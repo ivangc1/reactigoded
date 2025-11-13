@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
+import Container from 'react-bootstrap/Container';
+import Button from 'react-bootstrap/Button';
 import './App.css'
 
 function App() {
@@ -28,6 +30,15 @@ function App() {
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
       </p>
+    <Container className="py-5 text-center">
+      <h1 className="mb-4">reactigoded + React-Bootstrap</h1>
+      <p className="lead">
+        Hola, esto ya está usando componentes de React-Bootstrap.
+      </p>
+      <Button variant="primary" size="lg">
+        Botón bonito
+      </Button>
+    </Container>
     </>
   )
 }
