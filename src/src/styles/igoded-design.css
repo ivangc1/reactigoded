@@ -1,0 +1,3226 @@
+/*
+SISTEMA DE DISEÑO IGODED - IVÁN GODED
+
+Sistema cromático basado en 4 colores cardinales.
+Todos los colores comparten L=0.565, C=0.102 en OKLCH para armonía perfecta.
+
+Tipografías: Electrolize (títulos), Saira (texto base)
+
+CÓMO USAR ESTE ARCHIVO:
+1. Importa este CSS en tu proyecto DESPUÉS de otros frameworks para que tus estilos no se pisen
+2. Usa las variables con var(--nombre) en tu CSS
+3. Usa las clases utilitarias directamente en tu HTML
+4. El tema sigue automáticamente la preferencia del sistema operativo/navegador
+   (usa @media (prefers-color-scheme: light/dark), que detecta si el usuario
+   tiene su dispositivo en modo claro u oscuro en Ajustes)
+5. Para forzar modo claro: añade data-theme="light" al html o body
+6. Para forzar modo oscuro: añade data-theme="dark" al html o body
+
+FILOSOFÍA IGODED DESIGN:
+- Dark mode: Tellus (verde, primary) + Liminal (teal, accent)
+- Light mode: Senum (azul, primary) + Vesper (violeta, accent)
+Los pares cromáticos se complementan: verde-teal para lo nocturno, azul-violeta para lo diurno.
+
+ÍNDICE:
+1. Imports / Importaciones (línea 60)
+2. Colores Igoded (línea 68)
+3. Neutros tintados (línea 194)
+4. Variables semánticas (línea 345)
+5. Tipografía (línea 448)
+6. Gradientes (línea 515)
+7. Sombras (línea 598)
+8. Glow / Resplandor (línea 697)
+9. Glassmorphism / Efecto cristal (línea 798)
+10. Border Radius / Bordes redondeados (línea 887)
+11. Transiciones (línea 906)
+12. Blur / Desenfoque (línea 923)
+13. Neumorphism / Neumorfismo (línea 940)
+14. Blend Modes / Modos de fusión (línea 1122)
+15. Clip-path / Recortes y formas (línea 1305)
+16. Filtros CSS (línea 1528)
+17. Estados interactivos (línea 1727)
+18. Formularios / Inputs (línea 1754)
+19. Links / Enlaces (línea 1858)
+20. Bordes (línea 1925)
+21. Spacing / Espaciado (línea 1964)
+22. Z-index / Capas y profundidad (línea 1994)
+23. Scrollbar / Barra de desplazamiento (línea 2018)
+24. Selection / Selección de texto (línea 2080)
+25. Focus Ring / Anillo de enfoque (línea 2127)
+26. Estados semánticos (línea 2151)
+27. Overlays / Capas superpuestas (línea 2192)
+28. Breakpoints / Puntos de ruptura (línea 2227)
+29. Aspect Ratios / Relaciones de aspecto (línea 2250)
+30. Container Widths / Anchos de contenedor (línea 2269)
+31. Clases utilitarias (línea 2288)
+32. Animaciones y Keyframes (línea 2567)
+33. Variables de Componentes (línea 2720)
+34. Reset base opcional (línea 2960) ← COMENTADO, solo descomentar si no usas frameworks
+
+1. IMPORTS
+Cargamos las fuentes de Google Fonts.
+Electrolize: para títulos, estilo técnico/futurista
+Saira: para texto, legible pero con personalidad
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Electrolize&family=Saira:wght@400;600;700&display=swap');
+
+
+/*
+2. COLORES IGODED
+
+El corazón del sistema. 4 colores cardinales,
+todos con la misma luminosidad y saturación en OKLCH para armonía perfecta.
+
+¿QUÉ ES OKLCH?
+Es un espacio de color "perceptualmente uniforme". Significa que si dos colores
+tienen el mismo valor de L (luminosidad), nuestros ojos los perciben igual de brillantes.
+En RGB o HSL esto NO pasa: un amarillo y un azul con el mismo "lightness" en HSL
+se ven muy diferentes. OKLCH arregla eso.
+
+L = 0.565 → luminosidad media (ni muy claro ni muy oscuro)
+C = 0.102 → saturación moderada (colores vivos pero no chillones)
+H = el ángulo de tono (qué color es)
+
+LOS 4 COLORES CARDINALES:
+- Tellus (H=120°): verde oliva, estabilidad, lo tangible
+- Liminal (H=180°): teal/cian, fluidez, transición, umbrales
+- Senum (H=260°): azul sereno, pensamiento, claridad mental
+- Vesper (H=290°): violeta crepuscular, pasión contenida, transformación
+
+CÓMO USAR:
+color: var(--tellus);           ← el verde siempre
+color: var(--primary);          ← el primary del modo actual (Tellus en dark, Senum en light)
+color: var(--accent);           ← el accent del modo actual (Liminal en dark, Vesper en light)
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  COLORES IGODED BASE (nunca cambian entre modos)
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Tellus (H=120°)
+  Verde oliva. Representa estabilidad, lo tangible, las raíces.
+  Es el PRIMARY en modo oscuro.
+  Usar para: elementos principales en dark mode, iconos de "confirmado", naturaleza
+  */
+  --tellus: #6E7E34;
+
+  /* 
+  Liminal (H=180°)
+  Teal/cian. Representa fluidez, transición, los umbrales entre estados.
+  Es el ACCENT en modo oscuro.
+  Usar para: elementos destacados en dark mode, transiciones, estados "en proceso"
+  */
+  --liminal: #038978;
+
+  /* 
+  Senum (H=260°)
+  Azul sereno. Representa pensamiento, claridad, calma mental.
+  Es el PRIMARY en modo claro.
+  Usar para: elementos principales en light mode, información, serenidad
+  */
+  --senum: #5276B2;
+
+  /* 
+  Vesper (H=290°)
+  Violeta crepuscular. Representa pasión contenida, transformación, creatividad.
+  Es el ACCENT en modo claro.
+  Usar para: elementos destacados en light mode, llamadas a la acción, creatividad
+  */
+  --vesper: #7A5DAD;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  VARIABLES ADAPTATIVAS (cambian según el modo)
+  ═══════════════════════════════════════════════════════
+  
+  Estas son las que deberías usar la mayoría de las veces.
+  Se adaptan automáticamente al modo claro/oscuro.
+  */
+
+  /* 
+  Primary: el color principal del modo actual.
+  Dark = Tellus (verde), Light = Senum (azul)
+  Usar para: botones principales, headers, elementos de marca
+  */
+  --primary: var(--tellus);
+
+  /* 
+  Accent: el color de énfasis del modo actual.
+  Dark = Liminal (teal), Light = Vesper (violeta)
+  Usar para: links, CTAs secundarios, estados activos, elementos que destacan
+  */
+  --accent: var(--liminal);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FONDOS BASE
+  ═══════════════════════════════════════════════════════
+  
+  Los fondos están tintados con el accent del modo para coherencia visual.
+  No son grises puros, tienen un sutil toque de color.
+  */
+
+  /* 
+  Fondo principal de la página en modo oscuro.
+  Tintado con Liminal (teal) para que no sea un negro muerto.
+  Es casi negro pero con vida.
+  */
+  --bg-base: #0c1515;
+
+  /* 
+  Fondo de tarjetas y contenedores elevados.
+  Un poco más claro que bg-base para crear jerarquía.
+  */
+  --bg-surface: #101b1b;
+
+  /* 
+  Fondo de elementos muy elevados (modales, dropdowns).
+  Más claro aún para máxima separación visual.
+  */
+  --bg-elevated: #1a2828;
+
+  /* 
+  Fondo sutil para destacar zonas sin ser agresivo.
+  */
+  --bg-muted: #152020;
+}
+
+
+/*
+3. NEUTROS TINTADOS
+
+Escala de grises con dos niveles de tinte del accent del modo.
+NO son grises puros, tienen personalidad.
+
+¿POR QUÉ TINTADOS?
+Los grises puros (#808080, #404040, etc.) se sienten "muertos" o "sin alma"
+al lado de colores vibrantes. Al añadir un poco del accent, todo armoniza.
+
+DOS INTENSIDADES:
+- medium (15%): sutil, casi gris pero con un toque
+- intense (30%): notable, claramente tintado
+
+CÓMO USAR:
+color: var(--neutral-500);              ← neutro tintado medio (15%)
+background: var(--neutral-intense-800); ← neutro tintado fuerte (30%)
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  NEUTROS TINTADOS MEDIUM (15% saturación)
+  ═══════════════════════════════════════════════════════
+  
+  Tinte Liminal (teal) en modo oscuro.
+  Sutiles, casi grises pero con un toque de vida.
+  */
+  
+  --neutral-50: #e8f0f0;
+  --neutral-100: #c5d5d5;
+  --neutral-200: #a5baba;
+  --neutral-300: #88a0a0;
+  --neutral-400: #6d8888;
+  --neutral-500: #557070;
+  --neutral-600: #405858;
+  --neutral-700: #2d4242;
+  --neutral-800: #1c2c2c;
+  --neutral-900: #0e1818;
+  --neutral-950: #0a1212;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  NEUTROS TINTADOS INTENSE (30% saturación)
+  ═══════════════════════════════════════════════════════
+  
+  Más color, más personalidad. Usar cuando quieres que se note el tinte.
+  */
+  
+  --neutral-intense-50: #e0f2f0;
+  --neutral-intense-100: #b3d9d5;
+  --neutral-intense-200: #88c0ba;
+  --neutral-intense-300: #60a8a0;
+  --neutral-intense-400: #3d9088;
+  --neutral-intense-500: #207870;
+  --neutral-intense-600: #186058;
+  --neutral-intense-700: #104840;
+  --neutral-intense-800: #0a3230;
+  --neutral-intense-900: #051c1a;
+  --neutral-intense-950: #031210;
+}
+
+/* 
+Modo claro automático: neutros tintados con Senum (azul)
+*/
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Medium 15% - tinte Senum */
+    --neutral-50: #f0f2f8;
+    --neutral-100: #d5dbe8;
+    --neutral-200: #bac5d8;
+    --neutral-300: #a0b0c8;
+    --neutral-400: #889cb8;
+    --neutral-500: #7088a5;
+    --neutral-600: #587090;
+    --neutral-700: #425878;
+    --neutral-800: #2c4060;
+    --neutral-900: #182848;
+    --neutral-950: #101830;
+    
+    /* Intense 30% - tinte Senum */
+    --neutral-intense-50: #e8eef8;
+    --neutral-intense-100: #c5d5f0;
+    --neutral-intense-200: #a0bce8;
+    --neutral-intense-300: #7aa3e0;
+    --neutral-intense-400: #588ad5;
+    --neutral-intense-500: #3a72c8;
+    --neutral-intense-600: #2a5ab0;
+    --neutral-intense-700: #1c4590;
+    --neutral-intense-800: #103070;
+    --neutral-intense-900: #081c50;
+    --neutral-intense-950: #041030;
+  }
+}
+
+/* Override manual: fuerza modo claro */
+[data-theme="light"] {
+  --neutral-50: #f0f2f8;
+  --neutral-100: #d5dbe8;
+  --neutral-200: #bac5d8;
+  --neutral-300: #a0b0c8;
+  --neutral-400: #889cb8;
+  --neutral-500: #7088a5;
+  --neutral-600: #587090;
+  --neutral-700: #425878;
+  --neutral-800: #2c4060;
+  --neutral-900: #182848;
+  --neutral-950: #101830;
+  
+  --neutral-intense-50: #e8eef8;
+  --neutral-intense-100: #c5d5f0;
+  --neutral-intense-200: #a0bce8;
+  --neutral-intense-300: #7aa3e0;
+  --neutral-intense-400: #588ad5;
+  --neutral-intense-500: #3a72c8;
+  --neutral-intense-600: #2a5ab0;
+  --neutral-intense-700: #1c4590;
+  --neutral-intense-800: #103070;
+  --neutral-intense-900: #081c50;
+  --neutral-intense-950: #041030;
+}
+
+/* Override manual: fuerza modo oscuro */
+[data-theme="dark"] {
+  --neutral-50: #e8f0f0;
+  --neutral-100: #c5d5d5;
+  --neutral-200: #a5baba;
+  --neutral-300: #88a0a0;
+  --neutral-400: #6d8888;
+  --neutral-500: #557070;
+  --neutral-600: #405858;
+  --neutral-700: #2d4242;
+  --neutral-800: #1c2c2c;
+  --neutral-900: #0e1818;
+  --neutral-950: #0a1212;
+  
+  --neutral-intense-50: #e0f2f0;
+  --neutral-intense-100: #b3d9d5;
+  --neutral-intense-200: #88c0ba;
+  --neutral-intense-300: #60a8a0;
+  --neutral-intense-400: #3d9088;
+  --neutral-intense-500: #207870;
+  --neutral-intense-600: #186058;
+  --neutral-intense-700: #104840;
+  --neutral-intense-800: #0a3230;
+  --neutral-intense-900: #051c1a;
+  --neutral-intense-950: #031210;
+}
+
+
+/*
+4. VARIABLES SEMÁNTICAS
+
+Variables que cambian automáticamente entre modos.
+ESTAS son las que deberías usar el 90% del tiempo.
+
+¿POR QUÉ?
+Si usas var(--tellus) directamente, siempre será verde.
+Si usas var(--primary), será verde en dark y azul en light.
+Tu código queda más limpio y el cambio de tema es automático.
+
+CÓMO USAR:
+background-color: var(--bg-base);     ← se adapta solo
+color: var(--text-body);              ← se adapta solo
+border-color: var(--border-default);  ← se adapta solo
+*/
+
+:root {
+  /* 
+  ═══════════════════════════════════════════════════════
+  TEXTOS (por defecto modo oscuro)
+  ═══════════════════════════════════════════════════════
+  */
+  
+  /* Texto principal, párrafos. Máximo contraste. */
+  --text-body: var(--neutral-50);
+  
+  /* Texto secundario, menos importante. Menor contraste. */
+  --text-muted: var(--neutral-400);
+  
+  /* Títulos. Mismo que body pero semánticamente diferente. */
+  --text-heading: var(--neutral-50);
+  
+  /* 
+  ═══════════════════════════════════════════════════════
+  BORDES (por defecto modo oscuro)
+  ═══════════════════════════════════════════════════════
+  */
+  
+  /* Borde estándar, visible pero no agresivo. */
+  --border-default: var(--accent);
+  
+  /* Borde sutil, apenas perceptible. */
+  --border-muted: var(--neutral-700);
+}
+
+/* Modo claro automático */
+@media (prefers-color-scheme: light) {
+  :root {
+    --primary: var(--senum);
+    --accent: var(--vesper);
+    
+    --bg-base: #EEF2F8;
+    --bg-surface: #E5EBF5;
+    --bg-elevated: #FFFFFF;
+    --bg-muted: #E0E8F2;
+    
+    --text-body: var(--neutral-900);
+    --text-muted: var(--neutral-500);
+    --text-heading: var(--neutral-900);
+    
+    --border-default: var(--accent);
+    --border-muted: var(--neutral-300);
+  }
+}
+
+/* Override manual: fuerza modo claro */
+[data-theme="light"] {
+  --primary: var(--senum);
+  --accent: var(--vesper);
+  
+  --bg-base: #EEF2F8;
+  --bg-surface: #E5EBF5;
+  --bg-elevated: #FFFFFF;
+  --bg-muted: #E0E8F2;
+  
+  --text-body: var(--neutral-900);
+  --text-muted: var(--neutral-500);
+  --text-heading: var(--neutral-900);
+  
+  --border-default: var(--accent);
+  --border-muted: var(--neutral-300);
+}
+
+/* Override manual: fuerza modo oscuro */
+[data-theme="dark"] {
+  --primary: var(--tellus);
+  --accent: var(--liminal);
+  
+  --bg-base: #0c1515;
+  --bg-surface: #101b1b;
+  --bg-elevated: #1a2828;
+  --bg-muted: #152020;
+  
+  --text-body: var(--neutral-50);
+  --text-muted: var(--neutral-400);
+  --text-heading: var(--neutral-50);
+  
+  --border-default: var(--accent);
+  --border-muted: var(--neutral-700);
+}
+
+
+/*
+5. TIPOGRAFÍA
+
+Sistema tipográfico con dos fuentes, tres pesos, nueve tamaños.
+
+CÓMO USAR:
+font-family: var(--font-heading);
+font-size: var(--text-xl);
+font-weight: var(--fw-semibold);
+line-height: var(--lh-tight);
+*/
+
+:root {
+
+  /* 
+  Familias tipográficas
+  heading: Electrolize, para h1-h6, impacto visual, estética técnica
+  base: Saira, para párrafos, legibilidad con personalidad
+  */
+  --font-heading: 'Electrolize', sans-serif;
+  --font-base: 'Saira', sans-serif;
+
+  /* 
+  Pesos (font-weight)
+  normal: texto corriente (400)
+  semibold: énfasis medio, botones, labels (600)
+  bold: énfasis fuerte, títulos (700)
+  */
+  --fw-normal: 400;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* 
+  Tamaños de texto
+  Escala Major Third (ratio 1.25) con base 16px.
+  Cada tamaño es 1.25 veces el anterior, creando jerarquía armónica.
+  */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 25px;
+  --text-2xl: 31px;
+  --text-3xl: 39px;
+  --text-4xl: 49px;
+  --text-5xl: 61px;
+
+  /* 
+  Line-height (altura de línea)
+  tight: para títulos, menos espacio entre líneas
+  normal: para párrafos, más respiro para leer
+  */
+  --lh-tight: 1.2;
+  --lh-normal: 1.6;
+
+  /* 
+  Letter-spacing (espacio entre letras)
+  tight: títulos grandes, letras más juntas
+  normal: texto base, sin modificar
+  wide: labels pequeños, letras más separadas
+  */
+  --ls-tight: -0.01em;
+  --ls-normal: 0;
+  --ls-wide: 0.02em;
+}
+
+
+/*
+6. GRADIENTES
+
+6 gradientes que combinan los colores Igoded.
+El adaptativo (primary-accent) cambia según el modo.
+
+¿POR QUÉ 6 Y NO MÁS?
+Porque tellus-senum es igual que senum-tellus pero invertido.
+Solo guardamos combinaciones únicas + 1 adaptativo + 1 de branding.
+
+CÓMO USAR:
+background: var(--grad-primary-accent);   ← se adapta al modo
+background: var(--grad-igoded);        ← los 4 colores, para branding
+background: var(--grad-tellus-vesper);    ← combinación fija específica
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GRADIENTE ADAPTATIVO
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Primary → Accent del modo actual.
+  Dark: Tellus → Liminal (verde a teal)
+  Light: Senum → Vesper (azul a violeta)
+  El más versátil, úsalo para CTAs y elementos de marca.
+  */
+  --grad-primary-accent: linear-gradient(135deg, var(--primary), var(--accent));
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GRADIENTE DE BRANDING
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Igoded: los 4 colores cardinales en orden.
+  Tellus → Liminal → Senum → Vesper
+  Verde → Teal → Azul → Violeta
+  Para: logos, headers especiales, identidad de marca
+  */
+  --grad-igoded: linear-gradient(90deg, var(--tellus), var(--liminal), var(--senum), var(--vesper));
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GRADIENTES FIJOS (no cambian entre modos)
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Tellus → Senum (140° de separación)
+  Verde a azul. Fresco, natural.
+  Para: fondos de secciones, tarjetas especiales
+  */
+  --grad-tellus-senum: linear-gradient(135deg, var(--tellus), var(--senum));
+
+  /* 
+  Tellus → Vesper (170° de separación)
+  Verde a violeta. Místico, transformador.
+  Para: transiciones importantes, elementos especiales
+  */
+  --grad-tellus-vesper: linear-gradient(135deg, var(--tellus), var(--vesper));
+
+  /* 
+  Liminal → Senum (80° de separación)
+  Teal a azul. SUTIL, casi monocromo pero con profundidad.
+  Para: fondos discretos, cuando no quieres que "grite"
+  Es una feature, no un bug: gradiente silencioso.
+  */
+  --grad-liminal-senum: linear-gradient(135deg, var(--liminal), var(--senum));
+
+  /* 
+  Liminal → Vesper (110° de separación)
+  Teal a violeta. Crepuscular, onírico.
+  Para: elementos de fantasía, creatividad, sueños
+  */
+  --grad-liminal-vesper: linear-gradient(135deg, var(--liminal), var(--vesper));
+}
+
+
+/*
+7. SOMBRAS
+
+Box-shadows tintadas con el accent del modo.
+Dark: tinte Liminal (teal). Light: tinte Vesper (violeta).
+
+¿POR QUÉ TINTADAS?
+Las sombras negras puras se ven "sucias" o "pesadas".
+Al tintarlas con el accent, se integran mejor con el diseño.
+Es un detalle sutil pero hace que todo se vea más refinado.
+
+CÓMO USAR:
+box-shadow: var(--shadow-md);
+*/
+
+:root {
+
+  /* 
+  sm: elevación mínima
+  Para: inputs, elementos que apenas flotan
+  */
+  --shadow-sm: 
+    0 1px 2px rgba(3, 137, 120, 0.15), 
+    0 1px 3px rgba(3, 137, 120, 0.25);
+
+  /* 
+  md: elevación media (la más común)
+  Para: cards, botones, dropdowns
+  */
+  --shadow-md: 
+    0 4px 6px rgba(3, 137, 120, 0.2), 
+    0 2px 4px rgba(3, 137, 120, 0.25);
+
+  /* 
+  lg: elevación alta
+  Para: modales, elementos importantes, hover states
+  */
+  --shadow-lg: 
+    0 10px 15px rgba(3, 137, 120, 0.25), 
+    0 4px 6px rgba(3, 137, 120, 0.2);
+
+  /* 
+  xl: máxima elevación
+  Para: popups críticos, elementos que dominan la pantalla
+  */
+  --shadow-xl: 
+    0 20px 25px rgba(3, 137, 120, 0.3), 
+    0 8px 10px rgba(3, 137, 120, 0.25);
+}
+
+/* Modo claro: sombras tintadas con Vesper (violeta) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --shadow-sm: 
+      0 1px 2px rgba(122, 93, 173, 0.08), 
+      0 1px 3px rgba(122, 93, 173, 0.15);
+    --shadow-md: 
+      0 4px 6px rgba(122, 93, 173, 0.12), 
+      0 2px 4px rgba(122, 93, 173, 0.15);
+    --shadow-lg: 
+      0 10px 15px rgba(122, 93, 173, 0.15), 
+      0 4px 6px rgba(122, 93, 173, 0.12);
+    --shadow-xl: 
+      0 20px 25px rgba(122, 93, 173, 0.18), 
+      0 8px 10px rgba(122, 93, 173, 0.15);
+  }
+}
+
+[data-theme="light"] {
+  --shadow-sm: 
+    0 1px 2px rgba(122, 93, 173, 0.08), 
+    0 1px 3px rgba(122, 93, 173, 0.15);
+  --shadow-md: 
+    0 4px 6px rgba(122, 93, 173, 0.12), 
+    0 2px 4px rgba(122, 93, 173, 0.15);
+  --shadow-lg: 
+    0 10px 15px rgba(122, 93, 173, 0.15), 
+    0 4px 6px rgba(122, 93, 173, 0.12);
+  --shadow-xl: 
+    0 20px 25px rgba(122, 93, 173, 0.18), 
+    0 8px 10px rgba(122, 93, 173, 0.15);
+}
+
+[data-theme="dark"] {
+  --shadow-sm: 
+    0 1px 2px rgba(3, 137, 120, 0.15), 
+    0 1px 3px rgba(3, 137, 120, 0.25);
+  --shadow-md: 
+    0 4px 6px rgba(3, 137, 120, 0.2), 
+    0 2px 4px rgba(3, 137, 120, 0.25);
+  --shadow-lg: 
+    0 10px 15px rgba(3, 137, 120, 0.25), 
+    0 4px 6px rgba(3, 137, 120, 0.2);
+  --shadow-xl: 
+    0 20px 25px rgba(3, 137, 120, 0.3), 
+    0 8px 10px rgba(3, 137, 120, 0.25);
+}
+
+
+/*
+8. GLOW / RESPLANDOR
+
+Sombras luminosas que crean efecto de resplandor neón.
+12 variables: 4 colores × 2 intensidades + 2 adaptativos × 2 intensidades.
+
+¿CUÁNDO USAR CADA INTENSIDAD?
+- medium: hover states, elementos secundarios, efectos sutiles
+- intense: CTAs principales, botones "hero", momentos importantes
+
+CUIDADO: El intense es potente. Úsalo con moderación o cansará la vista.
+
+CÓMO USAR:
+box-shadow: var(--glow-primary-medium);
+.boton:hover { box-shadow: var(--glow-accent-intense); }
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GLOWS INDIVIDUALES (cada color Igoded)
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* Tellus (verde) */
+  --glow-tellus-medium: 
+    0 0 20px rgba(110, 126, 52, 0.4), 
+    0 0 40px rgba(110, 126, 52, 0.2);
+  --glow-tellus-intense: 
+    0 0 30px rgba(110, 126, 52, 0.6), 
+    0 0 60px rgba(110, 126, 52, 0.4),
+    0 0 100px rgba(110, 126, 52, 0.2);
+
+  /* Liminal (teal) */
+  --glow-liminal-medium: 
+    0 0 20px rgba(3, 137, 120, 0.4), 
+    0 0 40px rgba(3, 137, 120, 0.2);
+  --glow-liminal-intense: 
+    0 0 30px rgba(3, 137, 120, 0.6), 
+    0 0 60px rgba(3, 137, 120, 0.4),
+    0 0 100px rgba(3, 137, 120, 0.2);
+
+  /* Senum (azul) */
+  --glow-senum-medium: 
+    0 0 20px rgba(82, 118, 178, 0.4), 
+    0 0 40px rgba(82, 118, 178, 0.2);
+  --glow-senum-intense: 
+    0 0 30px rgba(82, 118, 178, 0.6), 
+    0 0 60px rgba(82, 118, 178, 0.4),
+    0 0 100px rgba(82, 118, 178, 0.2);
+
+  /* Vesper (violeta) */
+  --glow-vesper-medium: 
+    0 0 20px rgba(122, 93, 173, 0.4), 
+    0 0 40px rgba(122, 93, 173, 0.2);
+  --glow-vesper-intense: 
+    0 0 30px rgba(122, 93, 173, 0.6), 
+    0 0 60px rgba(122, 93, 173, 0.4),
+    0 0 100px rgba(122, 93, 173, 0.2);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GLOWS ADAPTATIVOS (cambian según el modo)
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* Primary del modo (Tellus en dark, Senum en light) */
+  --glow-primary-medium: var(--glow-tellus-medium);
+  --glow-primary-intense: var(--glow-tellus-intense);
+
+  /* Accent del modo (Liminal en dark, Vesper en light) */
+  --glow-accent-medium: var(--glow-liminal-medium);
+  --glow-accent-intense: var(--glow-liminal-intense);
+}
+
+/* Modo claro: glows adaptativos cambian */
+@media (prefers-color-scheme: light) {
+  :root {
+    --glow-primary-medium: var(--glow-senum-medium);
+    --glow-primary-intense: var(--glow-senum-intense);
+    --glow-accent-medium: var(--glow-vesper-medium);
+    --glow-accent-intense: var(--glow-vesper-intense);
+  }
+}
+
+[data-theme="light"] {
+  --glow-primary-medium: var(--glow-senum-medium);
+  --glow-primary-intense: var(--glow-senum-intense);
+  --glow-accent-medium: var(--glow-vesper-medium);
+  --glow-accent-intense: var(--glow-vesper-intense);
+}
+
+[data-theme="dark"] {
+  --glow-primary-medium: var(--glow-tellus-medium);
+  --glow-primary-intense: var(--glow-tellus-intense);
+  --glow-accent-medium: var(--glow-liminal-medium);
+  --glow-accent-intense: var(--glow-liminal-intense);
+}
+
+
+/*
+9. GLASSMORPHISM / EFECTO CRISTAL
+
+Efecto vidrio esmerilado: fondo translúcido + desenfoque.
+8 variables: 2 neutros + 4 colores + 2 adaptativos.
+
+¿DÓNDE USARLO?
+Modales, sidebars, dropdowns, tarjetas flotantes, overlays elegantes.
+Funciona mejor sobre fondos con contenido visual (imágenes, gradientes).
+
+CÓMO USAR:
+Aplica las tres propiedades juntas:
+background: var(--glass-dark);
+backdrop-filter: blur(12px);
+-webkit-backdrop-filter: blur(12px);  ← para Safari
+
+O usa las clases utilitarias: class="glass-dark"
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GLASS NEUTROS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Glass Dark: fondo oscuro translúcido.
+  Ideal sobre fondos claros o imágenes.
+  */
+  --glass-dark: rgba(12, 21, 21, 0.7);
+
+  /* 
+  Glass Light: fondo claro translúcido.
+  Ideal sobre fondos oscuros o imágenes.
+  */
+  --glass-light: rgba(255, 255, 255, 0.15);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GLASS CON COLORES IGODED
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* Glass Tellus: tinte verde */
+  --glass-tellus: rgba(110, 126, 52, 0.2);
+
+  /* Glass Liminal: tinte teal */
+  --glass-liminal: rgba(3, 137, 120, 0.2);
+
+  /* Glass Senum: tinte azul */
+  --glass-senum: rgba(82, 118, 178, 0.2);
+
+  /* Glass Vesper: tinte violeta */
+  --glass-vesper: rgba(122, 93, 173, 0.2);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  GLASS ADAPTATIVOS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* Glass Primary del modo */
+  --glass-primary: var(--glass-tellus);
+
+  /* Glass Accent del modo */
+  --glass-accent: var(--glass-liminal);
+}
+
+/* Modo claro: glass adaptativos cambian */
+@media (prefers-color-scheme: light) {
+  :root {
+    --glass-primary: var(--glass-senum);
+    --glass-accent: var(--glass-vesper);
+  }
+}
+
+[data-theme="light"] {
+  --glass-primary: var(--glass-senum);
+  --glass-accent: var(--glass-vesper);
+}
+
+[data-theme="dark"] {
+  --glass-primary: var(--glass-tellus);
+  --glass-accent: var(--glass-liminal);
+}
+
+
+/*
+10. BORDER RADIUS
+
+Esquinas redondeadas. 6 niveles desde cuadrado hasta círculo.
+
+CÓMO USAR:
+border-radius: var(--radius-md);
+*/
+
+:root {
+  --radius-none: 0;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+}
+
+
+/*
+11. TRANSICIONES
+
+Duraciones y curvas de animación.
+
+CÓMO USAR:
+transition: all var(--transition-fast);
+*/
+
+:root {
+  --transition-instant: 0ms;
+  --transition-fast: 150ms ease-out;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease-in-out;
+}
+
+
+/*
+12. BLUR
+
+Niveles de desenfoque para backdrop-filter.
+
+CÓMO USAR:
+backdrop-filter: blur(var(--blur-md));
+*/
+
+:root {
+  --blur-sm: 4px;
+  --blur-md: 8px;
+  --blur-lg: 12px;
+  --blur-xl: 20px;
+}
+
+
+/*
+13. NEUMORPHISM (NEUMORFISMO)
+
+¿QUÉ ES?
+Neumorphism = "nuevo skeumorfismo". Es un estilo de diseño que hace que los elementos
+parezcan extruidos o hundidos en el fondo, como si fueran de plastilina o arcilla suave.
+Se logra con dos sombras: una clara (luz) arriba-izquierda y una oscura abajo-derecha.
+
+¿CÓMO FUNCIONA?
+Imagina una habitación con una luz arriba a la izquierda:
+- Los objetos que "salen" del fondo tienen brillo arriba-izquierda y sombra abajo-derecha
+- Los objetos que "se hunden" tienen sombra arriba-izquierda y brillo abajo-derecha
+
+REQUISITO CRÍTICO:
+El elemento Y su fondo deben tener EL MISMO COLOR (o muy similar).
+Si no, el efecto se rompe y se ve raro. Usa --neuo-bg como fondo del contenedor padre.
+
+DISEÑO IGODED:
+- Dark mode: fondo Liminal-tintado (#1a2828), sombras claras/oscuras con tinte teal
+- Light mode: fondo Senum-tintado (#dce4f0), sombras claras/oscuras con tinte azul
+
+HOVER STATES:
+- Normal: tinte sutil (apenas perceptible)
+- Hover: tinte más fuerte (personalidad visible)
+
+CÓMO USAR:
+.contenedor {
+  background: var(--neuo-bg);  ← OBLIGATORIO en el padre
+}
+.boton-neuo {
+  background: var(--neuo-bg);
+  box-shadow: var(--neuo-raised);
+}
+.boton-neuo:hover {
+  box-shadow: var(--neuo-raised-hover);
+}
+.input-neuo:focus {
+  box-shadow: var(--neuo-pressed);
+}
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FONDO BASE PARA NEUMORPHISM
+  ═══════════════════════════════════════════════════════
+  
+  IMPORTANTE: El elemento neumórfico debe tener este mismo color de fondo,
+  o uno casi idéntico. Si no, el efecto no funciona.
+  */
+  
+  /* Fondo neumórfico - tintado Liminal (teal) en dark mode */
+  --neuo-bg: #1a2828;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  ESTADOS NEUMÓRFICOS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Raised (elevado): el elemento "sale" del fondo.
+  Luz arriba-izquierda (#283a3a), sombra abajo-derecha (#0c1616).
+  Para: botones, cards, elementos interactivos en reposo.
+  */
+  --neuo-raised: 
+    -6px -6px 12px rgba(40, 58, 58, 0.6),
+    6px 6px 12px rgba(12, 22, 22, 0.8);
+
+  /* 
+  Raised Hover: versión con más personalidad para hover.
+  Sombras más intensas y con más tinte Liminal.
+  */
+  --neuo-raised-hover: 
+    -8px -8px 16px rgba(45, 66, 66, 0.7),
+    8px 8px 16px rgba(9, 18, 18, 0.9);
+
+  /* 
+  Pressed (hundido): el elemento se "hunde" en el fondo.
+  Sombras invertidas + inset (hacia dentro).
+  Para: botones activos, inputs en focus, toggles "on".
+  */
+  --neuo-pressed: 
+    inset -4px -4px 8px rgba(40, 58, 58, 0.5),
+    inset 4px 4px 8px rgba(12, 22, 22, 0.7);
+
+  /* 
+  Pressed Hover: versión más intensa para hover sobre elemento hundido.
+  */
+  --neuo-pressed-hover: 
+    inset -5px -5px 10px rgba(45, 66, 66, 0.6),
+    inset 5px 5px 10px rgba(9, 18, 18, 0.8);
+
+  /* 
+  Flat (plano): sin elevación, se funde con el fondo.
+  Sombras muy sutiles, casi imperceptibles.
+  Para: estados neutros, elementos que no necesitan destacar.
+  */
+  --neuo-flat: 
+    -2px -2px 4px rgba(40, 58, 58, 0.3),
+    2px 2px 4px rgba(12, 22, 22, 0.4);
+
+  /* 
+  Flat Hover: el elemento plano cobra algo de vida en hover.
+  */
+  --neuo-flat-hover: 
+    -3px -3px 6px rgba(45, 66, 66, 0.4),
+    3px 3px 6px rgba(9, 18, 18, 0.5);
+}
+
+/* Modo claro: neumorphism tintado Senum (azul) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --neuo-bg: #dce4f0;
+    
+    --neuo-raised: 
+      -6px -6px 12px rgba(255, 255, 255, 0.7),
+      6px 6px 12px rgba(140, 160, 195, 0.4);
+    --neuo-raised-hover: 
+      -8px -8px 16px rgba(255, 255, 255, 0.8),
+      8px 8px 16px rgba(130, 150, 185, 0.5);
+    --neuo-pressed: 
+      inset -4px -4px 8px rgba(255, 255, 255, 0.5),
+      inset 4px 4px 8px rgba(140, 160, 195, 0.3);
+    --neuo-pressed-hover: 
+      inset -5px -5px 10px rgba(255, 255, 255, 0.6),
+      inset 5px 5px 10px rgba(130, 150, 185, 0.4);
+    --neuo-flat: 
+      -2px -2px 4px rgba(255, 255, 255, 0.4),
+      2px 2px 4px rgba(140, 160, 195, 0.2);
+    --neuo-flat-hover: 
+      -3px -3px 6px rgba(255, 255, 255, 0.5),
+      3px 3px 6px rgba(130, 150, 185, 0.3);
+  }
+}
+
+[data-theme="light"] {
+  --neuo-bg: #dce4f0;
+  --neuo-raised: 
+    -6px -6px 12px rgba(255, 255, 255, 0.7),
+    6px 6px 12px rgba(140, 160, 195, 0.4);
+  --neuo-raised-hover: 
+    -8px -8px 16px rgba(255, 255, 255, 0.8),
+    8px 8px 16px rgba(130, 150, 185, 0.5);
+  --neuo-pressed: 
+    inset -4px -4px 8px rgba(255, 255, 255, 0.5),
+    inset 4px 4px 8px rgba(140, 160, 195, 0.3);
+  --neuo-pressed-hover: 
+    inset -5px -5px 10px rgba(255, 255, 255, 0.6),
+    inset 5px 5px 10px rgba(130, 150, 185, 0.4);
+  --neuo-flat: 
+    -2px -2px 4px rgba(255, 255, 255, 0.4),
+    2px 2px 4px rgba(140, 160, 195, 0.2);
+  --neuo-flat-hover: 
+    -3px -3px 6px rgba(255, 255, 255, 0.5),
+    3px 3px 6px rgba(130, 150, 185, 0.3);
+}
+
+[data-theme="dark"] {
+  --neuo-bg: #1a2828;
+  --neuo-raised: 
+    -6px -6px 12px rgba(40, 58, 58, 0.6),
+    6px 6px 12px rgba(12, 22, 22, 0.8);
+  --neuo-raised-hover: 
+    -8px -8px 16px rgba(45, 66, 66, 0.7),
+    8px 8px 16px rgba(9, 18, 18, 0.9);
+  --neuo-pressed: 
+    inset -4px -4px 8px rgba(40, 58, 58, 0.5),
+    inset 4px 4px 8px rgba(12, 22, 22, 0.7);
+  --neuo-pressed-hover: 
+    inset -5px -5px 10px rgba(45, 66, 66, 0.6),
+    inset 5px 5px 10px rgba(9, 18, 18, 0.8);
+  --neuo-flat: 
+    -2px -2px 4px rgba(40, 58, 58, 0.3),
+    2px 2px 4px rgba(12, 22, 22, 0.4);
+  --neuo-flat-hover: 
+    -3px -3px 6px rgba(45, 66, 66, 0.4),
+    3px 3px 6px rgba(9, 18, 18, 0.5);
+}
+
+
+/*
+14. BLEND MODES (MODOS DE FUSIÓN)
+
+¿QUÉ SON?
+Los blend modes determinan cómo se mezcla un elemento con lo que hay debajo.
+Es como los modos de fusión de Photoshop pero en CSS.
+
+¿CÓMO FUNCIONAN?
+Cada modo tiene una fórmula matemática diferente para combinar los píxeles
+del elemento (capa superior) con los del fondo (capa inferior).
+
+¿CUÁNDO USARLOS?
+- Overlays sobre imágenes
+- Efectos de color sobre fotos
+- Texturas superpuestas
+- Efectos creativos
+
+IMPORTANTE:
+Los blend modes funcionan con mix-blend-mode (mezcla con todo lo de abajo)
+o background-blend-mode (mezcla solo los fondos del mismo elemento).
+
+CÓMO USAR:
+.overlay {
+  background: var(--liminal);
+  mix-blend-mode: var(--blend-multiply);
+}
+.imagen-con-efecto {
+  background-image: url(...), linear-gradient(...);
+  background-blend-mode: var(--blend-overlay);
+}
+
+LOS 15 MODOS ESTÁNDAR CSS:
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MODOS QUE OSCURECEN
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Multiply (multiplicar): oscurece multiplicando colores.
+  Como poner dos filtros de café uno encima de otro.
+  Blanco desaparece, negro se mantiene.
+  Usar para: sombras suaves, overlays oscuros, efecto vintage
+  */
+  --blend-multiply: multiply;
+
+  /* 
+  Darken (oscurecer): mantiene el color más oscuro de cada píxel.
+  Compara capa superior e inferior, se queda con el más oscuro.
+  Usar para: combinar siluetas, eliminar fondos blancos
+  */
+  --blend-darken: darken;
+
+  /* 
+  Color-burn (subexposición): oscurece intensamente aumentando contraste.
+  Como subexponer una foto analógica.
+  MUY intenso, usar con moderación.
+  Usar para: efectos dramáticos, sombras profundas
+  */
+  --blend-color-burn: color-burn;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MODOS QUE ACLARAN
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Screen (pantalla): aclara como proyectar luz.
+  Como dos proyectores apuntando al mismo sitio.
+  Negro desaparece, blanco se mantiene.
+  Usar para: brillos, destellos, eliminar fondos negros
+  */
+  --blend-screen: screen;
+
+  /* 
+  Lighten (aclarar): mantiene el color más claro de cada píxel.
+  Opuesto a darken.
+  Usar para: efectos de luz, resaltar zonas claras
+  */
+  --blend-lighten: lighten;
+
+  /* 
+  Color-dodge (sobreexposición): aclara intensamente reduciendo contraste.
+  Como sobreexponer una foto analógica.
+  MUY intenso, usar con moderación.
+  Usar para: brillos intensos, efectos de luz extremos
+  */
+  --blend-color-dodge: color-dodge;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MODOS DE CONTRASTE
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Overlay (superposición): combina multiply y screen.
+  Oscurece oscuros, aclara claros. Aumenta contraste.
+  El más versátil y usado.
+  Usar para: añadir profundidad, overlays de color equilibrados
+  */
+  --blend-overlay: overlay;
+
+  /* 
+  Hard-light (luz fuerte): overlay agresivo.
+  Como apuntar una linterna potente.
+  Más extremo que overlay.
+  Usar para: efectos de luz dramáticos, alto contraste
+  */
+  --blend-hard-light: hard-light;
+
+  /* 
+  Soft-light (luz suave): overlay suave.
+  Como luz difusa a través de una cortina.
+  Más sutil que overlay.
+  Usar para: ajustes sutiles de tono, efectos delicados
+  */
+  --blend-soft-light: soft-light;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MODOS DE INVERSIÓN/DIFERENCIA
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Difference (diferencia): resta colores, muestra la diferencia.
+  Colores iguales = negro. Opuestos = resultado brillante.
+  Usar para: efectos psicodélicos, detectar diferencias, negativos
+  */
+  --blend-difference: difference;
+
+  /* 
+  Exclusion (exclusión): como difference pero más suave.
+  Menos contraste que difference.
+  Usar para: efectos sutiles de inversión, mezclas creativas
+  */
+  --blend-exclusion: exclusion;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MODOS DE COMPONENTE (HSL)
+  ═══════════════════════════════════════════════════════
+  
+  Estos modos trabajan con componentes individuales del color:
+  Hue (tono), Saturation (saturación), Luminosity (luminosidad)
+  */
+
+  /* 
+  Hue (tono): aplica el tono de la capa superior.
+  Mantiene saturación y luminosidad del fondo.
+  Usar para: cambiar el color de algo sin afectar su brillo
+  */
+  --blend-hue: hue;
+
+  /* 
+  Saturation (saturación): aplica la saturación de la capa superior.
+  Mantiene tono y luminosidad del fondo.
+  Usar para: desaturar o saturar zonas específicas
+  */
+  --blend-saturation: saturation;
+
+  /* 
+  Color: aplica tono Y saturación de la capa superior.
+  Mantiene luminosidad del fondo.
+  Usar para: colorear imágenes B/N, tintes de color
+  */
+  --blend-color: color;
+
+  /* 
+  Luminosity (luminosidad): aplica el brillo de la capa superior.
+  Mantiene tono y saturación del fondo.
+  Usar para: ajustar brillo sin cambiar colores
+  */
+  --blend-luminosity: luminosity;
+}
+
+
+/*
+15. CLIP-PATH (RECORTES Y FORMAS)
+
+¿QUÉ ES?
+clip-path recorta un elemento para que solo se vea la parte dentro de una forma.
+Es como usar tijeras para cortar una foto en forma de estrella.
+
+¿CÓMO FUNCIONA?
+Defines una forma (círculo, polígono, etc.) y todo lo que queda fuera
+de esa forma se vuelve invisible (pero sigue ocupando espacio en el layout).
+
+COORDENADAS:
+- Se usan porcentajes (0% = izquierda/arriba, 100% = derecha/abajo)
+- polygon() define puntos: polygon(x1 y1, x2 y2, x3 y3, ...)
+- Los puntos se conectan en orden formando la figura
+
+CÓMO USAR:
+.avatar { clip-path: var(--clip-circle); }
+.badge { clip-path: var(--clip-hexagon); }
+.flecha { clip-path: var(--clip-arrow-right); }
+
+NOTA: clip-path NO afecta al box model. El elemento sigue ocupando
+su espacio rectangular original. Solo cambia lo que se VE.
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FORMAS BÁSICAS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Circle (círculo): forma circular perfecta.
+  50% = radio del 50% (llena todo el contenedor)
+  at 50% 50% = centrado
+  Usar para: avatares, badges circulares, iconos
+  */
+  --clip-circle: circle(50% at 50% 50%);
+
+  /* 
+  Ellipse (elipse): óvalo/elipse.
+  50% 40% = radio horizontal 50%, radio vertical 40%
+  Usar para: badges ovalados, formas orgánicas
+  */
+  --clip-ellipse: ellipse(50% 40% at 50% 50%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TRIÁNGULOS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Triangle Down (triángulo hacia abajo): punta abajo.
+  Puntos: arriba-izq (0,0), arriba-der (100%,0), centro-abajo (50%,100%)
+  Usar para: flechas dropdown, indicadores "expandir"
+  */
+  --clip-triangle: polygon(50% 100%, 0% 0%, 100% 0%);
+
+  /* 
+  Triangle Up (triángulo hacia arriba): punta arriba.
+  Usar para: indicadores "colapsar", flechas hacia arriba
+  */
+  --clip-triangle-up: polygon(50% 0%, 0% 100%, 100% 100%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  POLÍGONOS REGULARES
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Diamond (rombo): cuadrado rotado 45°.
+  4 puntos: arriba, derecha, abajo, izquierda
+  Usar para: badges especiales, decoraciones
+  */
+  --clip-diamond: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+
+  /* 
+  Pentagon (pentágono): 5 lados.
+  Usar para: badges premium, elementos especiales
+  */
+  --clip-pentagon: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+
+  /* 
+  Hexagon (hexágono): 6 lados. Forma de panal de abeja.
+  Muy popular en diseño de interfaces gaming/tech.
+  Usar para: avatares, skills, iconos tech
+  */
+  --clip-hexagon: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+
+  /* 
+  Heptagon (heptágono): 7 lados.
+  Menos común pero útil para variedad visual.
+  */
+  --clip-heptagon: polygon(50% 0%, 90% 20%, 100% 60%, 75% 100%, 25% 100%, 0% 60%, 10% 20%);
+
+  /* 
+  Octagon (octágono): 8 lados. Forma de señal de STOP.
+  Usar para: avisos importantes, badges de alerta
+  */
+  --clip-octagon: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FORMAS ESPECIALES
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Star (estrella): estrella de 5 puntas.
+  10 puntos alternando entre puntas externas e internas.
+  Usar para: ratings, favoritos, destacados
+  */
+  --clip-star: polygon(
+    50% 0%, 
+    61% 35%, 
+    98% 35%, 
+    68% 57%, 
+    79% 91%, 
+    50% 70%, 
+    21% 91%, 
+    32% 57%, 
+    2% 35%, 
+    39% 35%
+  );
+
+  /* 
+  Cross (cruz): forma de cruz/más.
+  12 puntos formando los 4 brazos.
+  Usar para: botones de cerrar, iconos médicos, añadir
+  */
+  --clip-cross: polygon(
+    35% 0%, 65% 0%, 65% 35%, 
+    100% 35%, 100% 65%, 65% 65%, 
+    65% 100%, 35% 100%, 35% 65%, 
+    0% 65%, 0% 35%, 35% 35%
+  );
+
+  /* 
+  Message (bocadillo): forma de globo de chat.
+  Rectángulo con pico abajo-izquierda.
+  Usar para: tooltips, chat bubbles, comentarios
+  */
+  --clip-message: polygon(
+    0% 0%, 100% 0%, 100% 75%, 
+    75% 75%, 50% 100%, 50% 75%, 0% 75%
+  );
+
+  /* 
+  Bevel (biselado): rectángulo con esquinas recortadas.
+  Estética cyberpunk/tech.
+  Usar para: botones sci-fi, tarjetas gaming
+  */
+  --clip-bevel: polygon(
+    10% 0%, 90% 0%, 100% 10%, 
+    100% 90%, 90% 100%, 10% 100%, 
+    0% 90%, 0% 10%
+  );
+
+  /* 
+  Rabbet (rebaje): rectángulo con muescas en las esquinas.
+  Como un marco de foto recortado.
+  Usar para: marcos, contenedores decorativos
+  */
+  --clip-rabbet: polygon(
+    0% 15%, 15% 15%, 15% 0%, 
+    85% 0%, 85% 15%, 100% 15%, 
+    100% 85%, 85% 85%, 85% 100%, 
+    15% 100%, 15% 85%, 0% 85%
+  );
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FORMAS DIRECCIONALES (FLECHAS Y CHEVRONES)
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Arrow Right (flecha derecha): flecha apuntando a la derecha.
+  Usar para: botones "siguiente", indicadores de dirección
+  */
+  --clip-arrow-right: polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%);
+
+  /* 
+  Arrow Left (flecha izquierda): flecha apuntando a la izquierda.
+  Usar para: botones "anterior", navegación hacia atrás
+  */
+  --clip-arrow-left: polygon(40% 0%, 40% 20%, 100% 20%, 100% 80%, 40% 80%, 40% 100%, 0% 50%);
+
+  /* 
+  Chevron Right: punta de flecha sin cuerpo, hacia la derecha.
+  Usar para: indicadores de navegación, breadcrumbs
+  */
+  --clip-chevron-right: polygon(0% 0%, 75% 50%, 0% 100%, 25% 100%, 100% 50%, 25% 0%);
+
+  /* 
+  Chevron Left: punta de flecha sin cuerpo, hacia la izquierda.
+  */
+  --clip-chevron-left: polygon(100% 0%, 25% 50%, 100% 100%, 75% 100%, 0% 50%, 75% 0%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FORMAS GEOMÉTRICAS INCLINADAS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Trapezoid (trapecio): base ancha abajo, estrecha arriba.
+  Usar para: pestañas, tabs, botones con perspectiva
+  */
+  --clip-trapezoid: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+
+  /* 
+  Parallelogram (paralelogramo): rectángulo inclinado.
+  Usar para: botones con estilo itálico, elementos dinámicos
+  */
+  --clip-parallelogram: polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%);
+}
+
+
+/*
+16. FILTROS CSS
+
+¿QUÉ SON?
+Los filtros CSS aplican efectos visuales a elementos: desenfoque, brillo,
+contraste, saturación, escala de grises, sepia, etc. Son como los filtros
+de Instagram pero aplicados con código.
+
+¿CÓMO FUNCIONAN?
+Se combinan múltiples funciones de filtro en una sola propiedad.
+El orden importa: se aplican de izquierda a derecha.
+
+FUNCIONES DISPONIBLES:
+- grayscale(%) → escala de grises (0-100%)
+- sepia(%) → tono sepia/marrón (0-100%)
+- saturate(%) → saturación (0% = gris, 100% = normal, 200% = muy saturado)
+- brightness(%) → brillo (0% = negro, 100% = normal, 200% = muy brillante)
+- contrast(%) → contraste (0% = gris, 100% = normal, 200% = alto contraste)
+- hue-rotate(deg) → rota el tono en el círculo de color (0-360°)
+- blur(px) → desenfoque gaussiano
+- invert(%) → invierte colores (como negativo de foto)
+- opacity(%) → transparencia
+- drop-shadow() → sombra (respeta transparencia, a diferencia de box-shadow)
+
+TINTES DE MARCA:
+Los filtros --filter-tellus, --filter-liminal, etc. aplican
+un tinte del color correspondiente a cualquier imagen.
+¡Útil para que fotos externas encajen con tu paleta!
+
+CÓMO USAR:
+.imagen-disabled { filter: var(--filter-disabled); }
+.imagen:hover { filter: var(--filter-hover); }
+.foto-de-equipo { filter: var(--filter-liminal); }
+*/
+
+:root {
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FILTROS DE ESTADO (para UI)
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  Disabled: elemento deshabilitado.
+  Gris completo + transparencia.
+  Usar para: botones disabled, campos bloqueados
+  */
+  --filter-disabled: grayscale(100%) opacity(50%);
+
+  /* 
+  Hover: feedback visual al pasar el cursor.
+  Ligeramente más brillante.
+  Usar para: imágenes interactivas, iconos hover
+  */
+  --filter-hover: brightness(110%);
+
+  /* 
+  Loading: elemento cargando.
+  Reducido y desaturado para indicar "en proceso".
+  Usar para: imágenes cargando, estados pendientes
+  */
+  --filter-loading: saturate(50%) opacity(70%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  FILTROS ESTÉTICOS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* 
+  B/W (blanco y negro): escala de grises pura.
+  Usar para: fotos artísticas, estados "inactivo"
+  */
+  --filter-bw: grayscale(100%);
+
+  /* 
+  Muted (apagado): colores reducidos pero no grises.
+  Usar para: fondos sutiles, elementos secundarios
+  */
+  --filter-muted: saturate(60%) brightness(95%);
+
+  /* 
+  Vintage: efecto foto antigua.
+  Sepia + contraste reducido + saturación baja.
+  Usar para: galerías nostálgicas, efectos retro
+  */
+  --filter-vintage: sepia(30%) saturate(80%) contrast(90%);
+
+  /* 
+  Vivid: colores explosivos.
+  Alta saturación + alto contraste.
+  Usar para: destacar imágenes, llamar atención. ¡Con moderación!
+  */
+  --filter-vivid: saturate(150%) contrast(110%);
+
+  /* 
+  Warm (cálido): tonos más cálidos (amarillo/naranja).
+  Usar para: fotos de atardecer, ambiente acogedor
+  */
+  --filter-warm: sepia(15%) saturate(110%) brightness(105%);
+
+  /* 
+  Cool (frío): tonos más fríos (azul).
+  hue-rotate(15deg) empuja ligeramente hacia el azul.
+  Usar para: temas nocturnos, ambientes tecnológicos
+  */
+  --filter-cool: saturate(90%) brightness(105%) hue-rotate(15deg);
+
+  /* 
+  Dramatic: alto contraste cinematográfico.
+  Usar para: fotos de impacto, hero images
+  */
+  --filter-dramatic: contrast(120%) saturate(110%) brightness(95%);
+
+  /* 
+  Faded (deslavado): como foto expuesta al sol.
+  Bajo contraste + bajo saturación.
+  Usar para: fondos sutiles, estética "washed out"
+  */
+  --filter-faded: contrast(85%) saturate(70%) brightness(105%);
+
+  /* 
+  Bright: más luminosidad sin alterar colores.
+  Usar para: fondos claros, efecto aireado
+  */
+  --filter-bright: brightness(115%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TINTES DE MARCA IGODED
+  ═══════════════════════════════════════════════════════
+  
+  Estos filtros aplican el color de cada cardinal Igoded
+  a cualquier imagen. Útil para fotos externas que quieres
+  que encajen con la paleta Igoded.
+  
+  CÓMO FUNCIONAN:
+  1. sepia() añade un tono base marrón
+  2. hue-rotate() gira ese tono hacia el color deseado
+  3. saturate() ajusta la intensidad
+  */
+
+  /* 
+  Tinte Tellus (verde):
+  Sepia base + rotación hacia verde (70°) + saturación moderada.
+  */
+  --filter-tellus: sepia(25%) hue-rotate(70deg) saturate(85%);
+
+  /* 
+  Tinte Liminal (teal):
+  Sepia base + rotación hacia cian (130°) + saturación moderada.
+  */
+  --filter-liminal: sepia(30%) hue-rotate(130deg) saturate(90%);
+
+  /* 
+  Tinte Senum (azul):
+  Sepia base + rotación hacia azul (190°) + saturación moderada.
+  */
+  --filter-senum: sepia(25%) hue-rotate(190deg) saturate(85%);
+
+  /* 
+  Tinte Vesper (violeta):
+  Sepia base + rotación hacia violeta (230°) + saturación elevada.
+  */
+  --filter-vesper: sepia(35%) hue-rotate(230deg) saturate(100%);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TINTES ADAPTATIVOS
+  ═══════════════════════════════════════════════════════
+  */
+
+  /* Tinte del primary del modo actual */
+  --filter-primary: var(--filter-tellus);
+
+  /* Tinte del accent del modo actual */
+  --filter-accent: var(--filter-liminal);
+}
+
+/* Modo claro: tintes adaptativos cambian */
+@media (prefers-color-scheme: light) {
+  :root {
+    --filter-primary: var(--filter-senum);
+    --filter-accent: var(--filter-vesper);
+  }
+}
+
+[data-theme="light"] {
+  --filter-primary: var(--filter-senum);
+  --filter-accent: var(--filter-vesper);
+}
+
+[data-theme="dark"] {
+  --filter-primary: var(--filter-tellus);
+  --filter-accent: var(--filter-liminal);
+}
+
+
+/*
+17. ESTADOS INTERACTIVOS
+
+Feedback visual para acciones del usuario.
+IMPORTANTE para usabilidad y accesibilidad.
+
+CÓMO USAR:
+.boton:hover { filter: var(--state-hover); }
+.boton:active { transform: scale(0.98); filter: var(--state-active); }
+*/
+
+:root {
+
+  /* Hover: cursor encima. Brillo sutil. */
+  --state-hover: brightness(1.1);
+  
+  /* Hover Heavy: versión más notable para accesibilidad */
+  --state-hover-heavy: brightness(1.15);
+
+  /* Active: elemento siendo pulsado. Se "hunde". */
+  --state-active: brightness(0.95);
+
+  /* Disabled: elemento deshabilitado. Gris + transparente. */
+  --state-disabled: grayscale(100%) opacity(50%);
+}
+
+
+/*
+18. FORMULARIOS / INPUTS
+
+Inputs tintados con los neutros del sistema (30% intensidad).
+Los campos de formulario tienen personalidad, no son grises muertos.
+
+CÓMO USAR:
+input {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  border: 1px solid var(--input-border);
+}
+input:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-glow);
+}
+*/
+
+:root {
+
+  /* 
+  Fondo del input en modo oscuro.
+  Tintado con Liminal (teal) al 30%.
+  */
+  --input-bg: #0a2a26;
+
+  /* Color del texto que escribe el usuario */
+  --input-text: #b0ebe3;
+
+  /* Placeholder (texto de ayuda antes de escribir) */
+  --input-placeholder: #3d7a73;
+
+  /* Borde en estado normal */
+  --input-border: #0f4540;
+
+  /* Borde en focus (cuando estás escribiendo) */
+  --input-border-focus: var(--accent);
+
+  /* 
+  Glow en focus: anillo luminoso alrededor.
+  Usa el glow del accent para coherencia.
+  */
+  --input-glow: 
+    0 0 0 3px rgba(3, 137, 120, 0.3), 
+    0 0 15px rgba(3, 137, 120, 0.2);
+
+  /* Borde cuando el campo es válido */
+  --input-border-valid: #22c55e;
+
+  /* Borde cuando el campo tiene error */
+  --input-border-invalid: #ef4444;
+
+  /* Input deshabilitado */
+  --input-bg-disabled: #151a1a;
+  --input-text-disabled: rgba(255, 255, 255, 0.3);
+  --input-border-disabled: rgba(255, 255, 255, 0.08);
+}
+
+/* Modo claro: inputs tintados con Senum (azul) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --input-bg: #FFFFFF;
+    --input-text: #102050;
+    --input-placeholder: #6080c5;
+    --input-border: #95acd5;
+    --input-border-focus: var(--accent);
+    --input-glow: 
+      0 0 0 3px rgba(122, 93, 173, 0.3), 
+      0 0 15px rgba(122, 93, 173, 0.2);
+    --input-bg-disabled: #e5e5e5;
+    --input-text-disabled: rgba(0, 0, 0, 0.3);
+    --input-border-disabled: rgba(0, 0, 0, 0.08);
+  }
+}
+
+[data-theme="light"] {
+  --input-bg: #FFFFFF;
+  --input-text: #102050;
+  --input-placeholder: #6080c5;
+  --input-border: #95acd5;
+  --input-border-focus: var(--accent);
+  --input-glow: 
+    0 0 0 3px rgba(122, 93, 173, 0.3), 
+    0 0 15px rgba(122, 93, 173, 0.2);
+  --input-bg-disabled: #e5e5e5;
+  --input-text-disabled: rgba(0, 0, 0, 0.3);
+  --input-border-disabled: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+  --input-bg: #0a2a26;
+  --input-text: #b0ebe3;
+  --input-placeholder: #3d7a73;
+  --input-border: #0f4540;
+  --input-border-focus: var(--accent);
+  --input-glow: 
+    0 0 0 3px rgba(3, 137, 120, 0.3), 
+    0 0 15px rgba(3, 137, 120, 0.2);
+  --input-bg-disabled: #151a1a;
+  --input-text-disabled: rgba(255, 255, 255, 0.3);
+  --input-border-disabled: rgba(255, 255, 255, 0.08);
+}
+
+
+/*
+19. LINKS / ENLACES
+
+Sistema completo de estados para enlaces:
+- Normal: accent del modo + subrayado siempre
+- Hover: más brillante + glow (text-shadow)
+- Visited: magenta apagado (#b8879a) en AMBOS modos
+
+¿POR QUÉ MAGENTA PARA VISITED?
+- Violeta conflictuaba con Vesper en light mode
+- Magenta apagado es neutro, no conflicta con ningún color Igoded
+- Es convencional (el visited clásico era violeta/púrpura)
+
+CÓMO USAR:
+Se aplica automáticamente a todos los <a> si activas el reset base.
+O copia estos estilos a tus propios selectores.
+*/
+
+:root {
+
+  /* 
+  Link normal: accent del modo.
+  Dark: Liminal (teal)
+  Light: Vesper (violeta)
+  */
+  --link-color: var(--accent);
+
+  /* 
+  Link hover: versión más brillante del accent.
+  */
+  --link-color-hover: #04d4b8;
+
+  /* 
+  Glow en hover: resplandor sutil alrededor del texto.
+  */
+  --link-glow: 0 0 8px rgba(3, 137, 120, 0.6);
+
+  /* 
+  Link visited: magenta apagado.
+  MISMO COLOR en ambos modos para consistencia.
+  */
+  --link-color-visited: #b8879a;
+}
+
+/* Modo claro */
+@media (prefers-color-scheme: light) {
+  :root {
+    --link-color: var(--accent);
+    --link-color-hover: #9b6dd0;
+    --link-glow: 0 0 8px rgba(122, 93, 173, 0.4);
+    /* visited sigue siendo #b8879a */
+  }
+}
+
+[data-theme="light"] {
+  --link-color: var(--accent);
+  --link-color-hover: #9b6dd0;
+  --link-glow: 0 0 8px rgba(122, 93, 173, 0.4);
+}
+
+[data-theme="dark"] {
+  --link-color: var(--accent);
+  --link-color-hover: #04d4b8;
+  --link-glow: 0 0 8px rgba(3, 137, 120, 0.6);
+}
+
+
+/*
+20. BORDES
+
+Sistema de bordes con el accent del modo.
+Decisión: borders = accent (Liminal en dark, Vesper en light)
+
+CÓMO USAR:
+border: var(--border-1) solid var(--border-color);
+*/
+
+:root {
+  --border-0: 0;
+  --border-1: 1px;
+  --border-2: 2px;
+  --border-4: 4px;
+  --border-8: 8px;
+
+  /* Color de borde principal: accent del modo */
+  --border-color: var(--accent);
+  
+  /* Color de borde sutil: neutro */
+  --border-color-muted: var(--neutral-600);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --border-color-muted: var(--neutral-300);
+  }
+}
+
+[data-theme="light"] {
+  --border-color-muted: var(--neutral-300);
+}
+
+[data-theme="dark"] {
+  --border-color-muted: var(--neutral-600);
+}
+
+
+/*
+21. SPACING (ESPACIADO)
+
+Escala de espaciado en rem (como Tailwind).
+Base: 0.25rem = 4px.
+
+CÓMO USAR:
+margin: var(--space-4);
+padding: var(--space-2) var(--space-4);
+gap: var(--space-3);
+*/
+
+:root {
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+  --space-20: 5rem;     /* 80px */
+  --space-24: 6rem;     /* 96px */
+  --space-32: 8rem;     /* 128px */
+}
+
+
+/*
+22. Z-INDEX
+
+Escala de capas para controlar qué elemento aparece encima de cuál.
+Valores espaciados para poder insertar nuevos niveles si hace falta.
+
+CÓMO USAR:
+z-index: var(--z-modal);
+*/
+
+:root {
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-notification: 800;
+  --z-maximum: 9999;
+}
+
+
+/*
+23. SCROLLBAR (BARRA DE DESPLAZAMIENTO)
+
+Barra de scroll personalizada con el PRIMARY del modo.
+Dark: Tellus (verde), Light: Senum (azul)
+
+Se aplica automáticamente a toda la web.
+*/
+
+:root {
+  --scrollbar-width: 10px;
+  --scrollbar-track: var(--neutral-800);
+  --scrollbar-thumb: var(--primary);
+  --scrollbar-thumb-hover: var(--accent);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --scrollbar-track: var(--neutral-100);
+    --scrollbar-thumb: var(--primary);
+    --scrollbar-thumb-hover: var(--accent);
+  }
+}
+
+[data-theme="light"] {
+  --scrollbar-track: var(--neutral-100);
+  --scrollbar-thumb: var(--primary);
+  --scrollbar-thumb-hover: var(--accent);
+}
+
+[data-theme="dark"] {
+  --scrollbar-track: var(--neutral-800);
+  --scrollbar-thumb: var(--primary);
+  --scrollbar-thumb-hover: var(--accent);
+}
+
+/* Chrome, Safari, Edge, Opera */
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+
+/*
+24. SELECTION (SELECCIÓN DE TEXTO)
+
+Color de fondo cuando seleccionas texto con el ratón.
+Usa el ACCENT del modo.
+
+Se aplica automáticamente.
+*/
+
+:root {
+  /* 
+  Fondo de selección: accent con transparencia.
+  Dark: Liminal (teal)
+  Light: Vesper (violeta)
+  */
+  --selection-bg: rgba(3, 137, 120, 0.3);
+  --selection-text: var(--neutral-50);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --selection-bg: rgba(122, 93, 173, 0.3);
+    --selection-text: var(--neutral-900);
+  }
+}
+
+[data-theme="light"] {
+  --selection-bg: rgba(122, 93, 173, 0.3);
+  --selection-text: var(--neutral-900);
+}
+
+[data-theme="dark"] {
+  --selection-bg: rgba(3, 137, 120, 0.3);
+  --selection-text: var(--neutral-50);
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+::-moz-selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+
+/*
+25. FOCUS RING (ANILLO DE ENFOQUE)
+
+Anillo visible cuando un elemento tiene el foco (navegación por teclado).
+OBLIGATORIO para accesibilidad (WCAG).
+
+Usa ACCENT + GLOW para máxima visibilidad.
+
+CÓMO USAR:
+.boton:focus-visible {
+  outline: var(--focus-ring-outline);
+  outline-offset: var(--focus-ring-offset);
+  box-shadow: var(--focus-ring-glow);
+}
+*/
+
+:root {
+  --focus-ring-color: var(--accent);
+  --focus-ring-outline: 2px solid var(--accent);
+  --focus-ring-offset: 2px;
+  --focus-ring-glow: var(--glow-accent-medium);
+}
+
+
+/*
+26. ESTADOS SEMÁNTICOS
+
+Colores para comunicar estados: éxito, error, advertencia, info.
+CONVENCIONALES a propósito: rojo=error, verde=éxito.
+
+¿POR QUÉ NO USAR COLORES IGODED?
+Porque rompe expectativas universales.
+Rojo=peligro está en nuestro cerebro reptiliano.
+La usabilidad manda sobre la estética.
+
+CÓMO USAR:
+color: var(--success);
+background-color: var(--error-light);
+border-color: var(--warning);
+*/
+
+:root {
+
+  /* Success: verde, operación exitosa, confirmación */
+  --success: #22c55e;
+  --success-light: #dcfce7;
+  --success-dark: #166534;
+
+  /* Error: rojo, algo salió mal, alerta crítica */
+  --error: #ef4444;
+  --error-light: #fee2e2;
+  --error-dark: #991b1b;
+
+  /* Warning: amarillo, cuidado, atención requerida */
+  --warning: #f59e0b;
+  --warning-light: #fef3c7;
+  --warning-dark: #92400e;
+
+  /* Info: azul, información neutral, ayuda */
+  --info: #3b82f6;
+  --info-light: #dbeafe;
+  --info-dark: #1e40af;
+}
+
+
+/*
+27. OVERLAYS (CAPAS SUPERPUESTAS)
+
+Capas semitransparentes sobre otros elementos.
+Para: fondos de modales, oscurecer imágenes.
+
+CÓMO USAR:
+.modal-backdrop { background: var(--overlay-dark); }
+*/
+
+:root {
+  --overlay-dark: rgba(12, 21, 21, 0.7);
+  --overlay-light: rgba(255, 255, 255, 0.7);
+  --overlay-accent: rgba(3, 137, 120, 0.5);
+  --overlay-gradient: linear-gradient(180deg, transparent, rgba(12, 21, 21, 0.9));
+  --overlay-vignette: radial-gradient(ellipse at center, transparent 40%, rgba(12, 21, 21, 0.8) 100%);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --overlay-dark: rgba(16, 24, 48, 0.7);
+    --overlay-accent: rgba(122, 93, 173, 0.5);
+    --overlay-gradient: linear-gradient(180deg, transparent, rgba(238, 242, 248, 0.9));
+    --overlay-vignette: radial-gradient(ellipse at center, transparent 40%, rgba(238, 242, 248, 0.8) 100%);
+  }
+}
+
+[data-theme="light"] {
+  --overlay-dark: rgba(16, 24, 48, 0.7);
+  --overlay-accent: rgba(122, 93, 173, 0.5);
+  --overlay-gradient: linear-gradient(180deg, transparent, rgba(238, 242, 248, 0.9));
+  --overlay-vignette: radial-gradient(ellipse at center, transparent 40%, rgba(238, 242, 248, 0.8) 100%);
+}
+
+
+/*
+28. BREAKPOINTS (PUNTOS DE RUPTURA)
+
+Tamaños de pantalla para diseño responsive.
+Basados en dispositivos comunes.
+
+CÓMO USAR EN MEDIA QUERIES:
+@media (min-width: 768px) { ... }
+
+Nota: Las variables CSS no funcionan en media queries.
+Estos valores son de referencia para tu código.
+*/
+
+:root {
+  /* Estos son SOLO de referencia, no funcionan en @media */
+  --bp-sm: 640px;   /* Móvil grande */
+  --bp-md: 768px;   /* Tablet */
+  --bp-lg: 1024px;  /* Laptop */
+  --bp-xl: 1280px;  /* Desktop */
+  --bp-2xl: 1536px; /* Pantalla grande */
+}
+
+
+/*
+29. ASPECT RATIOS (RELACIONES DE ASPECTO)
+
+Proporciones para vídeos, imágenes, contenedores.
+
+CÓMO USAR:
+aspect-ratio: var(--ratio-16-9);
+*/
+
+:root {
+  --ratio-1-1: 1 / 1;       /* Cuadrado */
+  --ratio-4-3: 4 / 3;       /* Foto clásica */
+  --ratio-16-9: 16 / 9;     /* Vídeo estándar */
+  --ratio-21-9: 21 / 9;     /* Cine ultrawide */
+  --ratio-9-16: 9 / 16;     /* Vertical (stories) */
+  --ratio-3-2: 3 / 2;       /* Foto réflex */
+}
+
+
+/*
+30. CONTAINER WIDTHS (ANCHOS DE CONTENEDOR)
+
+Anchos máximos para contenedores de contenido.
+
+CÓMO USAR:
+.container { max-width: var(--container-lg); margin-inline: auto; }
+*/
+
+:root {
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1280px;
+  --container-2xl: 1536px;
+  --container-full: 100%;
+}
+
+
+/*
+31. CLASES UTILITARIAS
+
+Clases CSS listas para usar en tu HTML.
+Aplican las variables del sistema directamente.
+
+CÓMO USAR:
+<div class="bg-base text-body p-4 rounded-lg shadow-md">
+  Contenido
+</div>
+*/
+
+/* Colores de fondo */
+.bg-base { background-color: var(--bg-base); }
+.bg-surface { background-color: var(--bg-surface); }
+.bg-elevated { background-color: var(--bg-elevated); }
+.bg-muted { background-color: var(--bg-muted); }
+.bg-primary { background-color: var(--primary); }
+.bg-accent { background-color: var(--accent); }
+.bg-tellus { background-color: var(--tellus); }
+.bg-liminal { background-color: var(--liminal); }
+.bg-senum { background-color: var(--senum); }
+.bg-vesper { background-color: var(--vesper); }
+
+/* Colores de texto */
+.text-body { color: var(--text-body); }
+.text-muted { color: var(--text-muted); }
+.text-heading { color: var(--text-heading); }
+.text-primary { color: var(--primary); }
+.text-accent { color: var(--accent); }
+.text-tellus { color: var(--tellus); }
+.text-liminal { color: var(--liminal); }
+.text-senum { color: var(--senum); }
+.text-vesper { color: var(--vesper); }
+
+/* Tipografía */
+.font-heading { font-family: var(--font-heading); }
+.font-base { font-family: var(--font-base); }
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+.text-2xl { font-size: var(--text-2xl); }
+.text-3xl { font-size: var(--text-3xl); }
+.text-4xl { font-size: var(--text-4xl); }
+.text-5xl { font-size: var(--text-5xl); }
+.fw-normal { font-weight: var(--fw-normal); }
+.fw-semibold { font-weight: var(--fw-semibold); }
+.fw-bold { font-weight: var(--fw-bold); }
+
+/* Gradientes */
+.grad-primary-accent { background: var(--grad-primary-accent); }
+.grad-igoded { background: var(--grad-igoded); }
+.grad-tellus-senum { background: var(--grad-tellus-senum); }
+.grad-tellus-vesper { background: var(--grad-tellus-vesper); }
+.grad-liminal-senum { background: var(--grad-liminal-senum); }
+.grad-liminal-vesper { background: var(--grad-liminal-vesper); }
+
+/* Sombras */
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+
+/* Glows */
+.glow-tellus-medium { box-shadow: var(--glow-tellus-medium); }
+.glow-tellus-intense { box-shadow: var(--glow-tellus-intense); }
+.glow-liminal-medium { box-shadow: var(--glow-liminal-medium); }
+.glow-liminal-intense { box-shadow: var(--glow-liminal-intense); }
+.glow-senum-medium { box-shadow: var(--glow-senum-medium); }
+.glow-senum-intense { box-shadow: var(--glow-senum-intense); }
+.glow-vesper-medium { box-shadow: var(--glow-vesper-medium); }
+.glow-vesper-intense { box-shadow: var(--glow-vesper-intense); }
+.glow-primary-medium { box-shadow: var(--glow-primary-medium); }
+.glow-primary-intense { box-shadow: var(--glow-primary-intense); }
+.glow-accent-medium { box-shadow: var(--glow-accent-medium); }
+.glow-accent-intense { box-shadow: var(--glow-accent-intense); }
+
+/* Glassmorphism */
+.glass-dark {
+  background: var(--glass-dark);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-light {
+  background: var(--glass-light);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-tellus {
+  background: var(--glass-tellus);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-liminal {
+  background: var(--glass-liminal);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-senum {
+  background: var(--glass-senum);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-vesper {
+  background: var(--glass-vesper);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-primary {
+  background: var(--glass-primary);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+.glass-accent {
+  background: var(--glass-accent);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
+}
+
+/* Border radius */
+.rounded-none { border-radius: var(--radius-none); }
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-full { border-radius: var(--radius-full); }
+
+/* Spacing */
+.p-1 { padding: var(--space-1); }
+.p-2 { padding: var(--space-2); }
+.p-3 { padding: var(--space-3); }
+.p-4 { padding: var(--space-4); }
+.p-6 { padding: var(--space-6); }
+.p-8 { padding: var(--space-8); }
+
+.m-1 { margin: var(--space-1); }
+.m-2 { margin: var(--space-2); }
+.m-3 { margin: var(--space-3); }
+.m-4 { margin: var(--space-4); }
+.m-6 { margin: var(--space-6); }
+.m-8 { margin: var(--space-8); }
+
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.gap-6 { gap: var(--space-6); }
+.gap-8 { gap: var(--space-8); }
+
+/* Z-index */
+.z-base { z-index: var(--z-base); }
+.z-dropdown { z-index: var(--z-dropdown); }
+.z-sticky { z-index: var(--z-sticky); }
+.z-modal { z-index: var(--z-modal); }
+.z-popover { z-index: var(--z-popover); }
+.z-tooltip { z-index: var(--z-tooltip); }
+
+/* Aspect ratios */
+.ratio-1-1 { aspect-ratio: var(--ratio-1-1); }
+.ratio-4-3 { aspect-ratio: var(--ratio-4-3); }
+.ratio-16-9 { aspect-ratio: var(--ratio-16-9); }
+.ratio-21-9 { aspect-ratio: var(--ratio-21-9); }
+.ratio-9-16 { aspect-ratio: var(--ratio-9-16); }
+.ratio-3-2 { aspect-ratio: var(--ratio-3-2); }
+
+/* Containers */
+.container-sm { max-width: var(--container-sm); margin-inline: auto; }
+.container-md { max-width: var(--container-md); margin-inline: auto; }
+.container-lg { max-width: var(--container-lg); margin-inline: auto; }
+.container-xl { max-width: var(--container-xl); margin-inline: auto; }
+.container-2xl { max-width: var(--container-2xl); margin-inline: auto; }
+.container-full { max-width: var(--container-full); }
+
+/* Estados interactivos */
+.state-hover:hover { filter: var(--state-hover); }
+.state-hover-heavy:hover { filter: var(--state-hover-heavy); }
+.state-active:active { 
+  filter: var(--state-active); 
+  transform: scale(0.98); 
+}
+.state-focus:focus-visible { 
+  outline: var(--focus-ring-outline); 
+  outline-offset: var(--focus-ring-offset); 
+  box-shadow: var(--focus-ring-glow);
+}
+.state-disabled { 
+  filter: var(--state-disabled); 
+  pointer-events: none; 
+  cursor: not-allowed; 
+}
+
+/* Overlays */
+.overlay-dark { background: var(--overlay-dark); }
+.overlay-light { background: var(--overlay-light); }
+.overlay-accent { background: var(--overlay-accent); }
+.overlay-gradient { background: var(--overlay-gradient); }
+.overlay-vignette { background: var(--overlay-vignette); }
+
+/* Bordes */
+.border { border: var(--border-1) solid var(--border-color); }
+.border-muted { border: var(--border-1) solid var(--border-color-muted); }
+.border-2 { border: var(--border-2) solid var(--border-color); }
+
+/* Transiciones */
+.transition-fast { transition: all var(--transition-fast); }
+.transition-normal { transition: all var(--transition-normal); }
+.transition-slow { transition: all var(--transition-slow); }
+
+/* Neumorphism */
+.neuo-raised { box-shadow: var(--neuo-raised); }
+.neuo-raised-hover:hover { box-shadow: var(--neuo-raised-hover); }
+.neuo-pressed { box-shadow: var(--neuo-pressed); }
+.neuo-pressed-hover:hover { box-shadow: var(--neuo-pressed-hover); }
+.neuo-flat { box-shadow: var(--neuo-flat); }
+.neuo-flat-hover:hover { box-shadow: var(--neuo-flat-hover); }
+.neuo-bg { background-color: var(--neuo-bg); }
+
+/* Blend Modes */
+.blend-multiply { mix-blend-mode: var(--blend-multiply); }
+.blend-darken { mix-blend-mode: var(--blend-darken); }
+.blend-color-burn { mix-blend-mode: var(--blend-color-burn); }
+.blend-screen { mix-blend-mode: var(--blend-screen); }
+.blend-lighten { mix-blend-mode: var(--blend-lighten); }
+.blend-color-dodge { mix-blend-mode: var(--blend-color-dodge); }
+.blend-overlay { mix-blend-mode: var(--blend-overlay); }
+.blend-hard-light { mix-blend-mode: var(--blend-hard-light); }
+.blend-soft-light { mix-blend-mode: var(--blend-soft-light); }
+.blend-difference { mix-blend-mode: var(--blend-difference); }
+.blend-exclusion { mix-blend-mode: var(--blend-exclusion); }
+.blend-hue { mix-blend-mode: var(--blend-hue); }
+.blend-saturation { mix-blend-mode: var(--blend-saturation); }
+.blend-color { mix-blend-mode: var(--blend-color); }
+.blend-luminosity { mix-blend-mode: var(--blend-luminosity); }
+
+/* Clip-path */
+.clip-circle { clip-path: var(--clip-circle); }
+.clip-ellipse { clip-path: var(--clip-ellipse); }
+.clip-triangle { clip-path: var(--clip-triangle); }
+.clip-triangle-up { clip-path: var(--clip-triangle-up); }
+.clip-diamond { clip-path: var(--clip-diamond); }
+.clip-pentagon { clip-path: var(--clip-pentagon); }
+.clip-hexagon { clip-path: var(--clip-hexagon); }
+.clip-heptagon { clip-path: var(--clip-heptagon); }
+.clip-octagon { clip-path: var(--clip-octagon); }
+.clip-star { clip-path: var(--clip-star); }
+.clip-cross { clip-path: var(--clip-cross); }
+.clip-message { clip-path: var(--clip-message); }
+.clip-bevel { clip-path: var(--clip-bevel); }
+.clip-rabbet { clip-path: var(--clip-rabbet); }
+.clip-arrow-right { clip-path: var(--clip-arrow-right); }
+.clip-arrow-left { clip-path: var(--clip-arrow-left); }
+.clip-chevron-right { clip-path: var(--clip-chevron-right); }
+.clip-chevron-left { clip-path: var(--clip-chevron-left); }
+.clip-trapezoid { clip-path: var(--clip-trapezoid); }
+.clip-parallelogram { clip-path: var(--clip-parallelogram); }
+
+/* Filtros CSS */
+.filter-disabled { filter: var(--filter-disabled); }
+.filter-hover { filter: var(--filter-hover); }
+.filter-loading { filter: var(--filter-loading); }
+.filter-bw { filter: var(--filter-bw); }
+.filter-muted { filter: var(--filter-muted); }
+.filter-vintage { filter: var(--filter-vintage); }
+.filter-vivid { filter: var(--filter-vivid); }
+.filter-warm { filter: var(--filter-warm); }
+.filter-cool { filter: var(--filter-cool); }
+.filter-dramatic { filter: var(--filter-dramatic); }
+.filter-faded { filter: var(--filter-faded); }
+.filter-bright { filter: var(--filter-bright); }
+.filter-tellus { filter: var(--filter-tellus); }
+.filter-liminal { filter: var(--filter-liminal); }
+.filter-senum { filter: var(--filter-senum); }
+.filter-vesper { filter: var(--filter-vesper); }
+.filter-primary { filter: var(--filter-primary); }
+.filter-accent { filter: var(--filter-accent); }
+
+
+
+/*
+32. ANIMACIONES Y KEYFRAMES
+
+Animaciones reutilizables para componentes interactivos.
+Úsalas con: animation: var(--anim-xxx);
+
+NOTA: Las animaciones tienen el mismo tinte que el modo actual.
+En dark mode usan teal (Liminal), en light mode usan azul/violeta.
+*/
+
+/* 
+═══════════════════════════════════════════════════════
+KEYFRAMES BASE
+═══════════════════════════════════════════════════════
+*/
+
+/* Rotación continua - para spinners */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Pulso - para llamar atención, notificaciones */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Pulso con escala - para botones, badges */
+@keyframes pulse-scale {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Shimmer - para skeletons de carga */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Fade in - para apariciones suaves */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Fade out - para desapariciones suaves */
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Slide desde arriba - para dropdowns, notificaciones */
+@keyframes slide-down {
+  from { 
+    opacity: 0;
+    transform: translateY(-10px); 
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0); 
+  }
+}
+
+/* Slide desde abajo - para modales, sheets */
+@keyframes slide-up {
+  from { 
+    opacity: 0;
+    transform: translateY(10px); 
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0); 
+  }
+}
+
+/* Slide desde izquierda - para sidebars */
+@keyframes slide-right {
+  from { 
+    opacity: 0;
+    transform: translateX(-10px); 
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0); 
+  }
+}
+
+/* Slide desde derecha - para sidebars */
+@keyframes slide-left {
+  from { 
+    opacity: 0;
+    transform: translateX(10px); 
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0); 
+  }
+}
+
+/* Shake - para errores, validación fallida */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+/* Bounce - para éxito, confirmaciones */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Scale in - para modales, popovers */
+@keyframes scale-in {
+  from { 
+    opacity: 0;
+    transform: scale(0.95); 
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1); 
+  }
+}
+
+/* Ping - para indicadores de notificación */
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+:root {
+  /* 
+  ═══════════════════════════════════════════════════════
+  VARIABLES DE ANIMACIÓN
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --anim-spin: spin 1s linear infinite;
+  --anim-pulse: pulse 2s ease-in-out infinite;
+  --anim-pulse-scale: pulse-scale 2s ease-in-out infinite;
+  --anim-shimmer: shimmer 1.5s ease-in-out infinite;
+  --anim-fade-in: fade-in 200ms ease-out;
+  --anim-fade-out: fade-out 200ms ease-in;
+  --anim-slide-down: slide-down 200ms ease-out;
+  --anim-slide-up: slide-up 200ms ease-out;
+  --anim-slide-right: slide-right 200ms ease-out;
+  --anim-slide-left: slide-left 200ms ease-out;
+  --anim-shake: shake 500ms ease-in-out;
+  --anim-bounce: bounce 500ms ease-in-out;
+  --anim-scale-in: scale-in 200ms ease-out;
+  --anim-ping: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+
+/*
+33. VARIABLES DE COMPONENTES
+
+Variables específicas para componentes UI comunes.
+Facilitan la consistencia y personalización.
+*/
+
+:root {
+  /* 
+  ═══════════════════════════════════════════════════════
+  SKELETON / LOADING PLACEHOLDER
+  ═══════════════════════════════════════════════════════
+  
+  Fondo con gradiente animado para indicar carga.
+  El shimmer va de izquierdo a derecha creando efecto "brillante".
+  */
+  
+  --skeleton-base: var(--bg-elevated);
+  --skeleton-highlight: var(--bg-sunken);
+  --skeleton-gradient: linear-gradient(
+    90deg,
+    var(--skeleton-base) 0%,
+    var(--skeleton-highlight) 50%,
+    var(--skeleton-base) 100%
+  );
+  --skeleton-radius: var(--radius-sm);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  SPINNER / LOADER
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --spinner-color: var(--accent);
+  --spinner-track: var(--neutral-700);
+  --spinner-size-sm: 1rem;
+  --spinner-size-md: 1.5rem;
+  --spinner-size-lg: 2rem;
+  --spinner-size-xl: 3rem;
+  --spinner-thickness: 2px;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  PROGRESS BAR
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --progress-track: var(--bg-sunken);
+  --progress-fill: var(--accent);
+  --progress-fill-success: var(--success);
+  --progress-fill-warning: var(--warning);
+  --progress-fill-danger: var(--danger);
+  --progress-height-sm: 4px;
+  --progress-height-md: 8px;
+  --progress-height-lg: 12px;
+  --progress-radius: var(--radius-full);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TOOLTIP
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --tooltip-bg: var(--bg-elevated);
+  --tooltip-text: var(--text-body);
+  --tooltip-padding: var(--space-xs) var(--space-sm);
+  --tooltip-radius: var(--radius-sm);
+  --tooltip-shadow: var(--shadow-lg);
+  --tooltip-arrow-size: 6px;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MODAL / DIALOG
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --modal-bg: var(--bg-elevated);
+  --modal-radius: var(--radius-lg);
+  --modal-shadow: var(--shadow-xl);
+  --modal-padding: var(--space-lg);
+  --modal-width-sm: 400px;
+  --modal-width-md: 560px;
+  --modal-width-lg: 720px;
+  --modal-width-xl: 900px;
+  --modal-backdrop: var(--overlay-dark);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TOAST / NOTIFICATION
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --toast-bg: var(--bg-elevated);
+  --toast-text: var(--text-body);
+  --toast-radius: var(--radius-md);
+  --toast-shadow: var(--shadow-lg);
+  --toast-padding: var(--space-sm) var(--space-md);
+  --toast-gap: var(--space-sm);
+  /* Posiciones desde el borde de la pantalla */
+  --toast-offset: var(--space-md);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TABS
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --tab-bg: transparent;
+  --tab-bg-active: var(--bg-elevated);
+  --tab-text: var(--text-muted);
+  --tab-text-active: var(--accent);
+  --tab-border: var(--border-default);
+  --tab-border-active: var(--accent);
+  --tab-padding: var(--space-sm) var(--space-md);
+  --tab-radius: var(--radius-sm);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  ACCORDION
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --accordion-bg: var(--bg-base);
+  --accordion-bg-hover: var(--bg-elevated);
+  --accordion-border: var(--border-subtle);
+  --accordion-radius: var(--radius-md);
+  --accordion-padding: var(--space-md);
+  --accordion-icon-size: 1.25rem;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TABLE
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --table-header-bg: var(--bg-sunken);
+  --table-header-text: var(--text-heading);
+  --table-row-bg: var(--bg-base);
+  --table-row-bg-alt: var(--bg-elevated);
+  --table-row-bg-hover: var(--bg-elevated);
+  --table-border: var(--border-subtle);
+  --table-padding: var(--space-sm) var(--space-md);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  STEPPER / WIZARD
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --stepper-line: var(--border-subtle);
+  --stepper-line-complete: var(--accent);
+  --stepper-dot-size: 2rem;
+  --stepper-dot-bg: var(--bg-sunken);
+  --stepper-dot-bg-active: var(--accent);
+  --stepper-dot-bg-complete: var(--success);
+  --stepper-dot-text: var(--text-muted);
+  --stepper-dot-text-active: var(--text-on-accent);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  RATING (ESTRELLAS)
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --rating-empty: var(--neutral-600);
+  --rating-filled: var(--warning);
+  --rating-hover: var(--warning);
+  --rating-size-sm: 1rem;
+  --rating-size-md: 1.5rem;
+  --rating-size-lg: 2rem;
+  --rating-gap: var(--space-2xs);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  SLIDER / RANGE
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --slider-track: var(--bg-sunken);
+  --slider-track-height: 6px;
+  --slider-fill: var(--accent);
+  --slider-thumb-size: 18px;
+  --slider-thumb-bg: var(--accent);
+  --slider-thumb-border: 2px solid var(--bg-base);
+  --slider-thumb-shadow: var(--shadow-md);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  DIVIDER / SEPARATOR
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --divider-color: var(--border-subtle);
+  --divider-thickness: 1px;
+  --divider-spacing: var(--space-md);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  DROPDOWN / SELECT
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --dropdown-bg: var(--bg-elevated);
+  --dropdown-border: var(--border-default);
+  --dropdown-radius: var(--radius-md);
+  --dropdown-shadow: var(--shadow-lg);
+  --dropdown-item-padding: var(--space-sm) var(--space-md);
+  --dropdown-item-hover: var(--bg-sunken);
+  --dropdown-item-active: var(--accent);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  CHIP / TAG
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --chip-bg: var(--bg-elevated);
+  --chip-text: var(--text-body);
+  --chip-border: var(--border-subtle);
+  --chip-radius: var(--radius-full);
+  --chip-padding: var(--space-2xs) var(--space-sm);
+  --chip-gap: var(--space-2xs);
+  --chip-close-size: 1rem;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  SIDEBAR / DRAWER
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --sidebar-bg: var(--bg-base);
+  --sidebar-width: 280px;
+  --sidebar-width-collapsed: 64px;
+  --sidebar-border: var(--border-subtle);
+  --sidebar-item-padding: var(--space-sm) var(--space-md);
+  --sidebar-item-radius: var(--radius-sm);
+  --sidebar-item-hover: var(--bg-elevated);
+  --sidebar-item-active: var(--accent);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  NAVBAR / HEADER
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --navbar-bg: var(--bg-base);
+  --navbar-height: 64px;
+  --navbar-border: var(--border-subtle);
+  --navbar-shadow: var(--shadow-sm);
+  --navbar-padding: 0 var(--space-lg);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  BREADCRUMB
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --breadcrumb-text: var(--text-muted);
+  --breadcrumb-text-active: var(--text-body);
+  --breadcrumb-separator: '/';
+  --breadcrumb-gap: var(--space-xs);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  PAGINATION
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --pagination-bg: transparent;
+  --pagination-bg-hover: var(--bg-elevated);
+  --pagination-bg-active: var(--accent);
+  --pagination-text: var(--text-body);
+  --pagination-text-active: var(--text-on-accent);
+  --pagination-size: 2.5rem;
+  --pagination-radius: var(--radius-sm);
+  --pagination-gap: var(--space-2xs);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  TIMELINE
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --timeline-line: var(--border-subtle);
+  --timeline-line-width: 2px;
+  --timeline-dot-size: 12px;
+  --timeline-dot-bg: var(--accent);
+  --timeline-dot-border: 2px solid var(--bg-base);
+  --timeline-gap: var(--space-lg);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  MENU / CONTEXT MENU
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --menu-bg: var(--bg-elevated);
+  --menu-border: var(--border-subtle);
+  --menu-radius: var(--radius-md);
+  --menu-shadow: var(--shadow-lg);
+  --menu-padding: var(--space-xs);
+  --menu-item-padding: var(--space-sm) var(--space-md);
+  --menu-item-radius: var(--radius-sm);
+  --menu-item-hover: var(--bg-sunken);
+  --menu-divider: var(--border-subtle);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  CALENDAR / DATE PICKER
+  ═══════════════════════════════════════════════════════
+  */
+  
+  --calendar-bg: var(--bg-elevated);
+  --calendar-header-bg: var(--bg-sunken);
+  --calendar-day-size: 2.5rem;
+  --calendar-day-hover: var(--bg-sunken);
+  --calendar-day-selected: var(--accent);
+  --calendar-day-today: var(--primary);
+  --calendar-day-outside: var(--text-muted);
+  --calendar-radius: var(--radius-md);
+}
+
+/* Modo claro: ajustes de componentes */
+@media (prefers-color-scheme: light) {
+  :root {
+    --spinner-track: var(--neutral-300);
+    --skeleton-base: var(--bg-elevated);
+    --skeleton-highlight: var(--neutral-200);
+  }
+}
+
+[data-theme="light"] {
+  --spinner-track: var(--neutral-300);
+  --skeleton-base: var(--bg-elevated);
+  --skeleton-highlight: var(--neutral-200);
+}
+
+/* 
+═══════════════════════════════════════════════════════
+CLASES UTILITARIAS DE ANIMACIÓN
+═══════════════════════════════════════════════════════
+*/
+
+.anim-spin { animation: var(--anim-spin); }
+.anim-pulse { animation: var(--anim-pulse); }
+.anim-pulse-scale { animation: var(--anim-pulse-scale); }
+.anim-shimmer { 
+  background: var(--skeleton-gradient);
+  background-size: 200% 100%;
+  animation: var(--anim-shimmer); 
+}
+.anim-fade-in { animation: var(--anim-fade-in); }
+.anim-fade-out { animation: var(--anim-fade-out); }
+.anim-slide-down { animation: var(--anim-slide-down); }
+.anim-slide-up { animation: var(--anim-slide-up); }
+.anim-slide-right { animation: var(--anim-slide-right); }
+.anim-slide-left { animation: var(--anim-slide-left); }
+.anim-shake { animation: var(--anim-shake); }
+.anim-bounce { animation: var(--anim-bounce); }
+.anim-scale-in { animation: var(--anim-scale-in); }
+.anim-ping { animation: var(--anim-ping); }
+
+/* Utilidad para pausar animaciones */
+.anim-paused { animation-play-state: paused; }
+.anim-running { animation-play-state: running; }
+
+/* Utilidad para reducir movimiento (accesibilidad) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
+
+/*
+34. RESET BASE OPCIONAL
+
+Estilos predeterminados para elementos HTML.
+
+ESTÁ COMENTADO A PROPÓSITO.
+
+¿Cuándo descomentarlo?
+- Si NO usas ningún framework (ni Bootstrap, ni Tailwind)
+- Si quieres una base limpia con Igoded Design
+
+¿Cuándo dejarlo comentado?
+- Si usas Bootstrap, Tailwind u otro framework
+
+PARA ACTIVAR: elimina las barras de comentario de apertura y cierre.
+
+body {
+  font-family: var(--font-base);
+  font-size: var(--text-base);
+  font-weight: var(--fw-normal);
+  line-height: var(--lh-normal);
+  background-color: var(--bg-base);
+  color: var(--text-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--text-heading);
+}
+
+h1 { font-size: var(--text-5xl); }
+h2 { font-size: var(--text-4xl); }
+h3 { font-size: var(--text-3xl); }
+h4 { font-size: var(--text-2xl); }
+h5 { font-size: var(--text-xl); }
+h6 { font-size: var(--text-lg); }
+
+a {
+  color: var(--link-color);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: all var(--transition-fast);
+}
+
+a:hover {
+  color: var(--link-color-hover);
+  text-shadow: var(--link-glow);
+}
+
+a:visited {
+  color: var(--link-color-visited);
+}
+
+a:focus-visible {
+  outline: var(--focus-ring-outline);
+  outline-offset: var(--focus-ring-offset);
+  box-shadow: var(--focus-ring-glow);
+}
+
+button, .btn {
+  font-family: var(--font-base);
+  font-weight: var(--fw-semibold);
+  background-color: var(--primary);
+  color: var(--bg-base);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-6);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+button:hover, .btn:hover {
+  filter: var(--state-hover);
+  box-shadow: var(--glow-primary-medium);
+}
+
+button:active, .btn:active {
+  transform: scale(0.98);
+  filter: var(--state-active);
+}
+
+button:focus-visible, .btn:focus-visible {
+  outline: var(--focus-ring-outline);
+  outline-offset: var(--focus-ring-offset);
+  box-shadow: var(--focus-ring-glow);
+}
+
+button:disabled, .btn:disabled {
+  filter: var(--state-disabled);
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  font-family: var(--font-base);
+  font-size: var(--text-base);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-glow);
+}
+
+input:disabled, textarea:disabled, select:disabled {
+  background-color: var(--input-bg-disabled);
+  color: var(--input-text-disabled);
+  border-color: var(--input-border-disabled);
+  cursor: not-allowed;
+}
+
+*/
