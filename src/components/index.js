@@ -5,6 +5,9 @@ export { Button } from './actions/Button'
 export { Badge } from './feedback/Badge'
 export { Alert } from './feedback/Alert'
 export { Spinner } from './feedback/Spinner'
+export { Toast, ToastContainer, useToast } from './feedback/Toast'
+export { Skeleton } from './feedback/Skeleton'
+export { Progress } from './feedback/Progress'
 
 // Forms
 export { Input } from './forms/Input'
