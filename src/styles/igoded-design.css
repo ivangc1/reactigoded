@@ -30,38 +30,38 @@ Los pares cromáticos se complementan: verde-teal para lo nocturno, azul-violeta
 ÍNDICE:
 1. Imports / Importaciones (línea 66)
 2. Colores Igoded (línea 76)
-3. Neutros tintados (línea 202)
-4. Variables semánticas (línea 353)
-5. Tipografía (línea 456)
-6. Gradientes (línea 523)
-7. Sombras (línea 606)
-8. Glow / Resplandor (línea 705)
-9. Glassmorphism / Efecto cristal (línea 806)
-10. Border Radius / Bordes redondeados (línea 895)
-11. Transiciones (línea 914)
-12. Blur / Desenfoque (línea 931)
-13. Neumorphism / Neumorfismo (línea 948)
-14. Blend Modes / Modos de fusión (línea 1130)
-15. Clip-path / Recortes y formas (línea 1313)
-16. Filtros CSS (línea 1536)
-17. Estados interactivos (línea 1735)
-18. Formularios / Inputs (línea 1762)
-19. Links / Enlaces (línea 1866)
-20. Bordes (línea 1933)
-21. Spacing / Espaciado (línea 1972)
-22. Z-index / Capas y profundidad (línea 2002)
-23. Scrollbar / Barra de desplazamiento (línea 2026)
-24. Selection / Selección de texto (línea 2088)
-25. Focus Ring / Anillo de enfoque (línea 2135)
-26. Estados semánticos (línea 2159)
-27. Overlays / Capas superpuestas (línea 2200)
-28. Breakpoints / Puntos de ruptura (línea 2235)
-29. Aspect Ratios / Relaciones de aspecto (línea 2258)
-30. Container Widths / Anchos de contenedor (línea 2277)
-31. Clases utilitarias (línea 2296)
-32. Animaciones y Keyframes (línea 2731)
-33. Variables de Componentes (línea 3010)
-34. Reset base opcional (línea 3993) ← COMENTADO, solo descomentar si no usas frameworks
+3. Neutros tintados (línea 244)
+4. Variables semánticas (línea 395)
+5. Tipografía (línea 502)
+6. Gradientes (línea 569)
+7. Sombras (línea 652)
+8. Glow / Resplandor (línea 751)
+9. Glassmorphism / Efecto cristal (línea 851)
+10. Border Radius / Bordes redondeados (línea 940)
+11. Transiciones (línea 959)
+12. Blur / Desenfoque (línea 976)
+13. Neumorphism / Neumorfismo (línea 993)
+14. Blend Modes / Modos de fusión (línea 1162)
+15. Clip-path / Recortes y formas (línea 1337)
+16. Filtros CSS (línea 1557)
+17. Estados interactivos (línea 1753)
+18. Formularios / Inputs (línea 1778)
+19. Links / Enlaces (línea 1877)
+20. Bordes (línea 1944)
+21. Spacing / Espaciado (línea 1983)
+22. Z-index / Capas y profundidad (línea 2013)
+23. Scrollbar / Barra de desplazamiento (línea 2037)
+24. Selection / Selección de texto (línea 2099)
+25. Focus Ring / Anillo de enfoque (línea 2146)
+26. Estados semánticos (línea 2165)
+27. Overlays / Capas superpuestas (línea 2209)
+28. Breakpoints / Puntos de ruptura (línea 2243)
+29. Aspect Ratios / Relaciones de aspecto (línea 2266)
+30. Container Widths / Anchos de contenedor (línea 2285)
+31. Clases utilitarias (línea 2303)
+32. Animaciones y Keyframes (línea 2740)
+33. Variables de Componentes (línea 3003)
+34. Reset base opcional (línea 3787) ← COMENTADO, solo descomentar si no usas frameworks
 
 1. IMPORTS
 Cargamos las fuentes de Google Fonts.
@@ -195,6 +195,54 @@ color: var(--accent);           ← el accent del modo actual (Liminal en dark, 
   Fondo sutil para destacar zonas sin ser agresivo.
   */
   --bg-muted: #152020;
+
+  /*
+  Fondo hundido, más oscuro que base.
+  Para headers de tabla, tracks de sliders, elementos inactivos.
+  */
+  --bg-sunken: #080f0f;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  BORDES
+  ═══════════════════════════════════════════════════════
+  */
+  --border-subtle: var(--neutral-800);
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  COLORES SEMÁNTICOS DE ESTADO
+  ═══════════════════════════════════════════════════════
+  */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* Texto sobre colores de estado (contraste) */
+  --text-on-primary: #ffffff;
+  --text-on-accent: #ffffff;
+  --text-on-success: #ffffff;
+  --text-on-warning: #000000;
+  --text-on-danger: #ffffff;
+
+  /* 
+  ═══════════════════════════════════════════════════════
+  ESPACIADO SEMÁNTICO (alias)
+  ═══════════════════════════════════════════════════════
+  */
+  --space-2xs: 0.125rem;
+  /* 2px */
+  --space-xs: 0.25rem;
+  /* 4px */
+  --space-sm: 0.5rem;
+  /* 8px */
+  --space-md: 1rem;
+  /* 16px */
+  --space-lg: 1.5rem;
+  /* 24px */
+  --space-xl: 2rem;
+  /* 32px */
 }
 
 
@@ -405,6 +453,7 @@ border-color: var(--border-default);  ← se adapta solo
     --bg-surface: #E5EBF5;
     --bg-elevated: #FFFFFF;
     --bg-muted: #E0E8F2;
+    --bg-sunken: #D8E2EF;
 
     --text-body: var(--neutral-900);
     --text-muted: var(--neutral-500);
@@ -412,6 +461,7 @@ border-color: var(--border-default);  ← se adapta solo
 
     --border-default: var(--accent);
     --border-muted: var(--neutral-300);
+    --border-subtle: var(--neutral-200);
   }
 }
 
@@ -424,6 +474,7 @@ border-color: var(--border-default);  ← se adapta solo
   --bg-surface: #E5EBF5;
   --bg-elevated: #FFFFFF;
   --bg-muted: #E0E8F2;
+  --bg-sunken: #D8E2EF;
 
   --text-body: var(--neutral-900);
   --text-muted: var(--neutral-500);
@@ -431,6 +482,7 @@ border-color: var(--border-default);  ← se adapta solo
 
   --border-default: var(--accent);
   --border-muted: var(--neutral-300);
+  --border-subtle: var(--neutral-200);
 }
 
 /* Override manual: fuerza modo oscuro */
@@ -715,7 +767,6 @@ CUIDADO: El intense es potente. Úsalo con moderación o cansará la vista.
 
 CÓMO USAR:
 box-shadow: var(--glow-primary-medium);
-.boton:hover { box-shadow: var(--glow-accent-intense); }
 */
 
 :root {
@@ -970,19 +1021,6 @@ HOVER STATES:
 - Hover: tinte más fuerte (personalidad visible)
 
 CÓMO USAR:
-.contenedor {
-  background: var(--neuo-bg);  ← OBLIGATORIO en el padre
-}
-.boton-neuo {
-  background: var(--neuo-bg);
-  box-shadow: var(--neuo-raised);
-}
-.boton-neuo:hover {
-  box-shadow: var(--neuo-raised-hover);
-}
-.input-neuo:focus {
-  box-shadow: var(--neuo-pressed);
-}
 */
 
 :root {
@@ -1148,14 +1186,6 @@ Los blend modes funcionan con mix-blend-mode (mezcla con todo lo de abajo)
 o background-blend-mode (mezcla solo los fondos del mismo elemento).
 
 CÓMO USAR:
-.overlay {
-  background: var(--liminal);
-  mix-blend-mode: var(--blend-multiply);
-}
-.imagen-con-efecto {
-  background-image: url(...), linear-gradient(...);
-  background-blend-mode: var(--blend-overlay);
-}
 
 LOS 15 MODOS ESTÁNDAR CSS:
 */
@@ -1326,9 +1356,6 @@ COORDENADAS:
 - Los puntos se conectan en orden formando la figura
 
 CÓMO USAR:
-.avatar { clip-path: var(--clip-circle); }
-.badge { clip-path: var(--clip-hexagon); }
-.flecha { clip-path: var(--clip-arrow-right); }
 
 NOTA: clip-path NO afecta al box model. El elemento sigue ocupando
 su espacio rectangular original. Solo cambia lo que se VE.
@@ -1552,9 +1579,6 @@ un tinte del color correspondiente a cualquier imagen.
 ¡Útil para que fotos externas encajen con tu paleta!
 
 CÓMO USAR:
-.imagen-disabled { filter: var(--filter-disabled); }
-.imagen:hover { filter: var(--filter-hover); }
-.foto-de-equipo { filter: var(--filter-liminal); }
 */
 
 :root {
@@ -1728,8 +1752,6 @@ Feedback visual para acciones del usuario.
 IMPORTANTE para usabilidad y accesibilidad.
 
 CÓMO USAR:
-.boton:hover { filter: var(--state-hover); }
-.boton:active { transform: scale(0.98); filter: var(--state-active); }
 */
 
 :root {
@@ -1755,11 +1777,6 @@ Inputs tintados con los neutros del sistema (30% intensidad).
 Los campos de formulario tienen personalidad, no son grises muertos.
 
 CÓMO USAR:
-input {
-  background-color: var(--input-bg);
-  color: var(--input-text);
-  border: 1px solid var(--input-border);
-}
 input:focus {
   border-color: var(--input-border-focus);
   box-shadow: var(--input-glow);
@@ -2143,11 +2160,6 @@ OBLIGATORIO para accesibilidad (WCAG).
 Usa ACCENT + GLOW para máxima visibilidad.
 
 CÓMO USAR:
-.boton:focus-visible {
-  outline: var(--focus-ring-outline);
-  outline-offset: var(--focus-ring-offset);
-  box-shadow: var(--focus-ring-glow);
-}
 */
 
 :root {
@@ -2177,23 +2189,26 @@ border-color: var(--warning);
 
 :root {
 
-  /* Success: verde, operación exitosa, confirmación */
-  --success: #22c55e;
+  /* 
+  Variantes claras/oscuras de los colores de estado
+  Los colores base (--success, --warning, --danger, --info) 
+  están definidos arriba en "Colores Semánticos de Estado"
+  */
+
+  /* Success variantes */
   --success-light: #dcfce7;
   --success-dark: #166534;
 
-  /* Error: rojo, algo salió mal, alerta crítica */
-  --error: #ef4444;
+  /* Error: alias de --danger para contextos de formulario */
+  --error: var(--danger);
   --error-light: #fee2e2;
   --error-dark: #991b1b;
 
-  /* Warning: amarillo, cuidado, atención requerida */
-  --warning: #f59e0b;
+  /* Warning variantes */
   --warning-light: #fef3c7;
   --warning-dark: #92400e;
 
-  /* Info: azul, información neutral, ayuda */
-  --info: #3b82f6;
+  /* Info variantes */
   --info-light: #dbeafe;
   --info-dark: #1e40af;
 }
@@ -2206,7 +2221,6 @@ Capas semitransparentes sobre otros elementos.
 Para: fondos de modales, oscurecer imágenes.
 
 CÓMO USAR:
-.modal-backdrop { background: var(--overlay-dark); }
 */
 
 :root {
@@ -2293,7 +2307,6 @@ aspect-ratio: var(--ratio-16-9);
 Anchos máximos para contenedores de contenido.
 
 CÓMO USAR:
-.container { max-width: var(--container-lg); margin-inline: auto; }
 */
 
 :root {
@@ -3239,6 +3252,10 @@ Control sobre cómo se envuelve el texto.
   white-space: pre-wrap;
 }
 
+.whitespace-pre-line {
+  white-space: pre-line;
+}
+
 /* Rompe palabras largas si es necesario (evita overflow) */
 .break-words {
   word-wrap: break-word;
@@ -3254,6 +3271,10 @@ Control sobre cómo se envuelve el texto.
 /* Rompe en cualquier carácter (para URLs largas, etc.) */
 .break-all {
   word-break: break-all;
+}
+
+.break-keep {
+  word-break: keep-all;
 }
 
 
@@ -3281,13 +3302,11 @@ Regla: si dudas, no animes. Reserva animaciones para momentos clave.
 CÓMO USAR - 3 FORMAS:
 
 1. Variable directa (recomendado):
-   .mi-spinner { animation: var(--anim-spin); }
 
 2. Clase utilitaria (rápido):
    <div class="anim-spin">...</div>
 
 3. Keyframe personalizado (control total):
-   .mi-cosa { animation: spin 2s linear infinite; }
 
 ACCESIBILIDAD:
 Algunos usuarios tienen "reducir movimiento" activado en su sistema.
@@ -3357,11 +3376,6 @@ SHIMMER - Brillo que recorre de izquierda a derecha
 ÚSALO EN: Skeletons de carga (placeholder mientras cargan datos)
 REQUIERE: Un gradiente como background (ver --skeleton-gradient)
 EJEMPLO:
-  .skeleton {
-    background: var(--skeleton-gradient);
-    background-size: 200% 100%;
-    animation: var(--anim-shimmer);
-  }
 */
 @keyframes shimmer {
   0% {
@@ -3537,14 +3551,6 @@ PING - Onda expansiva que desaparece
 ÚSALO EN: Badges de notificación "tienes mensajes nuevos"
 EFECTO: Un círculo que crece y se desvanece en loop
 EJEMPLO:
-  .badge-ping::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: var(--danger);
-    animation: var(--anim-ping);
-  }
 */
 @keyframes ping {
 
@@ -3566,7 +3572,6 @@ EJEMPLO:
   la duración, la curva de timing y si se repite.
   
   CÓMO USAR:
-    .mi-elemento { animation: var(--anim-spin); }
   
   ANATOMÍA:
     --anim-spin: spin 1s linear infinite;
@@ -3634,23 +3639,18 @@ VENTAJAS:
 - Temas: cambian automáticamente entre dark y light mode
 
 CÓMO USAR:
-  .mi-modal {
-    background: var(--modal-bg);
-    border-radius: var(--modal-radius);
-    box-shadow: var(--modal-shadow);
-    padding: var(--modal-padding);
-    width: var(--modal-width-md);
-  }
 
 ¿PUEDO CAMBIAR LOS VALORES?
 Sí. Puedes sobrescribir cualquier variable en tu propio CSS:
   :root {
-    --modal-radius: 0; /* modales cuadrados */
-}
+    --modal-radius: 0; ← modales cuadrados
+  }
 
 NOTA: Estas variables referencian otras variables base (--bg-elevated,
-  --radius-md, etc.),
-así que heredan los cambios de tema automáticamente. */:root {
+--radius-md, etc.), así que heredan los cambios de tema automáticamente.
+*/
+
+:root {
   /* 
   ═══════════════════════════════════════════════════════
   SKELETON / LOADING PLACEHOLDER
@@ -3661,13 +3661,6 @@ así que heredan los cambios de tema automáticamente. */:root {
   cuando el contenido aparece de golpe.
   
   CÓMO USARLO:
-    .skeleton-text {
-      height: 1em;
-      background: var(--skeleton-gradient);
-      background-size: 200% 100%;
-      border-radius: var(--skeleton-radius);
-      animation: var(--anim-shimmer);
-    }
   
   El shimmer crea un "brillo" que recorre el skeleton,
   indicando visualmente que algo está cargando.
@@ -3689,14 +3682,6 @@ así que heredan los cambios de tema automáticamente. */:root {
   Círculo giratorio que indica "procesando".
   
   CÓMO CONSTRUIR UN SPINNER:
-    .spinner {
-      width: var(--spinner-size-md);
-      height: var(--spinner-size-md);
-      border: var(--spinner-thickness) solid var(--spinner-track);
-      border-top-color: var(--spinner-color);
-      border-radius: 50%;
-      animation: var(--anim-spin);
-    }
   
   TAMAÑOS DISPONIBLES:
     sm (1rem)   → inline con texto, botones pequeños
@@ -3725,17 +3710,6 @@ así que heredan los cambios de tema automáticamente. */:root {
       <div class="progress-fill" style="width: 65%"></div>
     </div>
     
-    .progress-track {
-      height: var(--progress-height-md);
-      background: var(--progress-track);
-      border-radius: var(--progress-radius);
-    }
-    .progress-fill {
-      height: 100%;
-      background: var(--progress-fill);
-      border-radius: var(--progress-radius);
-      transition: width 300ms ease;
-    }
   
   VARIANTES DE COLOR:
     --progress-fill         → normal (accent)
@@ -3784,17 +3758,18 @@ así que heredan los cambios de tema automáticamente. */:root {
       padding: var(--tooltip-padding);
       border-radius: var(--tooltip-radius);
       box-shadow: var(--tooltip-shadow);
-      /* ... posicionamiento ... */
-}
+      ... posicionamiento ...
+    }
+  */
 
-*/ --tooltip-bg: var(--bg-elevated);
---tooltip-text: var(--text-body);
---tooltip-padding: var(--space-xs) var(--space-sm);
---tooltip-radius: var(--radius-sm);
---tooltip-shadow: var(--shadow-lg);
---tooltip-arrow-size: 6px;
+  --tooltip-bg: var(--bg-elevated);
+  --tooltip-text: var(--text-body);
+  --tooltip-padding: var(--space-xs) var(--space-sm);
+  --tooltip-radius: var(--radius-sm);
+  --tooltip-shadow: var(--shadow-lg);
+  --tooltip-arrow-size: 6px;
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   MODAL / DIALOG
   ═══════════════════════════════════════════════════════
@@ -3825,28 +3800,19 @@ así que heredan los cambios de tema automáticamente. */:root {
       </div>
     </div>
     
-    .modal-backdrop { background: var(--modal-backdrop); }
-    .modal {
-      background: var(--modal-bg);
-      border-radius: var(--modal-radius);
-      box-shadow: var(--modal-shadow);
-      padding: var(--modal-padding);
-      width: var(--modal-width-md);
-      animation: var(--anim-scale-in);
-    }
   */
 
---modal-bg: var(--bg-elevated);
---modal-radius: var(--radius-lg);
---modal-shadow: var(--shadow-xl);
---modal-padding: var(--space-lg);
---modal-width-sm: 400px;
---modal-width-md: 560px;
---modal-width-lg: 720px;
---modal-width-xl: 900px;
---modal-backdrop: var(--overlay-dark);
+  --modal-bg: var(--bg-elevated);
+  --modal-radius: var(--radius-lg);
+  --modal-shadow: var(--shadow-xl);
+  --modal-padding: var(--space-lg);
+  --modal-width-sm: 400px;
+  --modal-width-md: 560px;
+  --modal-width-lg: 720px;
+  --modal-width-xl: 900px;
+  --modal-backdrop: var(--overlay-dark);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   TOAST / NOTIFICATION
   ═══════════════════════════════════════════════════════
@@ -3869,34 +3835,18 @@ así que heredan los cambios de tema automáticamente. */:root {
     --toast-offset define la distancia al borde.
   
   ESTRUCTURA:
-    .toast-container {
-      position: fixed;
-      bottom: var(--toast-offset);
-      right: var(--toast-offset);
-      display: flex;
-      flex-direction: column;
-      gap: var(--toast-gap);
-    }
-    .toast {
-      background: var(--toast-bg);
-      color: var(--toast-text);
-      padding: var(--toast-padding);
-      border-radius: var(--toast-radius);
-      box-shadow: var(--toast-shadow);
-      animation: var(--anim-slide-left);
-    }
   */
 
---toast-bg: var(--bg-elevated);
---toast-text: var(--text-body);
---toast-radius: var(--radius-md);
---toast-shadow: var(--shadow-lg);
---toast-padding: var(--space-sm) var(--space-md);
---toast-gap: var(--space-sm);
-/* Posiciones desde el borde de la pantalla */
---toast-offset: var(--space-md);
+  --toast-bg: var(--bg-elevated);
+  --toast-text: var(--text-body);
+  --toast-radius: var(--radius-md);
+  --toast-shadow: var(--shadow-lg);
+  --toast-padding: var(--space-sm) var(--space-md);
+  --toast-gap: var(--space-sm);
+  /* Posiciones desde el borde de la pantalla */
+  --toast-offset: var(--space-md);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   TABS
   ═══════════════════════════════════════════════════════
@@ -3916,30 +3866,18 @@ así que heredan los cambios de tema automáticamente. */:root {
     </div>
     <div class="tab-content">...</div>
     
-    .tab {
-      background: var(--tab-bg);
-      color: var(--tab-text);
-      padding: var(--tab-padding);
-      border-radius: var(--tab-radius);
-      border-bottom: 2px solid var(--tab-border);
-    }
-    .tab.active {
-      background: var(--tab-bg-active);
-      color: var(--tab-text-active);
-      border-bottom-color: var(--tab-border-active);
-    }
   */
 
---tab-bg: transparent;
---tab-bg-active: var(--bg-elevated);
---tab-text: var(--text-muted);
---tab-text-active: var(--accent);
---tab-border: var(--border-default);
---tab-border-active: var(--accent);
---tab-padding: var(--space-sm) var(--space-md);
---tab-radius: var(--radius-sm);
+  --tab-bg: transparent;
+  --tab-bg-active: var(--bg-elevated);
+  --tab-text: var(--text-muted);
+  --tab-text-active: var(--accent);
+  --tab-border: var(--border-default);
+  --tab-border-active: var(--accent);
+  --tab-padding: var(--space-sm) var(--space-md);
+  --tab-radius: var(--radius-sm);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   ACCORDION
   ═══════════════════════════════════════════════════════
@@ -3962,28 +3900,16 @@ así que heredan los cambios de tema automáticamente. */:root {
       </div>
     </div>
     
-    .accordion-item {
-      background: var(--accordion-bg);
-      border: 1px solid var(--accordion-border);
-      border-radius: var(--accordion-radius);
-    }
-    .accordion-header {
-      padding: var(--accordion-padding);
-      width: 100%;
-    }
-    .accordion-header:hover {
-      background: var(--accordion-bg-hover);
-    }
   */
 
---accordion-bg: var(--bg-base);
---accordion-bg-hover: var(--bg-elevated);
---accordion-border: var(--border-subtle);
---accordion-radius: var(--radius-md);
---accordion-padding: var(--space-md);
---accordion-icon-size: 1.25rem;
+  --accordion-bg: var(--bg-base);
+  --accordion-bg-hover: var(--bg-elevated);
+  --accordion-border: var(--border-subtle);
+  --accordion-radius: var(--radius-md);
+  --accordion-padding: var(--space-md);
+  --accordion-icon-size: 1.25rem;
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   TABLE
   ═══════════════════════════════════════════════════════
@@ -3996,20 +3922,6 @@ así que heredan los cambios de tema automáticamente. */:root {
     - Alinea números a la derecha, texto a la izquierda
   
   ESTRUCTURA:
-    table {
-      border-collapse: collapse;
-      width: 100%;
-    }
-    th {
-      background: var(--table-header-bg);
-      color: var(--table-header-text);
-      padding: var(--table-padding);
-      text-align: left;
-    }
-    td {
-      padding: var(--table-padding);
-      border-bottom: 1px solid var(--table-border);
-    }
     tr:nth-child(even) {
       background: var(--table-row-bg-alt);
     }
@@ -4018,15 +3930,15 @@ así que heredan los cambios de tema automáticamente. */:root {
     }
   */
 
---table-header-bg: var(--bg-sunken);
---table-header-text: var(--text-heading);
---table-row-bg: var(--bg-base);
---table-row-bg-alt: var(--bg-elevated);
---table-row-bg-hover: var(--bg-elevated);
---table-border: var(--border-subtle);
---table-padding: var(--space-sm) var(--space-md);
+  --table-header-bg: var(--bg-sunken);
+  --table-header-text: var(--text-heading);
+  --table-row-bg: var(--bg-base);
+  --table-row-bg-alt: var(--bg-elevated);
+  --table-row-bg-hover: var(--bg-elevated);
+  --table-border: var(--border-subtle);
+  --table-padding: var(--space-sm) var(--space-md);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   STEPPER / WIZARD
   ═══════════════════════════════════════════════════════
@@ -4048,38 +3960,18 @@ así que heredan los cambios de tema automáticamente. */:root {
       <div class="step">3</div>
     </div>
     
-    .step {
-      width: var(--stepper-dot-size);
-      height: var(--stepper-dot-size);
-      background: var(--stepper-dot-bg);
-      color: var(--stepper-dot-text);
-      border-radius: 50%;
-    }
-    .step.active {
-      background: var(--stepper-dot-bg-active);
-      color: var(--stepper-dot-text-active);
-    }
-    .step.complete {
-      background: var(--stepper-dot-bg-complete);
-    }
-    .step-line {
-      background: var(--stepper-line);
-    }
-    .step-line.complete {
-      background: var(--stepper-line-complete);
-    }
   */
 
---stepper-line: var(--border-subtle);
---stepper-line-complete: var(--accent);
---stepper-dot-size: 2rem;
---stepper-dot-bg: var(--bg-sunken);
---stepper-dot-bg-active: var(--accent);
---stepper-dot-bg-complete: var(--success);
---stepper-dot-text: var(--text-muted);
---stepper-dot-text-active: var(--text-on-accent);
+  --stepper-line: var(--border-subtle);
+  --stepper-line-complete: var(--accent);
+  --stepper-dot-size: 2rem;
+  --stepper-dot-bg: var(--bg-sunken);
+  --stepper-dot-bg-active: var(--accent);
+  --stepper-dot-bg-complete: var(--success);
+  --stepper-dot-text: var(--text-muted);
+  --stepper-dot-text-active: var(--text-on-accent);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   RATING (ESTRELLAS)
   ═══════════════════════════════════════════════════════
@@ -4099,54 +3991,41 @@ así que heredan los cambios de tema automáticamente. */:root {
       <span class="star">☆</span>
     </div>
     
-    .star {
-      font-size: var(--rating-size-md);
-      color: var(--rating-empty);
-    }
-    .star.filled {
-      color: var(--rating-filled);
-    }
-    .star:hover {
-      color: var(--rating-hover);
-    }
-    .rating {
-      gap: var(--rating-gap);
-    }
   */
 
---rating-empty: var(--neutral-600);
---rating-filled: var(--warning);
---rating-hover: var(--warning);
---rating-size-sm: 1rem;
---rating-size-md: 1.5rem;
---rating-size-lg: 2rem;
---rating-gap: var(--space-2xs);
+  --rating-empty: var(--neutral-600);
+  --rating-filled: var(--warning);
+  --rating-hover: var(--warning);
+  --rating-size-sm: 1rem;
+  --rating-size-md: 1.5rem;
+  --rating-size-lg: 2rem;
+  --rating-gap: var(--space-2xs);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   SLIDER / RANGE
   ═══════════════════════════════════════════════════════
   */
 
---slider-track: var(--bg-sunken);
---slider-track-height: 6px;
---slider-fill: var(--accent);
---slider-thumb-size: 18px;
---slider-thumb-bg: var(--accent);
---slider-thumb-border: 2px solid var(--bg-base);
---slider-thumb-shadow: var(--shadow-md);
+  --slider-track: var(--bg-sunken);
+  --slider-track-height: 6px;
+  --slider-fill: var(--accent);
+  --slider-thumb-size: 18px;
+  --slider-thumb-bg: var(--accent);
+  --slider-thumb-border: 2px solid var(--bg-base);
+  --slider-thumb-shadow: var(--shadow-md);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   DIVIDER / SEPARATOR
   ═══════════════════════════════════════════════════════
   */
 
---divider-color: var(--border-subtle);
---divider-thickness: 1px;
---divider-spacing: var(--space-md);
+  --divider-color: var(--border-subtle);
+  --divider-thickness: 1px;
+  --divider-spacing: var(--space-md);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   DROPDOWN / SELECT
   ═══════════════════════════════════════════════════════
@@ -4167,33 +4046,17 @@ así que heredan los cambios de tema automáticamente. */:root {
       </ul>
     </div>
     
-    .dropdown-menu {
-      background: var(--dropdown-bg);
-      border: 1px solid var(--dropdown-border);
-      border-radius: var(--dropdown-radius);
-      box-shadow: var(--dropdown-shadow);
-      animation: var(--anim-slide-down);
-    }
-    .dropdown-item {
-      padding: var(--dropdown-item-padding);
-    }
-    .dropdown-item:hover {
-      background: var(--dropdown-item-hover);
-    }
-    .dropdown-item.active {
-      color: var(--dropdown-item-active);
-    }
   */
 
---dropdown-bg: var(--bg-elevated);
---dropdown-border: var(--border-default);
---dropdown-radius: var(--radius-md);
---dropdown-shadow: var(--shadow-lg);
---dropdown-item-padding: var(--space-sm) var(--space-md);
---dropdown-item-hover: var(--bg-sunken);
---dropdown-item-active: var(--accent);
+  --dropdown-bg: var(--bg-elevated);
+  --dropdown-border: var(--border-default);
+  --dropdown-radius: var(--radius-md);
+  --dropdown-shadow: var(--shadow-lg);
+  --dropdown-item-padding: var(--space-sm) var(--space-md);
+  --dropdown-item-hover: var(--bg-sunken);
+  --dropdown-item-active: var(--accent);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   CHIP / TAG
   ═══════════════════════════════════════════════════════
@@ -4211,31 +4074,17 @@ así que heredan los cambios de tema automáticamente. */:root {
       <button class="chip-close">×</button>
     </span>
     
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--chip-gap);
-      background: var(--chip-bg);
-      color: var(--chip-text);
-      border: 1px solid var(--chip-border);
-      border-radius: var(--chip-radius);
-      padding: var(--chip-padding);
-    }
-    .chip-close {
-      width: var(--chip-close-size);
-      height: var(--chip-close-size);
-    }
   */
 
---chip-bg: var(--bg-elevated);
---chip-text: var(--text-body);
---chip-border: var(--border-subtle);
---chip-radius: var(--radius-full);
---chip-padding: var(--space-2xs) var(--space-sm);
---chip-gap: var(--space-2xs);
---chip-close-size: 1rem;
+  --chip-bg: var(--bg-elevated);
+  --chip-text: var(--text-body);
+  --chip-border: var(--border-subtle);
+  --chip-radius: var(--radius-full);
+  --chip-padding: var(--space-2xs) var(--space-sm);
+  --chip-gap: var(--space-2xs);
+  --chip-close-size: 1rem;
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   SIDEBAR / DRAWER
   ═══════════════════════════════════════════════════════
@@ -4259,118 +4108,100 @@ así que heredan los cambios de tema automáticamente. */:root {
       </nav>
     </aside>
     
-    .sidebar {
-      width: var(--sidebar-width);
-      background: var(--sidebar-bg);
-      border-right: 1px solid var(--sidebar-border);
-    }
-    .sidebar.collapsed {
-      width: var(--sidebar-width-collapsed);
-    }
-    .sidebar-item {
-      padding: var(--sidebar-item-padding);
-      border-radius: var(--sidebar-item-radius);
-    }
-    .sidebar-item:hover {
-      background: var(--sidebar-item-hover);
-    }
-    .sidebar-item.active {
-      color: var(--sidebar-item-active);
-    }
   */
 
---sidebar-bg: var(--bg-base);
---sidebar-width: 280px;
---sidebar-width-collapsed: 64px;
---sidebar-border: var(--border-subtle);
---sidebar-item-padding: var(--space-sm) var(--space-md);
---sidebar-item-radius: var(--radius-sm);
---sidebar-item-hover: var(--bg-elevated);
---sidebar-item-active: var(--accent);
+  --sidebar-bg: var(--bg-base);
+  --sidebar-width: 280px;
+  --sidebar-width-collapsed: 64px;
+  --sidebar-border: var(--border-subtle);
+  --sidebar-item-padding: var(--space-sm) var(--space-md);
+  --sidebar-item-radius: var(--radius-sm);
+  --sidebar-item-hover: var(--bg-elevated);
+  --sidebar-item-active: var(--accent);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   NAVBAR / HEADER
   ═══════════════════════════════════════════════════════
   */
 
---navbar-bg: var(--bg-base);
---navbar-height: 64px;
---navbar-border: var(--border-subtle);
---navbar-shadow: var(--shadow-sm);
---navbar-padding: 0 var(--space-lg);
+  --navbar-bg: var(--bg-base);
+  --navbar-height: 64px;
+  --navbar-border: var(--border-subtle);
+  --navbar-shadow: var(--shadow-sm);
+  --navbar-padding: 0 var(--space-lg);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   BREADCRUMB
   ═══════════════════════════════════════════════════════
   */
 
---breadcrumb-text: var(--text-muted);
---breadcrumb-text-active: var(--text-body);
---breadcrumb-separator: '/';
---breadcrumb-gap: var(--space-xs);
+  --breadcrumb-text: var(--text-muted);
+  --breadcrumb-text-active: var(--text-body);
+  --breadcrumb-separator: '/';
+  --breadcrumb-gap: var(--space-xs);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   PAGINATION
   ═══════════════════════════════════════════════════════
   */
 
---pagination-bg: transparent;
---pagination-bg-hover: var(--bg-elevated);
---pagination-bg-active: var(--accent);
---pagination-text: var(--text-body);
---pagination-text-active: var(--text-on-accent);
---pagination-size: 2.5rem;
---pagination-radius: var(--radius-sm);
---pagination-gap: var(--space-2xs);
+  --pagination-bg: transparent;
+  --pagination-bg-hover: var(--bg-elevated);
+  --pagination-bg-active: var(--accent);
+  --pagination-text: var(--text-body);
+  --pagination-text-active: var(--text-on-accent);
+  --pagination-size: 2.5rem;
+  --pagination-radius: var(--radius-sm);
+  --pagination-gap: var(--space-2xs);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   TIMELINE
   ═══════════════════════════════════════════════════════
   */
 
---timeline-line: var(--border-subtle);
---timeline-line-width: 2px;
---timeline-dot-size: 12px;
---timeline-dot-bg: var(--accent);
---timeline-dot-border: 2px solid var(--bg-base);
---timeline-gap: var(--space-lg);
+  --timeline-line: var(--border-subtle);
+  --timeline-line-width: 2px;
+  --timeline-dot-size: 12px;
+  --timeline-dot-bg: var(--accent);
+  --timeline-dot-border: 2px solid var(--bg-base);
+  --timeline-gap: var(--space-lg);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   MENU / CONTEXT MENU
   ═══════════════════════════════════════════════════════
   */
 
---menu-bg: var(--bg-elevated);
---menu-border: var(--border-subtle);
---menu-radius: var(--radius-md);
---menu-shadow: var(--shadow-lg);
---menu-padding: var(--space-xs);
---menu-item-padding: var(--space-sm) var(--space-md);
---menu-item-radius: var(--radius-sm);
---menu-item-hover: var(--bg-sunken);
---menu-divider: var(--border-subtle);
+  --menu-bg: var(--bg-elevated);
+  --menu-border: var(--border-subtle);
+  --menu-radius: var(--radius-md);
+  --menu-shadow: var(--shadow-lg);
+  --menu-padding: var(--space-xs);
+  --menu-item-padding: var(--space-sm) var(--space-md);
+  --menu-item-radius: var(--radius-sm);
+  --menu-item-hover: var(--bg-sunken);
+  --menu-divider: var(--border-subtle);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   CALENDAR / DATE PICKER
   ═══════════════════════════════════════════════════════
   */
 
---calendar-bg: var(--bg-elevated);
---calendar-header-bg: var(--bg-sunken);
---calendar-day-size: 2.5rem;
---calendar-day-hover: var(--bg-sunken);
---calendar-day-selected: var(--accent);
---calendar-day-today: var(--primary);
---calendar-day-outside: var(--text-muted);
---calendar-radius: var(--radius-md);
+  --calendar-bg: var(--bg-elevated);
+  --calendar-header-bg: var(--bg-sunken);
+  --calendar-day-size: 2.5rem;
+  --calendar-day-hover: var(--bg-sunken);
+  --calendar-day-selected: var(--accent);
+  --calendar-day-today: var(--primary);
+  --calendar-day-outside: var(--text-muted);
+  --calendar-radius: var(--radius-md);
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   AVATAR
   ═══════════════════════════════════════════════════════
@@ -4398,57 +4229,35 @@ así que heredan los cambios de tema automáticamente. */:root {
       <span class="avatar-status online"></span>
     </div>
     
-    .avatar {
-      width: var(--avatar-size-md);
-      height: var(--avatar-size-md);
-      border-radius: var(--avatar-radius);
-      background: var(--avatar-bg);
-      color: var(--avatar-text);
-      border: var(--avatar-border);
-      object-fit: cover;
-    }
-    .avatar-status {
-      width: var(--avatar-status-size);
-      height: var(--avatar-status-size);
-      border-radius: 50%;
-      border: 2px solid var(--bg-base);
-    }
-    .avatar-status.online { background: var(--success); }
-    .avatar-status.offline { background: var(--neutral-500); }
   
   GRUPOS DE AVATARES (overlapping):
-    .avatar-group .avatar {
-      margin-left: calc(var(--avatar-size-md) * -0.3);
-      border: 2px solid var(--bg-base);
-    }
-    .avatar-group .avatar:first-child { margin-left: 0; }
   */
 
---avatar-size-xs: 1.5rem;
-/* 24px */
---avatar-size-sm: 2rem;
-/* 32px */
---avatar-size-md: 2.5rem;
-/* 40px */
---avatar-size-lg: 3rem;
-/* 48px */
---avatar-size-xl: 4rem;
-/* 64px */
---avatar-size-2xl: 6rem;
-/* 96px */
---avatar-radius: var(--radius-full);
-/* círculo perfecto */
---avatar-bg: var(--bg-elevated);
-/* fondo cuando no hay imagen */
---avatar-text: var(--text-muted);
-/* color de iniciales */
---avatar-border: 2px solid var(--border-subtle);
---avatar-status-size: 0.75rem;
-/* indicador online/offline */
---avatar-group-overlap: -0.5rem;
-/* superposición en grupos */
+  --avatar-size-xs: 1.5rem;
+  /* 24px */
+  --avatar-size-sm: 2rem;
+  /* 32px */
+  --avatar-size-md: 2.5rem;
+  /* 40px */
+  --avatar-size-lg: 3rem;
+  /* 48px */
+  --avatar-size-xl: 4rem;
+  /* 64px */
+  --avatar-size-2xl: 6rem;
+  /* 96px */
+  --avatar-radius: var(--radius-full);
+  /* círculo perfecto */
+  --avatar-bg: var(--bg-elevated);
+  /* fondo cuando no hay imagen */
+  --avatar-text: var(--text-muted);
+  /* color de iniciales */
+  --avatar-border: 2px solid var(--border-subtle);
+  --avatar-status-size: 0.75rem;
+  /* indicador online/offline */
+  --avatar-group-overlap: -0.5rem;
+  /* superposición en grupos */
 
-/* 
+  /* 
   ═══════════════════════════════════════════════════════
   BADGE
   ═══════════════════════════════════════════════════════
@@ -4477,69 +4286,85 @@ así que heredan los cambios de tema automáticamente. */:root {
     <span class="badge badge-primary">5</span>
     <span class="badge badge-danger badge-dot"></span>
     
-    /* Badge base */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--badge-size);
-  height: var(--badge-size);
-  padding: var(--badge-padding);
-  font-size: var(--badge-font-size);
-  font-weight: var(--fw-semibold);
-  border-radius: var(--badge-radius);
-  background: var(--badge-bg);
-  color: var(--badge-text);
-}
+    // Badge base
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--badge-size);
+      height: var(--badge-size);
+      padding: var(--badge-padding);
+      font-size: var(--badge-font-size);
+      font-weight: var(--fw-semibold);
+      border-radius: var(--badge-radius);
+      background: var(--badge-bg);
+      color: var(--badge-text);
+    }
+    
+    // Variante de color (ejemplo: danger)
+    .badge-danger {
+      background: var(--danger);
+      color: var(--text-on-danger);
+    }
+    
+  BADGE EN ESQUINA (notificaciones):
+    <div class="icon-wrapper">
+      <span class="icon">🔔</span>
+      <span class="badge badge-danger badge-corner">3</span>
+    </div>
+    
+    .icon-wrapper { position: relative; }
+    .badge-corner {
+      position: absolute;
+      top: var(--badge-corner-offset);
+      right: var(--badge-corner-offset);
+    }
+  
+  BADGE COMO PUNTO (sin texto):
+    <div class="menu-item">
+      Mensajes
+      <span class="badge badge-dot badge-danger"></span>
+    </div>
+    
+    .badge-dot {
+      min-width: var(--badge-dot-size);
+      width: var(--badge-dot-size);
+      height: var(--badge-dot-size);
+      padding: 0;
+    }
+  
+  BADGE CON ANIMACIÓN (llamar atención):
+    <span class="badge badge-danger anim-pulse">99+</span>
+    
+    O con el efecto ping:
+    <span class="badge badge-danger badge-ping">3</span>
+    
+    .badge-ping::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: inherit;
+      animation: var(--anim-ping);
+    }
+  */
 
-/* Variante de color (ejemplo: danger) */
-.badge-danger {
-  background: var(--danger);
-  color: var(--text-on-danger);
-}
-
-BADGE EN ESQUINA (notificaciones): <div class="icon-wrapper"><span class="icon">🔔</span><span class="badge badge-danger badge-corner">3</span></div>.icon-wrapper {
-  position: relative;
-}
-
-.badge-corner {
-  position: absolute;
-  top: var(--badge-corner-offset);
-  right: var(--badge-corner-offset);
-}
-
-BADGE COMO PUNTO (sin texto): <div class="menu-item">Mensajes <span class="badge badge-dot badge-danger"></span></div>.badge-dot {
-  min-width: var(--badge-dot-size);
-  width: var(--badge-dot-size);
-  height: var(--badge-dot-size);
-  padding: 0;
-}
-
-BADGE CON ANIMACIÓN (llamar atención): <span class="badge badge-danger anim-pulse">99+</span>O con el efecto ping: <span class="badge badge-danger badge-ping">3</span>.badge-ping::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: inherit;
-  animation: var(--anim-ping);
-}
-
-*/ --badge-size: 1.25rem;
-/* altura mínima / ancho mínimo */
---badge-padding: 0 var(--space-xs);
-/* padding horizontal */
---badge-font-size: var(--text-xs);
-/* tamaño de texto */
---badge-radius: var(--radius-full);
-/* píldora redondeada */
---badge-bg: var(--bg-elevated);
-/* fondo por defecto */
---badge-text: var(--text-body);
-/* texto por defecto */
---badge-dot-size: 0.5rem;
-/* tamaño del punto indicador */
---badge-corner-offset: -0.25rem;
-/* offset para posición esquina */
+  --badge-size: 1.25rem;
+  /* altura mínima / ancho mínimo */
+  --badge-padding: 0 var(--space-xs);
+  /* padding horizontal */
+  --badge-font-size: var(--text-xs);
+  /* tamaño de texto */
+  --badge-radius: var(--radius-full);
+  /* píldora redondeada */
+  --badge-bg: var(--bg-elevated);
+  /* fondo por defecto */
+  --badge-text: var(--text-body);
+  /* texto por defecto */
+  --badge-dot-size: 0.5rem;
+  /* tamaño del punto indicador */
+  --badge-corner-offset: -0.25rem;
+  /* offset para posición esquina */
 }
 
 /* Modo claro: ajustes de componentes */
@@ -4660,14 +4485,6 @@ ESTÁ COMENTADO A PROPÓSITO.
 
 PARA ACTIVAR: elimina las barras de comentario de apertura y cierre.
 
-body {
-  font-family: var(--font-base);
-  font-size: var(--text-base);
-  font-weight: var(--fw-normal);
-  line-height: var(--lh-normal);
-  background-color: var(--bg-base);
-  color: var(--text-body);
-}
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
@@ -4683,12 +4500,6 @@ h4 { font-size: var(--text-2xl); }
 h5 { font-size: var(--text-xl); }
 h6 { font-size: var(--text-lg); }
 
-a {
-  color: var(--link-color);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  transition: all var(--transition-fast);
-}
 
 a:hover {
   color: var(--link-color-hover);

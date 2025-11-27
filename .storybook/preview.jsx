@@ -10,13 +10,13 @@ const preview = {
       },
     },
     backgrounds: {
-      default: 'dark',
-      values: [
-        { name: 'dark', value: '#0f1414' },
-        { name: 'light', value: '#e8eef4' },
-      ],
+      options: {
+        dark: { name: 'dark', value: '#0f1414' },
+        light: { name: 'light', value: '#e8eef4' }
+      }
     },
   },
+
   globalTypes: {
     theme: {
       description: 'Global theme for components',
@@ -29,6 +29,7 @@ const preview = {
       },
     },
   },
+
   decorators: [
     (Story, context) => {
       const theme = context.globals.theme || 'dark'
@@ -39,6 +40,12 @@ const preview = {
       )
     },
   ],
+
+  initialGlobals: {
+    backgrounds: {
+      value: 'dark'
+    }
+  }
 }
 
 export default preview
