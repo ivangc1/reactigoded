@@ -1,5 +1,11 @@
 /*
-SISTEMA DE DISEÑO IGODED - IVÁN GODED
+═══════════════════════════════════════════════════════════════════════════════
+SISTEMA DE DISEÑO IGODED
+═══════════════════════════════════════════════════════════════════════════════
+
+Versión: 1.0.0
+Autor: Iván Goded
+Licencia: MIT
 
 Sistema cromático basado en 4 colores cardinales.
 Todos los colores comparten L=0.565, C=0.102 en OKLCH para armonía perfecta.
@@ -22,40 +28,40 @@ FILOSOFÍA IGODED DESIGN:
 Los pares cromáticos se complementan: verde-teal para lo nocturno, azul-violeta para lo diurno.
 
 ÍNDICE:
-1. Imports / Importaciones (línea 60)
-2. Colores Igoded (línea 68)
-3. Neutros tintados (línea 194)
-4. Variables semánticas (línea 345)
-5. Tipografía (línea 448)
-6. Gradientes (línea 515)
-7. Sombras (línea 598)
-8. Glow / Resplandor (línea 697)
-9. Glassmorphism / Efecto cristal (línea 798)
-10. Border Radius / Bordes redondeados (línea 887)
-11. Transiciones (línea 906)
-12. Blur / Desenfoque (línea 923)
-13. Neumorphism / Neumorfismo (línea 940)
-14. Blend Modes / Modos de fusión (línea 1122)
-15. Clip-path / Recortes y formas (línea 1305)
-16. Filtros CSS (línea 1528)
-17. Estados interactivos (línea 1727)
-18. Formularios / Inputs (línea 1754)
-19. Links / Enlaces (línea 1858)
-20. Bordes (línea 1925)
-21. Spacing / Espaciado (línea 1964)
-22. Z-index / Capas y profundidad (línea 1994)
-23. Scrollbar / Barra de desplazamiento (línea 2018)
-24. Selection / Selección de texto (línea 2080)
-25. Focus Ring / Anillo de enfoque (línea 2127)
-26. Estados semánticos (línea 2151)
-27. Overlays / Capas superpuestas (línea 2192)
-28. Breakpoints / Puntos de ruptura (línea 2227)
-29. Aspect Ratios / Relaciones de aspecto (línea 2250)
-30. Container Widths / Anchos de contenedor (línea 2269)
-31. Clases utilitarias (línea 2288)
-32. Animaciones y Keyframes (línea 2567)
-33. Variables de Componentes (línea 2720)
-34. Reset base opcional (línea 2960) ← COMENTADO, solo descomentar si no usas frameworks
+1. Imports / Importaciones (línea 66)
+2. Colores Igoded (línea 76)
+3. Neutros tintados (línea 202)
+4. Variables semánticas (línea 353)
+5. Tipografía (línea 456)
+6. Gradientes (línea 523)
+7. Sombras (línea 606)
+8. Glow / Resplandor (línea 705)
+9. Glassmorphism / Efecto cristal (línea 806)
+10. Border Radius / Bordes redondeados (línea 895)
+11. Transiciones (línea 914)
+12. Blur / Desenfoque (línea 931)
+13. Neumorphism / Neumorfismo (línea 948)
+14. Blend Modes / Modos de fusión (línea 1130)
+15. Clip-path / Recortes y formas (línea 1313)
+16. Filtros CSS (línea 1536)
+17. Estados interactivos (línea 1735)
+18. Formularios / Inputs (línea 1762)
+19. Links / Enlaces (línea 1866)
+20. Bordes (línea 1933)
+21. Spacing / Espaciado (línea 1972)
+22. Z-index / Capas y profundidad (línea 2002)
+23. Scrollbar / Barra de desplazamiento (línea 2026)
+24. Selection / Selección de texto (línea 2088)
+25. Focus Ring / Anillo de enfoque (línea 2135)
+26. Estados semánticos (línea 2159)
+27. Overlays / Capas superpuestas (línea 2200)
+28. Breakpoints / Puntos de ruptura (línea 2235)
+29. Aspect Ratios / Relaciones de aspecto (línea 2258)
+30. Container Widths / Anchos de contenedor (línea 2277)
+31. Clases utilitarias (línea 2296)
+32. Animaciones y Keyframes (línea 2731)
+33. Variables de Componentes (línea 3010)
+34. Reset base opcional (línea 3993) ← COMENTADO, solo descomentar si no usas frameworks
 
 1. IMPORTS
 Cargamos las fuentes de Google Fonts.
@@ -221,7 +227,7 @@ background: var(--neutral-intense-800); ← neutro tintado fuerte (30%)
   Tinte Liminal (teal) en modo oscuro.
   Sutiles, casi grises pero con un toque de vida.
   */
-  
+
   --neutral-50: #e8f0f0;
   --neutral-100: #c5d5d5;
   --neutral-200: #a5baba;
@@ -241,7 +247,7 @@ background: var(--neutral-intense-800); ← neutro tintado fuerte (30%)
   
   Más color, más personalidad. Usar cuando quieres que se note el tinte.
   */
-  
+
   --neutral-intense-50: #e0f2f0;
   --neutral-intense-100: #b3d9d5;
   --neutral-intense-200: #88c0ba;
@@ -272,7 +278,7 @@ Modo claro automático: neutros tintados con Senum (azul)
     --neutral-800: #2c4060;
     --neutral-900: #182848;
     --neutral-950: #101830;
-    
+
     /* Intense 30% - tinte Senum */
     --neutral-intense-50: #e8eef8;
     --neutral-intense-100: #c5d5f0;
@@ -301,7 +307,7 @@ Modo claro automático: neutros tintados con Senum (azul)
   --neutral-800: #2c4060;
   --neutral-900: #182848;
   --neutral-950: #101830;
-  
+
   --neutral-intense-50: #e8eef8;
   --neutral-intense-100: #c5d5f0;
   --neutral-intense-200: #a0bce8;
@@ -328,7 +334,7 @@ Modo claro automático: neutros tintados con Senum (azul)
   --neutral-800: #1c2c2c;
   --neutral-900: #0e1818;
   --neutral-950: #0a1212;
-  
+
   --neutral-intense-50: #e0f2f0;
   --neutral-intense-100: #b3d9d5;
   --neutral-intense-200: #88c0ba;
@@ -366,25 +372,25 @@ border-color: var(--border-default);  ← se adapta solo
   TEXTOS (por defecto modo oscuro)
   ═══════════════════════════════════════════════════════
   */
-  
+
   /* Texto principal, párrafos. Máximo contraste. */
   --text-body: var(--neutral-50);
-  
+
   /* Texto secundario, menos importante. Menor contraste. */
   --text-muted: var(--neutral-400);
-  
+
   /* Títulos. Mismo que body pero semánticamente diferente. */
   --text-heading: var(--neutral-50);
-  
+
   /* 
   ═══════════════════════════════════════════════════════
   BORDES (por defecto modo oscuro)
   ═══════════════════════════════════════════════════════
   */
-  
+
   /* Borde estándar, visible pero no agresivo. */
   --border-default: var(--accent);
-  
+
   /* Borde sutil, apenas perceptible. */
   --border-muted: var(--neutral-700);
 }
@@ -394,16 +400,16 @@ border-color: var(--border-default);  ← se adapta solo
   :root {
     --primary: var(--senum);
     --accent: var(--vesper);
-    
+
     --bg-base: #EEF2F8;
     --bg-surface: #E5EBF5;
     --bg-elevated: #FFFFFF;
     --bg-muted: #E0E8F2;
-    
+
     --text-body: var(--neutral-900);
     --text-muted: var(--neutral-500);
     --text-heading: var(--neutral-900);
-    
+
     --border-default: var(--accent);
     --border-muted: var(--neutral-300);
   }
@@ -413,16 +419,16 @@ border-color: var(--border-default);  ← se adapta solo
 [data-theme="light"] {
   --primary: var(--senum);
   --accent: var(--vesper);
-  
+
   --bg-base: #EEF2F8;
   --bg-surface: #E5EBF5;
   --bg-elevated: #FFFFFF;
   --bg-muted: #E0E8F2;
-  
+
   --text-body: var(--neutral-900);
   --text-muted: var(--neutral-500);
   --text-heading: var(--neutral-900);
-  
+
   --border-default: var(--accent);
   --border-muted: var(--neutral-300);
 }
@@ -431,16 +437,16 @@ border-color: var(--border-default);  ← se adapta solo
 [data-theme="dark"] {
   --primary: var(--tellus);
   --accent: var(--liminal);
-  
+
   --bg-base: #0c1515;
   --bg-surface: #101b1b;
   --bg-elevated: #1a2828;
   --bg-muted: #152020;
-  
+
   --text-body: var(--neutral-50);
   --text-muted: var(--neutral-400);
   --text-heading: var(--neutral-50);
-  
+
   --border-default: var(--accent);
   --border-muted: var(--neutral-700);
 }
@@ -617,80 +623,80 @@ box-shadow: var(--shadow-md);
   sm: elevación mínima
   Para: inputs, elementos que apenas flotan
   */
-  --shadow-sm: 
-    0 1px 2px rgba(3, 137, 120, 0.15), 
+  --shadow-sm:
+    0 1px 2px rgba(3, 137, 120, 0.15),
     0 1px 3px rgba(3, 137, 120, 0.25);
 
   /* 
   md: elevación media (la más común)
   Para: cards, botones, dropdowns
   */
-  --shadow-md: 
-    0 4px 6px rgba(3, 137, 120, 0.2), 
+  --shadow-md:
+    0 4px 6px rgba(3, 137, 120, 0.2),
     0 2px 4px rgba(3, 137, 120, 0.25);
 
   /* 
   lg: elevación alta
   Para: modales, elementos importantes, hover states
   */
-  --shadow-lg: 
-    0 10px 15px rgba(3, 137, 120, 0.25), 
+  --shadow-lg:
+    0 10px 15px rgba(3, 137, 120, 0.25),
     0 4px 6px rgba(3, 137, 120, 0.2);
 
   /* 
   xl: máxima elevación
   Para: popups críticos, elementos que dominan la pantalla
   */
-  --shadow-xl: 
-    0 20px 25px rgba(3, 137, 120, 0.3), 
+  --shadow-xl:
+    0 20px 25px rgba(3, 137, 120, 0.3),
     0 8px 10px rgba(3, 137, 120, 0.25);
 }
 
 /* Modo claro: sombras tintadas con Vesper (violeta) */
 @media (prefers-color-scheme: light) {
   :root {
-    --shadow-sm: 
-      0 1px 2px rgba(122, 93, 173, 0.08), 
+    --shadow-sm:
+      0 1px 2px rgba(122, 93, 173, 0.08),
       0 1px 3px rgba(122, 93, 173, 0.15);
-    --shadow-md: 
-      0 4px 6px rgba(122, 93, 173, 0.12), 
+    --shadow-md:
+      0 4px 6px rgba(122, 93, 173, 0.12),
       0 2px 4px rgba(122, 93, 173, 0.15);
-    --shadow-lg: 
-      0 10px 15px rgba(122, 93, 173, 0.15), 
+    --shadow-lg:
+      0 10px 15px rgba(122, 93, 173, 0.15),
       0 4px 6px rgba(122, 93, 173, 0.12);
-    --shadow-xl: 
-      0 20px 25px rgba(122, 93, 173, 0.18), 
+    --shadow-xl:
+      0 20px 25px rgba(122, 93, 173, 0.18),
       0 8px 10px rgba(122, 93, 173, 0.15);
   }
 }
 
 [data-theme="light"] {
-  --shadow-sm: 
-    0 1px 2px rgba(122, 93, 173, 0.08), 
+  --shadow-sm:
+    0 1px 2px rgba(122, 93, 173, 0.08),
     0 1px 3px rgba(122, 93, 173, 0.15);
-  --shadow-md: 
-    0 4px 6px rgba(122, 93, 173, 0.12), 
+  --shadow-md:
+    0 4px 6px rgba(122, 93, 173, 0.12),
     0 2px 4px rgba(122, 93, 173, 0.15);
-  --shadow-lg: 
-    0 10px 15px rgba(122, 93, 173, 0.15), 
+  --shadow-lg:
+    0 10px 15px rgba(122, 93, 173, 0.15),
     0 4px 6px rgba(122, 93, 173, 0.12);
-  --shadow-xl: 
-    0 20px 25px rgba(122, 93, 173, 0.18), 
+  --shadow-xl:
+    0 20px 25px rgba(122, 93, 173, 0.18),
     0 8px 10px rgba(122, 93, 173, 0.15);
 }
 
 [data-theme="dark"] {
-  --shadow-sm: 
-    0 1px 2px rgba(3, 137, 120, 0.15), 
+  --shadow-sm:
+    0 1px 2px rgba(3, 137, 120, 0.15),
     0 1px 3px rgba(3, 137, 120, 0.25);
-  --shadow-md: 
-    0 4px 6px rgba(3, 137, 120, 0.2), 
+  --shadow-md:
+    0 4px 6px rgba(3, 137, 120, 0.2),
     0 2px 4px rgba(3, 137, 120, 0.25);
-  --shadow-lg: 
-    0 10px 15px rgba(3, 137, 120, 0.25), 
+  --shadow-lg:
+    0 10px 15px rgba(3, 137, 120, 0.25),
     0 4px 6px rgba(3, 137, 120, 0.2);
-  --shadow-xl: 
-    0 20px 25px rgba(3, 137, 120, 0.3), 
+  --shadow-xl:
+    0 20px 25px rgba(3, 137, 120, 0.3),
     0 8px 10px rgba(3, 137, 120, 0.25);
 }
 
@@ -721,38 +727,38 @@ box-shadow: var(--glow-primary-medium);
   */
 
   /* Tellus (verde) */
-  --glow-tellus-medium: 
-    0 0 20px rgba(110, 126, 52, 0.4), 
+  --glow-tellus-medium:
+    0 0 20px rgba(110, 126, 52, 0.4),
     0 0 40px rgba(110, 126, 52, 0.2);
-  --glow-tellus-intense: 
-    0 0 30px rgba(110, 126, 52, 0.6), 
+  --glow-tellus-intense:
+    0 0 30px rgba(110, 126, 52, 0.6),
     0 0 60px rgba(110, 126, 52, 0.4),
     0 0 100px rgba(110, 126, 52, 0.2);
 
   /* Liminal (teal) */
-  --glow-liminal-medium: 
-    0 0 20px rgba(3, 137, 120, 0.4), 
+  --glow-liminal-medium:
+    0 0 20px rgba(3, 137, 120, 0.4),
     0 0 40px rgba(3, 137, 120, 0.2);
-  --glow-liminal-intense: 
-    0 0 30px rgba(3, 137, 120, 0.6), 
+  --glow-liminal-intense:
+    0 0 30px rgba(3, 137, 120, 0.6),
     0 0 60px rgba(3, 137, 120, 0.4),
     0 0 100px rgba(3, 137, 120, 0.2);
 
   /* Senum (azul) */
-  --glow-senum-medium: 
-    0 0 20px rgba(82, 118, 178, 0.4), 
+  --glow-senum-medium:
+    0 0 20px rgba(82, 118, 178, 0.4),
     0 0 40px rgba(82, 118, 178, 0.2);
-  --glow-senum-intense: 
-    0 0 30px rgba(82, 118, 178, 0.6), 
+  --glow-senum-intense:
+    0 0 30px rgba(82, 118, 178, 0.6),
     0 0 60px rgba(82, 118, 178, 0.4),
     0 0 100px rgba(82, 118, 178, 0.2);
 
   /* Vesper (violeta) */
-  --glow-vesper-medium: 
-    0 0 20px rgba(122, 93, 173, 0.4), 
+  --glow-vesper-medium:
+    0 0 20px rgba(122, 93, 173, 0.4),
     0 0 40px rgba(122, 93, 173, 0.2);
-  --glow-vesper-intense: 
-    0 0 30px rgba(122, 93, 173, 0.6), 
+  --glow-vesper-intense:
+    0 0 30px rgba(122, 93, 173, 0.6),
     0 0 60px rgba(122, 93, 173, 0.4),
     0 0 100px rgba(122, 93, 173, 0.2);
 
@@ -989,7 +995,7 @@ CÓMO USAR:
   IMPORTANTE: El elemento neumórfico debe tener este mismo color de fondo,
   o uno casi idéntico. Si no, el efecto no funciona.
   */
-  
+
   /* Fondo neumórfico - tintado Liminal (teal) en dark mode */
   --neuo-bg: #1a2828;
 
@@ -1004,7 +1010,7 @@ CÓMO USAR:
   Luz arriba-izquierda (#283a3a), sombra abajo-derecha (#0c1616).
   Para: botones, cards, elementos interactivos en reposo.
   */
-  --neuo-raised: 
+  --neuo-raised:
     -6px -6px 12px rgba(40, 58, 58, 0.6),
     6px 6px 12px rgba(12, 22, 22, 0.8);
 
@@ -1012,7 +1018,7 @@ CÓMO USAR:
   Raised Hover: versión con más personalidad para hover.
   Sombras más intensas y con más tinte Liminal.
   */
-  --neuo-raised-hover: 
+  --neuo-raised-hover:
     -8px -8px 16px rgba(45, 66, 66, 0.7),
     8px 8px 16px rgba(9, 18, 18, 0.9);
 
@@ -1021,14 +1027,14 @@ CÓMO USAR:
   Sombras invertidas + inset (hacia dentro).
   Para: botones activos, inputs en focus, toggles "on".
   */
-  --neuo-pressed: 
+  --neuo-pressed:
     inset -4px -4px 8px rgba(40, 58, 58, 0.5),
     inset 4px 4px 8px rgba(12, 22, 22, 0.7);
 
   /* 
   Pressed Hover: versión más intensa para hover sobre elemento hundido.
   */
-  --neuo-pressed-hover: 
+  --neuo-pressed-hover:
     inset -5px -5px 10px rgba(45, 66, 66, 0.6),
     inset 5px 5px 10px rgba(9, 18, 18, 0.8);
 
@@ -1037,14 +1043,14 @@ CÓMO USAR:
   Sombras muy sutiles, casi imperceptibles.
   Para: estados neutros, elementos que no necesitan destacar.
   */
-  --neuo-flat: 
+  --neuo-flat:
     -2px -2px 4px rgba(40, 58, 58, 0.3),
     2px 2px 4px rgba(12, 22, 22, 0.4);
 
   /* 
   Flat Hover: el elemento plano cobra algo de vida en hover.
   */
-  --neuo-flat-hover: 
+  --neuo-flat-hover:
     -3px -3px 6px rgba(45, 66, 66, 0.4),
     3px 3px 6px rgba(9, 18, 18, 0.5);
 }
@@ -1053,23 +1059,23 @@ CÓMO USAR:
 @media (prefers-color-scheme: light) {
   :root {
     --neuo-bg: #dce4f0;
-    
-    --neuo-raised: 
+
+    --neuo-raised:
       -6px -6px 12px rgba(255, 255, 255, 0.7),
       6px 6px 12px rgba(140, 160, 195, 0.4);
-    --neuo-raised-hover: 
+    --neuo-raised-hover:
       -8px -8px 16px rgba(255, 255, 255, 0.8),
       8px 8px 16px rgba(130, 150, 185, 0.5);
-    --neuo-pressed: 
+    --neuo-pressed:
       inset -4px -4px 8px rgba(255, 255, 255, 0.5),
       inset 4px 4px 8px rgba(140, 160, 195, 0.3);
-    --neuo-pressed-hover: 
+    --neuo-pressed-hover:
       inset -5px -5px 10px rgba(255, 255, 255, 0.6),
       inset 5px 5px 10px rgba(130, 150, 185, 0.4);
-    --neuo-flat: 
+    --neuo-flat:
       -2px -2px 4px rgba(255, 255, 255, 0.4),
       2px 2px 4px rgba(140, 160, 195, 0.2);
-    --neuo-flat-hover: 
+    --neuo-flat-hover:
       -3px -3px 6px rgba(255, 255, 255, 0.5),
       3px 3px 6px rgba(130, 150, 185, 0.3);
   }
@@ -1077,44 +1083,44 @@ CÓMO USAR:
 
 [data-theme="light"] {
   --neuo-bg: #dce4f0;
-  --neuo-raised: 
+  --neuo-raised:
     -6px -6px 12px rgba(255, 255, 255, 0.7),
     6px 6px 12px rgba(140, 160, 195, 0.4);
-  --neuo-raised-hover: 
+  --neuo-raised-hover:
     -8px -8px 16px rgba(255, 255, 255, 0.8),
     8px 8px 16px rgba(130, 150, 185, 0.5);
-  --neuo-pressed: 
+  --neuo-pressed:
     inset -4px -4px 8px rgba(255, 255, 255, 0.5),
     inset 4px 4px 8px rgba(140, 160, 195, 0.3);
-  --neuo-pressed-hover: 
+  --neuo-pressed-hover:
     inset -5px -5px 10px rgba(255, 255, 255, 0.6),
     inset 5px 5px 10px rgba(130, 150, 185, 0.4);
-  --neuo-flat: 
+  --neuo-flat:
     -2px -2px 4px rgba(255, 255, 255, 0.4),
     2px 2px 4px rgba(140, 160, 195, 0.2);
-  --neuo-flat-hover: 
+  --neuo-flat-hover:
     -3px -3px 6px rgba(255, 255, 255, 0.5),
     3px 3px 6px rgba(130, 150, 185, 0.3);
 }
 
 [data-theme="dark"] {
   --neuo-bg: #1a2828;
-  --neuo-raised: 
+  --neuo-raised:
     -6px -6px 12px rgba(40, 58, 58, 0.6),
     6px 6px 12px rgba(12, 22, 22, 0.8);
-  --neuo-raised-hover: 
+  --neuo-raised-hover:
     -8px -8px 16px rgba(45, 66, 66, 0.7),
     8px 8px 16px rgba(9, 18, 18, 0.9);
-  --neuo-pressed: 
+  --neuo-pressed:
     inset -4px -4px 8px rgba(40, 58, 58, 0.5),
     inset 4px 4px 8px rgba(12, 22, 22, 0.7);
-  --neuo-pressed-hover: 
+  --neuo-pressed-hover:
     inset -5px -5px 10px rgba(45, 66, 66, 0.6),
     inset 5px 5px 10px rgba(9, 18, 18, 0.8);
-  --neuo-flat: 
+  --neuo-flat:
     -2px -2px 4px rgba(40, 58, 58, 0.3),
     2px 2px 4px rgba(12, 22, 22, 0.4);
-  --neuo-flat-hover: 
+  --neuo-flat-hover:
     -3px -3px 6px rgba(45, 66, 66, 0.4),
     3px 3px 6px rgba(9, 18, 18, 0.5);
 }
@@ -1419,63 +1425,53 @@ su espacio rectangular original. Solo cambia lo que se VE.
   10 puntos alternando entre puntas externas e internas.
   Usar para: ratings, favoritos, destacados
   */
-  --clip-star: polygon(
-    50% 0%, 
-    61% 35%, 
-    98% 35%, 
-    68% 57%, 
-    79% 91%, 
-    50% 70%, 
-    21% 91%, 
-    32% 57%, 
-    2% 35%, 
-    39% 35%
-  );
+  --clip-star: polygon(50% 0%,
+      61% 35%,
+      98% 35%,
+      68% 57%,
+      79% 91%,
+      50% 70%,
+      21% 91%,
+      32% 57%,
+      2% 35%,
+      39% 35%);
 
   /* 
   Cross (cruz): forma de cruz/más.
   12 puntos formando los 4 brazos.
   Usar para: botones de cerrar, iconos médicos, añadir
   */
-  --clip-cross: polygon(
-    35% 0%, 65% 0%, 65% 35%, 
-    100% 35%, 100% 65%, 65% 65%, 
-    65% 100%, 35% 100%, 35% 65%, 
-    0% 65%, 0% 35%, 35% 35%
-  );
+  --clip-cross: polygon(35% 0%, 65% 0%, 65% 35%,
+      100% 35%, 100% 65%, 65% 65%,
+      65% 100%, 35% 100%, 35% 65%,
+      0% 65%, 0% 35%, 35% 35%);
 
   /* 
   Message (bocadillo): forma de globo de chat.
   Rectángulo con pico abajo-izquierda.
   Usar para: tooltips, chat bubbles, comentarios
   */
-  --clip-message: polygon(
-    0% 0%, 100% 0%, 100% 75%, 
-    75% 75%, 50% 100%, 50% 75%, 0% 75%
-  );
+  --clip-message: polygon(0% 0%, 100% 0%, 100% 75%,
+      75% 75%, 50% 100%, 50% 75%, 0% 75%);
 
   /* 
   Bevel (biselado): rectángulo con esquinas recortadas.
   Estética cyberpunk/tech.
   Usar para: botones sci-fi, tarjetas gaming
   */
-  --clip-bevel: polygon(
-    10% 0%, 90% 0%, 100% 10%, 
-    100% 90%, 90% 100%, 10% 100%, 
-    0% 90%, 0% 10%
-  );
+  --clip-bevel: polygon(10% 0%, 90% 0%, 100% 10%,
+      100% 90%, 90% 100%, 10% 100%,
+      0% 90%, 0% 10%);
 
   /* 
   Rabbet (rebaje): rectángulo con muescas en las esquinas.
   Como un marco de foto recortado.
   Usar para: marcos, contenedores decorativos
   */
-  --clip-rabbet: polygon(
-    0% 15%, 15% 15%, 15% 0%, 
-    85% 0%, 85% 15%, 100% 15%, 
-    100% 85%, 85% 85%, 85% 100%, 
-    15% 100%, 15% 85%, 0% 85%
-  );
+  --clip-rabbet: polygon(0% 15%, 15% 15%, 15% 0%,
+      85% 0%, 85% 15%, 100% 15%,
+      100% 85%, 85% 85%, 85% 100%,
+      15% 100%, 15% 85%, 0% 85%);
 
   /* 
   ═══════════════════════════════════════════════════════
@@ -1740,7 +1736,7 @@ CÓMO USAR:
 
   /* Hover: cursor encima. Brillo sutil. */
   --state-hover: brightness(1.1);
-  
+
   /* Hover Heavy: versión más notable para accesibilidad */
   --state-hover-heavy: brightness(1.15);
 
@@ -1794,8 +1790,8 @@ input:focus {
   Glow en focus: anillo luminoso alrededor.
   Usa el glow del accent para coherencia.
   */
-  --input-glow: 
-    0 0 0 3px rgba(3, 137, 120, 0.3), 
+  --input-glow:
+    0 0 0 3px rgba(3, 137, 120, 0.3),
     0 0 15px rgba(3, 137, 120, 0.2);
 
   /* Borde cuando el campo es válido */
@@ -1818,8 +1814,8 @@ input:focus {
     --input-placeholder: #6080c5;
     --input-border: #95acd5;
     --input-border-focus: var(--accent);
-    --input-glow: 
-      0 0 0 3px rgba(122, 93, 173, 0.3), 
+    --input-glow:
+      0 0 0 3px rgba(122, 93, 173, 0.3),
       0 0 15px rgba(122, 93, 173, 0.2);
     --input-bg-disabled: #e5e5e5;
     --input-text-disabled: rgba(0, 0, 0, 0.3);
@@ -1833,8 +1829,8 @@ input:focus {
   --input-placeholder: #6080c5;
   --input-border: #95acd5;
   --input-border-focus: var(--accent);
-  --input-glow: 
-    0 0 0 3px rgba(122, 93, 173, 0.3), 
+  --input-glow:
+    0 0 0 3px rgba(122, 93, 173, 0.3),
     0 0 15px rgba(122, 93, 173, 0.2);
   --input-bg-disabled: #e5e5e5;
   --input-text-disabled: rgba(0, 0, 0, 0.3);
@@ -1847,8 +1843,8 @@ input:focus {
   --input-placeholder: #3d7a73;
   --input-border: #0f4540;
   --input-border-focus: var(--accent);
-  --input-glow: 
-    0 0 0 3px rgba(3, 137, 120, 0.3), 
+  --input-glow:
+    0 0 0 3px rgba(3, 137, 120, 0.3),
     0 0 15px rgba(3, 137, 120, 0.2);
   --input-bg-disabled: #151a1a;
   --input-text-disabled: rgba(255, 255, 255, 0.3);
@@ -1942,7 +1938,7 @@ border: var(--border-1) solid var(--border-color);
 
   /* Color de borde principal: accent del modo */
   --border-color: var(--accent);
-  
+
   /* Color de borde sutil: neutro */
   --border-color-muted: var(--neutral-600);
 }
@@ -1976,19 +1972,32 @@ gap: var(--space-3);
 
 :root {
   --space-0: 0;
-  --space-1: 0.25rem;   /* 4px */
-  --space-2: 0.5rem;    /* 8px */
-  --space-3: 0.75rem;   /* 12px */
-  --space-4: 1rem;      /* 16px */
-  --space-5: 1.25rem;   /* 20px */
-  --space-6: 1.5rem;    /* 24px */
-  --space-8: 2rem;      /* 32px */
-  --space-10: 2.5rem;   /* 40px */
-  --space-12: 3rem;     /* 48px */
-  --space-16: 4rem;     /* 64px */
-  --space-20: 5rem;     /* 80px */
-  --space-24: 6rem;     /* 96px */
-  --space-32: 8rem;     /* 128px */
+  --space-1: 0.25rem;
+  /* 4px */
+  --space-2: 0.5rem;
+  /* 8px */
+  --space-3: 0.75rem;
+  /* 12px */
+  --space-4: 1rem;
+  /* 16px */
+  --space-5: 1.25rem;
+  /* 20px */
+  --space-6: 1.5rem;
+  /* 24px */
+  --space-8: 2rem;
+  /* 32px */
+  --space-10: 2.5rem;
+  /* 40px */
+  --space-12: 3rem;
+  /* 48px */
+  --space-16: 4rem;
+  /* 64px */
+  --space-20: 5rem;
+  /* 80px */
+  --space-24: 6rem;
+  /* 96px */
+  --space-32: 8rem;
+  /* 128px */
 }
 
 
@@ -2240,11 +2249,16 @@ Estos valores son de referencia para tu código.
 
 :root {
   /* Estos son SOLO de referencia, no funcionan en @media */
-  --bp-sm: 640px;   /* Móvil grande */
-  --bp-md: 768px;   /* Tablet */
-  --bp-lg: 1024px;  /* Laptop */
-  --bp-xl: 1280px;  /* Desktop */
-  --bp-2xl: 1536px; /* Pantalla grande */
+  --bp-sm: 640px;
+  /* Móvil grande */
+  --bp-md: 768px;
+  /* Tablet */
+  --bp-lg: 1024px;
+  /* Laptop */
+  --bp-xl: 1280px;
+  /* Desktop */
+  --bp-2xl: 1536px;
+  /* Pantalla grande */
 }
 
 
@@ -2258,12 +2272,18 @@ aspect-ratio: var(--ratio-16-9);
 */
 
 :root {
-  --ratio-1-1: 1 / 1;       /* Cuadrado */
-  --ratio-4-3: 4 / 3;       /* Foto clásica */
-  --ratio-16-9: 16 / 9;     /* Vídeo estándar */
-  --ratio-21-9: 21 / 9;     /* Cine ultrawide */
-  --ratio-9-16: 9 / 16;     /* Vertical (stories) */
-  --ratio-3-2: 3 / 2;       /* Foto réflex */
+  --ratio-1-1: 1 / 1;
+  /* Cuadrado */
+  --ratio-4-3: 4 / 3;
+  /* Foto clásica */
+  --ratio-16-9: 16 / 9;
+  /* Vídeo estándar */
+  --ratio-21-9: 21 / 9;
+  /* Cine ultrawide */
+  --ratio-9-16: 9 / 16;
+  /* Vertical (stories) */
+  --ratio-3-2: 3 / 2;
+  /* Foto réflex */
 }
 
 
@@ -2299,71 +2319,230 @@ CÓMO USAR:
 */
 
 /* Colores de fondo */
-.bg-base { background-color: var(--bg-base); }
-.bg-surface { background-color: var(--bg-surface); }
-.bg-elevated { background-color: var(--bg-elevated); }
-.bg-muted { background-color: var(--bg-muted); }
-.bg-primary { background-color: var(--primary); }
-.bg-accent { background-color: var(--accent); }
-.bg-tellus { background-color: var(--tellus); }
-.bg-liminal { background-color: var(--liminal); }
-.bg-senum { background-color: var(--senum); }
-.bg-vesper { background-color: var(--vesper); }
+.bg-base {
+  background-color: var(--bg-base);
+}
+
+.bg-surface {
+  background-color: var(--bg-surface);
+}
+
+.bg-elevated {
+  background-color: var(--bg-elevated);
+}
+
+.bg-muted {
+  background-color: var(--bg-muted);
+}
+
+.bg-primary {
+  background-color: var(--primary);
+}
+
+.bg-accent {
+  background-color: var(--accent);
+}
+
+.bg-tellus {
+  background-color: var(--tellus);
+}
+
+.bg-liminal {
+  background-color: var(--liminal);
+}
+
+.bg-senum {
+  background-color: var(--senum);
+}
+
+.bg-vesper {
+  background-color: var(--vesper);
+}
 
 /* Colores de texto */
-.text-body { color: var(--text-body); }
-.text-muted { color: var(--text-muted); }
-.text-heading { color: var(--text-heading); }
-.text-primary { color: var(--primary); }
-.text-accent { color: var(--accent); }
-.text-tellus { color: var(--tellus); }
-.text-liminal { color: var(--liminal); }
-.text-senum { color: var(--senum); }
-.text-vesper { color: var(--vesper); }
+.text-body {
+  color: var(--text-body);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-heading {
+  color: var(--text-heading);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-accent {
+  color: var(--accent);
+}
+
+.text-tellus {
+  color: var(--tellus);
+}
+
+.text-liminal {
+  color: var(--liminal);
+}
+
+.text-senum {
+  color: var(--senum);
+}
+
+.text-vesper {
+  color: var(--vesper);
+}
 
 /* Tipografía */
-.font-heading { font-family: var(--font-heading); }
-.font-base { font-family: var(--font-base); }
-.text-xs { font-size: var(--text-xs); }
-.text-sm { font-size: var(--text-sm); }
-.text-base { font-size: var(--text-base); }
-.text-lg { font-size: var(--text-lg); }
-.text-xl { font-size: var(--text-xl); }
-.text-2xl { font-size: var(--text-2xl); }
-.text-3xl { font-size: var(--text-3xl); }
-.text-4xl { font-size: var(--text-4xl); }
-.text-5xl { font-size: var(--text-5xl); }
-.fw-normal { font-weight: var(--fw-normal); }
-.fw-semibold { font-weight: var(--fw-semibold); }
-.fw-bold { font-weight: var(--fw-bold); }
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-base {
+  font-family: var(--font-base);
+}
+
+.text-xs {
+  font-size: var(--text-xs);
+}
+
+.text-sm {
+  font-size: var(--text-sm);
+}
+
+.text-base {
+  font-size: var(--text-base);
+}
+
+.text-lg {
+  font-size: var(--text-lg);
+}
+
+.text-xl {
+  font-size: var(--text-xl);
+}
+
+.text-2xl {
+  font-size: var(--text-2xl);
+}
+
+.text-3xl {
+  font-size: var(--text-3xl);
+}
+
+.text-4xl {
+  font-size: var(--text-4xl);
+}
+
+.text-5xl {
+  font-size: var(--text-5xl);
+}
+
+.fw-normal {
+  font-weight: var(--fw-normal);
+}
+
+.fw-semibold {
+  font-weight: var(--fw-semibold);
+}
+
+.fw-bold {
+  font-weight: var(--fw-bold);
+}
 
 /* Gradientes */
-.grad-primary-accent { background: var(--grad-primary-accent); }
-.grad-igoded { background: var(--grad-igoded); }
-.grad-tellus-senum { background: var(--grad-tellus-senum); }
-.grad-tellus-vesper { background: var(--grad-tellus-vesper); }
-.grad-liminal-senum { background: var(--grad-liminal-senum); }
-.grad-liminal-vesper { background: var(--grad-liminal-vesper); }
+.grad-primary-accent {
+  background: var(--grad-primary-accent);
+}
+
+.grad-igoded {
+  background: var(--grad-igoded);
+}
+
+.grad-tellus-senum {
+  background: var(--grad-tellus-senum);
+}
+
+.grad-tellus-vesper {
+  background: var(--grad-tellus-vesper);
+}
+
+.grad-liminal-senum {
+  background: var(--grad-liminal-senum);
+}
+
+.grad-liminal-vesper {
+  background: var(--grad-liminal-vesper);
+}
 
 /* Sombras */
-.shadow-sm { box-shadow: var(--shadow-sm); }
-.shadow-md { box-shadow: var(--shadow-md); }
-.shadow-lg { box-shadow: var(--shadow-lg); }
-.shadow-xl { box-shadow: var(--shadow-xl); }
+.shadow-sm {
+  box-shadow: var(--shadow-sm);
+}
+
+.shadow-md {
+  box-shadow: var(--shadow-md);
+}
+
+.shadow-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+.shadow-xl {
+  box-shadow: var(--shadow-xl);
+}
 
 /* Glows */
-.glow-tellus-medium { box-shadow: var(--glow-tellus-medium); }
-.glow-tellus-intense { box-shadow: var(--glow-tellus-intense); }
-.glow-liminal-medium { box-shadow: var(--glow-liminal-medium); }
-.glow-liminal-intense { box-shadow: var(--glow-liminal-intense); }
-.glow-senum-medium { box-shadow: var(--glow-senum-medium); }
-.glow-senum-intense { box-shadow: var(--glow-senum-intense); }
-.glow-vesper-medium { box-shadow: var(--glow-vesper-medium); }
-.glow-vesper-intense { box-shadow: var(--glow-vesper-intense); }
-.glow-primary-medium { box-shadow: var(--glow-primary-medium); }
-.glow-primary-intense { box-shadow: var(--glow-primary-intense); }
-.glow-accent-medium { box-shadow: var(--glow-accent-medium); }
-.glow-accent-intense { box-shadow: var(--glow-accent-intense); }
+.glow-tellus-medium {
+  box-shadow: var(--glow-tellus-medium);
+}
+
+.glow-tellus-intense {
+  box-shadow: var(--glow-tellus-intense);
+}
+
+.glow-liminal-medium {
+  box-shadow: var(--glow-liminal-medium);
+}
+
+.glow-liminal-intense {
+  box-shadow: var(--glow-liminal-intense);
+}
+
+.glow-senum-medium {
+  box-shadow: var(--glow-senum-medium);
+}
+
+.glow-senum-intense {
+  box-shadow: var(--glow-senum-intense);
+}
+
+.glow-vesper-medium {
+  box-shadow: var(--glow-vesper-medium);
+}
+
+.glow-vesper-intense {
+  box-shadow: var(--glow-vesper-intense);
+}
+
+.glow-primary-medium {
+  box-shadow: var(--glow-primary-medium);
+}
+
+.glow-primary-intense {
+  box-shadow: var(--glow-primary-intense);
+}
+
+.glow-accent-medium {
+  box-shadow: var(--glow-accent-medium);
+}
+
+.glow-accent-intense {
+  box-shadow: var(--glow-accent-intense);
+}
 
 /* Glassmorphism */
 .glass-dark {
@@ -2371,36 +2550,43 @@ CÓMO USAR:
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-light {
   background: var(--glass-light);
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-tellus {
   background: var(--glass-tellus);
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-liminal {
   background: var(--glass-liminal);
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-senum {
   background: var(--glass-senum);
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-vesper {
   background: var(--glass-vesper);
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-primary {
   background: var(--glass-primary);
   backdrop-filter: blur(var(--blur-lg));
   -webkit-backdrop-filter: blur(var(--blur-lg));
 }
+
 .glass-accent {
   background: var(--glass-accent);
   backdrop-filter: blur(var(--blur-lg));
@@ -2408,354 +2594,1117 @@ CÓMO USAR:
 }
 
 /* Border radius */
-.rounded-none { border-radius: var(--radius-none); }
-.rounded-sm { border-radius: var(--radius-sm); }
-.rounded-md { border-radius: var(--radius-md); }
-.rounded-lg { border-radius: var(--radius-lg); }
-.rounded-xl { border-radius: var(--radius-xl); }
-.rounded-full { border-radius: var(--radius-full); }
+.rounded-none {
+  border-radius: var(--radius-none);
+}
+
+.rounded-sm {
+  border-radius: var(--radius-sm);
+}
+
+.rounded-md {
+  border-radius: var(--radius-md);
+}
+
+.rounded-lg {
+  border-radius: var(--radius-lg);
+}
+
+.rounded-xl {
+  border-radius: var(--radius-xl);
+}
+
+.rounded-full {
+  border-radius: var(--radius-full);
+}
 
 /* Spacing */
-.p-1 { padding: var(--space-1); }
-.p-2 { padding: var(--space-2); }
-.p-3 { padding: var(--space-3); }
-.p-4 { padding: var(--space-4); }
-.p-6 { padding: var(--space-6); }
-.p-8 { padding: var(--space-8); }
+.p-1 {
+  padding: var(--space-1);
+}
 
-.m-1 { margin: var(--space-1); }
-.m-2 { margin: var(--space-2); }
-.m-3 { margin: var(--space-3); }
-.m-4 { margin: var(--space-4); }
-.m-6 { margin: var(--space-6); }
-.m-8 { margin: var(--space-8); }
+.p-2 {
+  padding: var(--space-2);
+}
 
-.gap-1 { gap: var(--space-1); }
-.gap-2 { gap: var(--space-2); }
-.gap-3 { gap: var(--space-3); }
-.gap-4 { gap: var(--space-4); }
-.gap-6 { gap: var(--space-6); }
-.gap-8 { gap: var(--space-8); }
+.p-3 {
+  padding: var(--space-3);
+}
+
+.p-4 {
+  padding: var(--space-4);
+}
+
+.p-6 {
+  padding: var(--space-6);
+}
+
+.p-8 {
+  padding: var(--space-8);
+}
+
+.m-1 {
+  margin: var(--space-1);
+}
+
+.m-2 {
+  margin: var(--space-2);
+}
+
+.m-3 {
+  margin: var(--space-3);
+}
+
+.m-4 {
+  margin: var(--space-4);
+}
+
+.m-6 {
+  margin: var(--space-6);
+}
+
+.m-8 {
+  margin: var(--space-8);
+}
+
+.gap-1 {
+  gap: var(--space-1);
+}
+
+.gap-2 {
+  gap: var(--space-2);
+}
+
+.gap-3 {
+  gap: var(--space-3);
+}
+
+.gap-4 {
+  gap: var(--space-4);
+}
+
+.gap-6 {
+  gap: var(--space-6);
+}
+
+.gap-8 {
+  gap: var(--space-8);
+}
 
 /* Z-index */
-.z-base { z-index: var(--z-base); }
-.z-dropdown { z-index: var(--z-dropdown); }
-.z-sticky { z-index: var(--z-sticky); }
-.z-modal { z-index: var(--z-modal); }
-.z-popover { z-index: var(--z-popover); }
-.z-tooltip { z-index: var(--z-tooltip); }
+.z-base {
+  z-index: var(--z-base);
+}
+
+.z-dropdown {
+  z-index: var(--z-dropdown);
+}
+
+.z-sticky {
+  z-index: var(--z-sticky);
+}
+
+.z-modal {
+  z-index: var(--z-modal);
+}
+
+.z-popover {
+  z-index: var(--z-popover);
+}
+
+.z-tooltip {
+  z-index: var(--z-tooltip);
+}
 
 /* Aspect ratios */
-.ratio-1-1 { aspect-ratio: var(--ratio-1-1); }
-.ratio-4-3 { aspect-ratio: var(--ratio-4-3); }
-.ratio-16-9 { aspect-ratio: var(--ratio-16-9); }
-.ratio-21-9 { aspect-ratio: var(--ratio-21-9); }
-.ratio-9-16 { aspect-ratio: var(--ratio-9-16); }
-.ratio-3-2 { aspect-ratio: var(--ratio-3-2); }
+.ratio-1-1 {
+  aspect-ratio: var(--ratio-1-1);
+}
+
+.ratio-4-3 {
+  aspect-ratio: var(--ratio-4-3);
+}
+
+.ratio-16-9 {
+  aspect-ratio: var(--ratio-16-9);
+}
+
+.ratio-21-9 {
+  aspect-ratio: var(--ratio-21-9);
+}
+
+.ratio-9-16 {
+  aspect-ratio: var(--ratio-9-16);
+}
+
+.ratio-3-2 {
+  aspect-ratio: var(--ratio-3-2);
+}
 
 /* Containers */
-.container-sm { max-width: var(--container-sm); margin-inline: auto; }
-.container-md { max-width: var(--container-md); margin-inline: auto; }
-.container-lg { max-width: var(--container-lg); margin-inline: auto; }
-.container-xl { max-width: var(--container-xl); margin-inline: auto; }
-.container-2xl { max-width: var(--container-2xl); margin-inline: auto; }
-.container-full { max-width: var(--container-full); }
+.container-sm {
+  max-width: var(--container-sm);
+  margin-inline: auto;
+}
+
+.container-md {
+  max-width: var(--container-md);
+  margin-inline: auto;
+}
+
+.container-lg {
+  max-width: var(--container-lg);
+  margin-inline: auto;
+}
+
+.container-xl {
+  max-width: var(--container-xl);
+  margin-inline: auto;
+}
+
+.container-2xl {
+  max-width: var(--container-2xl);
+  margin-inline: auto;
+}
+
+.container-full {
+  max-width: var(--container-full);
+}
 
 /* Estados interactivos */
-.state-hover:hover { filter: var(--state-hover); }
-.state-hover-heavy:hover { filter: var(--state-hover-heavy); }
-.state-active:active { 
-  filter: var(--state-active); 
-  transform: scale(0.98); 
+.state-hover:hover {
+  filter: var(--state-hover);
 }
-.state-focus:focus-visible { 
-  outline: var(--focus-ring-outline); 
-  outline-offset: var(--focus-ring-offset); 
+
+.state-hover-heavy:hover {
+  filter: var(--state-hover-heavy);
+}
+
+.state-active:active {
+  filter: var(--state-active);
+  transform: scale(0.98);
+}
+
+.state-focus:focus-visible {
+  outline: var(--focus-ring-outline);
+  outline-offset: var(--focus-ring-offset);
   box-shadow: var(--focus-ring-glow);
 }
-.state-disabled { 
-  filter: var(--state-disabled); 
-  pointer-events: none; 
-  cursor: not-allowed; 
+
+.state-disabled {
+  filter: var(--state-disabled);
+  pointer-events: none;
+  cursor: not-allowed;
 }
 
 /* Overlays */
-.overlay-dark { background: var(--overlay-dark); }
-.overlay-light { background: var(--overlay-light); }
-.overlay-accent { background: var(--overlay-accent); }
-.overlay-gradient { background: var(--overlay-gradient); }
-.overlay-vignette { background: var(--overlay-vignette); }
+.overlay-dark {
+  background: var(--overlay-dark);
+}
+
+.overlay-light {
+  background: var(--overlay-light);
+}
+
+.overlay-accent {
+  background: var(--overlay-accent);
+}
+
+.overlay-gradient {
+  background: var(--overlay-gradient);
+}
+
+.overlay-vignette {
+  background: var(--overlay-vignette);
+}
 
 /* Bordes */
-.border { border: var(--border-1) solid var(--border-color); }
-.border-muted { border: var(--border-1) solid var(--border-color-muted); }
-.border-2 { border: var(--border-2) solid var(--border-color); }
+.border {
+  border: var(--border-1) solid var(--border-color);
+}
+
+.border-muted {
+  border: var(--border-1) solid var(--border-color-muted);
+}
+
+.border-2 {
+  border: var(--border-2) solid var(--border-color);
+}
 
 /* Transiciones */
-.transition-fast { transition: all var(--transition-fast); }
-.transition-normal { transition: all var(--transition-normal); }
-.transition-slow { transition: all var(--transition-slow); }
+.transition-fast {
+  transition: all var(--transition-fast);
+}
+
+.transition-normal {
+  transition: all var(--transition-normal);
+}
+
+.transition-slow {
+  transition: all var(--transition-slow);
+}
 
 /* Neumorphism */
-.neuo-raised { box-shadow: var(--neuo-raised); }
-.neuo-raised-hover:hover { box-shadow: var(--neuo-raised-hover); }
-.neuo-pressed { box-shadow: var(--neuo-pressed); }
-.neuo-pressed-hover:hover { box-shadow: var(--neuo-pressed-hover); }
-.neuo-flat { box-shadow: var(--neuo-flat); }
-.neuo-flat-hover:hover { box-shadow: var(--neuo-flat-hover); }
-.neuo-bg { background-color: var(--neuo-bg); }
+.neuo-raised {
+  box-shadow: var(--neuo-raised);
+}
+
+.neuo-raised-hover:hover {
+  box-shadow: var(--neuo-raised-hover);
+}
+
+.neuo-pressed {
+  box-shadow: var(--neuo-pressed);
+}
+
+.neuo-pressed-hover:hover {
+  box-shadow: var(--neuo-pressed-hover);
+}
+
+.neuo-flat {
+  box-shadow: var(--neuo-flat);
+}
+
+.neuo-flat-hover:hover {
+  box-shadow: var(--neuo-flat-hover);
+}
+
+.neuo-bg {
+  background-color: var(--neuo-bg);
+}
 
 /* Blend Modes */
-.blend-multiply { mix-blend-mode: var(--blend-multiply); }
-.blend-darken { mix-blend-mode: var(--blend-darken); }
-.blend-color-burn { mix-blend-mode: var(--blend-color-burn); }
-.blend-screen { mix-blend-mode: var(--blend-screen); }
-.blend-lighten { mix-blend-mode: var(--blend-lighten); }
-.blend-color-dodge { mix-blend-mode: var(--blend-color-dodge); }
-.blend-overlay { mix-blend-mode: var(--blend-overlay); }
-.blend-hard-light { mix-blend-mode: var(--blend-hard-light); }
-.blend-soft-light { mix-blend-mode: var(--blend-soft-light); }
-.blend-difference { mix-blend-mode: var(--blend-difference); }
-.blend-exclusion { mix-blend-mode: var(--blend-exclusion); }
-.blend-hue { mix-blend-mode: var(--blend-hue); }
-.blend-saturation { mix-blend-mode: var(--blend-saturation); }
-.blend-color { mix-blend-mode: var(--blend-color); }
-.blend-luminosity { mix-blend-mode: var(--blend-luminosity); }
+.blend-multiply {
+  mix-blend-mode: var(--blend-multiply);
+}
+
+.blend-darken {
+  mix-blend-mode: var(--blend-darken);
+}
+
+.blend-color-burn {
+  mix-blend-mode: var(--blend-color-burn);
+}
+
+.blend-screen {
+  mix-blend-mode: var(--blend-screen);
+}
+
+.blend-lighten {
+  mix-blend-mode: var(--blend-lighten);
+}
+
+.blend-color-dodge {
+  mix-blend-mode: var(--blend-color-dodge);
+}
+
+.blend-overlay {
+  mix-blend-mode: var(--blend-overlay);
+}
+
+.blend-hard-light {
+  mix-blend-mode: var(--blend-hard-light);
+}
+
+.blend-soft-light {
+  mix-blend-mode: var(--blend-soft-light);
+}
+
+.blend-difference {
+  mix-blend-mode: var(--blend-difference);
+}
+
+.blend-exclusion {
+  mix-blend-mode: var(--blend-exclusion);
+}
+
+.blend-hue {
+  mix-blend-mode: var(--blend-hue);
+}
+
+.blend-saturation {
+  mix-blend-mode: var(--blend-saturation);
+}
+
+.blend-color {
+  mix-blend-mode: var(--blend-color);
+}
+
+.blend-luminosity {
+  mix-blend-mode: var(--blend-luminosity);
+}
 
 /* Clip-path */
-.clip-circle { clip-path: var(--clip-circle); }
-.clip-ellipse { clip-path: var(--clip-ellipse); }
-.clip-triangle { clip-path: var(--clip-triangle); }
-.clip-triangle-up { clip-path: var(--clip-triangle-up); }
-.clip-diamond { clip-path: var(--clip-diamond); }
-.clip-pentagon { clip-path: var(--clip-pentagon); }
-.clip-hexagon { clip-path: var(--clip-hexagon); }
-.clip-heptagon { clip-path: var(--clip-heptagon); }
-.clip-octagon { clip-path: var(--clip-octagon); }
-.clip-star { clip-path: var(--clip-star); }
-.clip-cross { clip-path: var(--clip-cross); }
-.clip-message { clip-path: var(--clip-message); }
-.clip-bevel { clip-path: var(--clip-bevel); }
-.clip-rabbet { clip-path: var(--clip-rabbet); }
-.clip-arrow-right { clip-path: var(--clip-arrow-right); }
-.clip-arrow-left { clip-path: var(--clip-arrow-left); }
-.clip-chevron-right { clip-path: var(--clip-chevron-right); }
-.clip-chevron-left { clip-path: var(--clip-chevron-left); }
-.clip-trapezoid { clip-path: var(--clip-trapezoid); }
-.clip-parallelogram { clip-path: var(--clip-parallelogram); }
+.clip-circle {
+  clip-path: var(--clip-circle);
+}
+
+.clip-ellipse {
+  clip-path: var(--clip-ellipse);
+}
+
+.clip-triangle {
+  clip-path: var(--clip-triangle);
+}
+
+.clip-triangle-up {
+  clip-path: var(--clip-triangle-up);
+}
+
+.clip-diamond {
+  clip-path: var(--clip-diamond);
+}
+
+.clip-pentagon {
+  clip-path: var(--clip-pentagon);
+}
+
+.clip-hexagon {
+  clip-path: var(--clip-hexagon);
+}
+
+.clip-heptagon {
+  clip-path: var(--clip-heptagon);
+}
+
+.clip-octagon {
+  clip-path: var(--clip-octagon);
+}
+
+.clip-star {
+  clip-path: var(--clip-star);
+}
+
+.clip-cross {
+  clip-path: var(--clip-cross);
+}
+
+.clip-message {
+  clip-path: var(--clip-message);
+}
+
+.clip-bevel {
+  clip-path: var(--clip-bevel);
+}
+
+.clip-rabbet {
+  clip-path: var(--clip-rabbet);
+}
+
+.clip-arrow-right {
+  clip-path: var(--clip-arrow-right);
+}
+
+.clip-arrow-left {
+  clip-path: var(--clip-arrow-left);
+}
+
+.clip-chevron-right {
+  clip-path: var(--clip-chevron-right);
+}
+
+.clip-chevron-left {
+  clip-path: var(--clip-chevron-left);
+}
+
+.clip-trapezoid {
+  clip-path: var(--clip-trapezoid);
+}
+
+.clip-parallelogram {
+  clip-path: var(--clip-parallelogram);
+}
 
 /* Filtros CSS */
-.filter-disabled { filter: var(--filter-disabled); }
-.filter-hover { filter: var(--filter-hover); }
-.filter-loading { filter: var(--filter-loading); }
-.filter-bw { filter: var(--filter-bw); }
-.filter-muted { filter: var(--filter-muted); }
-.filter-vintage { filter: var(--filter-vintage); }
-.filter-vivid { filter: var(--filter-vivid); }
-.filter-warm { filter: var(--filter-warm); }
-.filter-cool { filter: var(--filter-cool); }
-.filter-dramatic { filter: var(--filter-dramatic); }
-.filter-faded { filter: var(--filter-faded); }
-.filter-bright { filter: var(--filter-bright); }
-.filter-tellus { filter: var(--filter-tellus); }
-.filter-liminal { filter: var(--filter-liminal); }
-.filter-senum { filter: var(--filter-senum); }
-.filter-vesper { filter: var(--filter-vesper); }
-.filter-primary { filter: var(--filter-primary); }
-.filter-accent { filter: var(--filter-accent); }
+.filter-disabled {
+  filter: var(--filter-disabled);
+}
+
+.filter-hover {
+  filter: var(--filter-hover);
+}
+
+.filter-loading {
+  filter: var(--filter-loading);
+}
+
+.filter-bw {
+  filter: var(--filter-bw);
+}
+
+.filter-muted {
+  filter: var(--filter-muted);
+}
+
+.filter-vintage {
+  filter: var(--filter-vintage);
+}
+
+.filter-vivid {
+  filter: var(--filter-vivid);
+}
+
+.filter-warm {
+  filter: var(--filter-warm);
+}
+
+.filter-cool {
+  filter: var(--filter-cool);
+}
+
+.filter-dramatic {
+  filter: var(--filter-dramatic);
+}
+
+.filter-faded {
+  filter: var(--filter-faded);
+}
+
+.filter-bright {
+  filter: var(--filter-bright);
+}
+
+.filter-tellus {
+  filter: var(--filter-tellus);
+}
+
+.filter-liminal {
+  filter: var(--filter-liminal);
+}
+
+.filter-senum {
+  filter: var(--filter-senum);
+}
+
+.filter-vesper {
+  filter: var(--filter-vesper);
+}
+
+.filter-primary {
+  filter: var(--filter-primary);
+}
+
+.filter-accent {
+  filter: var(--filter-accent);
+}
+
+/* 
+═══════════════════════════════════════════════════════
+ACCESIBILIDAD
+═══════════════════════════════════════════════════════
+
+Estas clases son ESENCIALES para hacer tu web accesible
+a personas con discapacidad visual que usan lectores de pantalla.
+*/
+
+/*
+SR-ONLY (Screen Reader Only)
+Oculta visualmente pero permite que lectores de pantalla lo lean.
+
+¿CUÁNDO USARLO?
+- Botones con solo icono: <button><span class="sr-only">Cerrar</span>✕</button>
+- Formularios: <label class="sr-only" for="email">Email</label>
+- Contexto adicional que solo necesitan usuarios de lectores
+
+¿POR QUÉ NO USAR display:none?
+Porque display:none oculta el contenido TAMBIÉN para lectores de pantalla.
+sr-only lo mantiene en el DOM y legible para tecnología asistiva.
+
+EJEMPLO:
+  <button aria-label="Menú">
+    <span class="sr-only">Abrir menú de navegación</span>
+    ☰
+  </button>
+*/
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+SR-ONLY-FOCUSABLE
+Como sr-only, pero se vuelve visible cuando recibe foco.
+Útil para enlaces de "saltar al contenido principal".
+
+EJEMPLO:
+  <a href="#main" class="sr-only-focusable">
+    Saltar al contenido principal
+  </a>
+*/
+.sr-only-focusable:focus,
+.sr-only-focusable:active {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* 
+═══════════════════════════════════════════════════════
+TEXTO - UTILIDADES
+═══════════════════════════════════════════════════════
+
+Clases para controlar comportamiento de texto.
+*/
+
+/*
+TRUNCATE - Corta texto largo con elipsis (...)
+Requiere que el contenedor tenga ancho definido.
+
+EJEMPLO:
+  <p class="truncate" style="width: 200px;">
+    Este texto muy largo se cortará con puntos suspensivos...
+  </p>
+
+NOTA: Solo funciona con texto de UNA línea.
+Para múltiples líneas, usa line-clamp (ver abajo).
+*/
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+LINE-CLAMP - Corta texto multilínea con elipsis
+Muestra N líneas y luego corta con "..."
+
+EJEMPLO:
+  <p class="line-clamp-2">
+    Este párrafo largo se mostrará solo en 2 líneas
+    y el resto se cortará con puntos suspensivos...
+  </p>
+*/
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/*
+TEXT-WRAP UTILITIES
+Control sobre cómo se envuelve el texto.
+*/
+
+/* No permite saltos de línea */
+.whitespace-nowrap {
+  white-space: nowrap;
+}
+
+/* Permite saltos solo en palabras completas */
+.whitespace-normal {
+  white-space: normal;
+}
+
+/* Preserva espacios y saltos de línea (como <pre>) */
+.whitespace-pre {
+  white-space: pre;
+}
+
+/* Como pre pero con wrapping */
+.whitespace-pre-wrap {
+  white-space: pre-wrap;
+}
+
+/* Rompe palabras largas si es necesario (evita overflow) */
+.break-words {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* No rompe palabras nunca */
+.break-normal {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Rompe en cualquier carácter (para URLs largas, etc.) */
+.break-all {
+  word-break: break-all;
+}
 
 
 
 /*
 32. ANIMACIONES Y KEYFRAMES
 
-Animaciones reutilizables para componentes interactivos.
-Úsalas con: animation: var(--anim-xxx);
+Animaciones reutilizables para dar vida a tu interfaz.
+14 keyframes + 14 variables + 16 clases utilitarias.
 
-NOTA: Las animaciones tienen el mismo tinte que el modo actual.
-En dark mode usan teal (Liminal), en light mode usan azul/violeta.
+¿QUÉ ES UN KEYFRAME?
+Un @keyframes define los "fotogramas clave" de una animación.
+El navegador interpola automáticamente entre ellos.
+Es como definir "al principio haz esto, al final haz esto otro".
+
+¿CUÁNDO USAR ANIMACIONES?
+- Feedback: el usuario hizo algo y quieres que lo note (shake, bounce)
+- Carga: algo está procesándose (spin, shimmer, pulse)
+- Transiciones: algo aparece o desaparece (fade, slide, scale)
+- Atención: hay algo nuevo que ver (ping, pulse)
+
+CUIDADO: Menos es más. Animar TODO cansa la vista y distrae.
+Regla: si dudas, no animes. Reserva animaciones para momentos clave.
+
+CÓMO USAR - 3 FORMAS:
+
+1. Variable directa (recomendado):
+   .mi-spinner { animation: var(--anim-spin); }
+
+2. Clase utilitaria (rápido):
+   <div class="anim-spin">...</div>
+
+3. Keyframe personalizado (control total):
+   .mi-cosa { animation: spin 2s linear infinite; }
+
+ACCESIBILIDAD:
+Algunos usuarios tienen "reducir movimiento" activado en su sistema.
+Al final de esta sección hay estilos que respetan esa preferencia.
 */
 
 /* 
 ═══════════════════════════════════════════════════════
 KEYFRAMES BASE
 ═══════════════════════════════════════════════════════
+
+Los @keyframes son las "recetas" de animación.
+Las variables --anim-xxx son atajos que incluyen duración y curva.
 */
 
-/* Rotación continua - para spinners */
+/* 
+SPIN - Rotación continua 360°
+ÚSALO EN: Spinners de carga, iconos de "procesando"
+EJEMPLO: <div class="anim-spin">🔄</div>
+*/
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* Pulso - para llamar atención, notificaciones */
+/* 
+PULSE - Parpadeo suave de opacidad
+ÚSALO EN: Skeletons, indicadores "algo está pasando"
+NO USES EN: Texto (molesta leerlo)
+*/
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
-/* Pulso con escala - para botones, badges */
+/* 
+PULSE-SCALE - Crece y encoge sutilmente
+ÚSALO EN: Botones importantes, badges de notificación
+CUIDADO: Muy llamativo, usar con moderación
+*/
 @keyframes pulse-scale {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
 }
 
-/* Shimmer - para skeletons de carga */
+/* 
+SHIMMER - Brillo que recorre de izquierda a derecha
+ÚSALO EN: Skeletons de carga (placeholder mientras cargan datos)
+REQUIERE: Un gradiente como background (ver --skeleton-gradient)
+EJEMPLO:
+  .skeleton {
+    background: var(--skeleton-gradient);
+    background-size: 200% 100%;
+    animation: var(--anim-shimmer);
+  }
+*/
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
 
-/* Fade in - para apariciones suaves */
+/* 
+FADE-IN - Aparece suavemente (invisible → visible)
+ÚSALO EN: Cualquier cosa que aparezca en pantalla
+COMBINA CON: slide-down/up para más impacto
+*/
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
-/* Fade out - para desapariciones suaves */
+/* 
+FADE-OUT - Desaparece suavemente (visible → invisible)
+ÚSALO EN: Cerrar modales, quitar notificaciones
+NOTA: Después de la animación, necesitas display:none o similar
+*/
 @keyframes fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
-/* Slide desde arriba - para dropdowns, notificaciones */
+/* 
+SLIDE-DOWN - Baja desde arriba (como un dropdown)
+ÚSALO EN: Menús desplegables, notificaciones desde arriba
+COMBINA: Fade + movimiento = aparición más "premium"
+*/
 @keyframes slide-down {
-  from { 
+  from {
     opacity: 0;
-    transform: translateY(-10px); 
+    transform: translateY(-10px);
   }
-  to { 
+
+  to {
     opacity: 1;
-    transform: translateY(0); 
+    transform: translateY(0);
   }
 }
 
-/* Slide desde abajo - para modales, sheets */
+/* 
+SLIDE-UP - Sube desde abajo (como un bottom sheet)
+ÚSALO EN: Modales móviles, action sheets, toasts desde abajo
+*/
 @keyframes slide-up {
-  from { 
+  from {
     opacity: 0;
-    transform: translateY(10px); 
+    transform: translateY(10px);
   }
-  to { 
+
+  to {
     opacity: 1;
-    transform: translateY(0); 
+    transform: translateY(0);
   }
 }
 
-/* Slide desde izquierda - para sidebars */
+/* 
+SLIDE-RIGHT - Entra desde la izquierda → derecha
+ÚSALO EN: Sidebars que se abren, paneles laterales izquierdos
+NOTA: El nombre indica la DIRECCIÓN del movimiento, no el origen
+*/
 @keyframes slide-right {
-  from { 
+  from {
     opacity: 0;
-    transform: translateX(-10px); 
+    transform: translateX(-10px);
   }
-  to { 
+
+  to {
     opacity: 1;
-    transform: translateX(0); 
+    transform: translateX(0);
   }
 }
 
-/* Slide desde derecha - para sidebars */
+/* 
+SLIDE-LEFT - Entra desde la derecha → izquierda
+ÚSALO EN: Paneles que se abren desde la derecha
+*/
 @keyframes slide-left {
-  from { 
+  from {
     opacity: 0;
-    transform: translateX(10px); 
+    transform: translateX(10px);
   }
-  to { 
+
+  to {
     opacity: 1;
-    transform: translateX(0); 
+    transform: translateX(0);
   }
 }
 
-/* Shake - para errores, validación fallida */
+/* 
+SHAKE - Vibración horizontal (izquierda-derecha-izquierda)
+ÚSALO EN: Errores de formulario, contraseña incorrecta, validación fallida
+DURACIÓN: 500ms es suficiente, más largo es molesto
+NO ABUSES: Es agresivo, reservar para errores claros
+*/
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-  20%, 40%, 60%, 80% { transform: translateX(4px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-4px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(4px);
+  }
 }
 
-/* Bounce - para éxito, confirmaciones */
+/* 
+BOUNCE - Rebote vertical (sube y baja)
+ÚSALO EN: Confirmación de éxito, "¡guardado!", checkmarks
+SENSACIÓN: Alegre, positivo, celebratorio
+*/
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
-/* Scale in - para modales, popovers */
+/* 
+SCALE-IN - Aparece creciendo desde 95% a 100%
+ÚSALO EN: Modales, popovers, tooltips, cualquier overlay
+SENSACIÓN: Elegante, menos intrusivo que fade solo
+*/
 @keyframes scale-in {
-  from { 
+  from {
     opacity: 0;
-    transform: scale(0.95); 
+    transform: scale(0.95);
   }
-  to { 
+
+  to {
     opacity: 1;
-    transform: scale(1); 
+    transform: scale(1);
   }
 }
 
-/* Ping - para indicadores de notificación */
+/* 
+PING - Onda expansiva que desaparece
+ÚSALO EN: Badges de notificación "tienes mensajes nuevos"
+EFECTO: Un círculo que crece y se desvanece en loop
+EJEMPLO:
+  .badge-ping::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--danger);
+    animation: var(--anim-ping);
+  }
+*/
 @keyframes ping {
-  75%, 100% {
+
+  75%,
+  100% {
     transform: scale(2);
     opacity: 0;
   }
 }
+
 
 :root {
   /* 
   ═══════════════════════════════════════════════════════
   VARIABLES DE ANIMACIÓN
   ═══════════════════════════════════════════════════════
-  */
   
+  Estas variables son atajos: incluyen el nombre del keyframe,
+  la duración, la curva de timing y si se repite.
+  
+  CÓMO USAR:
+    .mi-elemento { animation: var(--anim-spin); }
+  
+  ANATOMÍA:
+    --anim-spin: spin 1s linear infinite;
+                 │    │   │      └── repetir infinitamente
+                 │    │   └── curva lineal (velocidad constante)
+                 │    └── duración 1 segundo
+                 └── nombre del @keyframes
+  
+  CURVAS DE TIMING:
+    linear      → velocidad constante (ideal para spin)
+    ease-out    → empieza rápido, termina suave (apariciones)
+    ease-in     → empieza suave, termina rápido (desapariciones)
+    ease-in-out → suave en ambos extremos (loops suaves)
+  */
+
+  /* INFINITAS (se repiten para siempre) */
   --anim-spin: spin 1s linear infinite;
+  /* spinners */
   --anim-pulse: pulse 2s ease-in-out infinite;
+  /* parpadeo */
   --anim-pulse-scale: pulse-scale 2s ease-in-out infinite;
+  /* latido */
   --anim-shimmer: shimmer 1.5s ease-in-out infinite;
-  --anim-fade-in: fade-in 200ms ease-out;
-  --anim-fade-out: fade-out 200ms ease-in;
-  --anim-slide-down: slide-down 200ms ease-out;
-  --anim-slide-up: slide-up 200ms ease-out;
-  --anim-slide-right: slide-right 200ms ease-out;
-  --anim-slide-left: slide-left 200ms ease-out;
-  --anim-shake: shake 500ms ease-in-out;
-  --anim-bounce: bounce 500ms ease-in-out;
-  --anim-scale-in: scale-in 200ms ease-out;
+  /* brillo skeleton */
   --anim-ping: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+  /* onda */
+
+  /* UNA VEZ (se ejecutan y paran) */
+  --anim-fade-in: fade-in 200ms ease-out;
+  /* aparecer */
+  --anim-fade-out: fade-out 200ms ease-in;
+  /* desaparecer */
+  --anim-slide-down: slide-down 200ms ease-out;
+  /* dropdown */
+  --anim-slide-up: slide-up 200ms ease-out;
+  /* modal desde abajo */
+  --anim-slide-right: slide-right 200ms ease-out;
+  /* sidebar izq */
+  --anim-slide-left: slide-left 200ms ease-out;
+  /* sidebar der */
+  --anim-shake: shake 500ms ease-in-out;
+  /* error */
+  --anim-bounce: bounce 500ms ease-in-out;
+  /* éxito */
+  --anim-scale-in: scale-in 200ms ease-out;
+  /* modal/popover */
 }
 
 
 /*
 33. VARIABLES DE COMPONENTES
 
-Variables específicas para componentes UI comunes.
-Facilitan la consistencia y personalización.
-*/
+Variables específicas para construir componentes UI consistentes.
+156 variables organizadas por componente.
 
-:root {
+¿PARA QUÉ SIRVEN?
+Estas variables son "presets" de diseño para componentes comunes.
+En lugar de inventar valores cada vez, usas estas variables y
+todo tu UI queda coherente automáticamente.
+
+VENTAJAS:
+- Consistencia: todos los modales tienen el mismo border-radius
+- Mantenimiento: cambias --modal-radius y todos los modales cambian
+- Velocidad: no tienes que pensar qué padding usar, ya está decidido
+- Temas: cambian automáticamente entre dark y light mode
+
+CÓMO USAR:
+  .mi-modal {
+    background: var(--modal-bg);
+    border-radius: var(--modal-radius);
+    box-shadow: var(--modal-shadow);
+    padding: var(--modal-padding);
+    width: var(--modal-width-md);
+  }
+
+¿PUEDO CAMBIAR LOS VALORES?
+Sí. Puedes sobrescribir cualquier variable en tu propio CSS:
+  :root {
+    --modal-radius: 0; /* modales cuadrados */
+}
+
+NOTA: Estas variables referencian otras variables base (--bg-elevated,
+  --radius-md, etc.),
+así que heredan los cambios de tema automáticamente. */:root {
   /* 
   ═══════════════════════════════════════════════════════
   SKELETON / LOADING PLACEHOLDER
   ═══════════════════════════════════════════════════════
   
-  Fondo con gradiente animado para indicar carga.
-  El shimmer va de izquierdo a derecha creando efecto "brillante".
-  */
+  Los "skeletons" son formas grises que ocupan el espacio
+  donde aparecerá contenido mientras carga. Evitan el "salto"
+  cuando el contenido aparece de golpe.
   
+  CÓMO USARLO:
+    .skeleton-text {
+      height: 1em;
+      background: var(--skeleton-gradient);
+      background-size: 200% 100%;
+      border-radius: var(--skeleton-radius);
+      animation: var(--anim-shimmer);
+    }
+  
+  El shimmer crea un "brillo" que recorre el skeleton,
+  indicando visualmente que algo está cargando.
+  */
+
   --skeleton-base: var(--bg-elevated);
   --skeleton-highlight: var(--bg-sunken);
-  --skeleton-gradient: linear-gradient(
-    90deg,
-    var(--skeleton-base) 0%,
-    var(--skeleton-highlight) 50%,
-    var(--skeleton-base) 100%
-  );
+  --skeleton-gradient: linear-gradient(90deg,
+      var(--skeleton-base) 0%,
+      var(--skeleton-highlight) 50%,
+      var(--skeleton-base) 100%);
   --skeleton-radius: var(--radius-sm);
 
   /* 
   ═══════════════════════════════════════════════════════
   SPINNER / LOADER
   ═══════════════════════════════════════════════════════
-  */
   
+  Círculo giratorio que indica "procesando".
+  
+  CÓMO CONSTRUIR UN SPINNER:
+    .spinner {
+      width: var(--spinner-size-md);
+      height: var(--spinner-size-md);
+      border: var(--spinner-thickness) solid var(--spinner-track);
+      border-top-color: var(--spinner-color);
+      border-radius: 50%;
+      animation: var(--anim-spin);
+    }
+  
+  TAMAÑOS DISPONIBLES:
+    sm (1rem)   → inline con texto, botones pequeños
+    md (1.5rem) → uso general, botones normales
+    lg (2rem)   → cards, secciones
+    xl (3rem)   → pantalla completa de carga
+  */
+
   --spinner-color: var(--accent);
   --spinner-track: var(--neutral-700);
   --spinner-size-sm: 1rem;
@@ -2768,8 +3717,33 @@ Facilitan la consistencia y personalización.
   ═══════════════════════════════════════════════════════
   PROGRESS BAR
   ═══════════════════════════════════════════════════════
-  */
   
+  Barra que muestra progreso de 0% a 100%.
+  
+  CÓMO CONSTRUIRLA:
+    <div class="progress-track">
+      <div class="progress-fill" style="width: 65%"></div>
+    </div>
+    
+    .progress-track {
+      height: var(--progress-height-md);
+      background: var(--progress-track);
+      border-radius: var(--progress-radius);
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--progress-fill);
+      border-radius: var(--progress-radius);
+      transition: width 300ms ease;
+    }
+  
+  VARIANTES DE COLOR:
+    --progress-fill         → normal (accent)
+    --progress-fill-success → completado, éxito (verde)
+    --progress-fill-warning → atención, casi lleno (amarillo)
+    --progress-fill-danger  → error, lleno, crítico (rojo)
+  */
+
   --progress-track: var(--bg-sunken);
   --progress-fill: var(--accent);
   --progress-fill-success: var(--success);
@@ -2784,265 +3758,788 @@ Facilitan la consistencia y personalización.
   ═══════════════════════════════════════════════════════
   TOOLTIP
   ═══════════════════════════════════════════════════════
-  */
   
-  --tooltip-bg: var(--bg-elevated);
-  --tooltip-text: var(--text-body);
-  --tooltip-padding: var(--space-xs) var(--space-sm);
-  --tooltip-radius: var(--radius-sm);
-  --tooltip-shadow: var(--shadow-lg);
-  --tooltip-arrow-size: 6px;
+  Cajita flotante con info adicional al hacer hover.
+  
+  CUÁNDO USAR:
+    - Explicar iconos sin texto
+    - Dar más contexto sobre un elemento
+    - Mostrar atajos de teclado
+  
+  CUÁNDO NO USAR:
+    - Info esencial (no todos hacen hover, móvil no tiene hover)
+    - Contenido largo (usa un popover o modal)
+  
+  ESTRUCTURA TÍPICA:
+    <button data-tooltip="Guardar cambios">💾</button>
+    
+    [data-tooltip] {
+      position: relative;
+    }
+    [data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      background: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      padding: var(--tooltip-padding);
+      border-radius: var(--tooltip-radius);
+      box-shadow: var(--tooltip-shadow);
+      /* ... posicionamiento ... */
+}
 
-  /* 
+*/ --tooltip-bg: var(--bg-elevated);
+--tooltip-text: var(--text-body);
+--tooltip-padding: var(--space-xs) var(--space-sm);
+--tooltip-radius: var(--radius-sm);
+--tooltip-shadow: var(--shadow-lg);
+--tooltip-arrow-size: 6px;
+
+/* 
   ═══════════════════════════════════════════════════════
   MODAL / DIALOG
   ═══════════════════════════════════════════════════════
-  */
   
-  --modal-bg: var(--bg-elevated);
-  --modal-radius: var(--radius-lg);
-  --modal-shadow: var(--shadow-xl);
-  --modal-padding: var(--space-lg);
-  --modal-width-sm: 400px;
-  --modal-width-md: 560px;
-  --modal-width-lg: 720px;
-  --modal-width-xl: 900px;
-  --modal-backdrop: var(--overlay-dark);
+  Ventana centrada que bloquea el fondo para enfocar atención.
+  
+  CUÁNDO USAR:
+    - Confirmaciones importantes ("¿Eliminar?")
+    - Formularios que requieren atención
+    - Contenido que interrumpe el flujo
+  
+  CUÁNDO NO USAR:
+    - Info que puede mostrarse inline
+    - Acciones frecuentes (frustra al usuario)
+  
+  TAMAÑOS:
+    sm (400px) → confirmaciones, alertas
+    md (560px) → formularios simples
+    lg (720px) → formularios complejos, tablas
+    xl (900px) → contenido pesado, comparativas
+  
+  ESTRUCTURA:
+    <div class="modal-backdrop">
+      <div class="modal">
+        <header>...</header>
+        <main>...</main>
+        <footer>...</footer>
+      </div>
+    </div>
+    
+    .modal-backdrop { background: var(--modal-backdrop); }
+    .modal {
+      background: var(--modal-bg);
+      border-radius: var(--modal-radius);
+      box-shadow: var(--modal-shadow);
+      padding: var(--modal-padding);
+      width: var(--modal-width-md);
+      animation: var(--anim-scale-in);
+    }
+  */
 
-  /* 
+--modal-bg: var(--bg-elevated);
+--modal-radius: var(--radius-lg);
+--modal-shadow: var(--shadow-xl);
+--modal-padding: var(--space-lg);
+--modal-width-sm: 400px;
+--modal-width-md: 560px;
+--modal-width-lg: 720px;
+--modal-width-xl: 900px;
+--modal-backdrop: var(--overlay-dark);
+
+/* 
   ═══════════════════════════════════════════════════════
   TOAST / NOTIFICATION
   ═══════════════════════════════════════════════════════
-  */
   
-  --toast-bg: var(--bg-elevated);
-  --toast-text: var(--text-body);
-  --toast-radius: var(--radius-md);
-  --toast-shadow: var(--shadow-lg);
-  --toast-padding: var(--space-sm) var(--space-md);
-  --toast-gap: var(--space-sm);
-  /* Posiciones desde el borde de la pantalla */
-  --toast-offset: var(--space-md);
+  Mensaje temporal que aparece y desaparece solo.
+  No interrumpe, solo informa.
+  
+  CUÁNDO USAR:
+    - "Guardado correctamente" ✓
+    - "Copiado al portapapeles"
+    - "Nueva versión disponible"
+    - Errores no críticos
+  
+  CUÁNDO NO USAR:
+    - Errores que requieren acción (usa modal)
+    - Info que el usuario necesita recordar
+  
+  POSICIÓN TÍPICA:
+    Esquina inferior derecha o superior derecha.
+    --toast-offset define la distancia al borde.
+  
+  ESTRUCTURA:
+    .toast-container {
+      position: fixed;
+      bottom: var(--toast-offset);
+      right: var(--toast-offset);
+      display: flex;
+      flex-direction: column;
+      gap: var(--toast-gap);
+    }
+    .toast {
+      background: var(--toast-bg);
+      color: var(--toast-text);
+      padding: var(--toast-padding);
+      border-radius: var(--toast-radius);
+      box-shadow: var(--toast-shadow);
+      animation: var(--anim-slide-left);
+    }
+  */
 
-  /* 
+--toast-bg: var(--bg-elevated);
+--toast-text: var(--text-body);
+--toast-radius: var(--radius-md);
+--toast-shadow: var(--shadow-lg);
+--toast-padding: var(--space-sm) var(--space-md);
+--toast-gap: var(--space-sm);
+/* Posiciones desde el borde de la pantalla */
+--toast-offset: var(--space-md);
+
+/* 
   ═══════════════════════════════════════════════════════
   TABS
   ═══════════════════════════════════════════════════════
-  */
   
-  --tab-bg: transparent;
-  --tab-bg-active: var(--bg-elevated);
-  --tab-text: var(--text-muted);
-  --tab-text-active: var(--accent);
-  --tab-border: var(--border-default);
-  --tab-border-active: var(--accent);
-  --tab-padding: var(--space-sm) var(--space-md);
-  --tab-radius: var(--radius-sm);
+  Pestañas para navegar entre secciones de contenido.
+  
+  REGLAS UX:
+    - El tab activo debe ser obvio (color, borde, fondo)
+    - El contenido debe cambiar SIN recargar página
+    - Máximo 5-7 tabs visibles, más = usar dropdown
+  
+  ESTRUCTURA:
+    <div class="tabs">
+      <button class="tab">General</button>
+      <button class="tab active">Seguridad</button>
+      <button class="tab">Avanzado</button>
+    </div>
+    <div class="tab-content">...</div>
+    
+    .tab {
+      background: var(--tab-bg);
+      color: var(--tab-text);
+      padding: var(--tab-padding);
+      border-radius: var(--tab-radius);
+      border-bottom: 2px solid var(--tab-border);
+    }
+    .tab.active {
+      background: var(--tab-bg-active);
+      color: var(--tab-text-active);
+      border-bottom-color: var(--tab-border-active);
+    }
+  */
 
-  /* 
+--tab-bg: transparent;
+--tab-bg-active: var(--bg-elevated);
+--tab-text: var(--text-muted);
+--tab-text-active: var(--accent);
+--tab-border: var(--border-default);
+--tab-border-active: var(--accent);
+--tab-padding: var(--space-sm) var(--space-md);
+--tab-radius: var(--radius-sm);
+
+/* 
   ═══════════════════════════════════════════════════════
   ACCORDION
   ═══════════════════════════════════════════════════════
-  */
   
-  --accordion-bg: var(--bg-base);
-  --accordion-bg-hover: var(--bg-elevated);
-  --accordion-border: var(--border-subtle);
-  --accordion-radius: var(--radius-md);
-  --accordion-padding: var(--space-md);
-  --accordion-icon-size: 1.25rem;
+  Secciones colapsables que se expanden al hacer click.
+  Ideal para FAQs, menús largos, configuraciones.
+  
+  REGLAS UX:
+    - Solo un panel abierto a la vez (o varios, tú decides)
+    - Icono que indique estado (▶ cerrado, ▼ abierto)
+    - Animación suave al abrir/cerrar
+  
+  ESTRUCTURA:
+    <div class="accordion-item">
+      <button class="accordion-header">
+        ¿Cómo funciona? ▼
+      </button>
+      <div class="accordion-content">
+        Explicación aquí...
+      </div>
+    </div>
+    
+    .accordion-item {
+      background: var(--accordion-bg);
+      border: 1px solid var(--accordion-border);
+      border-radius: var(--accordion-radius);
+    }
+    .accordion-header {
+      padding: var(--accordion-padding);
+      width: 100%;
+    }
+    .accordion-header:hover {
+      background: var(--accordion-bg-hover);
+    }
+  */
 
-  /* 
+--accordion-bg: var(--bg-base);
+--accordion-bg-hover: var(--bg-elevated);
+--accordion-border: var(--border-subtle);
+--accordion-radius: var(--radius-md);
+--accordion-padding: var(--space-md);
+--accordion-icon-size: 1.25rem;
+
+/* 
   ═══════════════════════════════════════════════════════
   TABLE
   ═══════════════════════════════════════════════════════
-  */
   
-  --table-header-bg: var(--bg-sunken);
-  --table-header-text: var(--text-heading);
-  --table-row-bg: var(--bg-base);
-  --table-row-bg-alt: var(--bg-elevated);
-  --table-row-bg-hover: var(--bg-elevated);
-  --table-border: var(--border-subtle);
-  --table-padding: var(--space-sm) var(--space-md);
+  Tablas de datos con filas alternas y hover.
+  
+  TIPS:
+    - Usa filas alternas (zebra striping) para legibilidad
+    - Añade hover para indicar qué fila está seleccionada
+    - Alinea números a la derecha, texto a la izquierda
+  
+  ESTRUCTURA:
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th {
+      background: var(--table-header-bg);
+      color: var(--table-header-text);
+      padding: var(--table-padding);
+      text-align: left;
+    }
+    td {
+      padding: var(--table-padding);
+      border-bottom: 1px solid var(--table-border);
+    }
+    tr:nth-child(even) {
+      background: var(--table-row-bg-alt);
+    }
+    tr:hover {
+      background: var(--table-row-bg-hover);
+    }
+  */
 
-  /* 
+--table-header-bg: var(--bg-sunken);
+--table-header-text: var(--text-heading);
+--table-row-bg: var(--bg-base);
+--table-row-bg-alt: var(--bg-elevated);
+--table-row-bg-hover: var(--bg-elevated);
+--table-border: var(--border-subtle);
+--table-padding: var(--space-sm) var(--space-md);
+
+/* 
   ═══════════════════════════════════════════════════════
   STEPPER / WIZARD
   ═══════════════════════════════════════════════════════
-  */
   
-  --stepper-line: var(--border-subtle);
-  --stepper-line-complete: var(--accent);
-  --stepper-dot-size: 2rem;
-  --stepper-dot-bg: var(--bg-sunken);
-  --stepper-dot-bg-active: var(--accent);
-  --stepper-dot-bg-complete: var(--success);
-  --stepper-dot-text: var(--text-muted);
-  --stepper-dot-text-active: var(--text-on-accent);
+  Indicador visual de progreso en pasos (1 → 2 → 3 → ✓).
+  Usado en formularios largos, onboarding, checkouts.
+  
+  TRES ESTADOS POR PASO:
+    - Pendiente: gris, inactivo
+    - Activo: color accent, el paso actual
+    - Completado: verde/success, ya terminado
+  
+  ESTRUCTURA:
+    <div class="stepper">
+      <div class="step complete">1</div>
+      <div class="step-line complete"></div>
+      <div class="step active">2</div>
+      <div class="step-line"></div>
+      <div class="step">3</div>
+    </div>
+    
+    .step {
+      width: var(--stepper-dot-size);
+      height: var(--stepper-dot-size);
+      background: var(--stepper-dot-bg);
+      color: var(--stepper-dot-text);
+      border-radius: 50%;
+    }
+    .step.active {
+      background: var(--stepper-dot-bg-active);
+      color: var(--stepper-dot-text-active);
+    }
+    .step.complete {
+      background: var(--stepper-dot-bg-complete);
+    }
+    .step-line {
+      background: var(--stepper-line);
+    }
+    .step-line.complete {
+      background: var(--stepper-line-complete);
+    }
+  */
 
-  /* 
+--stepper-line: var(--border-subtle);
+--stepper-line-complete: var(--accent);
+--stepper-dot-size: 2rem;
+--stepper-dot-bg: var(--bg-sunken);
+--stepper-dot-bg-active: var(--accent);
+--stepper-dot-bg-complete: var(--success);
+--stepper-dot-text: var(--text-muted);
+--stepper-dot-text-active: var(--text-on-accent);
+
+/* 
   ═══════════════════════════════════════════════════════
   RATING (ESTRELLAS)
   ═══════════════════════════════════════════════════════
-  */
   
-  --rating-empty: var(--neutral-600);
-  --rating-filled: var(--warning);
-  --rating-hover: var(--warning);
-  --rating-size-sm: 1rem;
-  --rating-size-md: 1.5rem;
-  --rating-size-lg: 2rem;
-  --rating-gap: var(--space-2xs);
+  Sistema de puntuación visual con estrellas (★★★☆☆).
+  
+  VARIANTES:
+    - Solo lectura: muestra puntuación existente
+    - Interactivo: usuario puede puntuar haciendo click
+  
+  ESTRUCTURA:
+    <div class="rating">
+      <span class="star filled">★</span>
+      <span class="star filled">★</span>
+      <span class="star filled">★</span>
+      <span class="star">☆</span>
+      <span class="star">☆</span>
+    </div>
+    
+    .star {
+      font-size: var(--rating-size-md);
+      color: var(--rating-empty);
+    }
+    .star.filled {
+      color: var(--rating-filled);
+    }
+    .star:hover {
+      color: var(--rating-hover);
+    }
+    .rating {
+      gap: var(--rating-gap);
+    }
+  */
 
-  /* 
+--rating-empty: var(--neutral-600);
+--rating-filled: var(--warning);
+--rating-hover: var(--warning);
+--rating-size-sm: 1rem;
+--rating-size-md: 1.5rem;
+--rating-size-lg: 2rem;
+--rating-gap: var(--space-2xs);
+
+/* 
   ═══════════════════════════════════════════════════════
   SLIDER / RANGE
   ═══════════════════════════════════════════════════════
   */
-  
-  --slider-track: var(--bg-sunken);
-  --slider-track-height: 6px;
-  --slider-fill: var(--accent);
-  --slider-thumb-size: 18px;
-  --slider-thumb-bg: var(--accent);
-  --slider-thumb-border: 2px solid var(--bg-base);
-  --slider-thumb-shadow: var(--shadow-md);
 
-  /* 
+--slider-track: var(--bg-sunken);
+--slider-track-height: 6px;
+--slider-fill: var(--accent);
+--slider-thumb-size: 18px;
+--slider-thumb-bg: var(--accent);
+--slider-thumb-border: 2px solid var(--bg-base);
+--slider-thumb-shadow: var(--shadow-md);
+
+/* 
   ═══════════════════════════════════════════════════════
   DIVIDER / SEPARATOR
   ═══════════════════════════════════════════════════════
   */
-  
-  --divider-color: var(--border-subtle);
-  --divider-thickness: 1px;
-  --divider-spacing: var(--space-md);
 
-  /* 
+--divider-color: var(--border-subtle);
+--divider-thickness: 1px;
+--divider-spacing: var(--space-md);
+
+/* 
   ═══════════════════════════════════════════════════════
   DROPDOWN / SELECT
   ═══════════════════════════════════════════════════════
-  */
   
-  --dropdown-bg: var(--bg-elevated);
-  --dropdown-border: var(--border-default);
-  --dropdown-radius: var(--radius-md);
-  --dropdown-shadow: var(--shadow-lg);
-  --dropdown-item-padding: var(--space-sm) var(--space-md);
-  --dropdown-item-hover: var(--bg-sunken);
-  --dropdown-item-active: var(--accent);
+  Menú desplegable que aparece al hacer click.
+  
+  DIFERENCIA CON TOOLTIP:
+    - Tooltip: hover, solo muestra info
+    - Dropdown: click, permite seleccionar opciones
+  
+  ESTRUCTURA:
+    <div class="dropdown">
+      <button class="dropdown-trigger">Opciones ▼</button>
+      <ul class="dropdown-menu">
+        <li class="dropdown-item">Editar</li>
+        <li class="dropdown-item active">Duplicar</li>
+        <li class="dropdown-item">Eliminar</li>
+      </ul>
+    </div>
+    
+    .dropdown-menu {
+      background: var(--dropdown-bg);
+      border: 1px solid var(--dropdown-border);
+      border-radius: var(--dropdown-radius);
+      box-shadow: var(--dropdown-shadow);
+      animation: var(--anim-slide-down);
+    }
+    .dropdown-item {
+      padding: var(--dropdown-item-padding);
+    }
+    .dropdown-item:hover {
+      background: var(--dropdown-item-hover);
+    }
+    .dropdown-item.active {
+      color: var(--dropdown-item-active);
+    }
+  */
 
-  /* 
+--dropdown-bg: var(--bg-elevated);
+--dropdown-border: var(--border-default);
+--dropdown-radius: var(--radius-md);
+--dropdown-shadow: var(--shadow-lg);
+--dropdown-item-padding: var(--space-sm) var(--space-md);
+--dropdown-item-hover: var(--bg-sunken);
+--dropdown-item-active: var(--accent);
+
+/* 
   ═══════════════════════════════════════════════════════
   CHIP / TAG
   ═══════════════════════════════════════════════════════
-  */
   
-  --chip-bg: var(--bg-elevated);
-  --chip-text: var(--text-body);
-  --chip-border: var(--border-subtle);
-  --chip-radius: var(--radius-full);
-  --chip-padding: var(--space-2xs) var(--space-sm);
-  --chip-gap: var(--space-2xs);
-  --chip-close-size: 1rem;
+  Etiquetas pequeñas para categorías, filtros, selecciones.
+  
+  USOS COMUNES:
+    - Tags de categoría: "JavaScript", "React", "CSS"
+    - Filtros activos: "Precio: <100€" [×]
+    - Selección múltiple: chips seleccionables
+  
+  ESTRUCTURA:
+    <span class="chip">
+      React
+      <button class="chip-close">×</button>
+    </span>
+    
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--chip-gap);
+      background: var(--chip-bg);
+      color: var(--chip-text);
+      border: 1px solid var(--chip-border);
+      border-radius: var(--chip-radius);
+      padding: var(--chip-padding);
+    }
+    .chip-close {
+      width: var(--chip-close-size);
+      height: var(--chip-close-size);
+    }
+  */
 
-  /* 
+--chip-bg: var(--bg-elevated);
+--chip-text: var(--text-body);
+--chip-border: var(--border-subtle);
+--chip-radius: var(--radius-full);
+--chip-padding: var(--space-2xs) var(--space-sm);
+--chip-gap: var(--space-2xs);
+--chip-close-size: 1rem;
+
+/* 
   ═══════════════════════════════════════════════════════
   SIDEBAR / DRAWER
   ═══════════════════════════════════════════════════════
-  */
   
-  --sidebar-bg: var(--bg-base);
-  --sidebar-width: 280px;
-  --sidebar-width-collapsed: 64px;
-  --sidebar-border: var(--border-subtle);
-  --sidebar-item-padding: var(--space-sm) var(--space-md);
-  --sidebar-item-radius: var(--radius-sm);
-  --sidebar-item-hover: var(--bg-elevated);
-  --sidebar-item-active: var(--accent);
+  Panel lateral de navegación, típicamente a la izquierda.
+  
+  DOS ESTADOS:
+    - Expandido (280px): muestra icono + texto
+    - Colapsado (64px): solo iconos, ahorra espacio
+  
+  CUÁNDO COLAPSAR:
+    - Pantallas pequeñas (responsive)
+    - Usuario lo elige (botón hamburguesa)
+    - Focus en contenido principal
+  
+  ESTRUCTURA:
+    <aside class="sidebar">
+      <nav>
+        <a class="sidebar-item active">🏠 Inicio</a>
+        <a class="sidebar-item">⚙️ Ajustes</a>
+      </nav>
+    </aside>
+    
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--sidebar-border);
+    }
+    .sidebar.collapsed {
+      width: var(--sidebar-width-collapsed);
+    }
+    .sidebar-item {
+      padding: var(--sidebar-item-padding);
+      border-radius: var(--sidebar-item-radius);
+    }
+    .sidebar-item:hover {
+      background: var(--sidebar-item-hover);
+    }
+    .sidebar-item.active {
+      color: var(--sidebar-item-active);
+    }
+  */
 
-  /* 
+--sidebar-bg: var(--bg-base);
+--sidebar-width: 280px;
+--sidebar-width-collapsed: 64px;
+--sidebar-border: var(--border-subtle);
+--sidebar-item-padding: var(--space-sm) var(--space-md);
+--sidebar-item-radius: var(--radius-sm);
+--sidebar-item-hover: var(--bg-elevated);
+--sidebar-item-active: var(--accent);
+
+/* 
   ═══════════════════════════════════════════════════════
   NAVBAR / HEADER
   ═══════════════════════════════════════════════════════
   */
-  
-  --navbar-bg: var(--bg-base);
-  --navbar-height: 64px;
-  --navbar-border: var(--border-subtle);
-  --navbar-shadow: var(--shadow-sm);
-  --navbar-padding: 0 var(--space-lg);
 
-  /* 
+--navbar-bg: var(--bg-base);
+--navbar-height: 64px;
+--navbar-border: var(--border-subtle);
+--navbar-shadow: var(--shadow-sm);
+--navbar-padding: 0 var(--space-lg);
+
+/* 
   ═══════════════════════════════════════════════════════
   BREADCRUMB
   ═══════════════════════════════════════════════════════
   */
-  
-  --breadcrumb-text: var(--text-muted);
-  --breadcrumb-text-active: var(--text-body);
-  --breadcrumb-separator: '/';
-  --breadcrumb-gap: var(--space-xs);
 
-  /* 
+--breadcrumb-text: var(--text-muted);
+--breadcrumb-text-active: var(--text-body);
+--breadcrumb-separator: '/';
+--breadcrumb-gap: var(--space-xs);
+
+/* 
   ═══════════════════════════════════════════════════════
   PAGINATION
   ═══════════════════════════════════════════════════════
   */
-  
-  --pagination-bg: transparent;
-  --pagination-bg-hover: var(--bg-elevated);
-  --pagination-bg-active: var(--accent);
-  --pagination-text: var(--text-body);
-  --pagination-text-active: var(--text-on-accent);
-  --pagination-size: 2.5rem;
-  --pagination-radius: var(--radius-sm);
-  --pagination-gap: var(--space-2xs);
 
-  /* 
+--pagination-bg: transparent;
+--pagination-bg-hover: var(--bg-elevated);
+--pagination-bg-active: var(--accent);
+--pagination-text: var(--text-body);
+--pagination-text-active: var(--text-on-accent);
+--pagination-size: 2.5rem;
+--pagination-radius: var(--radius-sm);
+--pagination-gap: var(--space-2xs);
+
+/* 
   ═══════════════════════════════════════════════════════
   TIMELINE
   ═══════════════════════════════════════════════════════
   */
-  
-  --timeline-line: var(--border-subtle);
-  --timeline-line-width: 2px;
-  --timeline-dot-size: 12px;
-  --timeline-dot-bg: var(--accent);
-  --timeline-dot-border: 2px solid var(--bg-base);
-  --timeline-gap: var(--space-lg);
 
-  /* 
+--timeline-line: var(--border-subtle);
+--timeline-line-width: 2px;
+--timeline-dot-size: 12px;
+--timeline-dot-bg: var(--accent);
+--timeline-dot-border: 2px solid var(--bg-base);
+--timeline-gap: var(--space-lg);
+
+/* 
   ═══════════════════════════════════════════════════════
   MENU / CONTEXT MENU
   ═══════════════════════════════════════════════════════
   */
-  
-  --menu-bg: var(--bg-elevated);
-  --menu-border: var(--border-subtle);
-  --menu-radius: var(--radius-md);
-  --menu-shadow: var(--shadow-lg);
-  --menu-padding: var(--space-xs);
-  --menu-item-padding: var(--space-sm) var(--space-md);
-  --menu-item-radius: var(--radius-sm);
-  --menu-item-hover: var(--bg-sunken);
-  --menu-divider: var(--border-subtle);
 
-  /* 
+--menu-bg: var(--bg-elevated);
+--menu-border: var(--border-subtle);
+--menu-radius: var(--radius-md);
+--menu-shadow: var(--shadow-lg);
+--menu-padding: var(--space-xs);
+--menu-item-padding: var(--space-sm) var(--space-md);
+--menu-item-radius: var(--radius-sm);
+--menu-item-hover: var(--bg-sunken);
+--menu-divider: var(--border-subtle);
+
+/* 
   ═══════════════════════════════════════════════════════
   CALENDAR / DATE PICKER
   ═══════════════════════════════════════════════════════
   */
+
+--calendar-bg: var(--bg-elevated);
+--calendar-header-bg: var(--bg-sunken);
+--calendar-day-size: 2.5rem;
+--calendar-day-hover: var(--bg-sunken);
+--calendar-day-selected: var(--accent);
+--calendar-day-today: var(--primary);
+--calendar-day-outside: var(--text-muted);
+--calendar-radius: var(--radius-md);
+
+/* 
+  ═══════════════════════════════════════════════════════
+  AVATAR
+  ═══════════════════════════════════════════════════════
   
-  --calendar-bg: var(--bg-elevated);
-  --calendar-header-bg: var(--bg-sunken);
-  --calendar-day-size: 2.5rem;
-  --calendar-day-hover: var(--bg-sunken);
-  --calendar-day-selected: var(--accent);
-  --calendar-day-today: var(--primary);
-  --calendar-day-outside: var(--text-muted);
-  --calendar-radius: var(--radius-md);
+  Imagen circular que representa a un usuario.
+  Puede mostrar foto, iniciales, o icono placeholder.
+  
+  TAMAÑOS TÍPICOS:
+    xs (24px) → listas compactas, comentarios inline
+    sm (32px) → chips, menciones, badges
+    md (40px) → uso general, listas de usuarios
+    lg (48px) → cards de perfil, headers
+    xl (64px) → página de perfil, detalle de usuario
+    2xl (96px) → perfil destacado, onboarding
+  
+  VARIANTES:
+    - Con imagen: <img src="..." class="avatar" />
+    - Con iniciales: <div class="avatar">IG</div>
+    - Con icono: <div class="avatar">👤</div>
+    - Con estado (online/offline): avatar + badge de estado
+  
+  ESTRUCTURA:
+    <div class="avatar-wrapper">
+      <img class="avatar avatar-md" src="user.jpg" alt="Usuario" />
+      <span class="avatar-status online"></span>
+    </div>
+    
+    .avatar {
+      width: var(--avatar-size-md);
+      height: var(--avatar-size-md);
+      border-radius: var(--avatar-radius);
+      background: var(--avatar-bg);
+      color: var(--avatar-text);
+      border: var(--avatar-border);
+      object-fit: cover;
+    }
+    .avatar-status {
+      width: var(--avatar-status-size);
+      height: var(--avatar-status-size);
+      border-radius: 50%;
+      border: 2px solid var(--bg-base);
+    }
+    .avatar-status.online { background: var(--success); }
+    .avatar-status.offline { background: var(--neutral-500); }
+  
+  GRUPOS DE AVATARES (overlapping):
+    .avatar-group .avatar {
+      margin-left: calc(var(--avatar-size-md) * -0.3);
+      border: 2px solid var(--bg-base);
+    }
+    .avatar-group .avatar:first-child { margin-left: 0; }
+  */
+
+--avatar-size-xs: 1.5rem;
+/* 24px */
+--avatar-size-sm: 2rem;
+/* 32px */
+--avatar-size-md: 2.5rem;
+/* 40px */
+--avatar-size-lg: 3rem;
+/* 48px */
+--avatar-size-xl: 4rem;
+/* 64px */
+--avatar-size-2xl: 6rem;
+/* 96px */
+--avatar-radius: var(--radius-full);
+/* círculo perfecto */
+--avatar-bg: var(--bg-elevated);
+/* fondo cuando no hay imagen */
+--avatar-text: var(--text-muted);
+/* color de iniciales */
+--avatar-border: 2px solid var(--border-subtle);
+--avatar-status-size: 0.75rem;
+/* indicador online/offline */
+--avatar-group-overlap: -0.5rem;
+/* superposición en grupos */
+
+/* 
+  ═══════════════════════════════════════════════════════
+  BADGE
+  ═══════════════════════════════════════════════════════
+  
+  Indicador pequeño de estado, cantidad o categoría.
+  Se usa junto a otros elementos (iconos, avatares, botones).
+  
+  TIPOS DE BADGES:
+    - Contador: número de notificaciones (1, 5, 99+)
+    - Estado: "Nuevo", "Beta", "Pro"
+    - Indicador: punto rojo sin texto (hay algo nuevo)
+  
+  COLORES: Usa las variables semánticas directamente:
+    - Neutro:  background: var(--badge-bg)     → fondo por defecto
+    - Primary: background: var(--primary)      → acción principal
+              color: var(--text-on-primary)
+    - Success: background: var(--success)      → completado, online
+              color: var(--text-on-success)
+    - Warning: background: var(--warning)      → atención, pendiente
+              color: var(--text-on-warning)
+    - Danger:  background: var(--danger)       → error, urgente
+              color: var(--text-on-danger)
+  
+  ESTRUCTURA BÁSICA:
+    <span class="badge">Nuevo</span>
+    <span class="badge badge-primary">5</span>
+    <span class="badge badge-danger badge-dot"></span>
+    
+    /* Badge base */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--badge-size);
+  height: var(--badge-size);
+  padding: var(--badge-padding);
+  font-size: var(--badge-font-size);
+  font-weight: var(--fw-semibold);
+  border-radius: var(--badge-radius);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+}
+
+/* Variante de color (ejemplo: danger) */
+.badge-danger {
+  background: var(--danger);
+  color: var(--text-on-danger);
+}
+
+BADGE EN ESQUINA (notificaciones): <div class="icon-wrapper"><span class="icon">🔔</span><span class="badge badge-danger badge-corner">3</span></div>.icon-wrapper {
+  position: relative;
+}
+
+.badge-corner {
+  position: absolute;
+  top: var(--badge-corner-offset);
+  right: var(--badge-corner-offset);
+}
+
+BADGE COMO PUNTO (sin texto): <div class="menu-item">Mensajes <span class="badge badge-dot badge-danger"></span></div>.badge-dot {
+  min-width: var(--badge-dot-size);
+  width: var(--badge-dot-size);
+  height: var(--badge-dot-size);
+  padding: 0;
+}
+
+BADGE CON ANIMACIÓN (llamar atención): <span class="badge badge-danger anim-pulse">99+</span>O con el efecto ping: <span class="badge badge-danger badge-ping">3</span>.badge-ping::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: var(--anim-ping);
+}
+
+*/ --badge-size: 1.25rem;
+/* altura mínima / ancho mínimo */
+--badge-padding: 0 var(--space-xs);
+/* padding horizontal */
+--badge-font-size: var(--text-xs);
+/* tamaño de texto */
+--badge-radius: var(--radius-full);
+/* píldora redondeada */
+--badge-bg: var(--bg-elevated);
+/* fondo por defecto */
+--badge-text: var(--text-body);
+/* texto por defecto */
+--badge-dot-size: 0.5rem;
+/* tamaño del punto indicador */
+--badge-corner-offset: -0.25rem;
+/* offset para posición esquina */
 }
 
 /* Modo claro: ajustes de componentes */
@@ -3066,32 +4563,79 @@ CLASES UTILITARIAS DE ANIMACIÓN
 ═══════════════════════════════════════════════════════
 */
 
-.anim-spin { animation: var(--anim-spin); }
-.anim-pulse { animation: var(--anim-pulse); }
-.anim-pulse-scale { animation: var(--anim-pulse-scale); }
-.anim-shimmer { 
+.anim-spin {
+  animation: var(--anim-spin);
+}
+
+.anim-pulse {
+  animation: var(--anim-pulse);
+}
+
+.anim-pulse-scale {
+  animation: var(--anim-pulse-scale);
+}
+
+.anim-shimmer {
   background: var(--skeleton-gradient);
   background-size: 200% 100%;
-  animation: var(--anim-shimmer); 
+  animation: var(--anim-shimmer);
 }
-.anim-fade-in { animation: var(--anim-fade-in); }
-.anim-fade-out { animation: var(--anim-fade-out); }
-.anim-slide-down { animation: var(--anim-slide-down); }
-.anim-slide-up { animation: var(--anim-slide-up); }
-.anim-slide-right { animation: var(--anim-slide-right); }
-.anim-slide-left { animation: var(--anim-slide-left); }
-.anim-shake { animation: var(--anim-shake); }
-.anim-bounce { animation: var(--anim-bounce); }
-.anim-scale-in { animation: var(--anim-scale-in); }
-.anim-ping { animation: var(--anim-ping); }
+
+.anim-fade-in {
+  animation: var(--anim-fade-in);
+}
+
+.anim-fade-out {
+  animation: var(--anim-fade-out);
+}
+
+.anim-slide-down {
+  animation: var(--anim-slide-down);
+}
+
+.anim-slide-up {
+  animation: var(--anim-slide-up);
+}
+
+.anim-slide-right {
+  animation: var(--anim-slide-right);
+}
+
+.anim-slide-left {
+  animation: var(--anim-slide-left);
+}
+
+.anim-shake {
+  animation: var(--anim-shake);
+}
+
+.anim-bounce {
+  animation: var(--anim-bounce);
+}
+
+.anim-scale-in {
+  animation: var(--anim-scale-in);
+}
+
+.anim-ping {
+  animation: var(--anim-ping);
+}
 
 /* Utilidad para pausar animaciones */
-.anim-paused { animation-play-state: paused; }
-.anim-running { animation-play-state: running; }
+.anim-paused {
+  animation-play-state: paused;
+}
+
+.anim-running {
+  animation-play-state: running;
+}
 
 /* Utilidad para reducir movimiento (accesibilidad) */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
