@@ -1,4 +1,5 @@
-import '../src/styles/igoded-design.css'
+import '../src/styles/igoded-design.css';
+import { ThemeSwitch } from '../src/components/ThemeSwitch';
 
 /** @type { import('@storybook/react').Preview } */
 const preview = {
@@ -9,43 +10,19 @@ const preview = {
         date: /Date$/i,
       },
     },
-    backgrounds: {
-      options: {
-        dark: { name: 'dark', value: '#0f1414' },
-        light: { name: 'light', value: '#e8eef4' }
-      }
-    },
-  },
-
-  globalTypes: {
-    theme: {
-      description: 'Global theme for components',
-      defaultValue: 'dark',
-      toolbar: {
-        title: 'Theme',
-        icon: 'circlehollow',
-        items: ['dark', 'light'],
-        dynamicTitle: true,
-      },
-    },
+    backgrounds: { disable: true },
   },
 
   decorators: [
-    (Story, context) => {
-      const theme = context.globals.theme || 'dark'
-      return (
-        <div data-theme={theme} style={{ padding: '2rem', minHeight: '100vh' }}>
-          <Story />
+    (Story) => (
+      <div style={{ padding: '1rem' }}>
+        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+          <ThemeSwitch />
         </div>
-      )
-    },
+        <Story />
+      </div>
+    ),
   ],
+};
 
-  initialGlobals: {
-    backgrounds: {
-      value: 'dark'
-    }
-  }
-}
-
-export default preview
+export default preview;

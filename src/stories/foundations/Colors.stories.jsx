@@ -1,377 +1,182 @@
-/**
- * Colors - Sistema cromático Igoded
- *
- * Basado en 4 colores cardinales con armonía perfecta en OKLCH
- * (L=0.565, C=0.102 para todos)
- */
-
 export default {
   title: 'Foundations/Colors',
-  parameters: {
-    layout: 'fullscreen',
-  },
-}
+};
 
-const ColorSwatch = ({ name, variable, hex, description }) => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-md)',
-    padding: 'var(--space-sm)',
-    borderRadius: 'var(--radius-md)',
-    background: 'var(--bg-surface)',
-  }}>
-    <div style={{
-      width: '80px',
-      height: '80px',
-      borderRadius: 'var(--radius-md)',
-      background: `var(${variable})`,
-      boxShadow: 'var(--shadow-md)',
-    }} />
-    <div>
-      <div style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-lg)',
-        color: 'var(--text-heading)',
-      }}>
-        {name}
-      </div>
-      <div style={{
-        fontFamily: 'var(--font-mono, monospace)',
-        fontSize: 'var(--text-sm)',
-        color: 'var(--text-muted)',
-      }}>
-        {variable} → {hex}
-      </div>
-      {description && (
-        <div style={{
-          fontSize: 'var(--text-sm)',
-          color: 'var(--text-body)',
-          marginTop: 'var(--space-2xs)',
-          maxWidth: '300px',
-        }}>
-          {description}
-        </div>
-      )}
-    </div>
+const ColorBox = ({ color, name, textColor = 'white' }) => (
+  <div
+    style={{
+      backgroundColor: `var(--ig-${color})`,
+      color: textColor,
+      padding: '1rem',
+      borderRadius: 'var(--ig-rounded-md)',
+      textAlign: 'center',
+      minWidth: '120px',
+    }}
+  >
+    <div className="ig-fw-medium">{name}</div>
+    <div className="ig-text-xs ig-opacity-80">--ig-{color}</div>
   </div>
-)
+);
 
-const Section = ({ title, children }) => (
-  <div style={{ marginBottom: 'var(--space-xl)' }}>
-    <h2 style={{
-      fontFamily: 'var(--font-heading)',
-      fontSize: 'var(--text-2xl)',
-      color: 'var(--text-heading)',
-      marginBottom: 'var(--space-md)',
-      paddingBottom: 'var(--space-xs)',
-      borderBottom: '1px solid var(--border-default)',
-    }}>
-      {title}
-    </h2>
-    {children}
-  </div>
-)
-
-export const ColoresCardinales = {
+export const CardinalColors = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <h1 style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-4xl)',
-        color: 'var(--text-heading)',
-        marginBottom: 'var(--space-lg)',
-      }}>
-        Colores Cardinales Igoded
-      </h1>
-
-      <p style={{
-        color: 'var(--text-body)',
-        marginBottom: 'var(--space-xl)',
-        maxWidth: '700px',
-        lineHeight: 'var(--lh-relaxed)',
-      }}>
-        4 colores cardinales con la misma luminosidad y saturación en OKLCH (L=0.565, C=0.102)
-        para armonía perfecta. Cada color tiene un significado y un rol específico.
-      </p>
-
-      <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
-        <ColorSwatch
-          name="Tellus"
-          variable="--tellus"
-          hex="#6E7E34"
-          description="Verde oliva. Estabilidad, lo tangible. PRIMARY en modo oscuro."
-        />
-        <ColorSwatch
-          name="Liminal"
-          variable="--liminal"
-          hex="#038978"
-          description="Teal/cian. Fluidez, transición. ACCENT en modo oscuro."
-        />
-        <ColorSwatch
-          name="Senum"
-          variable="--senum"
-          hex="#5276B2"
-          description="Azul sereno. Pensamiento, claridad. PRIMARY en modo claro."
-        />
-        <ColorSwatch
-          name="Vesper"
-          variable="--vesper"
-          hex="#7A5DAD"
-          description="Violeta crepuscular. Pasión, transformación. ACCENT en modo claro."
-        />
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Cardinal Colors</h2>
+      <p className="ig-text-muted ig-mb-6">The four signature colors of Igoded Design System.</p>
+      <div className="ig-flex ig-flex-wrap ig-gap-4">
+        <ColorBox color="tellus" name="Tellus" />
+        <ColorBox color="liminal" name="Liminal" />
+        <ColorBox color="senum" name="Senum" textColor="var(--ig-neutral-900)" />
+        <ColorBox color="vesper" name="Vesper" />
       </div>
     </div>
   ),
-}
+};
 
-export const ColoresAdaptativos = {
+export const ThemeColors = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Colores Adaptativos">
-        <p style={{
-          color: 'var(--text-body)',
-          marginBottom: 'var(--space-lg)',
-        }}>
-          Estos colores cambian automáticamente según el modo (dark/light).
-          Usa el selector de tema en la toolbar para ver el cambio.
-        </p>
-
-        <div style={{ display: 'grid', gap: 'var(--space-md)', marginBottom: 'var(--space-xl)' }}>
-          <ColorSwatch
-            name="Primary"
-            variable="--primary"
-            hex="Tellus (dark) / Senum (light)"
-            description="Color principal del modo actual. Usar para botones, headers, elementos de marca."
-          />
-          <ColorSwatch
-            name="Accent"
-            variable="--accent"
-            hex="Liminal (dark) / Vesper (light)"
-            description="Color de énfasis. Usar para links, CTAs, estados activos."
-          />
-        </div>
-      </Section>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Theme Colors</h2>
+      <p className="ig-text-muted ig-mb-6">Adaptive colors that change based on light/dark theme.</p>
+      <div className="ig-flex ig-flex-wrap ig-gap-4">
+        <ColorBox color="primary" name="Primary" />
+        <ColorBox color="accent" name="Accent" />
+      </div>
     </div>
   ),
-}
+};
 
-export const Fondos = {
+export const SemanticColors = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Colores de Fondo">
-        <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
-          <ColorSwatch
-            name="Base"
-            variable="--bg-base"
-            hex="#0c1515 (dark)"
-            description="Fondo principal de la página. Tintado con el accent del modo."
-          />
-          <ColorSwatch
-            name="Surface"
-            variable="--bg-surface"
-            hex="#101b1b (dark)"
-            description="Fondo de tarjetas y contenedores."
-          />
-          <ColorSwatch
-            name="Elevated"
-            variable="--bg-elevated"
-            hex="#1a2828 (dark)"
-            description="Fondo de elementos elevados (modales, dropdowns)."
-          />
-          <ColorSwatch
-            name="Muted"
-            variable="--bg-muted"
-            hex="#152020 (dark)"
-            description="Fondo sutil para destacar zonas."
-          />
-        </div>
-      </Section>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Semantic Colors</h2>
+      <p className="ig-text-muted ig-mb-6">Colors for communicating status and feedback.</p>
+      <div className="ig-flex ig-flex-wrap ig-gap-4">
+        <ColorBox color="success" name="Success" />
+        <ColorBox color="warning" name="Warning" textColor="var(--ig-neutral-900)" />
+        <ColorBox color="danger" name="Danger" />
+        <ColorBox color="info" name="Info" />
+      </div>
     </div>
   ),
-}
+};
 
-export const NeutrosTintados = {
+export const NeutralScale = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Neutros Tintados (15% saturación)">
-        <p style={{ color: 'var(--text-body)', marginBottom: 'var(--space-md)' }}>
-          Grises con un toque del accent del modo para mayor armonía.
-        </p>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-          gap: 'var(--space-sm)',
-        }}>
-          {['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'].map(shade => (
-            <div key={shade} style={{
-              background: `var(--neutral-${shade})`,
-              padding: 'var(--space-md)',
-              borderRadius: 'var(--radius-md)',
-              textAlign: 'center',
-            }}>
-              <span style={{
-                color: parseInt(shade) < 500 ? 'var(--neutral-900)' : 'var(--neutral-50)',
-                fontSize: 'var(--text-sm)',
-                fontFamily: 'var(--font-mono, monospace)',
-              }}>
-                {shade}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Neutros Intensos (30% saturación)">
-        <p style={{ color: 'var(--text-body)', marginBottom: 'var(--space-md)' }}>
-          Más color, más personalidad. Notable tinte del accent.
-        </p>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-          gap: 'var(--space-sm)',
-        }}>
-          {['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'].map(shade => (
-            <div key={shade} style={{
-              background: `var(--neutral-intense-${shade})`,
-              padding: 'var(--space-md)',
-              borderRadius: 'var(--radius-md)',
-              textAlign: 'center',
-            }}>
-              <span style={{
-                color: parseInt(shade) < 500 ? 'var(--neutral-900)' : 'var(--neutral-50)',
-                fontSize: 'var(--text-sm)',
-                fontFamily: 'var(--font-mono, monospace)',
-              }}>
-                {shade}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Section>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Neutral Scale</h2>
+      <p className="ig-text-muted ig-mb-6">Gray scale for backgrounds, borders, and text.</p>
+      <div className="ig-flex ig-flex-col ig-gap-2">
+        {[50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map(shade => (
+          <div
+            key={shade}
+            style={{
+              backgroundColor: `var(--ig-neutral-${shade})`,
+              color: shade >= 500 ? 'white' : 'var(--ig-neutral-900)',
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--ig-rounded-md)',
+              display: 'flex',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span className="ig-fw-medium">Neutral {shade}</span>
+            <span className="ig-text-sm ig-opacity-80">--ig-neutral-{shade}</span>
+          </div>
+        ))}
+      </div>
     </div>
   ),
-}
+};
 
-export const EstadosSemanticos = {
+export const BackgroundColors = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Estados Semánticos">
-        <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
-          <ColorSwatch
-            name="Success"
-            variable="--success"
-            hex="Verde éxito"
-            description="Confirmaciones, operaciones exitosas, estados positivos."
-          />
-          <ColorSwatch
-            name="Warning"
-            variable="--warning"
-            hex="Amarillo/naranja advertencia"
-            description="Advertencias, acciones que requieren atención."
-          />
-          <ColorSwatch
-            name="Danger"
-            variable="--danger"
-            hex="Rojo peligro"
-            description="Errores, acciones destructivas, estados críticos."
-          />
-          <ColorSwatch
-            name="Info"
-            variable="--info"
-            hex="Azul informativo"
-            description="Información neutral, ayuda, tips."
-          />
-        </div>
-      </Section>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Background Colors</h2>
+      <p className="ig-text-muted ig-mb-6">Background variants for different contexts.</p>
+      <div className="ig-flex ig-flex-col ig-gap-3">
+        {[
+          { var: 'bg-base', label: 'Base' },
+          { var: 'bg-surface', label: 'Surface' },
+          { var: 'bg-muted', label: 'Muted' },
+          { var: 'bg-elevated', label: 'Elevated' },
+        ].map(bg => (
+          <div
+            key={bg.var}
+            style={{
+              backgroundColor: `var(--ig-${bg.var})`,
+              padding: '1.5rem',
+              borderRadius: 'var(--ig-rounded-lg)',
+              border: '1px solid var(--ig-border-subtle)',
+            }}
+          >
+            <div className="ig-fw-medium">{bg.label}</div>
+            <div className="ig-text-sm ig-text-muted">--ig-{bg.var}</div>
+          </div>
+        ))}
+      </div>
     </div>
   ),
-}
+};
 
-export const ColoresDeTexto = {
+export const TextColors = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Colores de Texto">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-            <span style={{
-              color: 'var(--text-heading)',
-              fontSize: 'var(--text-xl)',
-              fontFamily: 'var(--font-heading)',
-              minWidth: '200px',
-            }}>
-              Heading Text
-            </span>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              --text-heading
-            </code>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-            <span style={{
-              color: 'var(--text-body)',
-              fontSize: 'var(--text-base)',
-              minWidth: '200px',
-            }}>
-              Body Text
-            </span>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              --text-body
-            </code>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-            <span style={{
-              color: 'var(--text-muted)',
-              fontSize: 'var(--text-base)',
-              minWidth: '200px',
-            }}>
-              Muted Text
-            </span>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              --text-muted
-            </code>
-          </div>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-md)',
-            background: 'var(--primary)',
-            padding: 'var(--space-sm)',
-            borderRadius: 'var(--radius-md)',
-            width: 'fit-content',
-          }}>
-            <span style={{
-              color: 'var(--text-on-primary)',
-              fontSize: 'var(--text-base)',
-              minWidth: '200px',
-            }}>
-              Text on Primary
-            </span>
-            <code style={{ color: 'var(--text-on-primary)', fontSize: 'var(--text-sm)', opacity: 0.8 }}>
-              --text-on-primary
-            </code>
-          </div>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-md)',
-            background: 'var(--accent)',
-            padding: 'var(--space-sm)',
-            borderRadius: 'var(--radius-md)',
-            width: 'fit-content',
-          }}>
-            <span style={{
-              color: 'var(--text-on-accent)',
-              fontSize: 'var(--text-base)',
-              minWidth: '200px',
-            }}>
-              Text on Accent
-            </span>
-            <code style={{ color: 'var(--text-on-accent)', fontSize: 'var(--text-sm)', opacity: 0.8 }}>
-              --text-on-accent
-            </code>
-          </div>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Text Colors</h2>
+      <p className="ig-text-muted ig-mb-6">Text color variants for hierarchy.</p>
+      <div className="ig-flex ig-flex-col ig-gap-4">
+        <div>
+          <p style={{ color: 'var(--ig-text-heading)' }} className="ig-text-lg ig-fw-semibold">
+            Heading Text
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-text-heading</code>
         </div>
-      </Section>
+        <div>
+          <p style={{ color: 'var(--ig-text-body)' }}>
+            Body Text - Default text color for paragraphs and content.
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-text-body</code>
+        </div>
+        <div>
+          <p style={{ color: 'var(--ig-text-muted)' }}>
+            Muted Text - Secondary text, captions, and helper text.
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-text-muted</code>
+        </div>
+        <div>
+          <p style={{ color: 'var(--ig-text-disabled)' }}>
+            Disabled Text - Text for disabled elements.
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-text-disabled</code>
+        </div>
+      </div>
     </div>
   ),
-}
+};
+
+export const BorderColors = {
+  render: () => (
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Border Colors</h2>
+      <p className="ig-text-muted ig-mb-6">Border variants for different emphasis levels.</p>
+      <div className="ig-flex ig-flex-col ig-gap-4">
+        {[
+          { var: 'border-subtle', label: 'Subtle' },
+          { var: 'border-default', label: 'Default' },
+          { var: 'border-strong', label: 'Strong' },
+        ].map(border => (
+          <div
+            key={border.var}
+            style={{
+              padding: '1rem',
+              borderRadius: 'var(--ig-rounded-lg)',
+              border: `2px solid var(--ig-${border.var})`,
+            }}
+          >
+            <div className="ig-fw-medium">{border.label}</div>
+            <div className="ig-text-sm ig-text-muted">--ig-{border.var}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};

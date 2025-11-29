@@ -1,224 +1,160 @@
-/**
- * Spacing - Sistema de espaciado Igoded
- *
- * Escala de espaciado consistente desde 2xs hasta 3xl
- */
-
 export default {
   title: 'Foundations/Spacing',
-  parameters: {
-    layout: 'fullscreen',
-  },
-}
+};
 
-const spacingScale = [
-  { name: 'space-2xs', value: '0.25rem', px: '4px' },
-  { name: 'space-xs', value: '0.5rem', px: '8px' },
-  { name: 'space-sm', value: '0.75rem', px: '12px' },
-  { name: 'space-md', value: '1rem', px: '16px' },
-  { name: 'space-lg', value: '1.5rem', px: '24px' },
-  { name: 'space-xl', value: '2rem', px: '32px' },
-  { name: 'space-2xl', value: '3rem', px: '48px' },
-  { name: 'space-3xl', value: '4rem', px: '64px' },
-]
+const SpacingBox = ({ size, value }) => (
+  <div className="ig-flex ig-items-center ig-gap-4 ig-mb-2">
+    <div
+      style={{
+        width: value,
+        height: '2rem',
+        backgroundColor: 'var(--ig-accent)',
+        borderRadius: 'var(--ig-rounded)',
+      }}
+    />
+    <span className="ig-text-sm" style={{ minWidth: '80px' }}>space-{size}</span>
+    <code className="ig-text-xs ig-text-muted">{value}</code>
+  </div>
+);
 
-export const EscalaDeEspaciado = {
+export const SpacingScale = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <h1 style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-4xl)',
-        color: 'var(--text-heading)',
-        marginBottom: 'var(--space-lg)',
-      }}>
-        Espaciado
-      </h1>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Spacing Scale</h2>
+      <p className="ig-text-muted ig-mb-6">Consistent spacing values based on 0.25rem (4px) unit.</p>
 
-      <p style={{
-        color: 'var(--text-body)',
-        marginBottom: 'var(--space-xl)',
-        maxWidth: '600px',
-      }}>
-        Sistema de espaciado consistente para margins, paddings y gaps.
-        Basado en múltiplos de 4px para alineación perfecta.
-      </p>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-        {spacingScale.map(({ name, value, px }) => (
-          <div key={name} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-md)',
-            padding: 'var(--space-sm)',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <div style={{
-              width: `var(--${name})`,
-              height: 'var(--space-lg)',
-              background: 'var(--accent)',
-              borderRadius: 'var(--radius-sm)',
-              flexShrink: 0,
-            }} />
-            <div style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 'var(--space-sm)',
-              minWidth: '200px',
-            }}>
-              <code style={{
-                color: 'var(--primary)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--fw-semibold)',
-              }}>
-                --{name}
-              </code>
-              <span style={{
-                color: 'var(--text-muted)',
-                fontSize: 'var(--text-xs)',
-              }}>
-                {value} ({px})
-              </span>
-            </div>
-          </div>
-        ))}
+      <div className="ig-flex ig-flex-col ig-gap-1">
+        <SpacingBox size="0" value="0" />
+        <SpacingBox size="0.5" value="0.125rem" />
+        <SpacingBox size="1" value="0.25rem" />
+        <SpacingBox size="1.5" value="0.375rem" />
+        <SpacingBox size="2" value="0.5rem" />
+        <SpacingBox size="2.5" value="0.625rem" />
+        <SpacingBox size="3" value="0.75rem" />
+        <SpacingBox size="3.5" value="0.875rem" />
+        <SpacingBox size="4" value="1rem" />
+        <SpacingBox size="5" value="1.25rem" />
+        <SpacingBox size="6" value="1.5rem" />
+        <SpacingBox size="7" value="1.75rem" />
+        <SpacingBox size="8" value="2rem" />
+        <SpacingBox size="9" value="2.25rem" />
+        <SpacingBox size="10" value="2.5rem" />
+        <SpacingBox size="12" value="3rem" />
+        <SpacingBox size="14" value="3.5rem" />
+        <SpacingBox size="16" value="4rem" />
+        <SpacingBox size="20" value="5rem" />
+        <SpacingBox size="24" value="6rem" />
       </div>
     </div>
   ),
-}
+};
 
-export const ComparacionVisual = {
+export const PaddingExamples = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <h2 style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-2xl)',
-        color: 'var(--text-heading)',
-        marginBottom: 'var(--space-lg)',
-      }}>
-        Comparación Visual de Espaciados
-      </h2>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Padding Classes</h2>
+      <p className="ig-text-muted ig-mb-6">Use ig-p-* for padding on all sides.</p>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-        gap: 'var(--space-lg)',
-      }}>
-        {spacingScale.map(({ name, px }) => (
-          <div key={name} style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 'var(--space-xs)',
-          }}>
-            <div style={{
-              width: `var(--${name})`,
-              height: `var(--${name})`,
-              background: 'var(--accent)',
-              borderRadius: 'var(--radius-sm)',
-              boxShadow: 'var(--shadow-md)',
-            }} />
-            <code style={{
-              color: 'var(--text-muted)',
-              fontSize: 'var(--text-xs)',
-            }}>
-              {name.replace('space-', '')} ({px})
-            </code>
-          </div>
-        ))}
-      </div>
-    </div>
-  ),
-}
-
-export const EjemplosDePadding = {
-  render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <h2 style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-2xl)',
-        color: 'var(--text-heading)',
-        marginBottom: 'var(--space-lg)',
-      }}>
-        Ejemplos de Padding
-      </h2>
-
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 'var(--space-lg)',
-      }}>
-        {spacingScale.slice(0, 6).map(({ name }) => (
-          <div key={name} style={{
-            background: 'var(--bg-elevated)',
-            border: '2px dashed var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <div style={{
-              padding: `var(--${name})`,
-              background: 'var(--accent)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-on-accent)',
-              fontSize: 'var(--text-sm)',
-              textAlign: 'center',
-            }}>
-              {name.replace('space-', '')}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  ),
-}
-
-export const EjemplosDeGap = {
-  render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <h2 style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-2xl)',
-        color: 'var(--text-heading)',
-        marginBottom: 'var(--space-lg)',
-      }}>
-        Ejemplos de Gap
-      </h2>
-
-      {['space-xs', 'space-sm', 'space-md', 'space-lg'].map(name => (
-        <div key={name} style={{ marginBottom: 'var(--space-xl)' }}>
-          <code style={{
-            color: 'var(--text-muted)',
-            fontSize: 'var(--text-sm)',
-            marginBottom: 'var(--space-xs)',
-            display: 'block',
-          }}>
-            gap: var(--{name})
-          </code>
-          <div style={{
-            display: 'flex',
-            gap: `var(--${name})`,
-            padding: 'var(--space-md)',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            {[1, 2, 3, 4, 5].map(n => (
-              <div key={n} style={{
-                width: '50px',
-                height: '50px',
-                background: 'var(--primary)',
-                borderRadius: 'var(--radius-sm)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-on-primary)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--fw-semibold)',
-              }}>
-                {n}
+      <div className="ig-flex ig-flex-wrap ig-gap-4">
+        {[0, 1, 2, 3, 4, 6, 8].map(size => (
+          <div key={size} className="ig-flex ig-flex-col ig-items-center">
+            <div
+              className={`ig-p-${size} ig-bg-accent`}
+              style={{ borderRadius: 'var(--ig-rounded-md)' }}
+            >
+              <div className="ig-bg-surface ig-p-2 ig-rounded ig-text-xs">
+                Content
               </div>
-            ))}
+            </div>
+            <span className="ig-text-xs ig-text-muted ig-mt-2">ig-p-{size}</span>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   ),
-}
+};
+
+export const MarginExamples = {
+  render: () => (
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Margin Classes</h2>
+      <p className="ig-text-muted ig-mb-6">Use ig-m-* for margin on all sides.</p>
+
+      <div className="ig-flex ig-flex-col ig-gap-4" style={{ maxWidth: '400px' }}>
+        {[0, 2, 4, 6, 8].map(size => (
+          <div key={size} className="ig-bg-muted ig-p-2 ig-rounded">
+            <div
+              className={`ig-m-${size} ig-bg-accent ig-p-4 ig-rounded ig-text-center`}
+              style={{ color: 'var(--ig-text-on-accent)' }}
+            >
+              ig-m-{size}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+export const GapExamples = {
+  render: () => (
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Gap Classes</h2>
+      <p className="ig-text-muted ig-mb-6">Use ig-gap-* for flexbox/grid gaps.</p>
+
+      <div className="ig-flex ig-flex-col ig-gap-6">
+        {[1, 2, 3, 4, 6, 8].map(size => (
+          <div key={size}>
+            <p className="ig-text-sm ig-text-muted ig-mb-2">ig-gap-{size}</p>
+            <div className={`ig-flex ig-gap-${size}`}>
+              {[1, 2, 3, 4, 5].map(i => (
+                <div
+                  key={i}
+                  className="ig-bg-accent ig-p-3 ig-rounded"
+                  style={{ color: 'var(--ig-text-on-accent)' }}
+                >
+                  {i}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+export const DirectionalSpacing = {
+  render: () => (
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Directional Spacing</h2>
+      <p className="ig-text-muted ig-mb-6">Use suffixes for specific directions.</p>
+
+      <div className="ig-grid ig-grid-cols-2 ig-gap-4" style={{ maxWidth: '600px' }}>
+        <div className="ig-p-4 ig-bg-muted ig-rounded">
+          <p className="ig-text-sm ig-fw-medium ig-mb-2">Padding</p>
+          <ul className="ig-text-xs ig-flex ig-flex-col ig-gap-1">
+            <li><code>ig-pt-*</code> - padding-top</li>
+            <li><code>ig-pr-*</code> - padding-right</li>
+            <li><code>ig-pb-*</code> - padding-bottom</li>
+            <li><code>ig-pl-*</code> - padding-left</li>
+            <li><code>ig-px-*</code> - padding left+right</li>
+            <li><code>ig-py-*</code> - padding top+bottom</li>
+          </ul>
+        </div>
+
+        <div className="ig-p-4 ig-bg-muted ig-rounded">
+          <p className="ig-text-sm ig-fw-medium ig-mb-2">Margin</p>
+          <ul className="ig-text-xs ig-flex ig-flex-col ig-gap-1">
+            <li><code>ig-mt-*</code> - margin-top</li>
+            <li><code>ig-mr-*</code> - margin-right</li>
+            <li><code>ig-mb-*</code> - margin-bottom</li>
+            <li><code>ig-ml-*</code> - margin-left</li>
+            <li><code>ig-mx-*</code> - margin left+right</li>
+            <li><code>ig-my-*</code> - margin top+bottom</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  ),
+};
