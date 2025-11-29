@@ -1,374 +1,172 @@
-/**
- * Typography - Sistema tipográfico Igoded
- *
- * Electrolize para títulos (estilo técnico/futurista)
- * Saira para texto (legible con personalidad)
- */
-
 export default {
   title: 'Foundations/Typography',
-  parameters: {
-    layout: 'fullscreen',
-  },
-}
+};
 
-const Section = ({ title, children }) => (
-  <div style={{ marginBottom: 'var(--space-xl)' }}>
-    <h2 style={{
-      fontFamily: 'var(--font-heading)',
-      fontSize: 'var(--text-2xl)',
-      color: 'var(--text-heading)',
-      marginBottom: 'var(--space-md)',
-      paddingBottom: 'var(--space-xs)',
-      borderBottom: '1px solid var(--border-default)',
-    }}>
-      {title}
-    </h2>
-    {children}
-  </div>
-)
-
-export const Fuentes = {
+export const FontFamilies = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <h1 style={{
-        fontFamily: 'var(--font-heading)',
-        fontSize: 'var(--text-4xl)',
-        color: 'var(--text-heading)',
-        marginBottom: 'var(--space-lg)',
-      }}>
-        Tipografía
-      </h1>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Font Families</h2>
+      <p className="ig-text-muted ig-mb-6">Three font families for different purposes.</p>
 
-      <Section title="Electrolize - Fuente de Títulos">
-        <p style={{
-          color: 'var(--text-muted)',
-          marginBottom: 'var(--space-md)',
-          fontSize: 'var(--text-sm)',
-        }}>
-          --font-heading: 'Electrolize', sans-serif
-        </p>
-        <div style={{
-          fontFamily: 'var(--font-heading)',
-          fontSize: 'var(--text-3xl)',
-          color: 'var(--text-heading)',
-          marginBottom: 'var(--space-md)',
-        }}>
-          ABCDEFGHIJKLMNOPQRSTUVWXYZ
+      <div className="ig-flex ig-flex-col ig-gap-6">
+        <div>
+          <p className="ig-text-sm ig-text-muted ig-mb-2">Heading (Electrolize)</p>
+          <p style={{ fontFamily: 'var(--ig-font-heading)' }} className="ig-text-3xl">
+            The quick brown fox jumps
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-font-heading</code>
         </div>
-        <div style={{
-          fontFamily: 'var(--font-heading)',
-          fontSize: 'var(--text-3xl)',
-          color: 'var(--text-heading)',
-          marginBottom: 'var(--space-md)',
-        }}>
-          abcdefghijklmnopqrstuvwxyz
-        </div>
-        <div style={{
-          fontFamily: 'var(--font-heading)',
-          fontSize: 'var(--text-3xl)',
-          color: 'var(--text-heading)',
-        }}>
-          0123456789 !@#$%^&*()
-        </div>
-      </Section>
 
-      <Section title="Saira - Fuente Base">
-        <p style={{
-          color: 'var(--text-muted)',
-          marginBottom: 'var(--space-md)',
-          fontSize: 'var(--text-sm)',
-        }}>
-          --font-base: 'Saira', sans-serif
-        </p>
-        <div style={{
-          fontFamily: 'var(--font-base)',
-          fontSize: 'var(--text-2xl)',
-          color: 'var(--text-body)',
-          marginBottom: 'var(--space-md)',
-        }}>
-          ABCDEFGHIJKLMNOPQRSTUVWXYZ
+        <div>
+          <p className="ig-text-sm ig-text-muted ig-mb-2">Base (Saira)</p>
+          <p style={{ fontFamily: 'var(--ig-font-base)' }} className="ig-text-xl">
+            The quick brown fox jumps over the lazy dog
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-font-base</code>
         </div>
-        <div style={{
-          fontFamily: 'var(--font-base)',
-          fontSize: 'var(--text-2xl)',
-          color: 'var(--text-body)',
-          marginBottom: 'var(--space-md)',
-        }}>
-          abcdefghijklmnopqrstuvwxyz
+
+        <div>
+          <p className="ig-text-sm ig-text-muted ig-mb-2">Mono (JetBrains Mono)</p>
+          <p style={{ fontFamily: 'var(--ig-font-mono)' }} className="ig-text-lg">
+            const greeting = "Hello, World!";
+          </p>
+          <code className="ig-text-xs ig-text-muted">--ig-font-mono</code>
         </div>
-        <div style={{
-          fontFamily: 'var(--font-base)',
-          fontSize: 'var(--text-2xl)',
-          color: 'var(--text-body)',
-        }}>
-          0123456789 !@#$%^&*()
-        </div>
-      </Section>
+      </div>
     </div>
   ),
-}
+};
 
-export const EscalaHeadings = {
+export const FontSizes = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Headings (H1-H6)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div>
-            <h1 style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'var(--text-5xl)',
-              color: 'var(--text-heading)',
-              margin: 0,
-            }}>
-              Heading 1 - Sistema Igoded
-            </h1>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              --text-5xl (3rem / 48px)
-            </code>
-          </div>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Font Sizes</h2>
+      <p className="ig-text-muted ig-mb-6">Type scale from xs to 5xl.</p>
 
-          <div>
-            <h2 style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'var(--text-4xl)',
-              color: 'var(--text-heading)',
-              margin: 0,
-            }}>
-              Heading 2 - Sistema Igoded
-            </h2>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              --text-4xl (2.25rem / 36px)
-            </code>
-          </div>
-
-          <div>
-            <h3 style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'var(--text-3xl)',
-              color: 'var(--text-heading)',
-              margin: 0,
-            }}>
-              Heading 3 - Sistema Igoded
-            </h3>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              --text-3xl (1.875rem / 30px)
-            </code>
-          </div>
-
-          <div>
-            <h4 style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'var(--text-2xl)',
-              color: 'var(--text-heading)',
-              margin: 0,
-            }}>
-              Heading 4 - Sistema Igoded
-            </h4>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              --text-2xl (1.5rem / 24px)
-            </code>
-          </div>
-
-          <div>
-            <h5 style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'var(--text-xl)',
-              color: 'var(--text-heading)',
-              margin: 0,
-            }}>
-              Heading 5 - Sistema Igoded
-            </h5>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              --text-xl (1.25rem / 20px)
-            </code>
-          </div>
-
-          <div>
-            <h6 style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'var(--text-lg)',
-              color: 'var(--text-heading)',
-              margin: 0,
-            }}>
-              Heading 6 - Sistema Igoded
-            </h6>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              --text-lg (1.125rem / 18px)
-            </code>
-          </div>
-        </div>
-      </Section>
-    </div>
-  ),
-}
-
-export const EscalaCompleta = {
-  render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Escala Tipográfica Completa">
+      <div className="ig-flex ig-flex-col ig-gap-4">
         {[
-          { name: 'text-xs', size: '0.75rem', px: '12px' },
-          { name: 'text-sm', size: '0.875rem', px: '14px' },
-          { name: 'text-base', size: '1rem', px: '16px' },
-          { name: 'text-lg', size: '1.125rem', px: '18px' },
-          { name: 'text-xl', size: '1.25rem', px: '20px' },
-          { name: 'text-2xl', size: '1.5rem', px: '24px' },
-          { name: 'text-3xl', size: '1.875rem', px: '30px' },
-          { name: 'text-4xl', size: '2.25rem', px: '36px' },
-          { name: 'text-5xl', size: '3rem', px: '48px' },
-        ].map(({ name, size, px }) => (
-          <div key={name} style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 'var(--space-md)',
-            marginBottom: 'var(--space-sm)',
-            padding: 'var(--space-sm)',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <span style={{
-              fontSize: `var(--${name})`,
-              color: 'var(--text-body)',
-              fontFamily: 'var(--font-base)',
-              minWidth: '300px',
-            }}>
-              El veloz murciélago
-            </span>
-            <code style={{
-              color: 'var(--text-muted)',
-              fontSize: 'var(--text-xs)',
-              fontFamily: 'var(--font-mono, monospace)',
-            }}>
-              --{name} ({size} / {px})
-            </code>
+          { class: 'ig-text-xs', label: 'Extra Small', size: '0.75rem' },
+          { class: 'ig-text-sm', label: 'Small', size: '0.875rem' },
+          { class: 'ig-text-base', label: 'Base', size: '1rem' },
+          { class: 'ig-text-lg', label: 'Large', size: '1.125rem' },
+          { class: 'ig-text-xl', label: 'XL', size: '1.25rem' },
+          { class: 'ig-text-2xl', label: '2XL', size: '1.5rem' },
+          { class: 'ig-text-3xl', label: '3XL', size: '1.875rem' },
+          { class: 'ig-text-4xl', label: '4XL', size: '2.25rem' },
+          { class: 'ig-text-5xl', label: '5XL', size: '3rem' },
+        ].map(item => (
+          <div key={item.class} className="ig-flex ig-items-baseline ig-gap-4">
+            <span className={item.class}>The quick brown fox</span>
+            <span className="ig-text-xs ig-text-muted">{item.label} ({item.size})</span>
           </div>
         ))}
-      </Section>
+      </div>
     </div>
   ),
-}
+};
 
-export const PesosFuente = {
+export const FontWeights = {
   render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Pesos de Fuente (Saira)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-md)',
-            padding: 'var(--space-md)',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <span style={{
-              fontFamily: 'var(--font-base)',
-              fontWeight: 'var(--fw-normal)',
-              fontSize: 'var(--text-xl)',
-              color: 'var(--text-body)',
-              minWidth: '400px',
-            }}>
-              Regular (400) - El veloz murciélago hindú
-            </span>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              --fw-normal
-            </code>
-          </div>
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Font Weights</h2>
+      <p className="ig-text-muted ig-mb-6">Weight variants from light to bold.</p>
 
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-md)',
-            padding: 'var(--space-md)',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <span style={{
-              fontFamily: 'var(--font-base)',
-              fontWeight: 'var(--fw-semibold)',
-              fontSize: 'var(--text-xl)',
-              color: 'var(--text-body)',
-              minWidth: '400px',
-            }}>
-              Semibold (600) - El veloz murciélago hindú
+      <div className="ig-flex ig-flex-col ig-gap-4">
+        {[
+          { class: 'ig-fw-light', label: 'Light', weight: '300' },
+          { class: 'ig-fw-normal', label: 'Normal', weight: '400' },
+          { class: 'ig-fw-medium', label: 'Medium', weight: '500' },
+          { class: 'ig-fw-semibold', label: 'Semibold', weight: '600' },
+          { class: 'ig-fw-bold', label: 'Bold', weight: '700' },
+        ].map(item => (
+          <div key={item.class} className="ig-flex ig-items-center ig-gap-4">
+            <span className={`ig-text-xl ${item.class}`} style={{ minWidth: '300px' }}>
+              The quick brown fox
             </span>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              --fw-semibold
-            </code>
+            <span className="ig-text-sm ig-text-muted">{item.label} ({item.weight})</span>
           </div>
+        ))}
+      </div>
+    </div>
+  ),
+};
 
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-md)',
-            padding: 'var(--space-md)',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <span style={{
-              fontFamily: 'var(--font-base)',
-              fontWeight: 'var(--fw-bold)',
-              fontSize: 'var(--text-xl)',
-              color: 'var(--text-body)',
-              minWidth: '400px',
-            }}>
-              Bold (700) - El veloz murciélago hindú
-            </span>
-            <code style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              --fw-bold
-            </code>
+export const TextUtilities = {
+  render: () => (
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Text Utilities</h2>
+      <p className="ig-text-muted ig-mb-6">Utility classes for text styling.</p>
+
+      <div className="ig-flex ig-flex-col ig-gap-6">
+        <div>
+          <h3 className="ig-text-sm ig-fw-semibold ig-mb-2">Alignment</h3>
+          <div className="ig-flex ig-flex-col ig-gap-2" style={{ maxWidth: '400px' }}>
+            <p className="ig-text-left ig-p-2 ig-bg-muted ig-rounded">Left aligned (default)</p>
+            <p className="ig-text-center ig-p-2 ig-bg-muted ig-rounded">Center aligned</p>
+            <p className="ig-text-right ig-p-2 ig-bg-muted ig-rounded">Right aligned</p>
           </div>
         </div>
-      </Section>
-    </div>
-  ),
-}
 
-export const LineHeight = {
-  render: () => (
-    <div style={{ padding: 'var(--space-lg)' }}>
-      <Section title="Line Height (Altura de línea)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-          {[
-            { name: 'lh-tight', value: '1.25', desc: 'Compacto - para títulos cortos' },
-            { name: 'lh-normal', value: '1.5', desc: 'Normal - uso general' },
-            { name: 'lh-relaxed', value: '1.75', desc: 'Relajado - para lectura prolongada' },
-          ].map(({ name, value, desc }) => (
-            <div key={name} style={{
-              padding: 'var(--space-md)',
-              background: 'var(--bg-surface)',
-              borderRadius: 'var(--radius-md)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-sm)',
-                marginBottom: 'var(--space-sm)',
-              }}>
-                <code style={{ color: 'var(--accent)', fontSize: 'var(--text-sm)' }}>
-                  --{name}: {value}
-                </code>
-                <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-                  — {desc}
-                </span>
-              </div>
-              <p style={{
-                fontFamily: 'var(--font-base)',
-                fontSize: 'var(--text-base)',
-                lineHeight: `var(--${name})`,
-                color: 'var(--text-body)',
-                margin: 0,
-                maxWidth: '600px',
-              }}>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-                incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
-                exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-              </p>
-            </div>
-          ))}
+        <div>
+          <h3 className="ig-text-sm ig-fw-semibold ig-mb-2">Transform</h3>
+          <div className="ig-flex ig-flex-col ig-gap-2">
+            <p className="ig-uppercase">Uppercase text</p>
+            <p className="ig-lowercase">LOWERCASE TEXT</p>
+            <p className="ig-capitalize">capitalize each word</p>
+          </div>
         </div>
-      </Section>
+
+        <div>
+          <h3 className="ig-text-sm ig-fw-semibold ig-mb-2">Decoration</h3>
+          <div className="ig-flex ig-gap-4">
+            <p className="ig-underline">Underline</p>
+            <p className="ig-line-through">Line through</p>
+            <p className="ig-no-underline">No underline</p>
+          </div>
+        </div>
+      </div>
     </div>
   ),
-}
+};
+
+export const HeadingStyles = {
+  render: () => (
+    <div className="ig-p-4">
+      <h2 className="ig-text-xl ig-fw-bold ig-mb-4">Heading Styles</h2>
+      <p className="ig-text-muted ig-mb-6">Recommended heading hierarchy.</p>
+
+      <div className="ig-flex ig-flex-col ig-gap-4">
+        <div>
+          <h1 style={{ fontFamily: 'var(--ig-font-heading)' }} className="ig-text-5xl ig-fw-bold">
+            Heading 1
+          </h1>
+          <code className="ig-text-xs ig-text-muted">5xl + bold + heading font</code>
+        </div>
+        <div>
+          <h2 style={{ fontFamily: 'var(--ig-font-heading)' }} className="ig-text-4xl ig-fw-bold">
+            Heading 2
+          </h2>
+          <code className="ig-text-xs ig-text-muted">4xl + bold + heading font</code>
+        </div>
+        <div>
+          <h3 style={{ fontFamily: 'var(--ig-font-heading)' }} className="ig-text-3xl ig-fw-semibold">
+            Heading 3
+          </h3>
+          <code className="ig-text-xs ig-text-muted">3xl + semibold + heading font</code>
+        </div>
+        <div>
+          <h4 className="ig-text-2xl ig-fw-semibold">Heading 4</h4>
+          <code className="ig-text-xs ig-text-muted">2xl + semibold</code>
+        </div>
+        <div>
+          <h5 className="ig-text-xl ig-fw-semibold">Heading 5</h5>
+          <code className="ig-text-xs ig-text-muted">xl + semibold</code>
+        </div>
+        <div>
+          <h6 className="ig-text-lg ig-fw-medium">Heading 6</h6>
+          <code className="ig-text-xs ig-text-muted">lg + medium</code>
+        </div>
+      </div>
+    </div>
+  ),
+};
