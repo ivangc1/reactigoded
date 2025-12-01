@@ -197,7 +197,7 @@ export const TimingFunctions = () => (
           <code className="ig-text-sm ig-text-muted ig-w-28">{nombre}</code>
           <div className="ig-group ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden ig-cursor-pointer">
             <div
-              className={`ig-w-8 ig-h-full ig-bg-brand ig-rounded ig-transition-all ig-duration-2500 ${clase} group-hover:ig-w-full`}
+              className={`ig-w-8 ig-h-full ig-bg-brand ig-rounded ig-transition-all ig-duration-5000 ${clase} group-hover:ig-w-full`}
             ></div>
           </div>
         </div>
