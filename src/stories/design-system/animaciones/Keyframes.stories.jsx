@@ -229,7 +229,10 @@ export const TodasLasAnimaciones = () => (
         'wiggle', 'heartbeat', 'shimmer', 'glow-pulse'
       ].map((anim) => (
         <div key={anim} className="ig-text-center">
-          <div className={`ig-w-12 ig-h-12 ig-bg-brand ig-rounded ig-mx-auto ig-mb-1 ig-animate-${anim}`}></div>
+          <div className={anim === 'shimmer'
+            ? 'ig-w-12 ig-h-12 ig-skeleton ig-rounded ig-mx-auto ig-mb-1'
+            : `ig-w-12 ig-h-12 ig-bg-brand ig-rounded ig-mx-auto ig-mb-1 ig-animate-${anim}`
+          }></div>
           <code className="ig-text-xs ig-text-muted">{anim}</code>
         </div>
       ))}
