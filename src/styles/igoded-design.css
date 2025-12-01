@@ -39,126 +39,126 @@ Lo mismo con variables: --ig-vitreus en vez de --vitreus.
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-ÍNDICE COMPLETO
+ÍNDICE COMPLETO (con números de línea)
 ═══════════════════════════════════════════════════════════════════════════════
 
 PARTE 1: VARIABLES CSS (todo lo que se define con --ig-*)
 
-  1. Imports / Fuentes
-  2. Colores Igoded (Fundus + 6 cardinales)
-  3. Transparencias con color-mix
-  4. Fondos
-  5. Textos
-  6. Bordes
-  7. Aliases semánticos (retrocompatibilidad)
-  8. Neutros tintados
-  9. Tipografía
-  10. Espaciado (escala Tailwind)
-  11. Border Radius
-  12. Sombras
-  13. Glows / Resplandores
-  14. Glassmorphism
-  15. Neumorphism
-  16. Gradientes
-  17. Transiciones
-  18. Z-index
-  19. Breakpoints (+ Container Queries)
-  20. Aspect Ratios
-  21. Anchos de contenedor
-  22. Blend Modes
-  23. Filtros CSS
-  24. Clip-paths
-  25. Estados interactivos
-  26. Formularios / Inputs
-  27. Focus Ring (+ Caret-color, Accent-color)
-  28. Scrollbar
-  29. Selection y Links
-  30. Variables de componentes
+  1. Imports / Fuentes ............................ 176
+  2. Colores Igoded (Fundus + 6 cardinales) ....... 194
+  3. Transparencias con color-mix ................. 319
+  4. Fondos ...................................... 409
+  5. Textos ...................................... 482
+  6. Bordes ...................................... 577
+  7. Aliases semánticos (retrocompatibilidad) ..... 628
+  8. Neutros tintados ............................ 673
+  9. Tipografía .................................. 761
+  10. Espaciado (escala Tailwind) ................. 872
+  11. Border Radius ............................... 960
+  12. Sombras .................................... 998
+  13. Glows / Resplandores ....................... 1112
+  14. Glassmorphism .............................. 1221
+  15. Neumorphism ................................ 1303
+  16. Gradientes ................................. 1390
+  17. Transiciones ............................... 1470
+  18. Z-index .................................... 1535
+  19. Breakpoints (+ Container Queries) .......... 1587
+  20. Aspect Ratios .............................. 1680
+  21. Anchos de contenedor ....................... 1721
+  22. Blend Modes ................................ 1760
+  23. Filtros CSS ................................ 1803
+  24. Clip-paths ................................. 1863
+  25. Estados interactivos ....................... 1935
+  26. Formularios / Inputs ....................... 1961
+  27. Focus Ring (+ Caret-color, Accent-color) ... 2022
+  28. Scrollbar .................................. 2124
+  29. Selection y Links .......................... 2167
+  30. Variables de componentes ................... 2192
 
 PARTE 2: KEYFRAMES Y ESTILOS BASE
 
-  31. Keyframes / Animaciones
-  32. Estilos base (scrollbar, selection)
+  31. Keyframes / Animaciones .................... 2401
+  32. Estilos base (scrollbar, selection) ........ 2622
 
 PARTE 3: CLASES UTILITARIAS (todo lo que se usa con class="ig-*")
 
-  33. Display (+ Float, Shape-outside)
-  34. Flexbox
-  35. Grid
-  36. Gap (+ Space between, Divide)
-  37. Padding
-  38. Margin (+ Propiedades lógicas RTL/LTR)
-  39. Width
-  40. Height (+ Size)
-  41. Min/Max sizing
-  42. Tipografía (clases + Multi-column)
-  43. Colores de texto
-  44. Colores de fondo (+ Gradientes)
-  45. Bordes (clases)
-  46. Border Radius (clases)
-  47. Sombras (clases)
-  48. Glows (clases)
-  49. Glassmorphism (clases)
-  50. Neumorphism (clases)
-  51. Opacity
-  52. Position (+ Safe area insets)
-  53. Z-index (clases)
-  54. Overflow (+ Scroll Snap, Isolation)
-  55. Visibility (+ Content-visibility)
-  56. Transiciones (clases + Will-change)
-  57. Transforms (+ 3D)
-  58. Cursor
-  59. Pointer events (+ Touch action)
-  60. User select
-  61. Object fit (+ Rendering, Fill/Stroke)
-  62. Aspect ratio (clases)
-  63. Animaciones (clases)
-  64. Contenedores
-  65. Filtros (clases)
-  66. Blend modes (clases)
-  67. Clip-path (clases + Mask)
-  68. Accesibilidad
+  33. Display (+ Float, Shape-outside) ........... 2749
+  34. Flexbox .................................... 2886
+  35. Grid ....................................... 3054
+  36. Gap (+ Space between, Divide) .............. 3267
+  37. Padding .................................... 3536
+  38. Margin (+ Propiedades lógicas RTL/LTR) ..... 3668
+  39. Width ...................................... 3988
+  40. Height (+ Size) ............................ 4087
+  41. Min/Max sizing ............................. 4245
+  42. Tipografía (clases + Multi-column) ......... 4349
+  43. Colores de texto ........................... 4785
+  44. Colores de fondo (+ Gradientes) ............ 4860
+  45. Bordes (clases) ............................ 5344
+  46. Border Radius (clases) ..................... 5437
+  47. Sombras (clases) ........................... 5520
+  48. Glows (clases) ............................. 5648
+  49. Glassmorphism (clases) ..................... 5741
+  50. Neumorphism (clases) ....................... 5848
+  51. Opacity .................................... 5945
+  52. Position (+ Safe area insets) .............. 5985
+  53. Z-index (clases) ........................... 6264
+  54. Overflow (+ Scroll Snap, Isolation) ........ 6309
+  55. Visibility (+ Content-visibility) .......... 6454
+  56. Transiciones (clases + Will-change) ........ 6520
+  57. Transforms (+ 3D) .......................... 6650
+  58. Cursor ..................................... 6885
+  59. Pointer events (+ Touch action) ............ 6954
+  60. User select ................................ 7018
+  61. Object fit (+ Rendering, Fill/Stroke) ...... 7045
+  62. Aspect ratio (clases) ...................... 7222
+  63. Animaciones (clases) ....................... 7257
+  64. Contenedores ............................... 7307
+  65. Filtros (clases) ........................... 7366
+  66. Blend modes (clases) ....................... 7548
+  67. Clip-path (clases + Mask) .................. 7610
+  68. Accesibilidad .............................. 7916
 
 PARTE 4: RESPONSIVE Y ESTADOS
 
-  69. Responsive modifiers (sm:, md:, + Container queries)
-  70. State modifiers (hover:, focus:, + Hover táctil)
+  69. Responsive modifiers (sm:, md:, lg:, xl:) .. 8075
+  70. State modifiers (hover:, focus:, peer:) .... 8816
 
 PARTE 5: COMPONENTES
 
-  71. Botones
-  72. Inputs / Formularios
-  73. Checkbox y Radio
-  74. Switch / Toggle
-  75. Cards
-  76. Alerts
-  77. Badges
-  78. Modal (+ Dialog nativo)
-  79. Avatar
-  80. Spinner
-  81. Progress
-  82. Skeleton
-  83. Tooltip
-  84. Tabs
-  85. Accordion
-  86. Dropdown
-  87. Breadcrumb
-  88. Pagination
-  89. Table
-  90. Toast / Notification
-  91. Divider
-  92. Stepper / Wizard
-  93. Rating (estrellas)
-  94. Slider / Range
-  95. Chip / Tag
-  96. Sidebar / Drawer
-  97. Navbar / Header
-  98. Timeline
+  71. Botones .................................... 9714
+  72. Inputs / Formularios ...................... 10076
+  73. Checkbox y Radio .......................... 10440
+  74. Switch / Toggle ........................... 10647
+  75. Cards ..................................... 10756
+  76. Alerts .................................... 10908
+  77. Badges .................................... 11030
+  78. Modal (+ Dialog nativo) ................... 11125
+  79. Avatar .................................... 11433
+  80. Spinner ................................... 11541
+  81. Progress .................................. 11590
+  82. Skeleton .................................. 11652
+  83. Tooltip ................................... 11729
+  84. Tabs ...................................... 11909
+  85. Accordion ................................. 12150
+  86. Dropdown .................................. 12240
+  87. Breadcrumb ................................ 12386
+  88. Pagination ................................ 12431
+  89. Table ..................................... 12540
+  90. Toast / Notification ...................... 12626
+  91. Divider ................................... 12746
+  92. Stepper / Wizard .......................... 12863
+  93. Rating (estrellas) ........................ 12986
+  94. Slider / Range ............................ 13067
+  95. Chip / Tag ................................ 13180
+  96. Sidebar / Drawer .......................... 13340
+  97. Navbar / Header ........................... 13520
+  98. Timeline .................................. 13660
 
 PARTE 6: EXTRAS
 
-  99. Estilos de impresión
-  100. Reset base opcional
+  99. Estilos de impresión ...................... 13764
+  100. Reset base opcional ....................... 13923
 
 ═══════════════════════════════════════════════════════════════════════════════
 */
