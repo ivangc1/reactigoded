@@ -122,43 +122,44 @@ PARTE 3: CLASES UTILITARIAS (todo lo que se usa con class="ig-*")
 PARTE 4: RESPONSIVE Y ESTADOS
 
   69. Responsive modifiers (sm:, md:, lg:, xl:) .. 8075
-  70. State modifiers (hover:, focus:, peer:) .... 8816
+  69b. Container queries (COMPLETAS) ............ 8697
+  70. State modifiers (hover:, focus:, peer:) ... 10015
 
 PARTE 5: COMPONENTES
 
-  71. Botones .................................... 9714
-  72. Inputs / Formularios ...................... 10076
-  73. Checkbox y Radio .......................... 10440
-  74. Switch / Toggle ........................... 10647
-  75. Cards ..................................... 10756
-  76. Alerts .................................... 10908
-  77. Badges .................................... 11030
-  78. Modal (+ Dialog nativo) ................... 11125
-  79. Avatar .................................... 11433
-  80. Spinner ................................... 11541
-  81. Progress .................................. 11590
-  82. Skeleton .................................. 11652
-  83. Tooltip ................................... 11729
-  84. Tabs ...................................... 11909
-  85. Accordion ................................. 12150
-  86. Dropdown .................................. 12240
-  87. Breadcrumb ................................ 12386
-  88. Pagination ................................ 12431
-  89. Table ..................................... 12540
-  90. Toast / Notification ...................... 12626
-  91. Divider ................................... 12746
-  92. Stepper / Wizard .......................... 12863
-  93. Rating (estrellas) ........................ 12986
-  94. Slider / Range ............................ 13067
-  95. Chip / Tag ................................ 13180
-  96. Sidebar / Drawer .......................... 13340
-  97. Navbar / Header ........................... 13520
-  98. Timeline .................................. 13660
+  71. Botones ................................... 10913
+  72. Inputs / Formularios ...................... 11275
+  73. Checkbox y Radio .......................... 11639
+  74. Switch / Toggle ........................... 11846
+  75. Cards ..................................... 11955
+  76. Alerts .................................... 12107
+  77. Badges .................................... 12229
+  78. Modal (+ Dialog nativo) ................... 12324
+  79. Avatar .................................... 12632
+  80. Spinner ................................... 12740
+  81. Progress .................................. 12789
+  82. Skeleton .................................. 12851
+  83. Tooltip ................................... 12928
+  84. Tabs ...................................... 13108
+  85. Accordion ................................. 13349
+  86. Dropdown .................................. 13439
+  87. Breadcrumb ................................ 13585
+  88. Pagination ................................ 13630
+  89. Table ..................................... 13739
+  90. Toast / Notification ...................... 13825
+  91. Divider ................................... 13945
+  92. Stepper / Wizard .......................... 14062
+  93. Rating (estrellas) ........................ 14185
+  94. Slider / Range ............................ 14266
+  95. Chip / Tag ................................ 14379
+  96. Sidebar / Drawer .......................... 14539
+  97. Navbar / Header ........................... 14719
+  98. Timeline .................................. 14859
 
 PARTE 6: EXTRAS
 
-  99. Estilos de impresión ...................... 13764
-  100. Reset base opcional ....................... 13923
+  99. Estilos de impresión ...................... 14963
+  100. Reset base opcional ....................... 15122
 
 ═══════════════════════════════════════════════════════════════════════════════
 */
@@ -8676,19 +8677,55 @@ EJEMPLO DE USO:
 
 
 /*
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  IGODED DESIGN SYSTEM v1.0 - PARCHE: CONTAINER QUERIES COMPLETAS              ║
+║                                                                               ║
+║  Este archivo reemplaza la sección 69b del CSS principal                      ║
+║  Añade ~733 clases de container queries (antes: 83)                           ║
+║                                                                               ║
+║  INSTRUCCIONES:                                                               ║
+║  1. Localizar la sección "69b. CONTAINER QUERIES" en igoded-design.css        ║
+║  2. Eliminar desde ese comentario hasta el inicio de la sección 70            ║
+║  3. Pegar este contenido en su lugar                                          ║
+║  4. Regenerar el archivo minificado                                           ║
+║                                                                               ║
+║  NUEVO TAMAÑO ESTIMADO: ~15,300 líneas (+1,100 líneas)                        ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+*/
+
+/*
 ═══════════════════════════════════════════════════════════════════════════════
-69b. CONTAINER QUERIES (CLASES)
+69b. CONTAINER QUERIES (CLASES COMPLETAS)
 ═══════════════════════════════════════════════════════════════════════════════
 
 QUÉ ES: Clases para usar container queries - responsive basado en contenedor.
+A diferencia de media queries (que responden al viewport), container queries
+responden al tamaño del contenedor padre.
+
+CUÁNDO USAR:
+- Componentes reutilizables que deben adaptarse a su espacio disponible
+- Cards, sidebars, widgets que pueden estar en diferentes contextos
+- Layouts donde el viewport no indica el espacio real del componente
 
 CLASES DE CONTENEDOR:
-- ig-container: contenedor básico (inline-size)
-- ig-container-normal: contenedor con width normal (no inline-size)
-- ig-container/[name]: contenedor nombrado para queries específicas
+- ig-@container: contenedor básico (inline-size)
+- ig-@container-normal: contenedor con width normal (no inline-size)
+- ig-@container/[name]: contenedor nombrado para queries específicas
 
-MODIFICADORES (@sm:, @md:, @lg:, etc):
-Funcionan igual que sm:, md:, lg: pero responden al contenedor, no al viewport.
+BREAKPOINTS DE CONTAINER:
+- @xs: 320px (móvil pequeño)
+- @sm: 384px (móvil)
+- @md: 448px (tablet pequeña)
+- @lg: 512px (tablet)
+- @xl: 576px (tablet grande)
+- @2xl: 672px (desktop pequeño)
+
+EJEMPLO DE USO:
+<div class="ig-@container">
+  <div class="ig-flex-col @md:ig-flex-row @lg:ig-gap-6">
+    Contenido que cambia según el ancho del contenedor
+  </div>
+</div>
 
 SOPORTE: Chrome 105+, Firefox 110+, Safari 16+
 */
@@ -8702,112 +8739,1275 @@ SOPORTE: Chrome 105+, Firefox 110+, Safari 16+
 .ig-\@container\/sidebar { container-type: inline-size; container-name: sidebar; }
 .ig-\@container\/card { container-type: inline-size; container-name: card; }
 .ig-\@container\/modal { container-type: inline-size; container-name: modal; }
+.ig-\@container\/widget { container-type: inline-size; container-name: widget; }
+.ig-\@container\/hero { container-type: inline-size; container-name: hero; }
 
-/* Container query: @xs (320px) */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @XS (320px) - Móvil pequeño
+   ═══════════════════════════════════════════════════════════════════════════ */
 @container (min-width: 320px) {
-  .\@xs\:ig-hidden { display: none; }
+  /* Display */
   .\@xs\:ig-block { display: block; }
+  .\@xs\:ig-inline-block { display: inline-block; }
+  .\@xs\:ig-inline { display: inline; }
   .\@xs\:ig-flex { display: flex; }
+  .\@xs\:ig-inline-flex { display: inline-flex; }
   .\@xs\:ig-grid { display: grid; }
+  .\@xs\:ig-hidden { display: none; }
+
+  /* Flex Direction */
   .\@xs\:ig-flex-row { flex-direction: row; }
+  .\@xs\:ig-flex-row-reverse { flex-direction: row-reverse; }
   .\@xs\:ig-flex-col { flex-direction: column; }
+  .\@xs\:ig-flex-col-reverse { flex-direction: column-reverse; }
+
+  /* Flex Wrap */
+  .\@xs\:ig-flex-wrap { flex-wrap: wrap; }
+  .\@xs\:ig-flex-nowrap { flex-wrap: nowrap; }
+
+  /* Justify Content */
+  .\@xs\:ig-justify-start { justify-content: flex-start; }
+  .\@xs\:ig-justify-center { justify-content: center; }
+  .\@xs\:ig-justify-end { justify-content: flex-end; }
+  .\@xs\:ig-justify-between { justify-content: space-between; }
+  .\@xs\:ig-justify-around { justify-content: space-around; }
+  .\@xs\:ig-justify-evenly { justify-content: space-evenly; }
+
+  /* Align Items */
+  .\@xs\:ig-items-start { align-items: flex-start; }
+  .\@xs\:ig-items-center { align-items: center; }
+  .\@xs\:ig-items-end { align-items: flex-end; }
+  .\@xs\:ig-items-stretch { align-items: stretch; }
+  .\@xs\:ig-items-baseline { align-items: baseline; }
+
+  /* Grid Columns */
+  .\@xs\:ig-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .\@xs\:ig-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .\@xs\:ig-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .\@xs\:ig-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .\@xs\:ig-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .\@xs\:ig-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+  /* Col Span */
+  .\@xs\:ig-col-span-1 { grid-column: span 1 / span 1; }
+  .\@xs\:ig-col-span-2 { grid-column: span 2 / span 2; }
+  .\@xs\:ig-col-span-3 { grid-column: span 3 / span 3; }
+  .\@xs\:ig-col-span-4 { grid-column: span 4 / span 4; }
+  .\@xs\:ig-col-span-6 { grid-column: span 6 / span 6; }
+  .\@xs\:ig-col-span-full { grid-column: 1 / -1; }
+
+  /* Gap */
+  .\@xs\:ig-gap-0 { gap: 0; }
+  .\@xs\:ig-gap-1 { gap: var(--ig-space-1); }
+  .\@xs\:ig-gap-2 { gap: var(--ig-space-2); }
+  .\@xs\:ig-gap-3 { gap: var(--ig-space-3); }
+  .\@xs\:ig-gap-4 { gap: var(--ig-space-4); }
+  .\@xs\:ig-gap-6 { gap: var(--ig-space-6); }
+  .\@xs\:ig-gap-8 { gap: var(--ig-space-8); }
+
+  /* Padding */
+  .\@xs\:ig-p-0 { padding: 0; }
+  .\@xs\:ig-p-1 { padding: var(--ig-space-1); }
+  .\@xs\:ig-p-2 { padding: var(--ig-space-2); }
+  .\@xs\:ig-p-3 { padding: var(--ig-space-3); }
+  .\@xs\:ig-p-4 { padding: var(--ig-space-4); }
+  .\@xs\:ig-p-6 { padding: var(--ig-space-6); }
+  .\@xs\:ig-p-8 { padding: var(--ig-space-8); }
+  .\@xs\:ig-px-0 { padding-left: 0; padding-right: 0; }
+  .\@xs\:ig-px-2 { padding-left: var(--ig-space-2); padding-right: var(--ig-space-2); }
+  .\@xs\:ig-px-4 { padding-left: var(--ig-space-4); padding-right: var(--ig-space-4); }
+  .\@xs\:ig-px-6 { padding-left: var(--ig-space-6); padding-right: var(--ig-space-6); }
+  .\@xs\:ig-py-0 { padding-top: 0; padding-bottom: 0; }
+  .\@xs\:ig-py-2 { padding-top: var(--ig-space-2); padding-bottom: var(--ig-space-2); }
+  .\@xs\:ig-py-4 { padding-top: var(--ig-space-4); padding-bottom: var(--ig-space-4); }
+  .\@xs\:ig-py-6 { padding-top: var(--ig-space-6); padding-bottom: var(--ig-space-6); }
+
+  /* Margin */
+  .\@xs\:ig-m-0 { margin: 0; }
+  .\@xs\:ig-m-auto { margin: auto; }
+  .\@xs\:ig-mx-auto { margin-left: auto; margin-right: auto; }
+  .\@xs\:ig-my-auto { margin-top: auto; margin-bottom: auto; }
+  .\@xs\:ig-mt-0 { margin-top: 0; }
+  .\@xs\:ig-mt-2 { margin-top: var(--ig-space-2); }
+  .\@xs\:ig-mt-4 { margin-top: var(--ig-space-4); }
+  .\@xs\:ig-mb-0 { margin-bottom: 0; }
+  .\@xs\:ig-mb-2 { margin-bottom: var(--ig-space-2); }
+  .\@xs\:ig-mb-4 { margin-bottom: var(--ig-space-4); }
+
+  /* Width */
+  .\@xs\:ig-w-auto { width: auto; }
+  .\@xs\:ig-w-full { width: 100%; }
+  .\@xs\:ig-w-1\/2 { width: 50%; }
+  .\@xs\:ig-w-1\/3 { width: 33.333333%; }
+  .\@xs\:ig-w-2\/3 { width: 66.666667%; }
+  .\@xs\:ig-w-1\/4 { width: 25%; }
+  .\@xs\:ig-w-3\/4 { width: 75%; }
+
+  /* Max Width */
+  .\@xs\:ig-max-w-xs { max-width: 20rem; }
+  .\@xs\:ig-max-w-sm { max-width: 24rem; }
+  .\@xs\:ig-max-w-md { max-width: 28rem; }
+  .\@xs\:ig-max-w-full { max-width: 100%; }
+
+  /* Text */
+  .\@xs\:ig-text-left { text-align: left; }
+  .\@xs\:ig-text-center { text-align: center; }
+  .\@xs\:ig-text-right { text-align: right; }
+  .\@xs\:ig-text-xs { font-size: var(--ig-text-xs); }
+  .\@xs\:ig-text-sm { font-size: var(--ig-text-sm); }
+  .\@xs\:ig-text-base { font-size: var(--ig-text-base); }
+  .\@xs\:ig-text-lg { font-size: var(--ig-text-lg); }
+  .\@xs\:ig-text-xl { font-size: var(--ig-text-xl); }
+  .\@xs\:ig-text-2xl { font-size: var(--ig-text-2xl); }
+
+  /* Position */
+  .\@xs\:ig-static { position: static; }
+  .\@xs\:ig-relative { position: relative; }
+  .\@xs\:ig-absolute { position: absolute; }
+  .\@xs\:ig-fixed { position: fixed; }
+  .\@xs\:ig-sticky { position: sticky; }
+
+  /* Order */
+  .\@xs\:ig-order-first { order: -9999; }
+  .\@xs\:ig-order-last { order: 9999; }
+  .\@xs\:ig-order-none { order: 0; }
+  .\@xs\:ig-order-1 { order: 1; }
+  .\@xs\:ig-order-2 { order: 2; }
+
+  /* Gap X/Y */
+  .\@xs\:ig-gap-x-2 { column-gap: var(--ig-space-2); }
+  .\@xs\:ig-gap-x-4 { column-gap: var(--ig-space-4); }
+  .\@xs\:ig-gap-x-6 { column-gap: var(--ig-space-6); }
+  .\@xs\:ig-gap-y-2 { row-gap: var(--ig-space-2); }
+  .\@xs\:ig-gap-y-4 { row-gap: var(--ig-space-4); }
+  .\@xs\:ig-gap-y-6 { row-gap: var(--ig-space-6); }
+
+  /* Aspect Ratio */
+  .\@xs\:ig-aspect-auto { aspect-ratio: auto; }
+  .\@xs\:ig-aspect-square { aspect-ratio: 1 / 1; }
+  .\@xs\:ig-aspect-video { aspect-ratio: 16 / 9; }
+  .\@xs\:ig-aspect-photo { aspect-ratio: 4 / 3; }
 }
 
-/* Container query: @sm (384px) */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @SM (384px) - Móvil
+   ═══════════════════════════════════════════════════════════════════════════ */
 @container (min-width: 384px) {
-  .\@sm\:ig-hidden { display: none; }
+  /* Display */
   .\@sm\:ig-block { display: block; }
-  .\@sm\:ig-flex { display: flex; }
-  .\@sm\:ig-grid { display: grid; }
+  .\@sm\:ig-inline-block { display: inline-block; }
   .\@sm\:ig-inline { display: inline; }
+  .\@sm\:ig-flex { display: flex; }
+  .\@sm\:ig-inline-flex { display: inline-flex; }
+  .\@sm\:ig-grid { display: grid; }
+  .\@sm\:ig-hidden { display: none; }
+
+  /* Flex Direction */
   .\@sm\:ig-flex-row { flex-direction: row; }
+  .\@sm\:ig-flex-row-reverse { flex-direction: row-reverse; }
   .\@sm\:ig-flex-col { flex-direction: column; }
+  .\@sm\:ig-flex-col-reverse { flex-direction: column-reverse; }
+
+  /* Flex Wrap */
+  .\@sm\:ig-flex-wrap { flex-wrap: wrap; }
+  .\@sm\:ig-flex-nowrap { flex-wrap: nowrap; }
+
+  /* Justify Content */
+  .\@sm\:ig-justify-start { justify-content: flex-start; }
+  .\@sm\:ig-justify-center { justify-content: center; }
+  .\@sm\:ig-justify-end { justify-content: flex-end; }
+  .\@sm\:ig-justify-between { justify-content: space-between; }
+  .\@sm\:ig-justify-around { justify-content: space-around; }
+  .\@sm\:ig-justify-evenly { justify-content: space-evenly; }
+
+  /* Align Items */
+  .\@sm\:ig-items-start { align-items: flex-start; }
+  .\@sm\:ig-items-center { align-items: center; }
+  .\@sm\:ig-items-end { align-items: flex-end; }
+  .\@sm\:ig-items-stretch { align-items: stretch; }
+  .\@sm\:ig-items-baseline { align-items: baseline; }
+
+  /* Grid Columns */
   .\@sm\:ig-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .\@sm\:ig-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .\@sm\:ig-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .\@sm\:ig-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .\@sm\:ig-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .\@sm\:ig-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+  /* Col Span */
+  .\@sm\:ig-col-span-1 { grid-column: span 1 / span 1; }
+  .\@sm\:ig-col-span-2 { grid-column: span 2 / span 2; }
+  .\@sm\:ig-col-span-3 { grid-column: span 3 / span 3; }
+  .\@sm\:ig-col-span-4 { grid-column: span 4 / span 4; }
+  .\@sm\:ig-col-span-6 { grid-column: span 6 / span 6; }
+  .\@sm\:ig-col-span-full { grid-column: 1 / -1; }
+
+  /* Gap */
+  .\@sm\:ig-gap-0 { gap: 0; }
+  .\@sm\:ig-gap-1 { gap: var(--ig-space-1); }
   .\@sm\:ig-gap-2 { gap: var(--ig-space-2); }
+  .\@sm\:ig-gap-3 { gap: var(--ig-space-3); }
   .\@sm\:ig-gap-4 { gap: var(--ig-space-4); }
+  .\@sm\:ig-gap-6 { gap: var(--ig-space-6); }
+  .\@sm\:ig-gap-8 { gap: var(--ig-space-8); }
+
+  /* Padding */
+  .\@sm\:ig-p-0 { padding: 0; }
+  .\@sm\:ig-p-2 { padding: var(--ig-space-2); }
+  .\@sm\:ig-p-3 { padding: var(--ig-space-3); }
   .\@sm\:ig-p-4 { padding: var(--ig-space-4); }
+  .\@sm\:ig-p-6 { padding: var(--ig-space-6); }
+  .\@sm\:ig-p-8 { padding: var(--ig-space-8); }
+  .\@sm\:ig-px-0 { padding-left: 0; padding-right: 0; }
+  .\@sm\:ig-px-2 { padding-left: var(--ig-space-2); padding-right: var(--ig-space-2); }
+  .\@sm\:ig-px-4 { padding-left: var(--ig-space-4); padding-right: var(--ig-space-4); }
+  .\@sm\:ig-px-6 { padding-left: var(--ig-space-6); padding-right: var(--ig-space-6); }
+  .\@sm\:ig-py-0 { padding-top: 0; padding-bottom: 0; }
+  .\@sm\:ig-py-2 { padding-top: var(--ig-space-2); padding-bottom: var(--ig-space-2); }
+  .\@sm\:ig-py-4 { padding-top: var(--ig-space-4); padding-bottom: var(--ig-space-4); }
+  .\@sm\:ig-py-6 { padding-top: var(--ig-space-6); padding-bottom: var(--ig-space-6); }
+
+  /* Margin */
+  .\@sm\:ig-m-0 { margin: 0; }
+  .\@sm\:ig-m-auto { margin: auto; }
+  .\@sm\:ig-mx-auto { margin-left: auto; margin-right: auto; }
+  .\@sm\:ig-my-auto { margin-top: auto; margin-bottom: auto; }
+  .\@sm\:ig-mt-0 { margin-top: 0; }
+  .\@sm\:ig-mt-2 { margin-top: var(--ig-space-2); }
+  .\@sm\:ig-mt-4 { margin-top: var(--ig-space-4); }
+  .\@sm\:ig-mb-0 { margin-bottom: 0; }
+  .\@sm\:ig-mb-2 { margin-bottom: var(--ig-space-2); }
+  .\@sm\:ig-mb-4 { margin-bottom: var(--ig-space-4); }
+
+  /* Width */
+  .\@sm\:ig-w-auto { width: auto; }
+  .\@sm\:ig-w-full { width: 100%; }
+  .\@sm\:ig-w-1\/2 { width: 50%; }
+  .\@sm\:ig-w-1\/3 { width: 33.333333%; }
+  .\@sm\:ig-w-2\/3 { width: 66.666667%; }
+  .\@sm\:ig-w-1\/4 { width: 25%; }
+  .\@sm\:ig-w-3\/4 { width: 75%; }
+
+  /* Max Width */
+  .\@sm\:ig-max-w-sm { max-width: 24rem; }
+  .\@sm\:ig-max-w-md { max-width: 28rem; }
+  .\@sm\:ig-max-w-lg { max-width: 32rem; }
+  .\@sm\:ig-max-w-full { max-width: 100%; }
+
+  /* Text */
+  .\@sm\:ig-text-left { text-align: left; }
+  .\@sm\:ig-text-center { text-align: center; }
+  .\@sm\:ig-text-right { text-align: right; }
+  .\@sm\:ig-text-xs { font-size: var(--ig-text-xs); }
+  .\@sm\:ig-text-sm { font-size: var(--ig-text-sm); }
   .\@sm\:ig-text-base { font-size: var(--ig-text-base); }
   .\@sm\:ig-text-lg { font-size: var(--ig-text-lg); }
+  .\@sm\:ig-text-xl { font-size: var(--ig-text-xl); }
+  .\@sm\:ig-text-2xl { font-size: var(--ig-text-2xl); }
+  .\@sm\:ig-text-3xl { font-size: var(--ig-text-3xl); }
+
+  /* Position */
+  .\@sm\:ig-static { position: static; }
+  .\@sm\:ig-relative { position: relative; }
+  .\@sm\:ig-absolute { position: absolute; }
+  .\@sm\:ig-fixed { position: fixed; }
+  .\@sm\:ig-sticky { position: sticky; }
+
+  /* Order */
+  .\@sm\:ig-order-first { order: -9999; }
+  .\@sm\:ig-order-last { order: 9999; }
+  .\@sm\:ig-order-none { order: 0; }
+  .\@sm\:ig-order-1 { order: 1; }
+  .\@sm\:ig-order-2 { order: 2; }
+
+  /* Gap X/Y */
+  .\@sm\:ig-gap-x-2 { column-gap: var(--ig-space-2); }
+  .\@sm\:ig-gap-x-4 { column-gap: var(--ig-space-4); }
+  .\@sm\:ig-gap-x-6 { column-gap: var(--ig-space-6); }
+  .\@sm\:ig-gap-x-8 { column-gap: var(--ig-space-8); }
+  .\@sm\:ig-gap-y-2 { row-gap: var(--ig-space-2); }
+  .\@sm\:ig-gap-y-4 { row-gap: var(--ig-space-4); }
+  .\@sm\:ig-gap-y-6 { row-gap: var(--ig-space-6); }
+  .\@sm\:ig-gap-y-8 { row-gap: var(--ig-space-8); }
+
+  /* Aspect Ratio */
+  .\@sm\:ig-aspect-auto { aspect-ratio: auto; }
+  .\@sm\:ig-aspect-square { aspect-ratio: 1 / 1; }
+  .\@sm\:ig-aspect-video { aspect-ratio: 16 / 9; }
+  .\@sm\:ig-aspect-photo { aspect-ratio: 4 / 3; }
+  .\@sm\:ig-aspect-portrait { aspect-ratio: 3 / 4; }
 }
 
-/* Container query: @md (448px) */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @MD (448px) - Tablet pequeña
+   ═══════════════════════════════════════════════════════════════════════════ */
 @container (min-width: 448px) {
-  .\@md\:ig-hidden { display: none; }
+  /* Display */
   .\@md\:ig-block { display: block; }
-  .\@md\:ig-flex { display: flex; }
-  .\@md\:ig-grid { display: grid; }
+  .\@md\:ig-inline-block { display: inline-block; }
   .\@md\:ig-inline { display: inline; }
+  .\@md\:ig-flex { display: flex; }
+  .\@md\:ig-inline-flex { display: inline-flex; }
+  .\@md\:ig-grid { display: grid; }
+  .\@md\:ig-hidden { display: none; }
+
+  /* Flex Direction */
   .\@md\:ig-flex-row { flex-direction: row; }
+  .\@md\:ig-flex-row-reverse { flex-direction: row-reverse; }
   .\@md\:ig-flex-col { flex-direction: column; }
-  .\@md\:ig-items-center { align-items: center; }
+  .\@md\:ig-flex-col-reverse { flex-direction: column-reverse; }
+
+  /* Flex Wrap */
+  .\@md\:ig-flex-wrap { flex-wrap: wrap; }
+  .\@md\:ig-flex-nowrap { flex-wrap: nowrap; }
+
+  /* Justify Content */
+  .\@md\:ig-justify-start { justify-content: flex-start; }
+  .\@md\:ig-justify-center { justify-content: center; }
+  .\@md\:ig-justify-end { justify-content: flex-end; }
   .\@md\:ig-justify-between { justify-content: space-between; }
+  .\@md\:ig-justify-around { justify-content: space-around; }
+  .\@md\:ig-justify-evenly { justify-content: space-evenly; }
+
+  /* Align Items */
+  .\@md\:ig-items-start { align-items: flex-start; }
+  .\@md\:ig-items-center { align-items: center; }
+  .\@md\:ig-items-end { align-items: flex-end; }
+  .\@md\:ig-items-stretch { align-items: stretch; }
+  .\@md\:ig-items-baseline { align-items: baseline; }
+
+  /* Grid Columns */
   .\@md\:ig-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .\@md\:ig-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .\@md\:ig-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .\@md\:ig-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .\@md\:ig-grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .\@md\:ig-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .\@md\:ig-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+  /* Col Span */
+  .\@md\:ig-col-span-1 { grid-column: span 1 / span 1; }
+  .\@md\:ig-col-span-2 { grid-column: span 2 / span 2; }
+  .\@md\:ig-col-span-3 { grid-column: span 3 / span 3; }
+  .\@md\:ig-col-span-4 { grid-column: span 4 / span 4; }
+  .\@md\:ig-col-span-6 { grid-column: span 6 / span 6; }
+  .\@md\:ig-col-span-8 { grid-column: span 8 / span 8; }
+  .\@md\:ig-col-span-12 { grid-column: span 12 / span 12; }
+  .\@md\:ig-col-span-full { grid-column: 1 / -1; }
+
+  /* Gap */
+  .\@md\:ig-gap-0 { gap: 0; }
+  .\@md\:ig-gap-2 { gap: var(--ig-space-2); }
+  .\@md\:ig-gap-3 { gap: var(--ig-space-3); }
   .\@md\:ig-gap-4 { gap: var(--ig-space-4); }
+  .\@md\:ig-gap-5 { gap: var(--ig-space-5); }
   .\@md\:ig-gap-6 { gap: var(--ig-space-6); }
+  .\@md\:ig-gap-8 { gap: var(--ig-space-8); }
+  .\@md\:ig-gap-10 { gap: var(--ig-space-10); }
+
+  /* Padding */
+  .\@md\:ig-p-0 { padding: 0; }
+  .\@md\:ig-p-2 { padding: var(--ig-space-2); }
   .\@md\:ig-p-4 { padding: var(--ig-space-4); }
   .\@md\:ig-p-6 { padding: var(--ig-space-6); }
+  .\@md\:ig-p-8 { padding: var(--ig-space-8); }
+  .\@md\:ig-p-10 { padding: var(--ig-space-10); }
+  .\@md\:ig-px-0 { padding-left: 0; padding-right: 0; }
+  .\@md\:ig-px-4 { padding-left: var(--ig-space-4); padding-right: var(--ig-space-4); }
+  .\@md\:ig-px-6 { padding-left: var(--ig-space-6); padding-right: var(--ig-space-6); }
+  .\@md\:ig-px-8 { padding-left: var(--ig-space-8); padding-right: var(--ig-space-8); }
+  .\@md\:ig-py-0 { padding-top: 0; padding-bottom: 0; }
+  .\@md\:ig-py-4 { padding-top: var(--ig-space-4); padding-bottom: var(--ig-space-4); }
+  .\@md\:ig-py-6 { padding-top: var(--ig-space-6); padding-bottom: var(--ig-space-6); }
+  .\@md\:ig-py-8 { padding-top: var(--ig-space-8); padding-bottom: var(--ig-space-8); }
+
+  /* Margin */
+  .\@md\:ig-m-0 { margin: 0; }
+  .\@md\:ig-m-auto { margin: auto; }
+  .\@md\:ig-mx-auto { margin-left: auto; margin-right: auto; }
+  .\@md\:ig-my-auto { margin-top: auto; margin-bottom: auto; }
+  .\@md\:ig-mt-0 { margin-top: 0; }
+  .\@md\:ig-mt-4 { margin-top: var(--ig-space-4); }
+  .\@md\:ig-mt-6 { margin-top: var(--ig-space-6); }
+  .\@md\:ig-mb-0 { margin-bottom: 0; }
+  .\@md\:ig-mb-4 { margin-bottom: var(--ig-space-4); }
+  .\@md\:ig-mb-6 { margin-bottom: var(--ig-space-6); }
+  .\@md\:ig-mb-8 { margin-bottom: var(--ig-space-8); }
+
+  /* Width */
+  .\@md\:ig-w-auto { width: auto; }
+  .\@md\:ig-w-full { width: 100%; }
+  .\@md\:ig-w-1\/2 { width: 50%; }
+  .\@md\:ig-w-1\/3 { width: 33.333333%; }
+  .\@md\:ig-w-2\/3 { width: 66.666667%; }
+  .\@md\:ig-w-1\/4 { width: 25%; }
+  .\@md\:ig-w-3\/4 { width: 75%; }
+  .\@md\:ig-w-64 { width: var(--ig-space-64); }
+
+  /* Max Width */
+  .\@md\:ig-max-w-none { max-width: none; }
+  .\@md\:ig-max-w-md { max-width: var(--ig-container-md); }
+  .\@md\:ig-max-w-lg { max-width: var(--ig-container-lg); }
+  .\@md\:ig-max-w-xl { max-width: var(--ig-container-xl); }
+  .\@md\:ig-max-w-full { max-width: 100%; }
+
+  /* Text */
+  .\@md\:ig-text-left { text-align: left; }
+  .\@md\:ig-text-center { text-align: center; }
+  .\@md\:ig-text-right { text-align: right; }
+  .\@md\:ig-text-xs { font-size: var(--ig-text-xs); }
+  .\@md\:ig-text-sm { font-size: var(--ig-text-sm); }
+  .\@md\:ig-text-base { font-size: var(--ig-text-base); }
   .\@md\:ig-text-lg { font-size: var(--ig-text-lg); }
   .\@md\:ig-text-xl { font-size: var(--ig-text-xl); }
+  .\@md\:ig-text-2xl { font-size: var(--ig-text-2xl); }
+  .\@md\:ig-text-3xl { font-size: var(--ig-text-3xl); }
+  .\@md\:ig-text-4xl { font-size: var(--ig-text-4xl); }
+
+  /* Position */
+  .\@md\:ig-static { position: static; }
+  .\@md\:ig-relative { position: relative; }
+  .\@md\:ig-absolute { position: absolute; }
+  .\@md\:ig-fixed { position: fixed; }
+  .\@md\:ig-sticky { position: sticky; }
+
+  /* Order */
+  .\@md\:ig-order-first { order: -9999; }
+  .\@md\:ig-order-last { order: 9999; }
+  .\@md\:ig-order-none { order: 0; }
+  .\@md\:ig-order-1 { order: 1; }
+  .\@md\:ig-order-2 { order: 2; }
+
+  /* Gap X/Y */
+  .\@md\:ig-gap-x-2 { column-gap: var(--ig-space-2); }
+  .\@md\:ig-gap-x-4 { column-gap: var(--ig-space-4); }
+  .\@md\:ig-gap-x-6 { column-gap: var(--ig-space-6); }
+  .\@md\:ig-gap-x-8 { column-gap: var(--ig-space-8); }
+  .\@md\:ig-gap-x-10 { column-gap: var(--ig-space-10); }
+  .\@md\:ig-gap-y-2 { row-gap: var(--ig-space-2); }
+  .\@md\:ig-gap-y-4 { row-gap: var(--ig-space-4); }
+  .\@md\:ig-gap-y-6 { row-gap: var(--ig-space-6); }
+  .\@md\:ig-gap-y-8 { row-gap: var(--ig-space-8); }
+  .\@md\:ig-gap-y-10 { row-gap: var(--ig-space-10); }
+
+  /* Aspect Ratio */
+  .\@md\:ig-aspect-auto { aspect-ratio: auto; }
+  .\@md\:ig-aspect-square { aspect-ratio: 1 / 1; }
+  .\@md\:ig-aspect-video { aspect-ratio: 16 / 9; }
+  .\@md\:ig-aspect-photo { aspect-ratio: 4 / 3; }
+  .\@md\:ig-aspect-portrait { aspect-ratio: 3 / 4; }
+  .\@md\:ig-aspect-cinema { aspect-ratio: 21 / 9; }
 }
 
-/* Container query: @lg (512px) */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @LG (512px) - Tablet
+   ═══════════════════════════════════════════════════════════════════════════ */
 @container (min-width: 512px) {
-  .\@lg\:ig-hidden { display: none; }
+  /* Display */
   .\@lg\:ig-block { display: block; }
+  .\@lg\:ig-inline-block { display: inline-block; }
+  .\@lg\:ig-inline { display: inline; }
   .\@lg\:ig-flex { display: flex; }
+  .\@lg\:ig-inline-flex { display: inline-flex; }
   .\@lg\:ig-grid { display: grid; }
+  .\@lg\:ig-hidden { display: none; }
+
+  /* Flex Direction */
   .\@lg\:ig-flex-row { flex-direction: row; }
+  .\@lg\:ig-flex-row-reverse { flex-direction: row-reverse; }
   .\@lg\:ig-flex-col { flex-direction: column; }
-  .\@lg\:ig-items-center { align-items: center; }
+  .\@lg\:ig-flex-col-reverse { flex-direction: column-reverse; }
+
+  /* Flex Wrap */
+  .\@lg\:ig-flex-wrap { flex-wrap: wrap; }
+  .\@lg\:ig-flex-nowrap { flex-wrap: nowrap; }
+
+  /* Justify Content */
+  .\@lg\:ig-justify-start { justify-content: flex-start; }
+  .\@lg\:ig-justify-center { justify-content: center; }
+  .\@lg\:ig-justify-end { justify-content: flex-end; }
   .\@lg\:ig-justify-between { justify-content: space-between; }
+  .\@lg\:ig-justify-around { justify-content: space-around; }
+  .\@lg\:ig-justify-evenly { justify-content: space-evenly; }
+
+  /* Align Items */
+  .\@lg\:ig-items-start { align-items: flex-start; }
+  .\@lg\:ig-items-center { align-items: center; }
+  .\@lg\:ig-items-end { align-items: flex-end; }
+  .\@lg\:ig-items-stretch { align-items: stretch; }
+  .\@lg\:ig-items-baseline { align-items: baseline; }
+
+  /* Grid Columns */
+  .\@lg\:ig-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   .\@lg\:ig-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .\@lg\:ig-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .\@lg\:ig-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .\@lg\:ig-grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .\@lg\:ig-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .\@lg\:ig-grid-cols-8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .\@lg\:ig-grid-cols-10 { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+  .\@lg\:ig-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+  /* Col Span */
+  .\@lg\:ig-col-span-1 { grid-column: span 1 / span 1; }
+  .\@lg\:ig-col-span-2 { grid-column: span 2 / span 2; }
+  .\@lg\:ig-col-span-3 { grid-column: span 3 / span 3; }
+  .\@lg\:ig-col-span-4 { grid-column: span 4 / span 4; }
+  .\@lg\:ig-col-span-5 { grid-column: span 5 / span 5; }
+  .\@lg\:ig-col-span-6 { grid-column: span 6 / span 6; }
+  .\@lg\:ig-col-span-7 { grid-column: span 7 / span 7; }
+  .\@lg\:ig-col-span-8 { grid-column: span 8 / span 8; }
+  .\@lg\:ig-col-span-9 { grid-column: span 9 / span 9; }
+  .\@lg\:ig-col-span-10 { grid-column: span 10 / span 10; }
+  .\@lg\:ig-col-span-12 { grid-column: span 12 / span 12; }
+  .\@lg\:ig-col-span-full { grid-column: 1 / -1; }
+
+  /* Gap */
+  .\@lg\:ig-gap-0 { gap: 0; }
+  .\@lg\:ig-gap-2 { gap: var(--ig-space-2); }
+  .\@lg\:ig-gap-4 { gap: var(--ig-space-4); }
   .\@lg\:ig-gap-6 { gap: var(--ig-space-6); }
   .\@lg\:ig-gap-8 { gap: var(--ig-space-8); }
+  .\@lg\:ig-gap-10 { gap: var(--ig-space-10); }
+  .\@lg\:ig-gap-12 { gap: var(--ig-space-12); }
+  .\@lg\:ig-gap-16 { gap: var(--ig-space-16); }
+
+  /* Padding */
+  .\@lg\:ig-p-0 { padding: 0; }
+  .\@lg\:ig-p-4 { padding: var(--ig-space-4); }
   .\@lg\:ig-p-6 { padding: var(--ig-space-6); }
   .\@lg\:ig-p-8 { padding: var(--ig-space-8); }
+  .\@lg\:ig-p-10 { padding: var(--ig-space-10); }
+  .\@lg\:ig-p-12 { padding: var(--ig-space-12); }
+  .\@lg\:ig-p-16 { padding: var(--ig-space-16); }
+  .\@lg\:ig-px-0 { padding-left: 0; padding-right: 0; }
+  .\@lg\:ig-px-4 { padding-left: var(--ig-space-4); padding-right: var(--ig-space-4); }
+  .\@lg\:ig-px-6 { padding-left: var(--ig-space-6); padding-right: var(--ig-space-6); }
+  .\@lg\:ig-px-8 { padding-left: var(--ig-space-8); padding-right: var(--ig-space-8); }
+  .\@lg\:ig-px-12 { padding-left: var(--ig-space-12); padding-right: var(--ig-space-12); }
+  .\@lg\:ig-py-0 { padding-top: 0; padding-bottom: 0; }
+  .\@lg\:ig-py-4 { padding-top: var(--ig-space-4); padding-bottom: var(--ig-space-4); }
+  .\@lg\:ig-py-6 { padding-top: var(--ig-space-6); padding-bottom: var(--ig-space-6); }
+  .\@lg\:ig-py-8 { padding-top: var(--ig-space-8); padding-bottom: var(--ig-space-8); }
+  .\@lg\:ig-py-12 { padding-top: var(--ig-space-12); padding-bottom: var(--ig-space-12); }
+
+  /* Margin */
+  .\@lg\:ig-m-0 { margin: 0; }
+  .\@lg\:ig-m-auto { margin: auto; }
+  .\@lg\:ig-mx-auto { margin-left: auto; margin-right: auto; }
+  .\@lg\:ig-my-auto { margin-top: auto; margin-bottom: auto; }
+  .\@lg\:ig-mt-0 { margin-top: 0; }
+  .\@lg\:ig-mt-4 { margin-top: var(--ig-space-4); }
+  .\@lg\:ig-mt-8 { margin-top: var(--ig-space-8); }
+  .\@lg\:ig-mb-0 { margin-bottom: 0; }
+  .\@lg\:ig-mb-4 { margin-bottom: var(--ig-space-4); }
+  .\@lg\:ig-mb-8 { margin-bottom: var(--ig-space-8); }
+  .\@lg\:ig-mb-12 { margin-bottom: var(--ig-space-12); }
+
+  /* Width */
+  .\@lg\:ig-w-auto { width: auto; }
+  .\@lg\:ig-w-full { width: 100%; }
+  .\@lg\:ig-w-1\/2 { width: 50%; }
+  .\@lg\:ig-w-1\/3 { width: 33.333333%; }
+  .\@lg\:ig-w-2\/3 { width: 66.666667%; }
+  .\@lg\:ig-w-1\/4 { width: 25%; }
+  .\@lg\:ig-w-3\/4 { width: 75%; }
+  .\@lg\:ig-w-1\/5 { width: 20%; }
+  .\@lg\:ig-w-2\/5 { width: 40%; }
+  .\@lg\:ig-w-3\/5 { width: 60%; }
+  .\@lg\:ig-w-4\/5 { width: 80%; }
+
+  /* Max Width */
+  .\@lg\:ig-max-w-none { max-width: none; }
+  .\@lg\:ig-max-w-lg { max-width: var(--ig-container-lg); }
+  .\@lg\:ig-max-w-xl { max-width: var(--ig-container-xl); }
+  .\@lg\:ig-max-w-2xl { max-width: var(--ig-container-2xl); }
+  .\@lg\:ig-max-w-3xl { max-width: var(--ig-container-3xl); }
+  .\@lg\:ig-max-w-4xl { max-width: var(--ig-container-4xl); }
+  .\@lg\:ig-max-w-full { max-width: 100%; }
+
+  /* Text */
+  .\@lg\:ig-text-left { text-align: left; }
+  .\@lg\:ig-text-center { text-align: center; }
+  .\@lg\:ig-text-right { text-align: right; }
+  .\@lg\:ig-text-sm { font-size: var(--ig-text-sm); }
+  .\@lg\:ig-text-base { font-size: var(--ig-text-base); }
+  .\@lg\:ig-text-lg { font-size: var(--ig-text-lg); }
   .\@lg\:ig-text-xl { font-size: var(--ig-text-xl); }
   .\@lg\:ig-text-2xl { font-size: var(--ig-text-2xl); }
+  .\@lg\:ig-text-3xl { font-size: var(--ig-text-3xl); }
+  .\@lg\:ig-text-4xl { font-size: var(--ig-text-4xl); }
+  .\@lg\:ig-text-5xl { font-size: var(--ig-text-5xl); }
+
+  /* Position */
+  .\@lg\:ig-static { position: static; }
+  .\@lg\:ig-relative { position: relative; }
+  .\@lg\:ig-absolute { position: absolute; }
+  .\@lg\:ig-fixed { position: fixed; }
+  .\@lg\:ig-sticky { position: sticky; }
+
+  /* Order */
+  .\@lg\:ig-order-first { order: -9999; }
+  .\@lg\:ig-order-last { order: 9999; }
+  .\@lg\:ig-order-none { order: 0; }
+  .\@lg\:ig-order-1 { order: 1; }
+  .\@lg\:ig-order-2 { order: 2; }
+
+  /* Gap X/Y */
+  .\@lg\:ig-gap-x-4 { column-gap: var(--ig-space-4); }
+  .\@lg\:ig-gap-x-6 { column-gap: var(--ig-space-6); }
+  .\@lg\:ig-gap-x-8 { column-gap: var(--ig-space-8); }
+  .\@lg\:ig-gap-x-10 { column-gap: var(--ig-space-10); }
+  .\@lg\:ig-gap-x-12 { column-gap: var(--ig-space-12); }
+  .\@lg\:ig-gap-y-4 { row-gap: var(--ig-space-4); }
+  .\@lg\:ig-gap-y-6 { row-gap: var(--ig-space-6); }
+  .\@lg\:ig-gap-y-8 { row-gap: var(--ig-space-8); }
+  .\@lg\:ig-gap-y-10 { row-gap: var(--ig-space-10); }
+  .\@lg\:ig-gap-y-12 { row-gap: var(--ig-space-12); }
+
+  /* Aspect Ratio */
+  .\@lg\:ig-aspect-auto { aspect-ratio: auto; }
+  .\@lg\:ig-aspect-square { aspect-ratio: 1 / 1; }
+  .\@lg\:ig-aspect-video { aspect-ratio: 16 / 9; }
+  .\@lg\:ig-aspect-photo { aspect-ratio: 4 / 3; }
+  .\@lg\:ig-aspect-portrait { aspect-ratio: 3 / 4; }
+  .\@lg\:ig-aspect-cinema { aspect-ratio: 21 / 9; }
 }
 
-/* Container query: @xl (576px) */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @XL (576px) - Tablet grande
+   ═══════════════════════════════════════════════════════════════════════════ */
 @container (min-width: 576px) {
-  .\@xl\:ig-hidden { display: none; }
+  /* Display */
   .\@xl\:ig-block { display: block; }
+  .\@xl\:ig-inline-block { display: inline-block; }
+  .\@xl\:ig-inline { display: inline; }
   .\@xl\:ig-flex { display: flex; }
+  .\@xl\:ig-inline-flex { display: inline-flex; }
   .\@xl\:ig-grid { display: grid; }
+  .\@xl\:ig-hidden { display: none; }
+
+  /* Flex Direction */
   .\@xl\:ig-flex-row { flex-direction: row; }
+  .\@xl\:ig-flex-row-reverse { flex-direction: row-reverse; }
+  .\@xl\:ig-flex-col { flex-direction: column; }
+  .\@xl\:ig-flex-col-reverse { flex-direction: column-reverse; }
+
+  /* Flex Wrap */
+  .\@xl\:ig-flex-wrap { flex-wrap: wrap; }
+  .\@xl\:ig-flex-nowrap { flex-wrap: nowrap; }
+
+  /* Justify Content */
+  .\@xl\:ig-justify-start { justify-content: flex-start; }
+  .\@xl\:ig-justify-center { justify-content: center; }
+  .\@xl\:ig-justify-end { justify-content: flex-end; }
+  .\@xl\:ig-justify-between { justify-content: space-between; }
+  .\@xl\:ig-justify-around { justify-content: space-around; }
+  .\@xl\:ig-justify-evenly { justify-content: space-evenly; }
+
+  /* Align Items */
+  .\@xl\:ig-items-start { align-items: flex-start; }
+  .\@xl\:ig-items-center { align-items: center; }
+  .\@xl\:ig-items-end { align-items: flex-end; }
+  .\@xl\:ig-items-stretch { align-items: stretch; }
+  .\@xl\:ig-items-baseline { align-items: baseline; }
+
+  /* Grid Columns */
+  .\@xl\:ig-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  .\@xl\:ig-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .\@xl\:ig-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .\@xl\:ig-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .\@xl\:ig-grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .\@xl\:ig-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .\@xl\:ig-grid-cols-8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .\@xl\:ig-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+  /* Col Span */
+  .\@xl\:ig-col-span-1 { grid-column: span 1 / span 1; }
+  .\@xl\:ig-col-span-2 { grid-column: span 2 / span 2; }
+  .\@xl\:ig-col-span-3 { grid-column: span 3 / span 3; }
+  .\@xl\:ig-col-span-4 { grid-column: span 4 / span 4; }
+  .\@xl\:ig-col-span-6 { grid-column: span 6 / span 6; }
+  .\@xl\:ig-col-span-8 { grid-column: span 8 / span 8; }
+  .\@xl\:ig-col-span-12 { grid-column: span 12 / span 12; }
+  .\@xl\:ig-col-span-full { grid-column: 1 / -1; }
+
+  /* Gap */
+  .\@xl\:ig-gap-0 { gap: 0; }
+  .\@xl\:ig-gap-4 { gap: var(--ig-space-4); }
+  .\@xl\:ig-gap-6 { gap: var(--ig-space-6); }
   .\@xl\:ig-gap-8 { gap: var(--ig-space-8); }
+  .\@xl\:ig-gap-10 { gap: var(--ig-space-10); }
+  .\@xl\:ig-gap-12 { gap: var(--ig-space-12); }
+
+  /* Padding */
+  .\@xl\:ig-p-0 { padding: 0; }
+  .\@xl\:ig-p-6 { padding: var(--ig-space-6); }
   .\@xl\:ig-p-8 { padding: var(--ig-space-8); }
+  .\@xl\:ig-p-10 { padding: var(--ig-space-10); }
+  .\@xl\:ig-p-12 { padding: var(--ig-space-12); }
+  .\@xl\:ig-p-16 { padding: var(--ig-space-16); }
+  .\@xl\:ig-px-0 { padding-left: 0; padding-right: 0; }
+  .\@xl\:ig-px-6 { padding-left: var(--ig-space-6); padding-right: var(--ig-space-6); }
+  .\@xl\:ig-px-8 { padding-left: var(--ig-space-8); padding-right: var(--ig-space-8); }
+  .\@xl\:ig-px-12 { padding-left: var(--ig-space-12); padding-right: var(--ig-space-12); }
+  .\@xl\:ig-py-0 { padding-top: 0; padding-bottom: 0; }
+  .\@xl\:ig-py-6 { padding-top: var(--ig-space-6); padding-bottom: var(--ig-space-6); }
+  .\@xl\:ig-py-8 { padding-top: var(--ig-space-8); padding-bottom: var(--ig-space-8); }
+  .\@xl\:ig-py-12 { padding-top: var(--ig-space-12); padding-bottom: var(--ig-space-12); }
+
+  /* Margin */
+  .\@xl\:ig-m-0 { margin: 0; }
+  .\@xl\:ig-m-auto { margin: auto; }
+  .\@xl\:ig-mx-auto { margin-left: auto; margin-right: auto; }
+  .\@xl\:ig-my-auto { margin-top: auto; margin-bottom: auto; }
+  .\@xl\:ig-mt-0 { margin-top: 0; }
+  .\@xl\:ig-mt-6 { margin-top: var(--ig-space-6); }
+  .\@xl\:ig-mt-8 { margin-top: var(--ig-space-8); }
+  .\@xl\:ig-mb-0 { margin-bottom: 0; }
+  .\@xl\:ig-mb-6 { margin-bottom: var(--ig-space-6); }
+  .\@xl\:ig-mb-8 { margin-bottom: var(--ig-space-8); }
+  .\@xl\:ig-mb-12 { margin-bottom: var(--ig-space-12); }
+
+  /* Width */
+  .\@xl\:ig-w-auto { width: auto; }
+  .\@xl\:ig-w-full { width: 100%; }
+  .\@xl\:ig-w-1\/2 { width: 50%; }
+  .\@xl\:ig-w-1\/3 { width: 33.333333%; }
+  .\@xl\:ig-w-2\/3 { width: 66.666667%; }
+  .\@xl\:ig-w-1\/4 { width: 25%; }
+  .\@xl\:ig-w-3\/4 { width: 75%; }
+  .\@xl\:ig-w-1\/5 { width: 20%; }
+  .\@xl\:ig-w-2\/5 { width: 40%; }
+  .\@xl\:ig-w-3\/5 { width: 60%; }
+  .\@xl\:ig-w-4\/5 { width: 80%; }
+
+  /* Max Width */
+  .\@xl\:ig-max-w-none { max-width: none; }
+  .\@xl\:ig-max-w-xl { max-width: var(--ig-container-xl); }
+  .\@xl\:ig-max-w-2xl { max-width: var(--ig-container-2xl); }
+  .\@xl\:ig-max-w-3xl { max-width: var(--ig-container-3xl); }
+  .\@xl\:ig-max-w-4xl { max-width: var(--ig-container-4xl); }
+  .\@xl\:ig-max-w-5xl { max-width: var(--ig-container-5xl); }
+  .\@xl\:ig-max-w-full { max-width: 100%; }
+
+  /* Text */
+  .\@xl\:ig-text-left { text-align: left; }
+  .\@xl\:ig-text-center { text-align: center; }
+  .\@xl\:ig-text-right { text-align: right; }
+  .\@xl\:ig-text-base { font-size: var(--ig-text-base); }
+  .\@xl\:ig-text-lg { font-size: var(--ig-text-lg); }
+  .\@xl\:ig-text-xl { font-size: var(--ig-text-xl); }
   .\@xl\:ig-text-2xl { font-size: var(--ig-text-2xl); }
   .\@xl\:ig-text-3xl { font-size: var(--ig-text-3xl); }
+  .\@xl\:ig-text-4xl { font-size: var(--ig-text-4xl); }
+  .\@xl\:ig-text-5xl { font-size: var(--ig-text-5xl); }
+  .\@xl\:ig-text-6xl { font-size: var(--ig-text-6xl); }
+
+  /* Position */
+  .\@xl\:ig-static { position: static; }
+  .\@xl\:ig-relative { position: relative; }
+  .\@xl\:ig-absolute { position: absolute; }
+  .\@xl\:ig-fixed { position: fixed; }
+  .\@xl\:ig-sticky { position: sticky; }
+
+  /* Order */
+  .\@xl\:ig-order-first { order: -9999; }
+  .\@xl\:ig-order-last { order: 9999; }
+  .\@xl\:ig-order-none { order: 0; }
+  .\@xl\:ig-order-1 { order: 1; }
+  .\@xl\:ig-order-2 { order: 2; }
+
+  /* Gap X/Y */
+  .\@xl\:ig-gap-x-6 { column-gap: var(--ig-space-6); }
+  .\@xl\:ig-gap-x-8 { column-gap: var(--ig-space-8); }
+  .\@xl\:ig-gap-x-10 { column-gap: var(--ig-space-10); }
+  .\@xl\:ig-gap-x-12 { column-gap: var(--ig-space-12); }
+  .\@xl\:ig-gap-y-6 { row-gap: var(--ig-space-6); }
+  .\@xl\:ig-gap-y-8 { row-gap: var(--ig-space-8); }
+  .\@xl\:ig-gap-y-10 { row-gap: var(--ig-space-10); }
+  .\@xl\:ig-gap-y-12 { row-gap: var(--ig-space-12); }
+
+  /* Aspect Ratio */
+  .\@xl\:ig-aspect-auto { aspect-ratio: auto; }
+  .\@xl\:ig-aspect-square { aspect-ratio: 1 / 1; }
+  .\@xl\:ig-aspect-video { aspect-ratio: 16 / 9; }
+  .\@xl\:ig-aspect-photo { aspect-ratio: 4 / 3; }
+  .\@xl\:ig-aspect-portrait { aspect-ratio: 3 / 4; }
+  .\@xl\:ig-aspect-cinema { aspect-ratio: 21 / 9; }
 }
 
-/* Container query: @2xl (672px) */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @2XL (672px) - Desktop pequeño
+   ═══════════════════════════════════════════════════════════════════════════ */
 @container (min-width: 672px) {
-  .\@2xl\:ig-hidden { display: none; }
+  /* Display */
   .\@2xl\:ig-block { display: block; }
+  .\@2xl\:ig-inline-block { display: inline-block; }
+  .\@2xl\:ig-inline { display: inline; }
   .\@2xl\:ig-flex { display: flex; }
+  .\@2xl\:ig-inline-flex { display: inline-flex; }
   .\@2xl\:ig-grid { display: grid; }
+  .\@2xl\:ig-hidden { display: none; }
+
+  /* Flex Direction */
+  .\@2xl\:ig-flex-row { flex-direction: row; }
+  .\@2xl\:ig-flex-row-reverse { flex-direction: row-reverse; }
+  .\@2xl\:ig-flex-col { flex-direction: column; }
+  .\@2xl\:ig-flex-col-reverse { flex-direction: column-reverse; }
+
+  /* Flex Wrap */
+  .\@2xl\:ig-flex-wrap { flex-wrap: wrap; }
+  .\@2xl\:ig-flex-nowrap { flex-wrap: nowrap; }
+
+  /* Justify Content */
+  .\@2xl\:ig-justify-start { justify-content: flex-start; }
+  .\@2xl\:ig-justify-center { justify-content: center; }
+  .\@2xl\:ig-justify-end { justify-content: flex-end; }
+  .\@2xl\:ig-justify-between { justify-content: space-between; }
+  .\@2xl\:ig-justify-around { justify-content: space-around; }
+  .\@2xl\:ig-justify-evenly { justify-content: space-evenly; }
+
+  /* Align Items */
+  .\@2xl\:ig-items-start { align-items: flex-start; }
+  .\@2xl\:ig-items-center { align-items: center; }
+  .\@2xl\:ig-items-end { align-items: flex-end; }
+  .\@2xl\:ig-items-stretch { align-items: stretch; }
+  .\@2xl\:ig-items-baseline { align-items: baseline; }
+
+  /* Grid Columns */
+  .\@2xl\:ig-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  .\@2xl\:ig-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .\@2xl\:ig-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .\@2xl\:ig-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .\@2xl\:ig-grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .\@2xl\:ig-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .\@2xl\:ig-grid-cols-8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .\@2xl\:ig-grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+  /* Col Span */
+  .\@2xl\:ig-col-span-1 { grid-column: span 1 / span 1; }
+  .\@2xl\:ig-col-span-2 { grid-column: span 2 / span 2; }
+  .\@2xl\:ig-col-span-3 { grid-column: span 3 / span 3; }
+  .\@2xl\:ig-col-span-4 { grid-column: span 4 / span 4; }
+  .\@2xl\:ig-col-span-6 { grid-column: span 6 / span 6; }
+  .\@2xl\:ig-col-span-8 { grid-column: span 8 / span 8; }
+  .\@2xl\:ig-col-span-12 { grid-column: span 12 / span 12; }
+  .\@2xl\:ig-col-span-full { grid-column: 1 / -1; }
+
+  /* Gap */
+  .\@2xl\:ig-gap-0 { gap: 0; }
+  .\@2xl\:ig-gap-6 { gap: var(--ig-space-6); }
+  .\@2xl\:ig-gap-8 { gap: var(--ig-space-8); }
   .\@2xl\:ig-gap-10 { gap: var(--ig-space-10); }
+  .\@2xl\:ig-gap-12 { gap: var(--ig-space-12); }
+  .\@2xl\:ig-gap-16 { gap: var(--ig-space-16); }
+
+  /* Padding */
+  .\@2xl\:ig-p-0 { padding: 0; }
+  .\@2xl\:ig-p-8 { padding: var(--ig-space-8); }
   .\@2xl\:ig-p-10 { padding: var(--ig-space-10); }
+  .\@2xl\:ig-p-12 { padding: var(--ig-space-12); }
+  .\@2xl\:ig-p-16 { padding: var(--ig-space-16); }
+  .\@2xl\:ig-px-0 { padding-left: 0; padding-right: 0; }
+  .\@2xl\:ig-px-8 { padding-left: var(--ig-space-8); padding-right: var(--ig-space-8); }
+  .\@2xl\:ig-px-12 { padding-left: var(--ig-space-12); padding-right: var(--ig-space-12); }
+  .\@2xl\:ig-px-16 { padding-left: var(--ig-space-16); padding-right: var(--ig-space-16); }
+  .\@2xl\:ig-py-0 { padding-top: 0; padding-bottom: 0; }
+  .\@2xl\:ig-py-8 { padding-top: var(--ig-space-8); padding-bottom: var(--ig-space-8); }
+  .\@2xl\:ig-py-12 { padding-top: var(--ig-space-12); padding-bottom: var(--ig-space-12); }
+  .\@2xl\:ig-py-16 { padding-top: var(--ig-space-16); padding-bottom: var(--ig-space-16); }
+
+  /* Margin */
+  .\@2xl\:ig-m-0 { margin: 0; }
+  .\@2xl\:ig-m-auto { margin: auto; }
+  .\@2xl\:ig-mx-auto { margin-left: auto; margin-right: auto; }
+  .\@2xl\:ig-my-auto { margin-top: auto; margin-bottom: auto; }
+  .\@2xl\:ig-mt-0 { margin-top: 0; }
+  .\@2xl\:ig-mt-8 { margin-top: var(--ig-space-8); }
+  .\@2xl\:ig-mt-12 { margin-top: var(--ig-space-12); }
+  .\@2xl\:ig-mb-0 { margin-bottom: 0; }
+  .\@2xl\:ig-mb-8 { margin-bottom: var(--ig-space-8); }
+  .\@2xl\:ig-mb-12 { margin-bottom: var(--ig-space-12); }
+  .\@2xl\:ig-mb-16 { margin-bottom: var(--ig-space-16); }
+
+  /* Width */
+  .\@2xl\:ig-w-auto { width: auto; }
+  .\@2xl\:ig-w-full { width: 100%; }
+  .\@2xl\:ig-w-1\/2 { width: 50%; }
+  .\@2xl\:ig-w-1\/3 { width: 33.333333%; }
+  .\@2xl\:ig-w-2\/3 { width: 66.666667%; }
+  .\@2xl\:ig-w-1\/4 { width: 25%; }
+  .\@2xl\:ig-w-3\/4 { width: 75%; }
+  .\@2xl\:ig-w-1\/5 { width: 20%; }
+  .\@2xl\:ig-w-2\/5 { width: 40%; }
+  .\@2xl\:ig-w-3\/5 { width: 60%; }
+  .\@2xl\:ig-w-4\/5 { width: 80%; }
+
+  /* Max Width */
+  .\@2xl\:ig-max-w-none { max-width: none; }
+  .\@2xl\:ig-max-w-2xl { max-width: var(--ig-container-2xl); }
+  .\@2xl\:ig-max-w-3xl { max-width: var(--ig-container-3xl); }
+  .\@2xl\:ig-max-w-4xl { max-width: var(--ig-container-4xl); }
+  .\@2xl\:ig-max-w-5xl { max-width: var(--ig-container-5xl); }
+  .\@2xl\:ig-max-w-6xl { max-width: var(--ig-container-6xl); }
+  .\@2xl\:ig-max-w-7xl { max-width: var(--ig-container-7xl); }
+  .\@2xl\:ig-max-w-full { max-width: 100%; }
+
+  /* Text */
+  .\@2xl\:ig-text-left { text-align: left; }
+  .\@2xl\:ig-text-center { text-align: center; }
+  .\@2xl\:ig-text-right { text-align: right; }
+  .\@2xl\:ig-text-lg { font-size: var(--ig-text-lg); }
+  .\@2xl\:ig-text-xl { font-size: var(--ig-text-xl); }
+  .\@2xl\:ig-text-2xl { font-size: var(--ig-text-2xl); }
   .\@2xl\:ig-text-3xl { font-size: var(--ig-text-3xl); }
   .\@2xl\:ig-text-4xl { font-size: var(--ig-text-4xl); }
+  .\@2xl\:ig-text-5xl { font-size: var(--ig-text-5xl); }
+  .\@2xl\:ig-text-6xl { font-size: var(--ig-text-6xl); }
+  .\@2xl\:ig-text-7xl { font-size: var(--ig-text-7xl); }
+
+  /* Position */
+  .\@2xl\:ig-static { position: static; }
+  .\@2xl\:ig-relative { position: relative; }
+  .\@2xl\:ig-absolute { position: absolute; }
+  .\@2xl\:ig-fixed { position: fixed; }
+  .\@2xl\:ig-sticky { position: sticky; }
+
+  /* Order */
+  .\@2xl\:ig-order-first { order: -9999; }
+  .\@2xl\:ig-order-last { order: 9999; }
+  .\@2xl\:ig-order-none { order: 0; }
+  .\@2xl\:ig-order-1 { order: 1; }
+  .\@2xl\:ig-order-2 { order: 2; }
+
+  /* Gap X/Y */
+  .\@2xl\:ig-gap-x-8 { column-gap: var(--ig-space-8); }
+  .\@2xl\:ig-gap-x-10 { column-gap: var(--ig-space-10); }
+  .\@2xl\:ig-gap-x-12 { column-gap: var(--ig-space-12); }
+  .\@2xl\:ig-gap-x-16 { column-gap: var(--ig-space-16); }
+  .\@2xl\:ig-gap-y-8 { row-gap: var(--ig-space-8); }
+  .\@2xl\:ig-gap-y-10 { row-gap: var(--ig-space-10); }
+  .\@2xl\:ig-gap-y-12 { row-gap: var(--ig-space-12); }
+  .\@2xl\:ig-gap-y-16 { row-gap: var(--ig-space-16); }
+
+  /* Aspect Ratio */
+  .\@2xl\:ig-aspect-auto { aspect-ratio: auto; }
+  .\@2xl\:ig-aspect-square { aspect-ratio: 1 / 1; }
+  .\@2xl\:ig-aspect-video { aspect-ratio: 16 / 9; }
+  .\@2xl\:ig-aspect-photo { aspect-ratio: 4 / 3; }
+  .\@2xl\:ig-aspect-portrait { aspect-ratio: 3 / 4; }
+  .\@2xl\:ig-aspect-cinema { aspect-ratio: 21 / 9; }
+}
+
+/*
+═══════════════════════════════════════════════════════════════════════════════
+MEJORAS DE ACCESIBILIDAD: prefers-contrast EXPANDIDO
+═══════════════════════════════════════════════════════════════════════════════
+
+QUÉ ES: Estilos adicionales para usuarios que han activado el modo de alto
+contraste en su sistema operativo. Esto mejora la legibilidad para personas
+con baja visión.
+
+CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
+"Aumentar contraste" en Windows, macOS o Linux.
+*/
+
+@media (prefers-contrast: more) {
+  :root {
+    /* Bordes más visibles */
+    --ig-border-default: currentColor;
+    --ig-border-subtle: currentColor;
+    
+    /* Sombras con bordes sólidos en lugar de difuminados */
+    --ig-shadow-sm: 0 1px 0 0 currentColor;
+    --ig-shadow: 0 2px 0 0 currentColor;
+    --ig-shadow-md: 0 3px 0 0 currentColor;
+    --ig-shadow-lg: 0 4px 0 0 currentColor;
+  }
+
+  /* Botones: bordes más gruesos y visibles */
+  .ig-btn {
+    border-width: 2px;
+    border-color: currentColor;
+  }
+
+  .ig-btn:focus-visible {
+    outline: 3px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  /* Inputs y formularios */
+  .ig-input,
+  .ig-select,
+  .ig-textarea {
+    border-width: 2px;
+    border-color: currentColor;
+  }
+
+  .ig-input:focus,
+  .ig-select:focus,
+  .ig-textarea:focus {
+    outline: 3px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  /* Cards y contenedores */
+  .ig-card {
+    border-width: 2px;
+    border-color: currentColor;
+  }
+
+  /* Alerts */
+  .ig-alert {
+    border-width: 2px;
+    border-left-width: 4px;
+  }
+
+  /* Badges */
+  .ig-badge {
+    border: 1px solid currentColor;
+  }
+
+  /* Checkboxes y radios */
+  .ig-checkbox-mark,
+  .ig-radio-mark {
+    border-width: 2px;
+  }
+
+  /* Toggle/Switch */
+  .ig-switch-track {
+    border: 2px solid currentColor;
+  }
+
+  /* Progress */
+  .ig-progress {
+    border: 1px solid currentColor;
+  }
+
+  /* Tabs */
+  .ig-tab.ig-tab-active {
+    border-bottom-width: 3px;
+  }
+
+  /* Links más visibles */
+  a:not(.ig-btn) {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Tooltips */
+  .ig-tooltip {
+    border: 1px solid currentColor;
+  }
+
+  /* Modal */
+  .ig-modal {
+    border: 2px solid currentColor;
+  }
+
+  /* Dropdown */
+  .ig-dropdown-menu {
+    border: 2px solid currentColor;
+  }
+
+  /* Table */
+  .ig-table th,
+  .ig-table td {
+    border-width: 1px;
+    border-color: currentColor;
+  }
+
+  /* Toast */
+  .ig-toast {
+    border: 2px solid currentColor;
+  }
+
+  /* Divider más visible */
+  .ig-divider {
+    border-color: currentColor;
+    border-width: 2px;
+  }
+}
+
+/* Forced colors / Windows High Contrast Mode - EXPANDIDO */
+@media (forced-colors: active) {
+  /* Botones */
+  .ig-btn {
+    border: 2px solid currentColor;
+    forced-color-adjust: none;
+  }
+
+  .ig-btn:hover {
+    border-color: Highlight;
+  }
+
+  .ig-btn:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  /* Inputs */
+  .ig-input,
+  .ig-select,
+  .ig-textarea {
+    border: 2px solid currentColor;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .ig-input:focus,
+  .ig-select:focus,
+  .ig-textarea:focus {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .ig-input:disabled,
+  .ig-select:disabled,
+  .ig-textarea:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  /* Focus global */
+  :focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* Links */
+  a {
+    color: LinkText;
+  }
+
+  a:visited {
+    color: VisitedText;
+  }
+
+  /* Cards */
+  .ig-card {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  /* Alerts */
+  .ig-alert {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  /* Badges */
+  .ig-badge {
+    border: 1px solid currentColor;
+    background: Canvas;
+  }
+
+  /* Checkbox y Radio */
+  .ig-checkbox-mark,
+  .ig-radio-mark {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  .ig-checkbox input[type="checkbox"]:checked + .ig-checkbox-mark,
+  .ig-radio input[type="radio"]:checked + .ig-radio-mark {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  /* Toggle */
+  .ig-switch-track {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  .ig-switch input[type="checkbox"]:checked + .ig-switch-track {
+    background: Highlight;
+  }
+
+  /* Progress */
+  .ig-progress {
+    border: 1px solid currentColor;
+    background: Canvas;
+  }
+
+  .ig-progress-bar {
+    background: Highlight;
+  }
+
+  /* Table */
+  .ig-table {
+    border: 2px solid currentColor;
+  }
+
+  .ig-table th,
+  .ig-table td {
+    border: 1px solid currentColor;
+  }
+
+  .ig-table th {
+    background: Canvas;
+  }
+
+  /* Modal */
+  .ig-modal-backdrop {
+    background: rgba(0, 0, 0, 0.8);
+  }
+
+  .ig-modal {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  /* Dropdown */
+  .ig-dropdown-menu {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  .ig-dropdown-item:hover {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* Toast */
+  .ig-toast {
+    border: 2px solid currentColor;
+    background: Canvas;
+  }
+
+  /* Tabs */
+  .ig-tab {
+    border: 1px solid transparent;
+  }
+
+  .ig-tab.ig-tab-active {
+    border-color: currentColor;
+    border-bottom-color: Highlight;
+  }
+
+  /* Sidebar */
+  .ig-sidebar {
+    border-right: 2px solid currentColor;
+  }
+
+  .ig-sidebar-item:hover {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* Navbar */
+  .ig-navbar {
+    border-bottom: 2px solid currentColor;
+  }
 }
 
 
