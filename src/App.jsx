@@ -28,6 +28,11 @@ function App() {
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
       </p>
+      <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+        <a href="/storybook" className="ig-btn ig-btn-brand">
+          Ver Storybook
+        </a>
+      </div>
     </>
   )
 }
