@@ -65240,7 +65240,30 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .ig-group:hover .ig-group-hover\:ig-forced-colors-none {
   forced-color-adjust: none;
 }
+/* ============================================
+   HOVER WIDTH UTILITIES
+   ============================================ */
 
+.hover\:ig-w-full:hover { width: 100%; }
+.hover\:ig-w-half:hover { width: 50%; }
+.hover\:ig-w-3quarters:hover { width: 75%; }
+.ig-group:hover .group-hover\:ig-w-full { width: 100%; }
+
+/* ============================================
+   INPUT FOCUS OVERRIDES (mayor especificidad)
+   ============================================ */
+
+.ig-input.focus\:ig-ring-brand:focus { 
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-vitreus) 50%, transparent) !important; 
+}
+
+.ig-input.focus\:ig-border-brand:focus { 
+  border-color: var(--ig-vitreus) !important; 
+}
+
+.ig-input.focus\:ig-scale-102:focus { 
+  transform: scale(1.02); 
+}
 /*
 ═══════════════════════════════════════════════════════════════════════════════
 PARTE 5: COMPONENTES
