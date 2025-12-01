@@ -170,15 +170,15 @@ export const AnimacionShimmer = () => (
     </p>
 
     <div className="ig-space-y-4 ig-max-w-md">
-      <div className="ig-h-4 ig-bg-muted ig-rounded ig-animate-shimmer"></div>
-      <div className="ig-h-4 ig-bg-muted ig-rounded ig-animate-shimmer ig-w-3/4"></div>
-      <div className="ig-h-4 ig-bg-muted ig-rounded ig-animate-shimmer ig-w-1/2"></div>
+      <div className="ig-skeleton ig-h-4"></div>
+      <div className="ig-skeleton ig-h-4 ig-w-3/4"></div>
+      <div className="ig-skeleton ig-h-4 ig-w-1/2"></div>
 
       <div className="ig-flex ig-gap-4 ig-mt-6">
-        <div className="ig-w-12 ig-h-12 ig-bg-muted ig-rounded-full ig-animate-shimmer"></div>
+        <div className="ig-skeleton ig-w-12 ig-h-12 ig-rounded-full"></div>
         <div className="ig-flex-1 ig-space-y-2">
-          <div className="ig-h-4 ig-bg-muted ig-rounded ig-animate-shimmer"></div>
-          <div className="ig-h-3 ig-bg-muted ig-rounded ig-animate-shimmer ig-w-2/3"></div>
+          <div className="ig-skeleton ig-h-4"></div>
+          <div className="ig-skeleton ig-h-3 ig-w-2/3"></div>
         </div>
       </div>
     </div>
