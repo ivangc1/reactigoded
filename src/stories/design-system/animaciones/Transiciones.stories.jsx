@@ -197,8 +197,7 @@ export const TimingFunctions = () => (
           <code className="ig-text-sm ig-text-muted" style={{ width: '7rem' }}>{nombre}</code>
           <div className="ig-group ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden ig-cursor-pointer">
             <div
-              style={{ transitionDuration: '2s' }}
-              className={`ig-w-8 ig-h-full ig-bg-brand ig-rounded ig-transition-all ${clase} group-hover:ig-w-full`}
+              className={`ig-w-8 ig-h-full ig-bg-brand ig-rounded ig-transition-all ig-duration-2500 ${clase} group-hover:ig-w-full`}
             ></div>
           </div>
         </div>
