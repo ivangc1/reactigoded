@@ -5,6 +5,7 @@ export const Tooltip = forwardRef(function Tooltip(
   {
     content,
     position = 'top',
+    variant,
     className = '',
     children,
     ...props
@@ -14,6 +15,7 @@ export const Tooltip = forwardRef(function Tooltip(
   const classes = [
     'ig-tooltip',
     position !== 'top' && `ig-tooltip-${position}`,
+    variant && `ig-tooltip-${variant}`,
     className
   ].filter(Boolean).join(' ');
 
@@ -32,6 +34,7 @@ export const Tooltip = forwardRef(function Tooltip(
 Tooltip.propTypes = {
   content: PropTypes.string.isRequired,
   position: PropTypes.oneOf(['top', 'bottom', 'left', 'right']),
+  variant: PropTypes.oneOf(['brand', 'secondary', 'success', 'warning', 'danger']),
   className: PropTypes.string,
   children: PropTypes.node.isRequired,
 };

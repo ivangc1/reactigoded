@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 
 export const Button = forwardRef(function Button(
   {
-    variant = 'primary',
+    variant = 'brand',
     size,
     loading = false,
     block = false,
@@ -39,8 +39,8 @@ export const Button = forwardRef(function Button(
 
 Button.propTypes = {
   variant: PropTypes.oneOf([
-    'primary', 'accent', 'tellus', 'liminal', 'senum', 'vesper',
-    'outline', 'ghost', 'link', 'success', 'warning', 'danger'
+    'brand', 'secondary', 'success', 'warning', 'danger', 'info',
+    'outline', 'ghost', 'link'
   ]),
   size: PropTypes.oneOf(['xs', 'sm', 'lg', 'xl']),
   loading: PropTypes.bool,

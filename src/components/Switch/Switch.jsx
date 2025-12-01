@@ -5,14 +5,21 @@ export const Switch = forwardRef(function Switch(
   {
     checked,
     disabled = false,
+    variant = 'brand',
     className = '',
     children,
     ...props
   },
   ref
 ) {
+  const classes = [
+    'ig-switch',
+    `ig-switch-${variant}`,
+    className
+  ].filter(Boolean).join(' ');
+
   return (
-    <label className={`ig-switch ${className}`.trim()}>
+    <label className={classes}>
       <input
         ref={ref}
         type="checkbox"
@@ -29,6 +36,7 @@ export const Switch = forwardRef(function Switch(
 Switch.propTypes = {
   checked: PropTypes.bool,
   disabled: PropTypes.bool,
+  variant: PropTypes.oneOf(['brand', 'secondary', 'success', 'warning', 'danger', 'info']),
   className: PropTypes.string,
   children: PropTypes.node,
 };

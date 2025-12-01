@@ -43,7 +43,7 @@ export const Alert = forwardRef(function Alert(
 });
 
 Alert.propTypes = {
-  variant: PropTypes.oneOf(['success', 'warning', 'danger', 'info', 'primary', 'accent', 'neutral']),
+  variant: PropTypes.oneOf(['success', 'warning', 'danger', 'info', 'brand', 'secondary']),
   icon: PropTypes.node,
   title: PropTypes.node,
   description: PropTypes.node,
