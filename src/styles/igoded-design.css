@@ -2292,7 +2292,7 @@ Ejemplo: --ig-alert-padding o --ig-modal-radius.
 
   /* === SKELETON === */
   --ig-skeleton-base: var(--ig-neutral-800);
-  --ig-skeleton-shine: var(--ig-neutral-700);
+  --ig-skeleton-shine: var(--ig-neutral-600);
 
   /* === SWITCH === */
   --ig-switch-w: 2.75rem;
@@ -2385,7 +2385,7 @@ Ejemplo: --ig-alert-padding o --ig-modal-radius.
   --ig-spinner-track: var(--ig-neutral-700);
   --ig-progress-track: var(--ig-neutral-700);
   --ig-skeleton-base: var(--ig-neutral-800);
-  --ig-skeleton-shine: var(--ig-neutral-700);
+  --ig-skeleton-shine: var(--ig-neutral-600);
   --ig-switch-bg: var(--ig-neutral-600);
 }
 
