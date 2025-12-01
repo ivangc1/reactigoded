@@ -1,23 +1,37 @@
 import React from 'react';
+import { Tabs, TabsList, Tab, TabsContent, TabPanel } from '../../../components/Tabs/Tabs';
+import { Badge } from '../../../components/Badge/Badge';
 
 export default {
   title: 'Componentes/Tabs',
+  component: Tabs,
+  argTypes: {
+    color: {
+      control: 'select',
+      options: ['brand', 'secondary', 'success', 'warning', 'danger', 'info'],
+    },
+    variant: {
+      control: 'select',
+      options: [undefined, 'pills'],
+    },
+    vertical: { control: 'boolean' },
+  },
 };
 
 export const TabsBasico = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tabs Básico</h2>
 
-    <div className="ig-tabs">
-      <div className="ig-tabs-list">
-        <button className="ig-tab ig-tab-active">Perfil</button>
-        <button className="ig-tab">Configuración</button>
-        <button className="ig-tab">Notificaciones</button>
-        <button className="ig-tab" disabled>Deshabilitado</button>
-      </div>
+    <Tabs defaultValue="perfil" color="brand">
+      <TabsList>
+        <Tab value="perfil">Perfil</Tab>
+        <Tab value="config">Configuración</Tab>
+        <Tab value="notif">Notificaciones</Tab>
+        <Tab value="disabled" disabled>Deshabilitado</Tab>
+      </TabsList>
 
-      <div className="ig-tabs-content">
-        <div className="ig-tab-panel ig-tab-panel-active">
+      <TabsContent>
+        <TabPanel value="perfil">
           <div className="ig-p-4">
             <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Contenido del Perfil</h3>
             <p className="ig-text-body">
@@ -25,9 +39,21 @@ export const TabsBasico = () => (
               tu información personal.
             </p>
           </div>
-        </div>
-      </div>
-    </div>
+        </TabPanel>
+        <TabPanel value="config">
+          <div className="ig-p-4">
+            <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Configuración</h3>
+            <p className="ig-text-body">Ajusta la configuración de tu cuenta.</p>
+          </div>
+        </TabPanel>
+        <TabPanel value="notif">
+          <div className="ig-p-4">
+            <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Notificaciones</h3>
+            <p className="ig-text-body">Gestiona tus preferencias de notificación.</p>
+          </div>
+        </TabPanel>
+      </TabsContent>
+    </Tabs>
   </div>
 );
 
@@ -36,60 +62,18 @@ export const VariantesDeColor = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Variantes de Color</h2>
 
     <div className="ig-space-y-8">
-      <div>
-        <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Brand (vitreus)</span>
-        <div className="ig-tabs ig-tabs-brand">
-          <div className="ig-tabs-list">
-            <button className="ig-tab ig-tab-active">Tab 1</button>
-            <button className="ig-tab">Tab 2</button>
-            <button className="ig-tab">Tab 3</button>
-          </div>
+      {['brand', 'secondary', 'success', 'warning', 'danger', 'info'].map((color) => (
+        <div key={color}>
+          <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">{color}</span>
+          <Tabs defaultValue="tab1" color={color}>
+            <TabsList>
+              <Tab value="tab1">Tab 1</Tab>
+              <Tab value="tab2">Tab 2</Tab>
+              <Tab value="tab3">Tab 3</Tab>
+            </TabsList>
+          </Tabs>
         </div>
-      </div>
-
-      <div>
-        <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Secondary (axis)</span>
-        <div className="ig-tabs ig-tabs-secondary">
-          <div className="ig-tabs-list">
-            <button className="ig-tab ig-tab-active">Tab 1</button>
-            <button className="ig-tab">Tab 2</button>
-            <button className="ig-tab">Tab 3</button>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Success (laurus)</span>
-        <div className="ig-tabs ig-tabs-success">
-          <div className="ig-tabs-list">
-            <button className="ig-tab ig-tab-active">Tab 1</button>
-            <button className="ig-tab">Tab 2</button>
-            <button className="ig-tab">Tab 3</button>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Warning (rutilus)</span>
-        <div className="ig-tabs ig-tabs-warning">
-          <div className="ig-tabs-list">
-            <button className="ig-tab ig-tab-active">Tab 1</button>
-            <button className="ig-tab">Tab 2</button>
-            <button className="ig-tab">Tab 3</button>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Danger (malum)</span>
-        <div className="ig-tabs ig-tabs-danger">
-          <div className="ig-tabs-list">
-            <button className="ig-tab ig-tab-active">Tab 1</button>
-            <button className="ig-tab">Tab 2</button>
-            <button className="ig-tab">Tab 3</button>
-          </div>
-        </div>
-      </div>
+      ))}
     </div>
   </div>
 );
@@ -98,35 +82,35 @@ export const TabsPills = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tabs Pills</h2>
     <p className="ig-text-body ig-mb-6">
-      Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-tabs-pills</code> para tabs con fondo.
+      Usa <code className="ig-bg-muted ig-px-1 ig-rounded">variant="pills"</code> para tabs con fondo.
     </p>
 
     <div className="ig-space-y-8">
-      <div className="ig-tabs ig-tabs-pills ig-tabs-brand">
-        <div className="ig-tabs-list">
-          <button className="ig-tab ig-tab-active">General</button>
-          <button className="ig-tab">Seguridad</button>
-          <button className="ig-tab">Privacidad</button>
-          <button className="ig-tab">Avanzado</button>
-        </div>
-      </div>
+      <Tabs defaultValue="general" variant="pills" color="brand">
+        <TabsList>
+          <Tab value="general">General</Tab>
+          <Tab value="seguridad">Seguridad</Tab>
+          <Tab value="privacidad">Privacidad</Tab>
+          <Tab value="avanzado">Avanzado</Tab>
+        </TabsList>
+      </Tabs>
 
-      <div className="ig-tabs ig-tabs-pills ig-tabs-secondary">
-        <div className="ig-tabs-list">
-          <button className="ig-tab ig-tab-active">Todos</button>
-          <button className="ig-tab">Activos</button>
-          <button className="ig-tab">Pendientes</button>
-          <button className="ig-tab">Archivados</button>
-        </div>
-      </div>
+      <Tabs defaultValue="todos" variant="pills" color="secondary">
+        <TabsList>
+          <Tab value="todos">Todos</Tab>
+          <Tab value="activos">Activos</Tab>
+          <Tab value="pendientes">Pendientes</Tab>
+          <Tab value="archivados">Archivados</Tab>
+        </TabsList>
+      </Tabs>
 
-      <div className="ig-tabs ig-tabs-pills ig-tabs-success">
-        <div className="ig-tabs-list">
-          <button className="ig-tab ig-tab-active">Aprobados</button>
-          <button className="ig-tab">En revisión</button>
-          <button className="ig-tab">Rechazados</button>
-        </div>
-      </div>
+      <Tabs defaultValue="aprobados" variant="pills" color="success">
+        <TabsList>
+          <Tab value="aprobados">Aprobados</Tab>
+          <Tab value="revision">En revisión</Tab>
+          <Tab value="rechazados">Rechazados</Tab>
+        </TabsList>
+      </Tabs>
     </div>
   </div>
 );
@@ -135,17 +119,17 @@ export const TabsVerticales = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tabs Verticales</h2>
 
-    <div className="ig-tabs ig-tabs-vertical ig-tabs-brand">
-      <div className="ig-tabs-list">
-        <button className="ig-tab ig-tab-active">General</button>
-        <button className="ig-tab">Cuenta</button>
-        <button className="ig-tab">Seguridad</button>
-        <button className="ig-tab">Notificaciones</button>
-        <button className="ig-tab">Integraciones</button>
-      </div>
+    <Tabs defaultValue="general" vertical color="brand">
+      <TabsList>
+        <Tab value="general">General</Tab>
+        <Tab value="cuenta">Cuenta</Tab>
+        <Tab value="seguridad">Seguridad</Tab>
+        <Tab value="notificaciones">Notificaciones</Tab>
+        <Tab value="integraciones">Integraciones</Tab>
+      </TabsList>
 
-      <div className="ig-tabs-content ig-flex-1">
-        <div className="ig-tab-panel ig-tab-panel-active">
+      <TabsContent className="ig-flex-1">
+        <TabPanel value="general">
           <div className="ig-p-4">
             <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Configuración General</h3>
             <p className="ig-text-body ig-mb-4">
@@ -169,9 +153,33 @@ export const TabsVerticales = () => (
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </TabPanel>
+        <TabPanel value="cuenta">
+          <div className="ig-p-4">
+            <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Cuenta</h3>
+            <p className="ig-text-body">Gestiona la configuración de tu cuenta.</p>
+          </div>
+        </TabPanel>
+        <TabPanel value="seguridad">
+          <div className="ig-p-4">
+            <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Seguridad</h3>
+            <p className="ig-text-body">Configura opciones de seguridad.</p>
+          </div>
+        </TabPanel>
+        <TabPanel value="notificaciones">
+          <div className="ig-p-4">
+            <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Notificaciones</h3>
+            <p className="ig-text-body">Gestiona tus preferencias de notificación.</p>
+          </div>
+        </TabPanel>
+        <TabPanel value="integraciones">
+          <div className="ig-p-4">
+            <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Integraciones</h3>
+            <p className="ig-text-body">Conecta con otras aplicaciones.</p>
+          </div>
+        </TabPanel>
+      </TabsContent>
+    </Tabs>
   </div>
 );
 
@@ -179,33 +187,33 @@ export const TabsConIconos = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tabs con Iconos</h2>
 
-    <div className="ig-tabs ig-tabs-brand">
-      <div className="ig-tabs-list">
-        <button className="ig-tab ig-tab-active">
+    <Tabs defaultValue="inicio" color="brand">
+      <TabsList>
+        <Tab value="inicio">
           <span className="ig-mr-2">🏠</span> Inicio
-        </button>
-        <button className="ig-tab">
+        </Tab>
+        <Tab value="perfil">
           <span className="ig-mr-2">👤</span> Perfil
-        </button>
-        <button className="ig-tab">
+        </Tab>
+        <Tab value="ajustes">
           <span className="ig-mr-2">⚙️</span> Ajustes
-        </button>
-        <button className="ig-tab">
+        </Tab>
+        <Tab value="stats">
           <span className="ig-mr-2">📊</span> Estadísticas
-        </button>
-      </div>
-    </div>
+        </Tab>
+      </TabsList>
+    </Tabs>
 
     <div className="ig-mt-8">
       <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Solo iconos</span>
-      <div className="ig-tabs ig-tabs-pills ig-tabs-brand">
-        <div className="ig-tabs-list">
-          <button className="ig-tab ig-tab-active" title="Inicio">🏠</button>
-          <button className="ig-tab" title="Perfil">👤</button>
-          <button className="ig-tab" title="Ajustes">⚙️</button>
-          <button className="ig-tab" title="Estadísticas">📊</button>
-        </div>
-      </div>
+      <Tabs defaultValue="inicio" variant="pills" color="brand">
+        <TabsList>
+          <Tab value="inicio" title="Inicio">🏠</Tab>
+          <Tab value="perfil" title="Perfil">👤</Tab>
+          <Tab value="ajustes" title="Ajustes">⚙️</Tab>
+          <Tab value="stats" title="Estadísticas">📊</Tab>
+        </TabsList>
+      </Tabs>
     </div>
   </div>
 );
@@ -214,25 +222,25 @@ export const TabsConBadge = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tabs con Badge</h2>
 
-    <div className="ig-tabs ig-tabs-brand">
-      <div className="ig-tabs-list">
-        <button className="ig-tab ig-tab-active">
+    <Tabs defaultValue="mensajes" color="brand">
+      <TabsList>
+        <Tab value="mensajes">
           Mensajes
-          <span className="ig-badge ig-badge-danger ig-badge-pill ig-ml-2">5</span>
-        </button>
-        <button className="ig-tab">
+          <Badge variant="danger" pill className="ig-ml-2">5</Badge>
+        </Tab>
+        <Tab value="notif">
           Notificaciones
-          <span className="ig-badge ig-badge-warning ig-badge-pill ig-ml-2">12</span>
-        </button>
-        <button className="ig-tab">
+          <Badge variant="warning" pill className="ig-ml-2">12</Badge>
+        </Tab>
+        <Tab value="tareas">
           Tareas
-          <span className="ig-badge ig-badge-success ig-badge-pill ig-ml-2">3</span>
-        </button>
-        <button className="ig-tab">
+          <Badge variant="success" pill className="ig-ml-2">3</Badge>
+        </Tab>
+        <Tab value="archivados">
           Archivados
-        </button>
-      </div>
-    </div>
+        </Tab>
+      </TabsList>
+    </Tabs>
   </div>
 );
 
@@ -241,15 +249,15 @@ export const EjemploCompleto = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Ejemplo Completo</h2>
 
     <div className="ig-bg-surface ig-rounded-lg ig-border ig-border-default">
-      <div className="ig-tabs ig-tabs-brand">
-        <div className="ig-tabs-list ig-px-4 ig-pt-4">
-          <button className="ig-tab ig-tab-active">Descripción</button>
-          <button className="ig-tab">Especificaciones</button>
-          <button className="ig-tab">Reseñas (24)</button>
-        </div>
+      <Tabs defaultValue="descripcion" color="brand">
+        <TabsList className="ig-px-4 ig-pt-4">
+          <Tab value="descripcion">Descripción</Tab>
+          <Tab value="specs">Especificaciones</Tab>
+          <Tab value="reviews">Reseñas (24)</Tab>
+        </TabsList>
 
-        <div className="ig-tabs-content">
-          <div className="ig-tab-panel ig-tab-panel-active">
+        <TabsContent>
+          <TabPanel value="descripcion">
             <div className="ig-p-4">
               <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Descripción del Producto</h3>
               <p className="ig-text-body ig-mb-4">
@@ -265,9 +273,21 @@ export const EjemploCompleto = () => (
                 <li>Envío gratuito</li>
               </ul>
             </div>
-          </div>
-        </div>
-      </div>
+          </TabPanel>
+          <TabPanel value="specs">
+            <div className="ig-p-4">
+              <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Especificaciones</h3>
+              <p className="ig-text-body">Detalles técnicos del producto...</p>
+            </div>
+          </TabPanel>
+          <TabPanel value="reviews">
+            <div className="ig-p-4">
+              <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Reseñas de clientes</h3>
+              <p className="ig-text-body">24 reseñas verificadas...</p>
+            </div>
+          </TabPanel>
+        </TabsContent>
+      </Tabs>
     </div>
   </div>
 );
@@ -279,16 +299,45 @@ export const TabsResponsive = () => (
       En pantallas pequeñas, los tabs pueden hacer scroll horizontal.
     </p>
 
-    <div className="ig-tabs ig-tabs-brand">
-      <div className="ig-tabs-list ig-overflow-x-auto ig-flex-nowrap">
-        <button className="ig-tab ig-tab-active ig-whitespace-nowrap">Dashboard</button>
-        <button className="ig-tab ig-whitespace-nowrap">Usuarios</button>
-        <button className="ig-tab ig-whitespace-nowrap">Productos</button>
-        <button className="ig-tab ig-whitespace-nowrap">Pedidos</button>
-        <button className="ig-tab ig-whitespace-nowrap">Estadísticas</button>
-        <button className="ig-tab ig-whitespace-nowrap">Configuración</button>
-        <button className="ig-tab ig-whitespace-nowrap">Ayuda</button>
-      </div>
-    </div>
+    <Tabs defaultValue="dashboard" color="brand">
+      <TabsList className="ig-overflow-x-auto ig-flex-nowrap">
+        <Tab value="dashboard" className="ig-whitespace-nowrap">Dashboard</Tab>
+        <Tab value="usuarios" className="ig-whitespace-nowrap">Usuarios</Tab>
+        <Tab value="productos" className="ig-whitespace-nowrap">Productos</Tab>
+        <Tab value="pedidos" className="ig-whitespace-nowrap">Pedidos</Tab>
+        <Tab value="stats" className="ig-whitespace-nowrap">Estadísticas</Tab>
+        <Tab value="config" className="ig-whitespace-nowrap">Configuración</Tab>
+        <Tab value="ayuda" className="ig-whitespace-nowrap">Ayuda</Tab>
+      </TabsList>
+    </Tabs>
   </div>
 );
+
+export const Playground = {
+  args: {
+    defaultValue: 'tab1',
+    color: 'brand',
+    variant: undefined,
+    vertical: false,
+    children: (
+      <>
+        <TabsList>
+          <Tab value="tab1">Tab 1</Tab>
+          <Tab value="tab2">Tab 2</Tab>
+          <Tab value="tab3">Tab 3</Tab>
+        </TabsList>
+        <TabsContent>
+          <TabPanel value="tab1">
+            <div className="ig-p-4">Contenido del Tab 1</div>
+          </TabPanel>
+          <TabPanel value="tab2">
+            <div className="ig-p-4">Contenido del Tab 2</div>
+          </TabPanel>
+          <TabPanel value="tab3">
+            <div className="ig-p-4">Contenido del Tab 3</div>
+          </TabPanel>
+        </TabsContent>
+      </>
+    ),
+  },
+};

@@ -9,6 +9,7 @@ export const Tabs = forwardRef(function Tabs(
     value,
     onChange,
     variant,
+    color = 'brand',
     vertical = false,
     className = '',
     children,
@@ -29,6 +30,7 @@ export const Tabs = forwardRef(function Tabs(
   const classes = [
     'ig-tabs',
     variant && `ig-tabs-${variant}`,
+    `ig-tabs-${color}`,
     vertical && 'ig-tabs-vertical',
     className
   ].filter(Boolean).join(' ');
@@ -46,7 +48,8 @@ Tabs.propTypes = {
   defaultValue: PropTypes.string,
   value: PropTypes.string,
   onChange: PropTypes.func,
-  variant: PropTypes.oneOf(['bordered', 'pills']),
+  variant: PropTypes.oneOf(['pills']),
+  color: PropTypes.oneOf(['brand', 'secondary', 'success', 'warning', 'danger', 'info']),
   vertical: PropTypes.bool,
   className: PropTypes.string,
   children: PropTypes.node,

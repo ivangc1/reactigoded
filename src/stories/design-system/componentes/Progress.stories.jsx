@@ -1,7 +1,20 @@
 import React from 'react';
+import { Progress } from '../../../components/Progress/Progress';
+import { Button } from '../../../components/Button/Button';
 
 export default {
   title: 'Componentes/Progress',
+  component: Progress,
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['brand', 'secondary', 'success', 'warning', 'danger', 'info'],
+    },
+    size: {
+      control: 'select',
+      options: ['sm', undefined, 'lg'],
+    },
+  },
 };
 
 export const ProgressBasico = () => (
@@ -14,9 +27,7 @@ export const ProgressBasico = () => (
           <span className="ig-text-sm ig-text-body">Progreso</span>
           <span className="ig-text-sm ig-text-muted">75%</span>
         </div>
-        <div className="ig-progress ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '75%' }}></div>
-        </div>
+        <Progress value={75} variant="brand" />
       </div>
 
       <div>
@@ -24,9 +35,7 @@ export const ProgressBasico = () => (
           <span className="ig-text-sm ig-text-body">Descarga</span>
           <span className="ig-text-sm ig-text-muted">45%</span>
         </div>
-        <div className="ig-progress ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '45%' }}></div>
-        </div>
+        <Progress value={45} variant="brand" />
       </div>
 
       <div>
@@ -34,9 +43,7 @@ export const ProgressBasico = () => (
           <span className="ig-text-sm ig-text-body">Completado</span>
           <span className="ig-text-sm ig-text-muted">100%</span>
         </div>
-        <div className="ig-progress ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '100%' }}></div>
-        </div>
+        <Progress value={100} variant="brand" />
       </div>
     </div>
   </div>
@@ -49,44 +56,32 @@ export const VariantesDeColor = () => (
     <div className="ig-space-y-4 ig-max-w-lg">
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Brand (vitreus)</span>
-        <div className="ig-progress ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '60%' }}></div>
-        </div>
+        <Progress value={60} variant="brand" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Secondary (axis)</span>
-        <div className="ig-progress ig-progress-secondary">
-          <div className="ig-progress-bar" style={{ width: '50%' }}></div>
-        </div>
+        <Progress value={50} variant="secondary" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Success (laurus)</span>
-        <div className="ig-progress ig-progress-success">
-          <div className="ig-progress-bar" style={{ width: '80%' }}></div>
-        </div>
+        <Progress value={80} variant="success" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Warning (rutilus)</span>
-        <div className="ig-progress ig-progress-warning">
-          <div className="ig-progress-bar" style={{ width: '70%' }}></div>
-        </div>
+        <Progress value={70} variant="warning" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Danger (malum)</span>
-        <div className="ig-progress ig-progress-danger">
-          <div className="ig-progress-bar" style={{ width: '40%' }}></div>
-        </div>
+        <Progress value={40} variant="danger" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Info (axis)</span>
-        <div className="ig-progress ig-progress-info">
-          <div className="ig-progress-bar" style={{ width: '55%' }}></div>
-        </div>
+        <Progress value={55} variant="info" />
       </div>
     </div>
   </div>
@@ -99,23 +94,17 @@ export const Tamanos = () => (
     <div className="ig-space-y-6 ig-max-w-lg">
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Pequeño (sm)</span>
-        <div className="ig-progress ig-progress-sm ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '60%' }}></div>
-        </div>
+        <Progress value={60} size="sm" variant="brand" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Normal (default)</span>
-        <div className="ig-progress ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '60%' }}></div>
-        </div>
+        <Progress value={60} variant="brand" />
       </div>
 
       <div>
         <span className="ig-text-sm ig-text-muted ig-block ig-mb-2">Grande (lg)</span>
-        <div className="ig-progress ig-progress-lg ig-progress-brand">
-          <div className="ig-progress-bar" style={{ width: '60%' }}></div>
-        </div>
+        <Progress value={60} size="lg" variant="brand" />
       </div>
     </div>
   </div>
@@ -125,22 +114,14 @@ export const ProgressIndeterminado = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Progress Indeterminado</h2>
     <p className="ig-text-body ig-mb-6">
-      Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-progress-indeterminate</code> cuando
+      Usa <code className="ig-bg-muted ig-px-1 ig-rounded">indeterminate</code> cuando
       no conoces el progreso exacto.
     </p>
 
     <div className="ig-space-y-4 ig-max-w-lg">
-      <div className="ig-progress ig-progress-brand ig-progress-indeterminate">
-        <div className="ig-progress-bar" style={{ width: '30%' }}></div>
-      </div>
-
-      <div className="ig-progress ig-progress-secondary ig-progress-indeterminate">
-        <div className="ig-progress-bar" style={{ width: '30%' }}></div>
-      </div>
-
-      <div className="ig-progress ig-progress-success ig-progress-indeterminate">
-        <div className="ig-progress-bar" style={{ width: '30%' }}></div>
-      </div>
+      <Progress indeterminate variant="brand" />
+      <Progress indeterminate variant="secondary" />
+      <Progress indeterminate variant="success" />
     </div>
   </div>
 );
@@ -160,11 +141,9 @@ export const CasosDeUso = () => (
               <span className="ig-text-sm ig-text-body">documento.pdf</span>
               <span className="ig-text-sm ig-text-muted">2.4 MB / 5.2 MB</span>
             </div>
-            <div className="ig-progress ig-progress-brand">
-              <div className="ig-progress-bar" style={{ width: '46%' }}></div>
-            </div>
+            <Progress value={46} variant="brand" />
           </div>
-          <button className="ig-btn ig-btn-outline ig-btn-sm">✕</button>
+          <Button variant="outline" size="sm">✕</Button>
         </div>
       </div>
 
@@ -176,14 +155,12 @@ export const CasosDeUso = () => (
             <span className="ig-text-body">Paso 2 de 4</span>
             <span className="ig-text-muted">50% completado</span>
           </div>
-          <div className="ig-progress ig-progress-lg ig-progress-success">
-            <div className="ig-progress-bar" style={{ width: '50%' }}></div>
-          </div>
+          <Progress value={50} size="lg" variant="success" />
           <div className="ig-flex ig-justify-between ig-text-xs ig-text-muted">
             <span className="ig-text-success">✓ Datos</span>
-            <span className="ig-text-brand ig-font-semibold">● Verificación</span>
-            <span>○ Pago</span>
-            <span>○ Confirmación</span>
+            <span className="ig-text-brand ig-font-semibold">Verificación</span>
+            <span>Pago</span>
+            <span>Confirmación</span>
           </div>
         </div>
       </div>
@@ -197,36 +174,28 @@ export const CasosDeUso = () => (
               <span className="ig-text-sm ig-text-body">Documentos</span>
               <span className="ig-text-sm ig-text-muted">4.2 GB</span>
             </div>
-            <div className="ig-progress ig-progress-sm ig-progress-brand">
-              <div className="ig-progress-bar" style={{ width: '42%' }}></div>
-            </div>
+            <Progress value={42} size="sm" variant="brand" />
           </div>
           <div>
             <div className="ig-flex ig-justify-between ig-mb-1">
               <span className="ig-text-sm ig-text-body">Imágenes</span>
               <span className="ig-text-sm ig-text-muted">2.8 GB</span>
             </div>
-            <div className="ig-progress ig-progress-sm ig-progress-secondary">
-              <div className="ig-progress-bar" style={{ width: '28%' }}></div>
-            </div>
+            <Progress value={28} size="sm" variant="secondary" />
           </div>
           <div>
             <div className="ig-flex ig-justify-between ig-mb-1">
               <span className="ig-text-sm ig-text-body">Videos</span>
               <span className="ig-text-sm ig-text-muted">1.5 GB</span>
             </div>
-            <div className="ig-progress ig-progress-sm ig-progress-success">
-              <div className="ig-progress-bar" style={{ width: '15%' }}></div>
-            </div>
+            <Progress value={15} size="sm" variant="success" />
           </div>
           <div className="ig-pt-2 ig-border-t ig-border-subtle">
             <div className="ig-flex ig-justify-between ig-mb-1">
               <span className="ig-text-sm ig-font-medium ig-text-body">Total</span>
               <span className="ig-text-sm ig-text-muted">8.5 GB / 10 GB</span>
             </div>
-            <div className="ig-progress ig-progress-warning">
-              <div className="ig-progress-bar" style={{ width: '85%' }}></div>
-            </div>
+            <Progress value={85} variant="warning" />
           </div>
         </div>
       </div>
@@ -236,8 +205,8 @@ export const CasosDeUso = () => (
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Cargando Contenido</h3>
         <div className="ig-text-center ig-py-4">
           <p className="ig-text-body ig-mb-4">Procesando datos...</p>
-          <div className="ig-progress ig-progress-brand ig-progress-indeterminate ig-max-w-xs ig-mx-auto">
-            <div className="ig-progress-bar" style={{ width: '30%' }}></div>
+          <div className="ig-max-w-xs ig-mx-auto">
+            <Progress indeterminate variant="brand" />
           </div>
         </div>
       </div>
@@ -271,3 +240,12 @@ export const ProgressCircular = () => (
     </div>
   </div>
 );
+
+export const Playground = {
+  args: {
+    value: 50,
+    variant: 'brand',
+    size: undefined,
+    indeterminate: false,
+  },
+};

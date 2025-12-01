@@ -1,7 +1,16 @@
 import React from 'react';
+import { Alert } from '../../../components/Alert/Alert';
+import { Button } from '../../../components/Button/Button';
 
 export default {
   title: 'Componentes/Alert',
+  component: Alert,
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['success', 'warning', 'danger', 'info', 'brand', 'secondary'],
+    },
+  },
 };
 
 export const Variantes = () => (
@@ -9,37 +18,29 @@ export const Variantes = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Variantes de Alert</h2>
 
     <div className="ig-space-y-4">
-      <div className="ig-alert ig-alert-success">
-        <span className="ig-alert-icon">✓</span>
-        <div>
-          <div className="ig-alert-title">¡Operación exitosa!</div>
-          <div className="ig-alert-description">Los cambios se han guardado correctamente.</div>
-        </div>
-      </div>
+      <Alert variant="success" icon="✓" title="¡Operación exitosa!">
+        Los cambios se han guardado correctamente.
+      </Alert>
 
-      <div className="ig-alert ig-alert-warning">
-        <span className="ig-alert-icon">⚠</span>
-        <div>
-          <div className="ig-alert-title">Advertencia</div>
-          <div className="ig-alert-description">Tu sesión expirará en 5 minutos.</div>
-        </div>
-      </div>
+      <Alert variant="warning" icon="⚠" title="Advertencia">
+        Tu sesión expirará en 5 minutos.
+      </Alert>
 
-      <div className="ig-alert ig-alert-danger">
-        <span className="ig-alert-icon">✕</span>
-        <div>
-          <div className="ig-alert-title">Error</div>
-          <div className="ig-alert-description">No se pudo completar la operación. Por favor, intenta de nuevo.</div>
-        </div>
-      </div>
+      <Alert variant="danger" icon="✕" title="Error">
+        No se pudo completar la operación. Por favor, intenta de nuevo.
+      </Alert>
 
-      <div className="ig-alert ig-alert-info">
-        <span className="ig-alert-icon">ℹ</span>
-        <div>
-          <div className="ig-alert-title">Información</div>
-          <div className="ig-alert-description">Hay actualizaciones disponibles para tu cuenta.</div>
-        </div>
-      </div>
+      <Alert variant="info" icon="ℹ" title="Información">
+        Hay actualizaciones disponibles para tu cuenta.
+      </Alert>
+
+      <Alert variant="brand" icon="★" title="Brand">
+        Mensaje con estilo brand.
+      </Alert>
+
+      <Alert variant="secondary" icon="◆" title="Secondary">
+        Mensaje con estilo secondary.
+      </Alert>
     </div>
   </div>
 );
@@ -49,25 +50,21 @@ export const AlertSimple = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Alert Simple (solo descripción)</h2>
 
     <div className="ig-space-y-4">
-      <div className="ig-alert ig-alert-success">
-        <span className="ig-alert-icon">✓</span>
-        <div className="ig-alert-description">Archivo subido correctamente.</div>
-      </div>
+      <Alert variant="success" icon="✓">
+        Archivo subido correctamente.
+      </Alert>
 
-      <div className="ig-alert ig-alert-warning">
-        <span className="ig-alert-icon">⚠</span>
-        <div className="ig-alert-description">Recuerda guardar tus cambios antes de salir.</div>
-      </div>
+      <Alert variant="warning" icon="⚠">
+        Recuerda guardar tus cambios antes de salir.
+      </Alert>
 
-      <div className="ig-alert ig-alert-danger">
-        <span className="ig-alert-icon">✕</span>
-        <div className="ig-alert-description">Error de conexión. Verifica tu red.</div>
-      </div>
+      <Alert variant="danger" icon="✕">
+        Error de conexión. Verifica tu red.
+      </Alert>
 
-      <div className="ig-alert ig-alert-info">
-        <span className="ig-alert-icon">ℹ</span>
-        <div className="ig-alert-description">Nueva versión disponible: v2.5.0</div>
-      </div>
+      <Alert variant="info" icon="ℹ">
+        Nueva versión disponible: v2.5.0
+      </Alert>
     </div>
   </div>
 );
@@ -77,22 +74,22 @@ export const AlertConBotonCerrar = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Alert con Botón de Cerrar</h2>
 
     <div className="ig-space-y-4">
-      <div className="ig-alert ig-alert-success">
-        <span className="ig-alert-icon">✓</span>
-        <div className="ig-flex-1">
-          <div className="ig-alert-title">¡Cuenta creada!</div>
-          <div className="ig-alert-description">Tu cuenta ha sido creada exitosamente.</div>
-        </div>
-        <button className="ig-alert-close">×</button>
-      </div>
+      <Alert
+        variant="success"
+        icon="✓"
+        title="¡Cuenta creada!"
+        onClose={() => alert('Cerrado')}
+      >
+        Tu cuenta ha sido creada exitosamente.
+      </Alert>
 
-      <div className="ig-alert ig-alert-warning">
-        <span className="ig-alert-icon">⚠</span>
-        <div className="ig-flex-1">
-          <div className="ig-alert-description">Este mensaje puede ser descartado.</div>
-        </div>
-        <button className="ig-alert-close">×</button>
-      </div>
+      <Alert
+        variant="warning"
+        icon="⚠"
+        onClose={() => alert('Cerrado')}
+      >
+        Este mensaje puede ser descartado.
+      </Alert>
     </div>
   </div>
 );
@@ -108,8 +105,8 @@ export const AlertConAcciones = () => (
           <div className="ig-alert-title">Nueva actualización disponible</div>
           <div className="ig-alert-description">Hay una nueva versión del sistema. ¿Deseas actualizar ahora?</div>
           <div className="ig-flex ig-gap-2 ig-mt-3">
-            <button className="ig-btn ig-btn-secondary ig-btn-sm">Actualizar ahora</button>
-            <button className="ig-btn ig-btn-ghost ig-btn-sm">Más tarde</button>
+            <Button variant="secondary" size="sm">Actualizar ahora</Button>
+            <Button variant="ghost" size="sm">Más tarde</Button>
           </div>
         </div>
       </div>
@@ -120,8 +117,8 @@ export const AlertConAcciones = () => (
           <div className="ig-alert-title">Error de sincronización</div>
           <div className="ig-alert-description">No se pudieron sincronizar los datos con el servidor.</div>
           <div className="ig-flex ig-gap-2 ig-mt-3">
-            <button className="ig-btn ig-btn-danger ig-btn-sm">Reintentar</button>
-            <button className="ig-btn ig-btn-ghost ig-btn-sm">Ver detalles</button>
+            <Button variant="danger" size="sm">Reintentar</Button>
+            <Button variant="ghost" size="sm">Ver detalles</Button>
           </div>
         </div>
       </div>
@@ -152,57 +149,48 @@ export const CasosDeUso = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Casos de Uso</h2>
 
     <div className="ig-space-y-6">
-      {/* Confirmación de formulario */}
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Después de enviar formulario</h3>
-        <div className="ig-alert ig-alert-success">
-          <span className="ig-alert-icon">✓</span>
-          <div>
-            <div className="ig-alert-title">¡Mensaje enviado!</div>
-            <div className="ig-alert-description">Te responderemos en un plazo de 24-48 horas.</div>
-          </div>
-        </div>
+        <Alert variant="success" icon="✓" title="¡Mensaje enviado!">
+          Te responderemos en un plazo de 24-48 horas.
+        </Alert>
       </div>
 
-      {/* Error de autenticación */}
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Error de login</h3>
-        <div className="ig-alert ig-alert-danger">
-          <span className="ig-alert-icon">✕</span>
-          <div className="ig-alert-description">
-            Email o contraseña incorrectos. ¿<a href="#" className="ig-underline">Olvidaste tu contraseña</a>?
-          </div>
-        </div>
+        <Alert variant="danger" icon="✕">
+          Email o contraseña incorrectos. ¿<a href="#" className="ig-underline">Olvidaste tu contraseña</a>?
+        </Alert>
       </div>
 
-      {/* Banner informativo */}
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Banner de mantenimiento</h3>
-        <div className="ig-alert ig-alert-warning">
-          <span className="ig-alert-icon">⚠</span>
-          <div className="ig-flex-1">
-            <div className="ig-alert-title">Mantenimiento programado</div>
-            <div className="ig-alert-description">
-              El sistema estará en mantenimiento el sábado de 2:00 a 6:00 AM (UTC).
-            </div>
-          </div>
-          <button className="ig-alert-close">×</button>
-        </div>
+        <Alert
+          variant="warning"
+          icon="⚠"
+          title="Mantenimiento programado"
+          onClose={() => {}}
+        >
+          El sistema estará en mantenimiento el sábado de 2:00 a 6:00 AM (UTC).
+        </Alert>
       </div>
 
-      {/* Notificación de funcionalidad */}
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Nueva funcionalidad</h3>
-        <div className="ig-alert ig-alert-info">
-          <span className="ig-alert-icon">🎉</span>
-          <div className="ig-flex-1">
-            <div className="ig-alert-title">¡Nueva función disponible!</div>
-            <div className="ig-alert-description">
-              Ahora puedes exportar tus datos a CSV. <a href="#" className="ig-underline">Pruébalo</a>
-            </div>
-          </div>
-        </div>
+        <Alert variant="info" icon="🎉" title="¡Nueva función disponible!">
+          Ahora puedes exportar tus datos a CSV. <a href="#" className="ig-underline">Pruébalo</a>
+        </Alert>
       </div>
     </div>
   </div>
 );
+
+export const Playground = {
+  args: {
+    variant: 'info',
+    icon: 'ℹ',
+    title: 'Título del alert',
+    children: 'Este es el contenido descriptivo del alert.',
+    onClose: undefined,
+  },
+};

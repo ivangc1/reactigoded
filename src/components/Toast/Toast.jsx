@@ -43,7 +43,7 @@ export const Toast = forwardRef(function Toast(
 });
 
 Toast.propTypes = {
-  variant: PropTypes.oneOf(['success', 'warning', 'danger', 'info']),
+  variant: PropTypes.oneOf(['success', 'warning', 'danger', 'info', 'brand', 'secondary']),
   icon: PropTypes.node,
   title: PropTypes.node,
   message: PropTypes.node,

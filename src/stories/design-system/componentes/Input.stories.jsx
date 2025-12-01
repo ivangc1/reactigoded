@@ -1,7 +1,18 @@
 import React from 'react';
+import { Input, Label, Helper, Error, InputGroup, InputAddon } from '../../../components/Input/Input';
+import { Button } from '../../../components/Button/Button';
 
 export default {
   title: 'Componentes/Input',
+  component: Input,
+  argTypes: {
+    size: {
+      control: 'select',
+      options: ['sm', undefined, 'lg'],
+    },
+    error: { control: 'boolean' },
+    success: { control: 'boolean' },
+  },
 };
 
 export const TiposDeInput = () => (
@@ -10,33 +21,33 @@ export const TiposDeInput = () => (
 
     <div className="ig-space-y-4 ig-max-w-md">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Texto</label>
-        <input type="text" className="ig-input" placeholder="Escribe algo..." />
+        <Label>Texto</Label>
+        <Input type="text" placeholder="Escribe algo..." />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Email</label>
-        <input type="email" className="ig-input" placeholder="correo@ejemplo.com" />
+        <Label>Email</Label>
+        <Input type="email" placeholder="correo@ejemplo.com" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Password</label>
-        <input type="password" className="ig-input" placeholder="••••••••" />
+        <Label>Password</Label>
+        <Input type="password" placeholder="••••••••" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Número</label>
-        <input type="number" className="ig-input" placeholder="0" />
+        <Label>Número</Label>
+        <Input type="number" placeholder="0" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Fecha</label>
-        <input type="date" className="ig-input" />
+        <Label>Fecha</Label>
+        <Input type="date" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Search</label>
-        <input type="search" className="ig-input" placeholder="Buscar..." />
+        <Label>Search</Label>
+        <Input type="search" placeholder="Buscar..." />
       </div>
     </div>
   </div>
@@ -48,30 +59,30 @@ export const Estados = () => (
 
     <div className="ig-space-y-4 ig-max-w-md">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Normal</label>
-        <input type="text" className="ig-input" placeholder="Input normal" />
+        <Label>Normal</Label>
+        <Input placeholder="Input normal" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Disabled</label>
-        <input type="text" className="ig-input" placeholder="Input deshabilitado" disabled />
+        <Label>Disabled</Label>
+        <Input placeholder="Input deshabilitado" disabled />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Readonly</label>
-        <input type="text" className="ig-input" value="Valor de solo lectura" readOnly />
+        <Label>Readonly</Label>
+        <Input value="Valor de solo lectura" readOnly />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-success ig-mb-2">Válido</label>
-        <input type="text" className="ig-input ig-input-valid" value="Correcto" />
-        <p className="ig-text-sm ig-text-success ig-mt-1">✓ Campo válido</p>
+        <Label className="ig-text-success">Válido</Label>
+        <Input success value="Correcto" />
+        <Helper className="ig-text-success">✓ Campo válido</Helper>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-danger ig-mb-2">Inválido</label>
-        <input type="text" className="ig-input ig-input-invalid" value="Error" />
-        <p className="ig-text-sm ig-text-danger ig-mt-1">✕ Este campo es requerido</p>
+        <Label className="ig-text-danger">Inválido</Label>
+        <Input error value="Error" />
+        <Error>✕ Este campo es requerido</Error>
       </div>
     </div>
   </div>
@@ -83,18 +94,18 @@ export const Tamanos = () => (
 
     <div className="ig-space-y-4 ig-max-w-md">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Pequeño (ig-input-sm)</label>
-        <input type="text" className="ig-input ig-input-sm" placeholder="Input pequeño" />
+        <Label>Pequeño (sm)</Label>
+        <Input size="sm" placeholder="Input pequeño" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Normal</label>
-        <input type="text" className="ig-input" placeholder="Input normal" />
+        <Label>Normal</Label>
+        <Input placeholder="Input normal" />
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Grande (ig-input-lg)</label>
-        <input type="text" className="ig-input ig-input-lg" placeholder="Input grande" />
+        <Label>Grande (lg)</Label>
+        <Input size="lg" placeholder="Input grande" />
       </div>
     </div>
   </div>
@@ -106,17 +117,17 @@ export const Textarea = () => (
 
     <div className="ig-space-y-4 ig-max-w-md">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Textarea normal</label>
+        <Label>Textarea normal</Label>
         <textarea className="ig-textarea" rows="4" placeholder="Escribe aquí tu mensaje..."></textarea>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Textarea disabled</label>
+        <Label>Textarea disabled</Label>
         <textarea className="ig-textarea" rows="4" disabled placeholder="Textarea deshabilitado"></textarea>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Con resize</label>
+        <Label>Con resize</Label>
         <textarea className="ig-textarea ig-resize" rows="3" placeholder="Puedes redimensionarme"></textarea>
       </div>
     </div>
@@ -129,28 +140,28 @@ export const InputConIcono = () => (
 
     <div className="ig-space-y-4 ig-max-w-md">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Icono a la izquierda</label>
-        <div className="ig-input-group">
+        <Label>Icono a la izquierda</Label>
+        <InputGroup>
           <span className="ig-input-icon ig-input-icon-left">🔍</span>
-          <input type="text" className="ig-input ig-pl-10" placeholder="Buscar..." />
-        </div>
+          <Input className="ig-pl-10" placeholder="Buscar..." />
+        </InputGroup>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Icono a la derecha</label>
-        <div className="ig-input-group">
-          <input type="text" className="ig-input ig-pr-10" placeholder="Email" />
+        <Label>Icono a la derecha</Label>
+        <InputGroup>
+          <Input className="ig-pr-10" placeholder="Email" />
           <span className="ig-input-icon ig-input-icon-right">✉️</span>
-        </div>
+        </InputGroup>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Ambos lados</label>
-        <div className="ig-input-group">
+        <Label>Ambos lados</Label>
+        <InputGroup>
           <span className="ig-input-icon ig-input-icon-left">💳</span>
-          <input type="text" className="ig-input ig-px-10" placeholder="Número de tarjeta" />
+          <Input className="ig-px-10" placeholder="Número de tarjeta" />
           <span className="ig-input-icon ig-input-icon-right">🔒</span>
-        </div>
+        </InputGroup>
       </div>
     </div>
   </div>
@@ -162,26 +173,26 @@ export const InputConAddon = () => (
 
     <div className="ig-space-y-4 ig-max-w-md">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Addon izquierdo</label>
+        <Label>Addon izquierdo</Label>
         <div className="ig-flex">
-          <span className="ig-input-addon ig-input-addon-left">https://</span>
-          <input type="text" className="ig-input ig-rounded-l-none" placeholder="ejemplo.com" />
+          <InputAddon className="ig-rounded-r-none">https://</InputAddon>
+          <Input className="ig-rounded-l-none" placeholder="ejemplo.com" />
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Addon derecho</label>
+        <Label>Addon derecho</Label>
         <div className="ig-flex">
-          <input type="text" className="ig-input ig-rounded-r-none" placeholder="usuario" />
-          <span className="ig-input-addon ig-input-addon-right">@gmail.com</span>
+          <Input className="ig-rounded-r-none" placeholder="usuario" />
+          <InputAddon className="ig-rounded-l-none">@gmail.com</InputAddon>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-2">Con botón</label>
+        <Label>Con botón</Label>
         <div className="ig-flex">
-          <input type="text" className="ig-input ig-rounded-r-none" placeholder="Buscar productos..." />
-          <button className="ig-btn ig-btn-brand ig-rounded-l-none">Buscar</button>
+          <Input className="ig-rounded-r-none" placeholder="Buscar productos..." />
+          <Button variant="brand" className="ig-rounded-l-none">Buscar</Button>
         </div>
       </div>
     </div>
@@ -197,31 +208,41 @@ export const FormularioCompleto = () => (
         <h3 className="ig-text-lg ig-font-semibold ig-text-heading">Crear cuenta</h3>
 
         <div>
-          <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-1">Nombre completo</label>
-          <input type="text" className="ig-input" placeholder="Juan Pérez" />
+          <Label required>Nombre completo</Label>
+          <Input placeholder="Juan Pérez" />
         </div>
 
         <div>
-          <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-1">Email</label>
-          <input type="email" className="ig-input" placeholder="juan@ejemplo.com" />
+          <Label required>Email</Label>
+          <Input type="email" placeholder="juan@ejemplo.com" />
         </div>
 
         <div>
-          <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-1">Contraseña</label>
-          <input type="password" className="ig-input" placeholder="••••••••" />
-          <p className="ig-text-xs ig-text-muted ig-mt-1">Mínimo 8 caracteres</p>
+          <Label required>Contraseña</Label>
+          <Input type="password" placeholder="••••••••" />
+          <Helper>Mínimo 8 caracteres</Helper>
         </div>
 
         <div>
-          <label className="ig-block ig-text-sm ig-font-medium ig-text-body ig-mb-1">Bio</label>
+          <Label>Bio</Label>
           <textarea className="ig-textarea" rows="3" placeholder="Cuéntanos sobre ti..."></textarea>
         </div>
 
         <div className="ig-flex ig-gap-3 ig-pt-2">
-          <button type="submit" className="ig-btn ig-btn-brand ig-flex-1">Crear cuenta</button>
-          <button type="button" className="ig-btn ig-btn-ghost">Cancelar</button>
+          <Button variant="brand" className="ig-flex-1">Crear cuenta</Button>
+          <Button variant="ghost">Cancelar</Button>
         </div>
       </div>
     </form>
   </div>
 );
+
+export const Playground = {
+  args: {
+    placeholder: 'Escribe algo...',
+    size: undefined,
+    error: false,
+    success: false,
+    disabled: false,
+  },
+};

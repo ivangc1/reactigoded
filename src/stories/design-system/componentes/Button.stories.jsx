@@ -1,7 +1,19 @@
 import React from 'react';
+import { Button } from '../../../components/Button/Button';
 
 export default {
   title: 'Componentes/Button',
+  component: Button,
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['brand', 'secondary', 'success', 'warning', 'danger', 'info', 'outline', 'ghost', 'link'],
+    },
+    size: {
+      control: 'select',
+      options: ['xs', 'sm', undefined, 'lg', 'xl'],
+    },
+  },
 };
 
 export const Variantes = () => (
@@ -12,19 +24,27 @@ export const Variantes = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Colores Sólidos</h3>
         <div className="ig-flex ig-flex-wrap ig-gap-3">
-          <button className="ig-btn ig-btn-brand">Brand</button>
-          <button className="ig-btn ig-btn-secondary">Secondary</button>
-          <button className="ig-btn ig-btn-success">Success</button>
-          <button className="ig-btn ig-btn-warning">Warning</button>
-          <button className="ig-btn ig-btn-danger">Danger</button>
-          <button className="ig-btn ig-btn-info">Info</button>
+          <Button variant="brand">Brand</Button>
+          <Button variant="secondary">Secondary</Button>
+          <Button variant="success">Success</Button>
+          <Button variant="warning">Warning</Button>
+          <Button variant="danger">Danger</Button>
+          <Button variant="info">Info</Button>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Outline</h3>
+        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Outline, Ghost y Link</h3>
         <div className="ig-flex ig-flex-wrap ig-gap-3">
-          <button className="ig-btn ig-btn-outline">Outline</button>
+          <Button variant="outline">Outline</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="link">Link</Button>
+        </div>
+      </div>
+
+      <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
+        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Outline con colores (CSS)</h3>
+        <div className="ig-flex ig-flex-wrap ig-gap-3">
           <button className="ig-btn ig-btn-outline-brand">Outline Brand</button>
           <button className="ig-btn ig-btn-outline-secondary">Outline Secondary</button>
           <button className="ig-btn ig-btn-outline-success">Outline Success</button>
@@ -34,20 +54,14 @@ export const Variantes = () => (
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Ghost</h3>
+        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Ghost con colores (CSS)</h3>
         <div className="ig-flex ig-flex-wrap ig-gap-3">
-          <button className="ig-btn ig-btn-ghost">Ghost</button>
           <button className="ig-btn ig-btn-ghost-brand">Ghost Brand</button>
           <button className="ig-btn ig-btn-ghost-secondary">Ghost Secondary</button>
           <button className="ig-btn ig-btn-ghost-success">Ghost Success</button>
           <button className="ig-btn ig-btn-ghost-warning">Ghost Warning</button>
           <button className="ig-btn ig-btn-ghost-danger">Ghost Danger</button>
         </div>
-      </div>
-
-      <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Link</h3>
-        <button className="ig-btn ig-btn-link">Parece un enlace</button>
       </div>
     </div>
   </div>
@@ -59,22 +73,22 @@ export const Tamanos = () => (
 
     <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <div className="ig-flex ig-flex-wrap ig-items-end ig-gap-3">
-        <button className="ig-btn ig-btn-brand ig-btn-xs">Extra Pequeño</button>
-        <button className="ig-btn ig-btn-brand ig-btn-sm">Pequeño</button>
-        <button className="ig-btn ig-btn-brand">Normal</button>
-        <button className="ig-btn ig-btn-brand ig-btn-lg">Grande</button>
-        <button className="ig-btn ig-btn-brand ig-btn-xl">Extra Grande</button>
+        <Button variant="brand" size="xs">Extra Pequeño</Button>
+        <Button variant="brand" size="sm">Pequeño</Button>
+        <Button variant="brand">Normal</Button>
+        <Button variant="brand" size="lg">Grande</Button>
+        <Button variant="brand" size="xl">Extra Grande</Button>
       </div>
     </div>
 
     <div className="ig-mt-6 ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-      <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Referencia de clases</h3>
+      <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Props disponibles</h3>
       <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-5 ig-gap-2 ig-text-sm">
-        <code className="ig-text-muted">ig-btn-xs</code>
-        <code className="ig-text-muted">ig-btn-sm</code>
+        <code className="ig-text-muted">size="xs"</code>
+        <code className="ig-text-muted">size="sm"</code>
         <code className="ig-text-muted">(default)</code>
-        <code className="ig-text-muted">ig-btn-lg</code>
-        <code className="ig-text-muted">ig-btn-xl</code>
+        <code className="ig-text-muted">size="lg"</code>
+        <code className="ig-text-muted">size="xl"</code>
       </div>
     </div>
   </div>
@@ -88,24 +102,18 @@ export const Estados = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Normal vs Disabled</h3>
         <div className="ig-flex ig-flex-wrap ig-gap-3">
-          <button className="ig-btn ig-btn-brand">Normal</button>
-          <button className="ig-btn ig-btn-brand" disabled>Disabled</button>
-          <button className="ig-btn ig-btn-secondary">Normal</button>
-          <button className="ig-btn ig-btn-secondary" disabled>Disabled</button>
+          <Button variant="brand">Normal</Button>
+          <Button variant="brand" disabled>Disabled</Button>
+          <Button variant="secondary">Normal</Button>
+          <Button variant="secondary" disabled>Disabled</Button>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Con Loading</h3>
         <div className="ig-flex ig-flex-wrap ig-gap-3">
-          <button className="ig-btn ig-btn-brand ig-btn-loading" disabled>
-            <span className="ig-spinner ig-spinner-sm" style={{ borderTopColor: 'currentColor' }} />
-            Cargando...
-          </button>
-          <button className="ig-btn ig-btn-secondary ig-btn-loading" disabled>
-            <span className="ig-spinner ig-spinner-sm" style={{ borderTopColor: 'currentColor' }} />
-            Procesando
-          </button>
+          <Button variant="brand" loading>Cargando...</Button>
+          <Button variant="secondary" loading>Procesando</Button>
         </div>
       </div>
     </div>
@@ -118,18 +126,18 @@ export const Modificadores = () => (
 
     <div className="ig-space-y-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">ig-btn-block (ancho completo)</h3>
-        <button className="ig-btn ig-btn-brand ig-btn-block">Botón Block</button>
+        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">block (ancho completo)</h3>
+        <Button variant="brand" block>Botón Block</Button>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">ig-btn-icon (cuadrado)</h3>
+        <h3 className="ig-font-semibold ig-text-heading ig-mb-3">icon (cuadrado)</h3>
         <div className="ig-flex ig-flex-wrap ig-gap-3">
-          <button className="ig-btn ig-btn-brand ig-btn-icon ig-btn-sm">✕</button>
-          <button className="ig-btn ig-btn-brand ig-btn-icon">✓</button>
-          <button className="ig-btn ig-btn-brand ig-btn-icon ig-btn-lg">+</button>
-          <button className="ig-btn ig-btn-outline ig-btn-icon">⋮</button>
-          <button className="ig-btn ig-btn-ghost ig-btn-icon">☰</button>
+          <Button variant="brand" icon size="sm">✕</Button>
+          <Button variant="brand" icon>✓</Button>
+          <Button variant="brand" icon size="lg">+</Button>
+          <Button variant="outline" icon>⋮</Button>
+          <Button variant="ghost" icon>☰</Button>
         </div>
       </div>
     </div>
@@ -142,26 +150,26 @@ export const ConIconos = () => (
 
     <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <div className="ig-flex ig-flex-wrap ig-gap-3">
-        <button className="ig-btn ig-btn-brand">
+        <Button variant="brand">
           <span>→</span>
           Siguiente
-        </button>
-        <button className="ig-btn ig-btn-brand">
+        </Button>
+        <Button variant="brand">
           ←
           <span>Anterior</span>
-        </button>
-        <button className="ig-btn ig-btn-success">
+        </Button>
+        <Button variant="success">
           ✓
           <span>Guardar</span>
-        </button>
-        <button className="ig-btn ig-btn-danger">
+        </Button>
+        <Button variant="danger">
           🗑
           <span>Eliminar</span>
-        </button>
-        <button className="ig-btn ig-btn-outline">
+        </Button>
+        <Button variant="outline">
           ↓
           <span>Descargar</span>
-        </button>
+        </Button>
       </div>
     </div>
   </div>
@@ -175,18 +183,18 @@ export const GrupoDeBotones = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Horizontal</h3>
         <div className="ig-inline-flex ig-rounded-lg ig-overflow-hidden ig-border ig-border-default">
-          <button className="ig-btn ig-btn-ghost ig-rounded-none ig-border-r ig-border-default">Izquierda</button>
-          <button className="ig-btn ig-btn-ghost ig-rounded-none ig-border-r ig-border-default">Centro</button>
-          <button className="ig-btn ig-btn-ghost ig-rounded-none">Derecha</button>
+          <Button variant="ghost" className="ig-rounded-none ig-border-r ig-border-default">Izquierda</Button>
+          <Button variant="ghost" className="ig-rounded-none ig-border-r ig-border-default">Centro</Button>
+          <Button variant="ghost" className="ig-rounded-none">Derecha</Button>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Con uno activo</h3>
         <div className="ig-inline-flex ig-rounded-lg ig-overflow-hidden ig-border ig-border-default">
-          <button className="ig-btn ig-btn-brand ig-rounded-none">Día</button>
-          <button className="ig-btn ig-btn-ghost ig-rounded-none ig-border-l ig-border-default">Semana</button>
-          <button className="ig-btn ig-btn-ghost ig-rounded-none ig-border-l ig-border-default">Mes</button>
+          <Button variant="brand" className="ig-rounded-none">Día</Button>
+          <Button variant="ghost" className="ig-rounded-none ig-border-l ig-border-default">Semana</Button>
+          <Button variant="ghost" className="ig-rounded-none ig-border-l ig-border-default">Mes</Button>
         </div>
       </div>
     </div>
@@ -201,34 +209,47 @@ export const CasosDeUso = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Formulario - Acciones primaria y secundaria</h3>
         <div className="ig-flex ig-gap-3">
-          <button className="ig-btn ig-btn-brand">Guardar cambios</button>
-          <button className="ig-btn ig-btn-ghost">Cancelar</button>
+          <Button variant="brand">Guardar cambios</Button>
+          <Button variant="ghost">Cancelar</Button>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Modal de confirmación</h3>
         <div className="ig-flex ig-gap-3">
-          <button className="ig-btn ig-btn-danger">Eliminar</button>
-          <button className="ig-btn ig-btn-outline">Cancelar</button>
+          <Button variant="danger">Eliminar</Button>
+          <Button variant="outline">Cancelar</Button>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">CTA Hero</h3>
         <div className="ig-flex ig-gap-3">
-          <button className="ig-btn ig-btn-brand ig-btn-lg">Empezar gratis</button>
-          <button className="ig-btn ig-btn-outline ig-btn-lg">Ver demo</button>
+          <Button variant="brand" size="lg">Empezar gratis</Button>
+          <Button variant="outline" size="lg">Ver demo</Button>
         </div>
       </div>
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Acciones de tabla</h3>
         <div className="ig-flex ig-gap-2">
-          <button className="ig-btn ig-btn-ghost ig-btn-sm">Editar</button>
+          <Button variant="ghost" size="sm">Editar</Button>
           <button className="ig-btn ig-btn-ghost-danger ig-btn-sm">Eliminar</button>
         </div>
       </div>
     </div>
   </div>
 );
+
+// Story interactiva con controls de Storybook
+export const Playground = {
+  args: {
+    children: 'Botón de ejemplo',
+    variant: 'brand',
+    size: undefined,
+    loading: false,
+    block: false,
+    icon: false,
+    disabled: false,
+  },
+};

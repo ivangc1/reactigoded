@@ -1,12 +1,54 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Modal } from '../../../components/Modal/Modal';
+import { Button } from '../../../components/Button/Button';
+import { Input, Label } from '../../../components/Input/Input';
+import { Checkbox } from '../../../components/Checkbox/Checkbox';
 
 export default {
   title: 'Componentes/Modal',
+  component: Modal,
+  argTypes: {
+    size: {
+      control: 'select',
+      options: ['sm', 'md', 'lg', 'xl', 'full'],
+    },
+  },
+};
+
+export const ModalInteractivo = () => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal Interactivo</h2>
+
+      <Button variant="brand" onClick={() => setOpen(true)}>
+        Abrir Modal
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Título del Modal"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button variant="brand" onClick={() => setOpen(false)}>Aceptar</Button>
+          </>
+        }
+      >
+        <p className="ig-text-body">
+          Este es el contenido del modal. Puede contener cualquier tipo de contenido,
+          incluyendo formularios, texto, imágenes, etc.
+        </p>
+      </Modal>
+    </div>
+  );
 };
 
 export const ModalBasico = () => (
   <div>
-    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal Básico</h2>
+    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal Básico (Estático)</h2>
     <p className="ig-text-body ig-mb-6">
       Los modales usan posición fija. Aquí se muestra su estructura estática.
     </p>
@@ -29,8 +71,8 @@ export const ModalBasico = () => (
             </p>
           </div>
           <div className="ig-modal-footer">
-            <button className="ig-btn ig-btn-outline">Cancelar</button>
-            <button className="ig-btn ig-btn-brand">Aceptar</button>
+            <Button variant="outline">Cancelar</Button>
+            <Button variant="brand">Aceptar</Button>
           </div>
         </div>
       </div>
@@ -38,136 +80,158 @@ export const ModalBasico = () => (
   </div>
 );
 
-export const TamanosDeModal = () => (
-  <div>
-    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tamaños de Modal</h2>
+export const TamanosDeModal = () => {
+  const [openSize, setOpenSize] = useState(null);
 
-    <div className="ig-space-y-6">
-      {[
-        { clase: 'ig-modal-sm', nombre: 'Pequeño (sm)', ancho: 'max-width: 24rem' },
-        { clase: 'ig-modal-md', nombre: 'Mediano (md)', ancho: 'max-width: 32rem' },
-        { clase: 'ig-modal-lg', nombre: 'Grande (lg)', ancho: 'max-width: 48rem' },
-        { clase: 'ig-modal-xl', nombre: 'Extra Grande (xl)', ancho: 'max-width: 64rem' },
-      ].map(({ clase, nombre, ancho }) => (
-        <div key={clase} className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-          <code className="ig-text-sm ig-text-muted ig-block ig-mb-3">{clase} - {ancho}</code>
-          <div className={`ig-modal ${clase}`} style={{ position: 'relative' }}>
-            <div className="ig-modal-header">
-              <h3>{nombre}</h3>
-              <button className="ig-modal-close">&times;</button>
-            </div>
-            <div className="ig-modal-body">
-              <p className="ig-text-body">Contenido del modal {nombre.toLowerCase()}.</p>
-            </div>
-            <div className="ig-modal-footer">
-              <button className="ig-btn ig-btn-outline ig-btn-sm">Cancelar</button>
-              <button className="ig-btn ig-btn-brand ig-btn-sm">Aceptar</button>
-            </div>
-          </div>
-        </div>
+  return (
+    <div>
+      <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Tamaños de Modal</h2>
+
+      <div className="ig-flex ig-flex-wrap ig-gap-4 ig-mb-6">
+        {['sm', 'md', 'lg', 'xl'].map((size) => (
+          <Button key={size} variant="outline" onClick={() => setOpenSize(size)}>
+            Modal {size.toUpperCase()}
+          </Button>
+        ))}
+      </div>
+
+      {['sm', 'md', 'lg', 'xl'].map((size) => (
+        <Modal
+          key={size}
+          open={openSize === size}
+          onClose={() => setOpenSize(null)}
+          size={size}
+          title={`Modal ${size.toUpperCase()}`}
+          footer={
+            <>
+              <Button variant="outline" size="sm" onClick={() => setOpenSize(null)}>Cancelar</Button>
+              <Button variant="brand" size="sm" onClick={() => setOpenSize(null)}>Aceptar</Button>
+            </>
+          }
+        >
+          <p className="ig-text-body">Contenido del modal tamaño {size}.</p>
+        </Modal>
       ))}
     </div>
-  </div>
-);
+  );
+};
 
-export const ModalConFormulario = () => (
-  <div>
-    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal con Formulario</h2>
+export const ModalConFormulario = () => {
+  const [open, setOpen] = useState(false);
 
-    <div className="ig-relative ig-bg-muted ig-rounded-lg ig-p-4">
-      <div className="ig-modal ig-modal-md" style={{ position: 'relative' }}>
-        <div className="ig-modal-header">
-          <h3>Crear nueva cuenta</h3>
-          <button className="ig-modal-close">&times;</button>
-        </div>
-        <div className="ig-modal-body">
-          <form className="ig-space-y-4">
-            <div className="ig-grid ig-grid-cols-2 ig-gap-4">
-              <div>
-                <label className="ig-form-label">Nombre</label>
-                <input type="text" className="ig-input" placeholder="Juan" />
-              </div>
-              <div>
-                <label className="ig-form-label">Apellido</label>
-                <input type="text" className="ig-input" placeholder="Pérez" />
-              </div>
+  return (
+    <div>
+      <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal con Formulario</h2>
+
+      <Button variant="brand" onClick={() => setOpen(true)}>
+        Crear cuenta
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Crear nueva cuenta"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button variant="brand" onClick={() => setOpen(false)}>Crear cuenta</Button>
+          </>
+        }
+      >
+        <form className="ig-space-y-4">
+          <div className="ig-grid ig-grid-cols-2 ig-gap-4">
+            <div>
+              <Label>Nombre</Label>
+              <Input placeholder="Juan" />
             </div>
             <div>
-              <label className="ig-form-label">Email</label>
-              <input type="email" className="ig-input" placeholder="juan@ejemplo.com" />
+              <Label>Apellido</Label>
+              <Input placeholder="Pérez" />
             </div>
-            <div>
-              <label className="ig-form-label">Contraseña</label>
-              <input type="password" className="ig-input" placeholder="••••••••" />
-            </div>
-            <label className="ig-checkbox">
-              <input type="checkbox" />
-              <span className="ig-checkbox-mark"></span>
-              Acepto los términos y condiciones
-            </label>
-          </form>
-        </div>
-        <div className="ig-modal-footer">
-          <button className="ig-btn ig-btn-outline">Cancelar</button>
-          <button className="ig-btn ig-btn-brand">Crear cuenta</button>
-        </div>
-      </div>
+          </div>
+          <div>
+            <Label>Email</Label>
+            <Input type="email" placeholder="juan@ejemplo.com" />
+          </div>
+          <div>
+            <Label>Contraseña</Label>
+            <Input type="password" placeholder="••••••••" />
+          </div>
+          <Checkbox>
+            Acepto los términos y condiciones
+          </Checkbox>
+        </form>
+      </Modal>
     </div>
-  </div>
-);
+  );
+};
 
-export const ModalDeConfirmacion = () => (
-  <div>
-    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal de Confirmación</h2>
+export const ModalDeConfirmacion = () => {
+  const [openDelete, setOpenDelete] = useState(false);
+  const [openSuccess, setOpenSuccess] = useState(false);
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
-      {/* Confirmación de eliminar */}
-      <div className="ig-bg-muted ig-rounded-lg ig-p-4">
-        <div className="ig-modal ig-modal-sm" style={{ position: 'relative' }}>
-          <div className="ig-modal-header">
-            <h3>Eliminar elemento</h3>
-            <button className="ig-modal-close">&times;</button>
-          </div>
-          <div className="ig-modal-body ig-text-center">
-            <div className="ig-w-16 ig-h-16 ig-bg-danger/20 ig-rounded-full ig-flex ig-items-center ig-justify-center ig-mx-auto ig-mb-4">
-              <span className="ig-text-3xl ig-text-danger">⚠</span>
-            </div>
-            <p className="ig-text-body">
-              ¿Estás seguro de que deseas eliminar este elemento?
-              Esta acción no se puede deshacer.
-            </p>
-          </div>
-          <div className="ig-modal-footer ig-justify-center">
-            <button className="ig-btn ig-btn-outline">Cancelar</button>
-            <button className="ig-btn ig-btn-danger">Eliminar</button>
-          </div>
-        </div>
+  return (
+    <div>
+      <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal de Confirmación</h2>
+
+      <div className="ig-flex ig-gap-4">
+        <Button variant="danger" onClick={() => setOpenDelete(true)}>
+          Eliminar elemento
+        </Button>
+        <Button variant="success" onClick={() => setOpenSuccess(true)}>
+          Mostrar éxito
+        </Button>
       </div>
 
-      {/* Confirmación de éxito */}
-      <div className="ig-bg-muted ig-rounded-lg ig-p-4">
-        <div className="ig-modal ig-modal-sm" style={{ position: 'relative' }}>
-          <div className="ig-modal-header">
-            <h3>Operación exitosa</h3>
-            <button className="ig-modal-close">&times;</button>
+      {/* Modal de eliminar */}
+      <Modal
+        open={openDelete}
+        onClose={() => setOpenDelete(false)}
+        size="sm"
+        title="Eliminar elemento"
+        footer={
+          <div className="ig-flex ig-justify-center ig-gap-3">
+            <Button variant="outline" onClick={() => setOpenDelete(false)}>Cancelar</Button>
+            <Button variant="danger" onClick={() => setOpenDelete(false)}>Eliminar</Button>
           </div>
-          <div className="ig-modal-body ig-text-center">
-            <div className="ig-w-16 ig-h-16 ig-bg-success/20 ig-rounded-full ig-flex ig-items-center ig-justify-center ig-mx-auto ig-mb-4">
-              <span className="ig-text-3xl ig-text-success">✓</span>
-            </div>
-            <h4 className="ig-text-lg ig-font-semibold ig-text-heading ig-mb-2">¡Guardado!</h4>
-            <p className="ig-text-body">
-              Los cambios se han guardado correctamente.
-            </p>
+        }
+      >
+        <div className="ig-text-center">
+          <div className="ig-w-16 ig-h-16 ig-bg-danger/20 ig-rounded-full ig-flex ig-items-center ig-justify-center ig-mx-auto ig-mb-4">
+            <span className="ig-text-3xl ig-text-danger">⚠</span>
           </div>
-          <div className="ig-modal-footer ig-justify-center">
-            <button className="ig-btn ig-btn-success">Continuar</button>
-          </div>
+          <p className="ig-text-body">
+            ¿Estás seguro de que deseas eliminar este elemento?
+            Esta acción no se puede deshacer.
+          </p>
         </div>
-      </div>
+      </Modal>
+
+      {/* Modal de éxito */}
+      <Modal
+        open={openSuccess}
+        onClose={() => setOpenSuccess(false)}
+        size="sm"
+        title="Operación exitosa"
+        footer={
+          <div className="ig-flex ig-justify-center">
+            <Button variant="success" onClick={() => setOpenSuccess(false)}>Continuar</Button>
+          </div>
+        }
+      >
+        <div className="ig-text-center">
+          <div className="ig-w-16 ig-h-16 ig-bg-success/20 ig-rounded-full ig-flex ig-items-center ig-justify-center ig-mx-auto ig-mb-4">
+            <span className="ig-text-3xl ig-text-success">✓</span>
+          </div>
+          <h4 className="ig-text-lg ig-font-semibold ig-text-heading ig-mb-2">¡Guardado!</h4>
+          <p className="ig-text-body">
+            Los cambios se han guardado correctamente.
+          </p>
+        </div>
+      </Modal>
     </div>
-  </div>
-);
+  );
+};
 
 export const DialogNativo = () => (
   <div>
@@ -200,49 +264,84 @@ export const DialogNativo = () => (
   </div>
 );
 
-export const ModalConScroll = () => (
-  <div>
-    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal con Scroll</h2>
+export const ModalConScroll = () => {
+  const [open, setOpen] = useState(false);
 
-    <div className="ig-bg-muted ig-rounded-lg ig-p-4">
-      <div className="ig-modal ig-modal-md" style={{ position: 'relative', maxHeight: '400px' }}>
-        <div className="ig-modal-header">
-          <h3>Términos y Condiciones</h3>
-          <button className="ig-modal-close">&times;</button>
+  return (
+    <div>
+      <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Modal con Scroll</h2>
+
+      <Button variant="brand" onClick={() => setOpen(true)}>
+        Abrir términos y condiciones
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Términos y Condiciones"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setOpen(false)}>Rechazar</Button>
+            <Button variant="brand" onClick={() => setOpen(false)}>Aceptar</Button>
+          </>
+        }
+      >
+        <div className="ig-max-h-64 ig-overflow-y-auto ig-space-y-4">
+          <h4 className="ig-font-semibold ig-text-heading">1. Introducción</h4>
+          <p className="ig-text-body">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+            tempor incididunt ut labore et dolore magna aliqua.
+          </p>
+          <h4 className="ig-font-semibold ig-text-heading">2. Uso del Servicio</h4>
+          <p className="ig-text-body">
+            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+            ut aliquip ex ea commodo consequat.
+          </p>
+          <h4 className="ig-font-semibold ig-text-heading">3. Privacidad</h4>
+          <p className="ig-text-body">
+            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+            dolore eu fugiat nulla pariatur.
+          </p>
+          <h4 className="ig-font-semibold ig-text-heading">4. Limitaciones</h4>
+          <p className="ig-text-body">
+            Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia
+            deserunt mollit anim id est laborum.
+          </p>
+          <h4 className="ig-font-semibold ig-text-heading">5. Contacto</h4>
+          <p className="ig-text-body">
+            Si tienes preguntas sobre estos términos, contáctanos en support@ejemplo.com
+          </p>
         </div>
-        <div className="ig-modal-body ig-overflow-y-auto" style={{ maxHeight: '250px' }}>
-          <div className="ig-space-y-4">
-            <h4 className="ig-font-semibold ig-text-heading">1. Introducción</h4>
-            <p className="ig-text-body">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
-              tempor incididunt ut labore et dolore magna aliqua.
-            </p>
-            <h4 className="ig-font-semibold ig-text-heading">2. Uso del Servicio</h4>
-            <p className="ig-text-body">
-              Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
-              ut aliquip ex ea commodo consequat.
-            </p>
-            <h4 className="ig-font-semibold ig-text-heading">3. Privacidad</h4>
-            <p className="ig-text-body">
-              Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-              dolore eu fugiat nulla pariatur.
-            </p>
-            <h4 className="ig-font-semibold ig-text-heading">4. Limitaciones</h4>
-            <p className="ig-text-body">
-              Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia
-              deserunt mollit anim id est laborum.
-            </p>
-            <h4 className="ig-font-semibold ig-text-heading">5. Contacto</h4>
-            <p className="ig-text-body">
-              Si tienes preguntas sobre estos términos, contáctanos en support@ejemplo.com
-            </p>
-          </div>
-        </div>
-        <div className="ig-modal-footer">
-          <button className="ig-btn ig-btn-outline">Rechazar</button>
-          <button className="ig-btn ig-btn-brand">Aceptar</button>
-        </div>
-      </div>
+      </Modal>
     </div>
-  </div>
-);
+  );
+};
+
+export const Playground = {
+  render: (args) => {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Button variant="brand" onClick={() => setOpen(true)}>
+          Abrir Modal
+        </Button>
+        <Modal
+          {...args}
+          open={open}
+          onClose={() => setOpen(false)}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button variant="brand" onClick={() => setOpen(false)}>Aceptar</Button>
+            </>
+          }
+        />
+      </>
+    );
+  },
+  args: {
+    title: 'Modal de Prueba',
+    size: 'md',
+    children: 'Usa los controles para cambiar las propiedades del modal.',
+  },
+};

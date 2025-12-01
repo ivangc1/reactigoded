@@ -1,81 +1,74 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Switch } from '../../../components/Switch/Switch';
 
 export default {
   title: 'Componentes/Toggle',
+  component: Switch,
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['brand', 'secondary', 'success', 'warning', 'danger', 'info'],
+    },
+  },
 };
 
-export const ToggleBasico = () => (
-  <div>
-    <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Toggle / Switch</h2>
+export const ToggleBasico = () => {
+  const [checked1, setChecked1] = useState(false);
+  const [checked2, setChecked2] = useState(true);
 
-    <div className="ig-space-y-4">
-      <label className="ig-switch">
-        <input type="checkbox" />
-        <span className="ig-switch-track"></span>
-        Opción desactivada
-      </label>
+  return (
+    <div>
+      <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Toggle / Switch</h2>
 
-      <label className="ig-switch">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
-        Opción activada
-      </label>
+      <div className="ig-space-y-4">
+        <Switch checked={checked1} onChange={(e) => setChecked1(e.target.checked)}>
+          Opción desactivada
+        </Switch>
 
-      <label className="ig-switch">
-        <input type="checkbox" disabled />
-        <span className="ig-switch-track"></span>
-        Deshabilitado (off)
-      </label>
+        <Switch checked={checked2} onChange={(e) => setChecked2(e.target.checked)}>
+          Opción activada
+        </Switch>
 
-      <label className="ig-switch">
-        <input type="checkbox" defaultChecked disabled />
-        <span className="ig-switch-track"></span>
-        Deshabilitado (on)
-      </label>
+        <Switch disabled>
+          Deshabilitado (off)
+        </Switch>
+
+        <Switch checked disabled>
+          Deshabilitado (on)
+        </Switch>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const VariantesDeColor = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Variantes de Color</h2>
 
     <div className="ig-space-y-4">
-      <label className="ig-switch ig-switch-brand">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
+      <Switch variant="brand" defaultChecked>
         Switch Brand (vitreus)
-      </label>
+      </Switch>
 
-      <label className="ig-switch ig-switch-secondary">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
+      <Switch variant="secondary" defaultChecked>
         Switch Secondary (axis)
-      </label>
+      </Switch>
 
-      <label className="ig-switch ig-switch-success">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
+      <Switch variant="success" defaultChecked>
         Switch Success (laurus)
-      </label>
+      </Switch>
 
-      <label className="ig-switch ig-switch-warning">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
+      <Switch variant="warning" defaultChecked>
         Switch Warning (rutilus)
-      </label>
+      </Switch>
 
-      <label className="ig-switch ig-switch-danger">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
+      <Switch variant="danger" defaultChecked>
         Switch Danger (malum)
-      </label>
+      </Switch>
 
-      <label className="ig-switch ig-switch-info">
-        <input type="checkbox" defaultChecked />
-        <span className="ig-switch-track"></span>
+      <Switch variant="info" defaultChecked>
         Switch Info (axis)
-      </label>
+      </Switch>
     </div>
   </div>
 );
@@ -94,10 +87,7 @@ export const CasosDeUso = () => (
               <div className="ig-font-medium ig-text-body">Notificaciones por email</div>
               <div className="ig-text-sm ig-text-muted">Recibe actualizaciones en tu correo</div>
             </div>
-            <label className="ig-switch ig-switch-brand">
-              <input type="checkbox" defaultChecked />
-              <span className="ig-switch-track"></span>
-            </label>
+            <Switch variant="brand" defaultChecked />
           </div>
 
           <div className="ig-border-t ig-border-subtle ig-pt-4 ig-flex ig-justify-between ig-items-center">
@@ -105,10 +95,7 @@ export const CasosDeUso = () => (
               <div className="ig-font-medium ig-text-body">Notificaciones push</div>
               <div className="ig-text-sm ig-text-muted">Alertas en tiempo real</div>
             </div>
-            <label className="ig-switch ig-switch-brand">
-              <input type="checkbox" />
-              <span className="ig-switch-track"></span>
-            </label>
+            <Switch variant="brand" />
           </div>
 
           <div className="ig-border-t ig-border-subtle ig-pt-4 ig-flex ig-justify-between ig-items-center">
@@ -116,10 +103,7 @@ export const CasosDeUso = () => (
               <div className="ig-font-medium ig-text-body">Modo silencioso</div>
               <div className="ig-text-sm ig-text-muted">Pausar todas las notificaciones</div>
             </div>
-            <label className="ig-switch ig-switch-warning">
-              <input type="checkbox" />
-              <span className="ig-switch-track"></span>
-            </label>
+            <Switch variant="warning" />
           </div>
         </div>
       </div>
@@ -133,10 +117,7 @@ export const CasosDeUso = () => (
               <div className="ig-font-medium ig-text-body">Perfil público</div>
               <div className="ig-text-sm ig-text-muted">Visible para todos los usuarios</div>
             </div>
-            <label className="ig-switch ig-switch-success">
-              <input type="checkbox" defaultChecked />
-              <span className="ig-switch-track"></span>
-            </label>
+            <Switch variant="success" defaultChecked />
           </div>
 
           <div className="ig-border-t ig-border-subtle ig-pt-4 ig-flex ig-justify-between ig-items-center">
@@ -144,10 +125,7 @@ export const CasosDeUso = () => (
               <div className="ig-font-medium ig-text-body">Autenticación en dos pasos</div>
               <div className="ig-text-sm ig-text-muted">Mayor seguridad para tu cuenta</div>
             </div>
-            <label className="ig-switch ig-switch-success">
-              <input type="checkbox" defaultChecked />
-              <span className="ig-switch-track"></span>
-            </label>
+            <Switch variant="success" defaultChecked />
           </div>
         </div>
       </div>
@@ -158,12 +136,9 @@ export const CasosDeUso = () => (
         <div className="ig-flex ig-justify-between ig-items-center">
           <div>
             <div className="ig-font-medium ig-text-body">Servidor activo</div>
-            <div className="ig-text-sm ig-text-success">● En línea</div>
+            <div className="ig-text-sm ig-text-success">En línea</div>
           </div>
-          <label className="ig-switch ig-switch-success">
-            <input type="checkbox" defaultChecked />
-            <span className="ig-switch-track"></span>
-          </label>
+          <Switch variant="success" defaultChecked />
         </div>
       </div>
     </div>
@@ -175,14 +150,20 @@ export const SwitchEnLinea = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Switch en Línea</h2>
 
     <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-      <p className="ig-text-body">
-        Puedes activar el modo oscuro{' '}
-        <label className="ig-switch ig-switch-brand" style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
-          <input type="checkbox" />
-          <span className="ig-switch-track"></span>
-        </label>
-        {' '}en cualquier momento desde aquí.
+      <p className="ig-text-body ig-flex ig-items-center ig-gap-2">
+        Puedes activar el modo oscuro
+        <Switch variant="brand" />
+        en cualquier momento desde aquí.
       </p>
     </div>
   </div>
 );
+
+export const Playground = {
+  args: {
+    children: 'Switch de ejemplo',
+    variant: 'brand',
+    checked: false,
+    disabled: false,
+  },
+};

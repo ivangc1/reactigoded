@@ -26,7 +26,7 @@ export const Card = forwardRef(function Card(
 });
 
 Card.propTypes = {
-  variant: PropTypes.oneOf(['bordered', 'elevated', 'glass']),
+  variant: PropTypes.oneOf(['bordered', 'elevated', 'glass', 'brand', 'secondary', 'success', 'warning', 'danger', 'info']),
   interactive: PropTypes.bool,
   className: PropTypes.string,
   children: PropTypes.node,

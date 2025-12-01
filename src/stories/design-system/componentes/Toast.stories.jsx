@@ -1,7 +1,16 @@
 import React from 'react';
+import { Toast, ToastContainer } from '../../../components/Toast/Toast';
+import { Button } from '../../../components/Button/Button';
 
 export default {
   title: 'Componentes/Toast',
+  component: Toast,
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['success', 'warning', 'danger', 'info', 'brand', 'secondary'],
+    },
+  },
 };
 
 export const ToastBasico = () => (
@@ -12,13 +21,9 @@ export const ToastBasico = () => (
     </p>
 
     <div className="ig-space-y-4 ig-max-w-sm">
-      <div className="ig-toast">
-        <div className="ig-toast-content">
-          <div className="ig-toast-title">Notificación</div>
-          <div className="ig-toast-message">Este es un mensaje de toast básico.</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast title="Notificación" onClose={() => {}}>
+        Este es un mensaje de toast básico.
+      </Toast>
     </div>
   </div>
 );
@@ -28,50 +33,29 @@ export const VariantesDeToast = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Variantes de Toast</h2>
 
     <div className="ig-space-y-4 ig-max-w-sm">
-      <div className="ig-toast ig-toast-success">
-        <div className="ig-toast-icon">✓</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-title">Éxito</div>
-          <div className="ig-toast-message">La operación se completó correctamente.</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="success" icon="✓" title="Éxito" onClose={() => {}}>
+        La operación se completó correctamente.
+      </Toast>
 
-      <div className="ig-toast ig-toast-warning">
-        <div className="ig-toast-icon">⚠</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-title">Advertencia</div>
-          <div className="ig-toast-message">Hay algo que deberías revisar.</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="warning" icon="⚠" title="Advertencia" onClose={() => {}}>
+        Hay algo que deberías revisar.
+      </Toast>
 
-      <div className="ig-toast ig-toast-danger">
-        <div className="ig-toast-icon">✕</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-title">Error</div>
-          <div className="ig-toast-message">Algo salió mal. Intenta de nuevo.</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="danger" icon="✕" title="Error" onClose={() => {}}>
+        Algo salió mal. Intenta de nuevo.
+      </Toast>
 
-      <div className="ig-toast ig-toast-info">
-        <div className="ig-toast-icon">ℹ</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-title">Información</div>
-          <div className="ig-toast-message">Aquí hay información importante.</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="info" icon="ℹ" title="Información" onClose={() => {}}>
+        Aquí hay información importante.
+      </Toast>
 
-      <div className="ig-toast ig-toast-brand">
-        <div className="ig-toast-icon">★</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-title">Brand</div>
-          <div className="ig-toast-message">Mensaje con estilo brand.</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="brand" icon="★" title="Brand" onClose={() => {}}>
+        Mensaje con estilo brand.
+      </Toast>
+
+      <Toast variant="secondary" icon="◆" title="Secondary" onClose={() => {}}>
+        Mensaje con estilo secondary.
+      </Toast>
     </div>
   </div>
 );
@@ -81,28 +65,17 @@ export const ToastSimple = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Toast Simple (Solo Mensaje)</h2>
 
     <div className="ig-space-y-4 ig-max-w-sm">
-      <div className="ig-toast ig-toast-success">
-        <div className="ig-toast-icon">✓</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-message">Guardado correctamente</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="success" icon="✓" onClose={() => {}}>
+        Guardado correctamente
+      </Toast>
 
-      <div className="ig-toast ig-toast-danger">
-        <div className="ig-toast-icon">✕</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-message">Error al guardar</div>
-        </div>
-        <button className="ig-toast-close">&times;</button>
-      </div>
+      <Toast variant="danger" icon="✕" onClose={() => {}}>
+        Error al guardar
+      </Toast>
 
-      <div className="ig-toast ig-toast-info">
-        <div className="ig-toast-icon">ℹ</div>
-        <div className="ig-toast-content">
-          <div className="ig-toast-message">Copiado al portapapeles</div>
-        </div>
-      </div>
+      <Toast variant="info" icon="ℹ">
+        Copiado al portapapeles
+      </Toast>
     </div>
   </div>
 );
@@ -111,62 +84,50 @@ export const PosicionesToast = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Posiciones de Toast</h2>
     <p className="ig-text-body ig-mb-6">
-      Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-toast-container</code> con clases de posición.
+      Usa <code className="ig-bg-muted ig-px-1 ig-rounded">position</code> en ToastContainer.
     </p>
 
     <div className="ig-relative ig-h-80 ig-bg-muted ig-rounded-lg ig-border ig-border-default">
       {/* Top Right */}
       <div className="ig-absolute ig-top-4 ig-right-4">
-        <div className="ig-toast ig-toast-success" style={{ width: '200px' }}>
-          <div className="ig-toast-content">
-            <div className="ig-toast-message ig-text-sm">Top Right</div>
-          </div>
-        </div>
+        <Toast variant="success" className="ig-w-48">
+          <span className="ig-text-sm">Top Right</span>
+        </Toast>
       </div>
 
       {/* Top Left */}
       <div className="ig-absolute ig-top-4 ig-left-4">
-        <div className="ig-toast ig-toast-info" style={{ width: '200px' }}>
-          <div className="ig-toast-content">
-            <div className="ig-toast-message ig-text-sm">Top Left</div>
-          </div>
-        </div>
+        <Toast variant="info" className="ig-w-48">
+          <span className="ig-text-sm">Top Left</span>
+        </Toast>
       </div>
 
       {/* Top Center */}
       <div className="ig-absolute ig-top-4 ig-left-1/2 ig--translate-x-1/2">
-        <div className="ig-toast ig-toast-warning" style={{ width: '200px' }}>
-          <div className="ig-toast-content">
-            <div className="ig-toast-message ig-text-sm">Top Center</div>
-          </div>
-        </div>
+        <Toast variant="warning" className="ig-w-48">
+          <span className="ig-text-sm">Top Center</span>
+        </Toast>
       </div>
 
       {/* Bottom Right */}
       <div className="ig-absolute ig-bottom-4 ig-right-4">
-        <div className="ig-toast ig-toast-brand" style={{ width: '200px' }}>
-          <div className="ig-toast-content">
-            <div className="ig-toast-message ig-text-sm">Bottom Right</div>
-          </div>
-        </div>
+        <Toast variant="brand" className="ig-w-48">
+          <span className="ig-text-sm">Bottom Right</span>
+        </Toast>
       </div>
 
       {/* Bottom Left */}
       <div className="ig-absolute ig-bottom-4 ig-left-4">
-        <div className="ig-toast ig-toast-secondary" style={{ width: '200px' }}>
-          <div className="ig-toast-content">
-            <div className="ig-toast-message ig-text-sm">Bottom Left</div>
-          </div>
-        </div>
+        <Toast variant="secondary" className="ig-w-48">
+          <span className="ig-text-sm">Bottom Left</span>
+        </Toast>
       </div>
 
       {/* Bottom Center */}
       <div className="ig-absolute ig-bottom-4 ig-left-1/2 ig--translate-x-1/2">
-        <div className="ig-toast ig-toast-danger" style={{ width: '200px' }}>
-          <div className="ig-toast-content">
-            <div className="ig-toast-message ig-text-sm">Bottom Center</div>
-          </div>
-        </div>
+        <Toast variant="danger" className="ig-w-48">
+          <span className="ig-text-sm">Bottom Center</span>
+        </Toast>
       </div>
     </div>
   </div>
@@ -181,7 +142,7 @@ export const ToastConAccion = () => (
         <div className="ig-toast-content">
           <div className="ig-toast-title">Archivo eliminado</div>
           <div className="ig-toast-message">El archivo ha sido movido a la papelera.</div>
-          <button className="ig-btn ig-btn-sm ig-btn-outline ig-mt-2">Deshacer</button>
+          <Button variant="outline" size="sm" className="ig-mt-2">Deshacer</Button>
         </div>
         <button className="ig-toast-close">&times;</button>
       </div>
@@ -192,8 +153,8 @@ export const ToastConAccion = () => (
           <div className="ig-toast-title">Nuevo mensaje</div>
           <div className="ig-toast-message">Juan te ha enviado un mensaje.</div>
           <div className="ig-flex ig-gap-2 ig-mt-2">
-            <button className="ig-btn ig-btn-sm ig-btn-brand">Ver</button>
-            <button className="ig-btn ig-btn-sm ig-btn-outline">Ignorar</button>
+            <Button variant="brand" size="sm">Ver</Button>
+            <Button variant="outline" size="sm">Ignorar</Button>
           </div>
         </div>
         <button className="ig-toast-close">&times;</button>
@@ -210,34 +171,18 @@ export const ToastApilados = () => (
     </p>
 
     <div className="ig-relative ig-h-96 ig-bg-muted ig-rounded-lg ig-border ig-border-default ig-overflow-hidden">
-      {/* Simulación de toast container */}
       <div className="ig-absolute ig-top-4 ig-right-4 ig-space-y-3" style={{ width: '320px' }}>
-        <div className="ig-toast ig-toast-success ig-animate-slide-in-right">
-          <div className="ig-toast-icon">✓</div>
-          <div className="ig-toast-content">
-            <div className="ig-toast-title">Guardado</div>
-            <div className="ig-toast-message">Cambios guardados correctamente.</div>
-          </div>
-          <button className="ig-toast-close">&times;</button>
-        </div>
+        <Toast variant="success" icon="✓" title="Guardado" onClose={() => {}}>
+          Cambios guardados correctamente.
+        </Toast>
 
-        <div className="ig-toast ig-toast-info ig-animate-slide-in-right">
-          <div className="ig-toast-icon">ℹ</div>
-          <div className="ig-toast-content">
-            <div className="ig-toast-title">Sincronizando</div>
-            <div className="ig-toast-message">Actualizando datos...</div>
-          </div>
-          <button className="ig-toast-close">&times;</button>
-        </div>
+        <Toast variant="info" icon="ℹ" title="Sincronizando" onClose={() => {}}>
+          Actualizando datos...
+        </Toast>
 
-        <div className="ig-toast ig-toast-warning ig-animate-slide-in-right">
-          <div className="ig-toast-icon">⚠</div>
-          <div className="ig-toast-content">
-            <div className="ig-toast-title">Conexión lenta</div>
-            <div className="ig-toast-message">Tu conexión parece inestable.</div>
-          </div>
-          <button className="ig-toast-close">&times;</button>
-        </div>
+        <Toast variant="warning" icon="⚠" title="Conexión lenta" onClose={() => {}}>
+          Tu conexión parece inestable.
+        </Toast>
       </div>
     </div>
   </div>
@@ -248,35 +193,44 @@ export const EstructuraContainer = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Estructura del Contenedor</h2>
 
     <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
-      <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Clases de posición</h3>
+      <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Uso del componente Toast</h3>
       <pre className="ig-text-sm ig-text-body ig-bg-muted ig-p-4 ig-rounded ig-overflow-x-auto">
-{`<!-- Contenedor fijo en la pantalla -->
-<div class="ig-toast-container ig-toast-top-right">
-  <div class="ig-toast ig-toast-success">
-    ...
-  </div>
-</div>
+{`import { Toast, ToastContainer } from '../components/Toast/Toast';
 
-<!-- Posiciones disponibles -->
-ig-toast-top-right
-ig-toast-top-left
-ig-toast-top-center
-ig-toast-bottom-right
-ig-toast-bottom-left
-ig-toast-bottom-center`}
+// Toast individual
+<Toast
+  variant="success"
+  icon="✓"
+  title="Éxito"
+  onClose={() => handleClose()}
+>
+  Mensaje del toast
+</Toast>
+
+// Contenedor de toasts
+<ToastContainer position="top-right">
+  {toasts.map(toast => (
+    <Toast key={toast.id} {...toast} />
+  ))}
+</ToastContainer>`}
       </pre>
 
-      <h3 className="ig-font-semibold ig-text-heading ig-mt-6 ig-mb-4">Estructura de un Toast</h3>
-      <pre className="ig-text-sm ig-text-body ig-bg-muted ig-p-4 ig-rounded ig-overflow-x-auto">
-{`<div class="ig-toast ig-toast-success">
-  <div class="ig-toast-icon">✓</div>
-  <div class="ig-toast-content">
-    <div class="ig-toast-title">Título</div>
-    <div class="ig-toast-message">Mensaje</div>
-  </div>
-  <button class="ig-toast-close">&times;</button>
-</div>`}
-      </pre>
+      <h3 className="ig-font-semibold ig-text-heading ig-mt-6 ig-mb-4">Variantes disponibles</h3>
+      <div className="ig-flex ig-flex-wrap ig-gap-2">
+        {['success', 'warning', 'danger', 'info', 'brand', 'secondary'].map((v) => (
+          <code key={v} className="ig-bg-muted ig-px-2 ig-py-1 ig-rounded ig-text-sm">{v}</code>
+        ))}
+      </div>
     </div>
   </div>
 );
+
+export const Playground = {
+  args: {
+    variant: 'info',
+    icon: 'ℹ',
+    title: 'Título del Toast',
+    children: 'Este es el mensaje del toast.',
+    onClose: undefined,
+  },
+};

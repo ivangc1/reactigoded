@@ -39,7 +39,7 @@ export const Progress = forwardRef(function Progress(
 
 Progress.propTypes = {
   value: PropTypes.number,
-  variant: PropTypes.oneOf(['success', 'warning', 'danger', 'accent', 'primary']),
+  variant: PropTypes.oneOf(['brand', 'secondary', 'success', 'warning', 'danger', 'info']),
   size: PropTypes.oneOf(['sm', 'lg']),
   indeterminate: PropTypes.bool,
   className: PropTypes.string,

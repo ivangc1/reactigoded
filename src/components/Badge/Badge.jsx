@@ -5,6 +5,7 @@ export const Badge = forwardRef(function Badge(
   {
     variant,
     size,
+    pill = false,
     dot = false,
     outline = false,
     className = '',
@@ -17,6 +18,7 @@ export const Badge = forwardRef(function Badge(
     'ig-badge',
     variant && `ig-badge-${variant}`,
     size && `ig-badge-${size}`,
+    pill && 'ig-badge-pill',
     dot && 'ig-badge-dot',
     outline && 'ig-badge-outline',
     className
@@ -31,10 +33,10 @@ export const Badge = forwardRef(function Badge(
 
 Badge.propTypes = {
   variant: PropTypes.oneOf([
-    'primary', 'accent', 'tellus', 'liminal', 'senum', 'vesper',
-    'success', 'warning', 'danger', 'info'
+    'brand', 'secondary', 'success', 'warning', 'danger', 'info'
   ]),
   size: PropTypes.oneOf(['sm', 'lg']),
+  pill: PropTypes.bool,
   dot: PropTypes.bool,
   outline: PropTypes.bool,
   className: PropTypes.string,
