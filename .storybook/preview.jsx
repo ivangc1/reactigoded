@@ -1,5 +1,4 @@
 import '../src/styles/igoded-design.css';
-import { ThemeSwitch } from '../src/components/ThemeSwitch';
 
 /** @type { import('@storybook/react').Preview } */
 const preview = {
@@ -11,17 +10,40 @@ const preview = {
       },
     },
     backgrounds: { disable: true },
+    layout: 'padded',
+  },
+
+  globalTypes: {
+    theme: {
+      name: 'Tema',
+      description: 'Cambiar entre modo claro y oscuro',
+      defaultValue: 'light',
+      toolbar: {
+        icon: 'circlehollow',
+        items: [
+          { value: 'light', icon: 'sun', title: 'Claro' },
+          { value: 'dark', icon: 'moon', title: 'Oscuro' },
+        ],
+        showName: true,
+      },
+    },
   },
 
   decorators: [
-    (Story) => (
-      <div style={{ padding: '1rem' }}>
-        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-          <ThemeSwitch />
+    (Story, context) => {
+      const theme = context.globals.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      return (
+        <div style={{
+          background: 'var(--ig-bg-base)',
+          color: 'var(--ig-text-body)',
+          minHeight: '100vh',
+          padding: '1rem'
+        }}>
+          <Story />
         </div>
-        <Story />
-      </div>
-    ),
+      );
+    },
   ],
 };
 
