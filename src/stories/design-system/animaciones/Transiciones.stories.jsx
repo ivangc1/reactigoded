@@ -195,9 +195,9 @@ export const TimingFunctions = () => (
       ].map(({ clase, nombre }) => (
         <div key={clase} className="ig-flex ig-items-center ig-gap-4">
           <code className="ig-text-sm ig-text-muted ig-w-32">{nombre}</code>
-          <div className="ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden">
+          <div className="ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden ig-group">
             <div
-              className={`ig-h-full ig-bg-brand ig-w-8 ig-rounded ig-transition-all ig-duration-1000 ${clase} hover:ig-w-full`}
+              className={`ig-h-full ig-bg-brand ig-w-8 ig-rounded ig-transition-all ig-duration-1000 ${clase} group-hover:ig-scale-110`}
             ></div>
           </div>
         </div>
