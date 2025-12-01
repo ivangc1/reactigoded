@@ -109,7 +109,7 @@ export const TransicionesEnInputs = () => (
 
       <input
         type="text"
-        className="ig-input ig-transition-all ig-duration-200 focus-within:ig-scale-102"
+        className="ig-input ig-transition-all ig-duration-200 focus:ig-scale-102"
         placeholder="Focus con escala"
       />
 
@@ -186,11 +186,6 @@ export const TimingFunctions = () => (
       Hover sobre cada barra para ver la diferencia de easing.
     </p>
 
-    <style>{`
-      .timing-bar { width: 2rem; }
-      .timing-container:hover .timing-bar { width: 100%; }
-    `}</style>
-
     <div className="ig-space-y-4">
       {[
         { clase: 'ig-ease-linear', nombre: 'Linear' },
@@ -200,9 +195,9 @@ export const TimingFunctions = () => (
       ].map(({ clase, nombre }) => (
         <div key={clase} className="ig-flex ig-items-center ig-gap-4">
           <code className="ig-text-sm ig-text-muted ig-w-32">{nombre}</code>
-          <div className="timing-container ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden ig-cursor-pointer">
+          <div className="ig-group ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden ig-cursor-pointer">
             <div
-              className={`timing-bar ig-h-full ig-bg-brand ig-rounded ig-transition-all ig-duration-1000 ${clase}`}
+              className={`ig-w-8 ig-h-full ig-bg-brand ig-rounded ig-transition-all ig-duration-1000 ${clase} group-hover:ig-w-full`}
             ></div>
           </div>
         </div>
