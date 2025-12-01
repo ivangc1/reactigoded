@@ -14,11 +14,11 @@ export const TransicionesVsAnimaciones = () => (
         <p className="ig-text-body ig-text-sm ig-mb-4">
           Requieren un trigger (hover, focus, etc.). Suavizan cambios de estado.
         </p>
-        <button className="ig-btn ig-btn-brand ig-transition-all ig-duration-300 ig-hover:ig-scale-110 ig-hover:ig-shadow-lg">
+        <button className="ig-btn ig-btn-brand ig-transition-all ig-duration-300 hover:ig-scale-110 hover:ig-shadow-lg">
           Hover para transición
         </button>
         <code className="ig-block ig-text-xs ig-text-muted ig-mt-2">
-          ig-transition-all ig-hover:ig-scale-110
+          ig-transition-all hover:ig-scale-110
         </code>
       </div>
 
@@ -41,23 +41,23 @@ export const TransicionesEnBotones = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones en Botones</h2>
 
     <div className="ig-flex ig-flex-wrap ig-gap-4">
-      <button className="ig-btn ig-btn-brand ig-transition-colors ig-duration-300 ig-hover:ig-bg-secondary">
+      <button className="ig-btn ig-btn-brand ig-transition-colors ig-duration-300 hover:ig-bg-secondary">
         Cambio de color
       </button>
 
-      <button className="ig-btn ig-btn-secondary ig-transition-transform ig-duration-200 ig-hover:ig-scale-105">
+      <button className="ig-btn ig-btn-secondary ig-transition-transform ig-duration-200 hover:ig-scale-105">
         Escalar
       </button>
 
-      <button className="ig-btn ig-btn-success ig-transition-all ig-duration-300 ig-hover:ig-shadow-xl ig-hover:ig--translate-y-1">
+      <button className="ig-btn ig-btn-success ig-transition-all ig-duration-300 hover:ig-shadow-xl hover:ig--translate-y-1">
         Elevación
       </button>
 
-      <button className="ig-btn ig-btn-warning ig-transition-all ig-duration-500 ig-hover:ig-rotate-3">
-        Rotación sutil
+      <button className="ig-btn ig-btn-warning ig-transition-all ig-duration-300 hover:ig-scale-110">
+        Escalar grande
       </button>
 
-      <button className="ig-border-2 ig-border-brand ig-text-brand ig-bg-transparent ig-px-4 ig-py-2 ig-rounded ig-transition-all ig-duration-300 ig-hover:ig-bg-brand ig-hover:ig-text-on-brand">
+      <button className="ig-border-2 ig-border-brand ig-text-brand ig-bg-transparent ig-px-4 ig-py-2 ig-rounded ig-transition-all ig-duration-300 hover:ig-bg-brand hover:ig-text-white">
         Relleno animado
       </button>
     </div>
@@ -69,7 +69,7 @@ export const TransicionesEnCards = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones en Cards</h2>
 
     <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
-      <div className="ig-card ig-transition-shadow ig-duration-300 ig-hover:ig-shadow-xl ig-cursor-pointer">
+      <div className="ig-card ig-transition-shadow ig-duration-300 hover:ig-shadow-xl ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">Shadow Transition</h3>
           <p className="ig-text-body ig-text-sm">La sombra aumenta suavemente.</p>
@@ -77,7 +77,7 @@ export const TransicionesEnCards = () => (
         </div>
       </div>
 
-      <div className="ig-card ig-transition-transform ig-duration-300 ig-hover:ig--translate-y-2 ig-cursor-pointer">
+      <div className="ig-card ig-transition-transform ig-duration-300 hover:ig--translate-y-2 ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">Transform Transition</h3>
           <p className="ig-text-body ig-text-sm">Se eleva al hacer hover.</p>
@@ -85,7 +85,7 @@ export const TransicionesEnCards = () => (
         </div>
       </div>
 
-      <div className="ig-card ig-transition-all ig-duration-300 ig-hover:ig-shadow-xl ig-hover:ig--translate-y-2 ig-hover:ig-border-brand ig-cursor-pointer">
+      <div className="ig-card ig-transition-all ig-duration-300 hover:ig-shadow-xl hover:ig--translate-y-2 hover:ig-border-brand ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">All Transitions</h3>
           <p className="ig-text-body ig-text-sm">Múltiples efectos combinados.</p>
@@ -103,26 +103,21 @@ export const TransicionesEnInputs = () => (
     <div className="ig-space-y-4 ig-max-w-md">
       <input
         type="text"
-        className="ig-input ig-transition-all ig-duration-200 ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-shadow-lg"
+        className="ig-input ig-transition-all ig-duration-200 focus:ig-ring-brand focus-within:ig-shadow-lg"
         placeholder="Focus con ring y sombra"
       />
 
       <input
         type="text"
-        className="ig-input ig-transition-all ig-duration-200 ig-focus:ig-scale-[1.02] ig-focus:ig-ring-2 ig-focus:ig-ring-brand"
+        className="ig-input ig-transition-all ig-duration-200 focus-within:ig-scale-102 focus:ig-ring-brand"
         placeholder="Focus con escala"
       />
 
-      <div className="ig-relative">
-        <input
-          type="text"
-          className="ig-input ig-transition-all ig-duration-200 ig-pl-10 ig-focus:ig-pl-4"
-          placeholder="Focus cambia padding"
-        />
-        <span className="ig-absolute ig-left-3 ig-top-1/2 ig--translate-y-1/2 ig-text-muted ig-transition-opacity ig-focus-within:ig-opacity-0">
-          🔍
-        </span>
-      </div>
+      <input
+        type="text"
+        className="ig-input ig-transition-all ig-duration-200 focus:ig-border-brand"
+        placeholder="Focus cambia borde"
+      />
     </div>
   </div>
 );
@@ -133,15 +128,15 @@ export const TransicionesConGrupo = () => (
 
     <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-group ig-card ig-cursor-pointer ig-overflow-hidden">
-        <div className="ig-h-32 ig-bg-brand ig-transition-transform ig-duration-500 ig-group-hover:ig-scale-110"></div>
+        <div className="ig-h-32 ig-bg-brand ig-transition-transform ig-duration-500 group-hover:ig-scale-110"></div>
         <div className="ig-card-body">
-          <h3 className="ig-font-semibold ig-text-heading ig-transition-colors ig-group-hover:ig-text-brand">
+          <h3 className="ig-font-semibold ig-text-heading ig-transition-colors group-hover:ig-text-brand">
             Imagen con zoom
           </h3>
           <p className="ig-text-body ig-text-sm">La imagen se amplía al hacer hover en la card.</p>
           <span className="ig-inline-flex ig-items-center ig-text-brand ig-text-sm ig-mt-2">
             Ver más
-            <span className="ig-transition-transform ig-group-hover:ig-translate-x-2 ig-ml-1">→</span>
+            <span className="ig-transition-transform group-hover:ig-translate-x-2 ig-ml-1">→</span>
           </span>
         </div>
       </div>
@@ -152,7 +147,7 @@ export const TransicionesConGrupo = () => (
           <p className="ig-text-body ig-text-sm ig-mb-10">
             Los botones aparecen al hacer hover.
           </p>
-          <div className="ig-absolute ig-bottom-4 ig-left-4 ig-right-4 ig-flex ig-gap-2 ig-opacity-0 ig-translate-y-4 ig-transition-all ig-duration-300 ig-group-hover:ig-opacity-100 ig-group-hover:ig-translate-y-0">
+          <div className="ig-absolute ig-bottom-4 ig-left-4 ig-right-4 ig-flex ig-gap-2 ig-opacity-0 ig-translate-y-4 ig-transition-all ig-duration-300 group-hover:ig-opacity-100 group-hover:ig-translate-y-0">
             <button className="ig-btn ig-btn-brand ig-btn-sm ig-flex-1">Editar</button>
             <button className="ig-btn ig-btn-outline ig-btn-sm ig-flex-1">Ver</button>
           </div>
@@ -169,10 +164,10 @@ export const TransicionesSecuenciales = () => (
     <div className="ig-group ig-bg-surface ig-p-6 ig-rounded-lg ig-border ig-border-default">
       <p className="ig-text-body ig-mb-4">Hover sobre el contenedor para ver la secuencia:</p>
       <div className="ig-flex ig-gap-4">
-        {[75, 150, 300, 500].map((delay, i) => (
+        {[75, 150, 300, 500].map((delay) => (
           <div
             key={delay}
-            className={`ig-w-16 ig-h-16 ig-bg-brand ig-rounded ig-transition-all ig-duration-300 ig-delay-${delay} ig-opacity-50 ig-translate-y-4 ig-group-hover:ig-opacity-100 ig-group-hover:ig-translate-y-0`}
+            className={`ig-w-16 ig-h-16 ig-bg-brand ig-rounded ig-transition-all ig-duration-300 ig-delay-${delay} ig-opacity-50 ig-translate-y-4 group-hover:ig-opacity-100 group-hover:ig-translate-y-0`}
           >
             <span className="ig-text-on-brand ig-flex ig-items-center ig-justify-center ig-h-full ig-text-xs">
               {delay}ms
@@ -200,9 +195,9 @@ export const TimingFunctions = () => (
       ].map(({ clase, nombre }) => (
         <div key={clase} className="ig-flex ig-items-center ig-gap-4">
           <code className="ig-text-sm ig-text-muted ig-w-32">{nombre}</code>
-          <div className="ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden">
+          <div className="ig-flex-1 ig-h-8 ig-bg-muted ig-rounded ig-relative ig-overflow-hidden ig-group">
             <div
-              className={`ig-h-full ig-bg-brand ig-w-8 ig-rounded ig-transition-all ig-duration-1000 ${clase} hover:ig-w-full`}
+              className={`ig-h-full ig-bg-brand ig-w-8 ig-rounded ig-transition-all ig-duration-1000 ${clase} group-hover:ig-scale-110`}
             ></div>
           </div>
         </div>
@@ -226,7 +221,7 @@ export const DuracionesPersonalizadas = () => (
         <div key={clase} className="ig-flex ig-items-center ig-gap-4">
           <code className="ig-text-sm ig-text-muted ig-w-32">{ms}</code>
           <div
-            className={`ig-w-16 ig-h-8 ig-bg-secondary ig-rounded ig-transition-all ${clase} ig-hover:ig-w-64 ig-hover:ig-bg-brand ig-cursor-pointer`}
+            className={`ig-w-16 ig-h-8 ig-bg-secondary ig-rounded ig-transition-all ${clase} hover:ig-scale-110 hover:ig-bg-brand ig-cursor-pointer`}
           ></div>
         </div>
       ))}
