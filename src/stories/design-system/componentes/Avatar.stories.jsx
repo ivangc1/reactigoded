@@ -189,7 +189,7 @@ export const CasosDeUsoAvatar = () => (
             { initials: 'MG', name: 'María García', role: 'Editor', status: 'away', color: 'secondary' },
             { initials: 'CL', name: 'Carlos López', role: 'Desarrollador', status: 'busy', color: 'success' },
           ].map((user, i) => (
-            <div key={i} className="ig-flex ig-items-center ig-gap-3 ig-p-2 ig-rounded ig-hover:ig-bg-muted">
+            <div key={i} className="ig-flex ig-items-center ig-gap-3 ig-p-2 ig-rounded hover:ig-bg-muted">
               <div className="ig-relative">
                 <div className={`ig-avatar ig-bg-${user.color} ig-text-on-${user.color}`}>
                   {user.initials}

@@ -185,7 +185,7 @@ export const TextosEnDarkMode = () => (
         <p className="ig-text-body">
           El texto normal usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-text-body</code>
           que ajusta su color automáticamente. Los enlaces usan
-          <a href="#" className="ig-text-brand ig-hover:ig-underline"> colores de marca</a>.
+          <a href="#" className="ig-text-brand hover:ig-underline"> colores de marca</a>.
         </p>
         <blockquote className="ig-border-l-4 ig-border-brand ig-pl-4 ig-italic ig-text-muted">
           Las citas usan texto muted para diferenciarse del contenido principal.

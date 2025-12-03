@@ -188,10 +188,10 @@ export const SombrasResponsivas = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Hover con Sombra</h3>
         <div className="ig-flex ig-gap-4">
-          <button className="ig-btn ig-btn-brand ig-shadow ig-hover:ig-shadow-lg ig-transition-shadow">
+          <button className="ig-btn ig-btn-brand ig-shadow hover:ig-shadow-lg ig-transition-shadow">
             Hover para sombra
           </button>
-          <div className="ig-bg-surface ig-p-4 ig-rounded ig-border ig-border-default ig-shadow-sm ig-hover:ig-shadow-xl ig-transition-shadow ig-cursor-pointer">
+          <div className="ig-bg-surface ig-p-4 ig-rounded ig-border ig-border-default ig-shadow-sm hover:ig-shadow-xl ig-transition-shadow ig-cursor-pointer">
             Card con hover
           </div>
         </div>
@@ -201,7 +201,7 @@ export const SombrasResponsivas = () => (
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Focus con Ring</h3>
         <input
           type="text"
-          className="ig-input ig-focus:ig-ring-2 ig-focus:ig-ring-brand"
+          className="ig-input focus:ig-ring-2 focus:ig-ring-brand"
           placeholder="Focus para ver el ring"
         />
       </div>

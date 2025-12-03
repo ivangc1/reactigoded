@@ -9,27 +9,27 @@ export const GroupHover = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Group Hover</h2>
     <p className="ig-text-body ig-mb-6">
       Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-group</code> en el padre y
-      <code className="ig-bg-muted ig-px-1 ig-rounded">group-hover:*</code> en los hijos.
+      <code className="ig-bg-muted ig-px-1 ig-rounded">group-hover:ig-*</code> en los hijos.
     </p>
 
     <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-group ig-card ig-cursor-pointer">
         <div className="ig-card-body">
-          <h3 className="ig-font-semibold ig-text-heading ig-group-hover:ig-text-brand ig-transition-colors">
+          <h3 className="ig-font-semibold ig-text-heading group-hover:ig-text-brand ig-transition-colors">
             Título que cambia color
           </h3>
-          <p className="ig-text-body ig-text-sm ig-group-hover:ig-text-heading ig-transition-colors">
+          <p className="ig-text-body ig-text-sm group-hover:ig-text-heading ig-transition-colors">
             El texto también cambia al hacer hover en la card.
           </p>
           <span className="ig-inline-flex ig-items-center ig-gap-1 ig-mt-2 ig-text-brand ig-text-sm">
             Ver más
-            <span className="ig-inline-block ig-transition-transform ig-group-hover:ig-translate-x-1">→</span>
+            <span className="ig-inline-block ig-transition-transform group-hover:ig-translate-x-1">→</span>
           </span>
         </div>
       </div>
 
       <div className="ig-group ig-card ig-cursor-pointer ig-overflow-hidden">
-        <div className="ig-h-32 ig-bg-brand ig-transition-transform ig-duration-500 ig-group-hover:ig-scale-110"></div>
+        <div className="ig-h-32 ig-bg-brand ig-transition-transform ig-duration-500 group-hover:ig-scale-110"></div>
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">Imagen con zoom</h3>
           <p className="ig-text-body ig-text-sm">La imagen hace zoom al hover del grupo.</p>
@@ -40,20 +40,20 @@ export const GroupHover = () => (
         <div className="ig-card-body ig-relative">
           <h3 className="ig-font-semibold ig-text-heading">Revelar contenido</h3>
           <p className="ig-text-body ig-text-sm ig-mb-8">Hover para ver los botones ocultos.</p>
-          <div className="ig-absolute ig-bottom-4 ig-left-4 ig-right-4 ig-flex ig-gap-2 ig-opacity-0 ig-group-hover:ig-opacity-100 ig-transition-opacity">
+          <div className="ig-absolute ig-bottom-4 ig-left-4 ig-right-4 ig-flex ig-gap-2 ig-opacity-0 group-hover:ig-opacity-100 ig-transition-opacity">
             <button className="ig-btn ig-btn-brand ig-btn-sm ig-flex-1">Editar</button>
             <button className="ig-btn ig-btn-outline ig-btn-sm ig-flex-1">Ver</button>
           </div>
         </div>
       </div>
 
-      <div className="ig-group ig-card ig-cursor-pointer ig-hover:ig-shadow-xl ig-hover:ig-border-brand ig-transition-all">
+      <div className="ig-group ig-card ig-cursor-pointer hover:ig-shadow-xl hover:ig-border-brand ig-transition-all">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">Card con borde</h3>
           <p className="ig-text-body ig-text-sm">
             El borde y sombra cambian al hover del grupo.
           </p>
-          <div className="ig-mt-2 ig-w-0 ig-h-1 ig-bg-brand ig-group-hover:ig-w-full ig-transition-all ig-duration-300"></div>
+          <div className="ig-mt-2 ig-w-0 ig-h-1 ig-bg-brand group-hover:ig-w-full ig-transition-all ig-duration-300"></div>
         </div>
       </div>
     </div>
@@ -71,7 +71,7 @@ export const GroupFocus = () => (
           className="ig-input ig-peer"
           placeholder="Input con label animado"
         />
-        <label className="ig-absolute ig-left-3 ig--top-2.5 ig-bg-surface ig-px-1 ig-text-sm ig-text-muted ig-group-focus-within:ig-text-brand ig-transition-colors">
+        <label className="ig-absolute ig-left-3 ig--top-2.5 ig-bg-surface ig-px-1 ig-text-sm ig-text-muted group-focus-within:ig-text-brand ig-transition-colors">
           Email
         </label>
       </div>
@@ -84,7 +84,7 @@ export const PeerBasico = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Peer Básico</h2>
     <p className="ig-text-body ig-mb-6">
       Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-peer</code> en un elemento y
-      <code className="ig-bg-muted ig-px-1 ig-rounded">peer-*:</code> en elementos hermanos siguientes.
+      <code className="ig-bg-muted ig-px-1 ig-rounded">peer-*:ig-*</code> en elementos hermanos siguientes.
     </p>
 
     <div className="ig-space-y-6 ig-max-w-md">
@@ -245,7 +245,7 @@ export const EjemploCompleto = () => (
         />
         <label
           htmlFor="nombre-completo"
-          className="ig-absolute ig-left-3 ig-top-4 ig-text-muted ig-text-sm ig-transition-all ig-origin-left peer-placeholder-shown:ig-top-4 peer-placeholder-shown:ig-text-base peer-focus:ig-top-1 peer-focus:ig-text-xs peer-focus:ig-text-brand peer-[:not(:placeholder-shown)]:ig-top-1 peer-[:not(:placeholder-shown)]:ig-text-xs"
+          className="ig-absolute ig-left-3 ig-top-4 ig-text-muted ig-text-sm ig-transition-all ig-origin-left peer-placeholder-shown:ig-top-4 peer-placeholder-shown:ig-text-base peer-focus:ig-top-1 peer-focus:ig-text-xs peer-focus:ig-text-brand peer-not-placeholder-shown:ig-top-1 peer-not-placeholder-shown:ig-text-xs"
         >
           Nombre completo
         </label>
@@ -276,13 +276,13 @@ export const EjemploCompleto = () => (
       </div>
 
       {/* Card interactiva con group */}
-      <div className="ig-group ig-border ig-border-default ig-rounded-lg ig-p-4 ig-cursor-pointer ig-hover:ig-border-brand ig-hover:ig-shadow-md ig-transition-all">
+      <div className="ig-group ig-border ig-border-default ig-rounded-lg ig-p-4 ig-cursor-pointer hover:ig-border-brand hover:ig-shadow-md ig-transition-all">
         <div className="ig-flex ig-items-center ig-gap-3">
-          <div className="ig-w-10 ig-h-10 ig-bg-brand/20 ig-rounded-full ig-flex ig-items-center ig-justify-center ig-group-hover:ig-bg-brand ig-transition-colors">
-            <span className="ig-text-brand ig-group-hover:ig-text-white ig-transition-colors">★</span>
+          <div className="ig-w-10 ig-h-10 ig-bg-brand/20 ig-rounded-full ig-flex ig-items-center ig-justify-center group-hover:ig-bg-brand ig-transition-colors">
+            <span className="ig-text-brand group-hover:ig-text-white ig-transition-colors">★</span>
           </div>
           <div>
-            <h4 className="ig-font-medium ig-text-body ig-group-hover:ig-text-brand ig-transition-colors">
+            <h4 className="ig-font-medium ig-text-body group-hover:ig-text-brand ig-transition-colors">
               Activar notificaciones
             </h4>
             <p className="ig-text-sm ig-text-muted">

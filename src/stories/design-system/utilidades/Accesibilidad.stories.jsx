@@ -67,13 +67,13 @@ export const FocusVisible = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Botones con focus visible</h3>
         <div className="ig-flex ig-gap-4">
-          <button className="ig-btn ig-btn-brand ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-brand ig-focus-visible:ig-ring-offset-2">
+          <button className="ig-btn ig-btn-brand focus-visible:ig-ring-2 focus-visible:ig-ring-brand focus-visible:ig-ring-offset-2">
             Botón 1
           </button>
-          <button className="ig-btn ig-btn-secondary ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-secondary ig-focus-visible:ig-ring-offset-2">
+          <button className="ig-btn ig-btn-secondary focus-visible:ig-ring-2 focus-visible:ig-ring-secondary focus-visible:ig-ring-offset-2">
             Botón 2
           </button>
-          <button className="ig-btn ig-btn-outline ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-brand ig-focus-visible:ig-ring-offset-2">
+          <button className="ig-btn ig-btn-outline focus-visible:ig-ring-2 focus-visible:ig-ring-brand focus-visible:ig-ring-offset-2">
             Botón 3
           </button>
         </div>
@@ -82,13 +82,13 @@ export const FocusVisible = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Links con focus visible</h3>
         <nav className="ig-flex ig-gap-4">
-          <a href="#" className="ig-text-brand ig-focus-visible:ig-outline-none ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-brand ig-rounded">
+          <a href="#" className="ig-text-brand focus-visible:ig-outline-none focus-visible:ig-ring-2 focus-visible:ig-ring-brand ig-rounded">
             Enlace 1
           </a>
-          <a href="#" className="ig-text-brand ig-focus-visible:ig-outline-none ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-brand ig-rounded">
+          <a href="#" className="ig-text-brand focus-visible:ig-outline-none focus-visible:ig-ring-2 focus-visible:ig-ring-brand ig-rounded">
             Enlace 2
           </a>
-          <a href="#" className="ig-text-brand ig-focus-visible:ig-outline-none ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-brand ig-rounded">
+          <a href="#" className="ig-text-brand focus-visible:ig-outline-none focus-visible:ig-ring-2 focus-visible:ig-ring-brand ig-rounded">
             Enlace 3
           </a>
         </nav>
@@ -109,7 +109,7 @@ export const SkipLinks = () => (
       <pre className="ig-text-sm ig-text-body ig-bg-muted ig-p-4 ig-rounded ig-overflow-x-auto">
 {`<a
   href="#main-content"
-  class="ig-sr-only ig-focus:ig-not-sr-only ig-focus:ig-absolute ig-focus:ig-top-4 ig-focus:ig-left-4 ig-focus:ig-z-50 ig-focus:ig-bg-brand ig-focus:ig-text-on-brand ig-focus:ig-px-4 ig-focus:ig-py-2 ig-focus:ig-rounded"
+  class="ig-sr-only focus:ig-not-sr-only focus:ig-absolute focus:ig-top-4 focus:ig-left-4 focus:ig-z-50 focus:ig-bg-brand focus:ig-text-on-brand focus:ig-px-4 focus:ig-py-2 focus:ig-rounded"
 >
   Saltar al contenido principal
 </a>`}
