@@ -14,19 +14,19 @@ export const FocusBasico = () => (
     <div className="ig-space-y-4 ig-max-w-md">
       <input
         type="text"
-        className="ig-input ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-border-brand"
+        className="ig-input focus:ig-ring-2 focus:ig-ring-brand focus:ig-border-brand"
         placeholder="Focus con ring brand"
       />
 
       <input
         type="text"
-        className="ig-input ig-focus:ig-ring-2 ig-focus:ig-ring-secondary ig-focus:ig-border-secondary"
+        className="ig-input focus:ig-ring-2 focus:ig-ring-secondary focus:ig-border-secondary"
         placeholder="Focus con ring secondary"
       />
 
       <input
         type="text"
-        className="ig-input ig-focus:ig-ring-2 ig-focus:ig-ring-success ig-focus:ig-border-success"
+        className="ig-input focus:ig-ring-2 focus:ig-ring-success focus:ig-border-success"
         placeholder="Focus con ring success"
       />
     </div>
@@ -38,15 +38,15 @@ export const FocusRing = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Focus Ring</h2>
 
     <div className="ig-flex ig-flex-wrap ig-gap-4">
-      <button className="ig-btn ig-btn-brand ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-ring-offset-2">
+      <button className="ig-btn ig-btn-brand focus:ig-ring-2 focus:ig-ring-brand focus:ig-ring-offset-2">
         Ring con offset
       </button>
 
-      <button className="ig-btn ig-btn-secondary ig-focus:ig-ring-4 ig-focus:ig-ring-secondary">
+      <button className="ig-btn ig-btn-secondary focus:ig-ring-4 focus:ig-ring-secondary">
         Ring grande
       </button>
 
-      <button className="ig-btn ig-btn-outline ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-ring-inset">
+      <button className="ig-btn ig-btn-outline focus:ig-ring-2 focus:ig-ring-brand focus:ig-ring-inset">
         Ring inset
       </button>
     </div>
@@ -62,11 +62,11 @@ export const FocusVisible = () => (
     </p>
 
     <div className="ig-flex ig-flex-wrap ig-gap-4">
-      <button className="ig-btn ig-btn-brand ig-focus-visible:ig-ring-2 ig-focus-visible:ig-ring-offset-2 ig-focus-visible:ig-ring-brand ig-outline-none">
+      <button className="ig-btn ig-btn-brand focus-visible:ig-ring-2 focus-visible:ig-ring-offset-2 focus-visible:ig-ring-brand ig-outline-none">
         Focus visible (teclado)
       </button>
 
-      <button className="ig-btn ig-btn-secondary ig-focus:ig-ring-2 ig-focus:ig-ring-offset-2 ig-focus:ig-ring-secondary ig-outline-none">
+      <button className="ig-btn ig-btn-secondary focus:ig-ring-2 focus:ig-ring-offset-2 focus:ig-ring-secondary ig-outline-none">
         Focus normal (clic y teclado)
       </button>
     </div>
@@ -86,7 +86,7 @@ export const FocusWithin = () => (
     </p>
 
     <div className="ig-space-y-6 ig-max-w-md">
-      <div className="ig-p-4 ig-bg-surface ig-rounded-lg ig-border-2 ig-border-subtle ig-focus-within:ig-border-brand ig-focus-within:ig-shadow-lg ig-transition-all">
+      <div className="ig-p-4 ig-bg-surface ig-rounded-lg ig-border-2 ig-border-subtle focus-within:ig-border-brand focus-within:ig-shadow-lg ig-transition-all">
         <label className="ig-form-label">Formulario con focus-within</label>
         <input type="text" className="ig-input" placeholder="Haz focus aquí" />
         <p className="ig-text-sm ig-text-muted ig-mt-2">
@@ -94,7 +94,7 @@ export const FocusWithin = () => (
         </p>
       </div>
 
-      <div className="ig-p-4 ig-bg-surface ig-rounded-lg ig-border ig-border-default ig-focus-within:ig-ring-2 ig-focus-within:ig-ring-brand">
+      <div className="ig-p-4 ig-bg-surface ig-rounded-lg ig-border ig-border-default focus-within:ig-ring-2 focus-within:ig-ring-brand">
         <div className="ig-flex ig-gap-2">
           <input type="text" className="ig-input ig-flex-1" placeholder="Buscar..." />
           <button className="ig-btn ig-btn-brand">Buscar</button>
@@ -113,7 +113,7 @@ export const FocusEnFormularios = () => (
         <label className="ig-form-label">Nombre</label>
         <input
           type="text"
-          className="ig-input ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-border-brand"
+          className="ig-input focus:ig-ring-2 focus:ig-ring-brand focus:ig-border-brand"
           placeholder="Tu nombre"
         />
       </div>
@@ -122,7 +122,7 @@ export const FocusEnFormularios = () => (
         <label className="ig-form-label">Email</label>
         <input
           type="email"
-          className="ig-input ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-border-brand"
+          className="ig-input focus:ig-ring-2 focus:ig-ring-brand focus:ig-border-brand"
           placeholder="tu@email.com"
         />
       </div>
@@ -130,7 +130,7 @@ export const FocusEnFormularios = () => (
       <div>
         <label className="ig-form-label">Mensaje</label>
         <textarea
-          className="ig-textarea ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-border-brand"
+          className="ig-textarea focus:ig-ring-2 focus:ig-ring-brand focus:ig-border-brand"
           rows={3}
           placeholder="Tu mensaje"
         ></textarea>
@@ -138,14 +138,14 @@ export const FocusEnFormularios = () => (
 
       <div>
         <label className="ig-form-label">País</label>
-        <select className="ig-select ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-border-brand">
+        <select className="ig-select focus:ig-ring-2 focus:ig-ring-brand focus:ig-border-brand">
           <option>España</option>
           <option>México</option>
           <option>Argentina</option>
         </select>
       </div>
 
-      <button type="button" className="ig-btn ig-btn-brand ig-w-full ig-focus:ig-ring-2 ig-focus:ig-ring-offset-2 ig-focus:ig-ring-brand">
+      <button type="button" className="ig-btn ig-btn-brand ig-w-full focus:ig-ring-2 focus:ig-ring-offset-2 focus:ig-ring-brand">
         Enviar
       </button>
     </form>
@@ -159,7 +159,7 @@ export const OutlineVsRing = () => (
     <div className="ig-space-y-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Outline nativo</h3>
-        <button className="ig-btn ig-btn-brand ig-focus:ig-outline-2 ig-focus:ig-outline-offset-2 ig-focus:ig-outline-brand">
+        <button className="ig-btn ig-btn-brand focus:ig-outline-2 focus:ig-outline-offset-2 focus:ig-outline-brand">
           Con outline
         </button>
         <p className="ig-text-sm ig-text-muted ig-mt-2">
@@ -169,7 +169,7 @@ export const OutlineVsRing = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Ring (box-shadow)</h3>
-        <button className="ig-btn ig-btn-brand ig-focus:ig-ring-2 ig-focus:ig-ring-offset-2 ig-focus:ig-ring-brand ig-outline-none">
+        <button className="ig-btn ig-btn-brand focus:ig-ring-2 focus:ig-ring-offset-2 focus:ig-ring-brand ig-outline-none">
           Con ring
         </button>
         <p className="ig-text-sm ig-text-muted ig-mt-2">
@@ -179,7 +179,7 @@ export const OutlineVsRing = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Sin indicador (no recomendado)</h3>
-        <button className="ig-btn ig-btn-brand ig-outline-none ig-focus:ig-outline-none">
+        <button className="ig-btn ig-btn-brand ig-outline-none focus:ig-outline-none">
           Sin focus visible
         </button>
         <p className="ig-text-sm ig-text-danger ig-mt-2">
@@ -197,11 +197,11 @@ export const FocusConTransiciones = () => (
     <div className="ig-space-y-4 ig-max-w-md">
       <input
         type="text"
-        className="ig-input ig-transition-all ig-duration-200 ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-shadow-lg ig-focus:ig-scale-[1.02]"
+        className="ig-input ig-transition-all ig-duration-200 focus:ig-ring-2 focus:ig-ring-brand focus:ig-shadow-lg focus:ig-scale-[1.02]"
         placeholder="Input que crece y brilla"
       />
 
-      <button className="ig-btn ig-btn-outline ig-w-full ig-transition-all ig-duration-200 ig-focus:ig-bg-brand ig-focus:ig-text-on-brand ig-focus:ig-border-brand ig-focus:ig-ring-2 ig-focus:ig-ring-brand ig-focus:ig-ring-offset-2">
+      <button className="ig-btn ig-btn-outline ig-w-full ig-transition-all ig-duration-200 focus:ig-bg-brand focus:ig-text-on-brand focus:ig-border-brand focus:ig-ring-2 focus:ig-ring-brand focus:ig-ring-offset-2">
         Botón que se rellena
       </button>
 
@@ -209,7 +209,7 @@ export const FocusConTransiciones = () => (
         {['A', 'B', 'C', 'D'].map((letra) => (
           <button
             key={letra}
-            className="ig-w-12 ig-h-12 ig-bg-surface ig-border ig-border-default ig-rounded ig-transition-all ig-duration-200 ig-focus:ig-bg-brand ig-focus:ig-text-on-brand ig-focus:ig-scale-110 ig-focus:ig-ring-2 ig-focus:ig-ring-brand"
+            className="ig-w-12 ig-h-12 ig-bg-surface ig-border ig-border-default ig-rounded ig-transition-all ig-duration-200 focus:ig-bg-brand focus:ig-text-on-brand focus:ig-scale-110 focus:ig-ring-2 focus:ig-ring-brand"
           >
             {letra}
           </button>

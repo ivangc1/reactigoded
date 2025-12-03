@@ -141,11 +141,11 @@ export const SidebarConContenedor = () => (
             <span className="@md:ig-hidden">🏠</span>
             <span className="ig-hidden @md:ig-inline">Inicio</span>
           </a>
-          <a href="#" className="ig-block ig-p-2 ig-rounded ig-hover:ig-bg-muted">
+          <a href="#" className="ig-block ig-p-2 ig-rounded hover:ig-bg-muted">
             <span className="@md:ig-hidden">👤</span>
             <span className="ig-hidden @md:ig-inline">Perfil</span>
           </a>
-          <a href="#" className="ig-block ig-p-2 ig-rounded ig-hover:ig-bg-muted">
+          <a href="#" className="ig-block ig-p-2 ig-rounded hover:ig-bg-muted">
             <span className="@md:ig-hidden">⚙️</span>
             <span className="ig-hidden @md:ig-inline">Ajustes</span>
           </a>

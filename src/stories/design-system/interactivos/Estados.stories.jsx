@@ -275,10 +275,10 @@ export const EstadosDeNavegacion = () => (
           <a href="#" className="ig-px-4 ig-py-3 ig-text-brand ig-border-b-2 ig-border-brand ig-font-medium">
             Activo
           </a>
-          <a href="#" className="ig-px-4 ig-py-3 ig-text-muted ig-hover:ig-text-body ig-hover:ig-bg-muted ig-transition-colors">
+          <a href="#" className="ig-px-4 ig-py-3 ig-text-muted hover:ig-text-body hover:ig-bg-muted ig-transition-colors">
             Inactivo
           </a>
-          <a href="#" className="ig-px-4 ig-py-3 ig-text-muted ig-hover:ig-text-body ig-hover:ig-bg-muted ig-transition-colors">
+          <a href="#" className="ig-px-4 ig-py-3 ig-text-muted hover:ig-text-body hover:ig-bg-muted ig-transition-colors">
             Otro
           </a>
           <span className="ig-px-4 ig-py-3 ig-text-disabled ig-cursor-not-allowed">
@@ -292,10 +292,10 @@ export const EstadosDeNavegacion = () => (
           <a href="#" className="ig-block ig-px-3 ig-py-2 ig-rounded ig-bg-brand ig-text-on-brand">
             Activo
           </a>
-          <a href="#" className="ig-block ig-px-3 ig-py-2 ig-rounded ig-text-body ig-hover:ig-bg-muted ig-transition-colors">
+          <a href="#" className="ig-block ig-px-3 ig-py-2 ig-rounded ig-text-body hover:ig-bg-muted ig-transition-colors">
             Link
           </a>
-          <a href="#" className="ig-block ig-px-3 ig-py-2 ig-rounded ig-text-body ig-hover:ig-bg-muted ig-transition-colors">
+          <a href="#" className="ig-block ig-px-3 ig-py-2 ig-rounded ig-text-body hover:ig-bg-muted ig-transition-colors">
             Otro link
           </a>
           <span className="ig-block ig-px-3 ig-py-2 ig-rounded ig-text-disabled ig-cursor-not-allowed">
