@@ -23,3 +23,6 @@ storybook-static
 *.njsproj
 *.sln
 *.sw?
+
+# Archivos comprimidos (se generan en servidor)
+*.gz
