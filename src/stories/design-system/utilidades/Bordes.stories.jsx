@@ -8,7 +8,7 @@ export const AnchosDeBorde = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Anchos de Borde</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-lg:ig-grid-cols-5 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 lg:ig-grid-cols-5 ig-gap-4">
       {[
         { clase: 'ig-border-0', nombre: '0' },
         { clase: 'ig-border', nombre: '1px' },
@@ -30,7 +30,7 @@ export const BordesPorLado = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Bordes por Lado</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
       <div className="ig-text-center">
         <div className="ig-w-20 ig-h-20 ig-bg-surface ig-border-t-4 ig-border-brand ig-rounded ig-mx-auto ig-mb-2"></div>
         <code className="ig-text-sm ig-text-muted">ig-border-t-4</code>
@@ -84,7 +84,7 @@ export const ColoresDeBorde = () => (
 
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Por Color</h3>
-        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-lg:ig-grid-cols-6 ig-gap-4">
+        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 lg:ig-grid-cols-6 ig-gap-4">
           {[
             { clase: 'ig-border-brand', nombre: 'brand' },
             { clase: 'ig-border-secondary', nombre: 'secondary' },
@@ -108,7 +108,7 @@ export const EstilosDeBorde = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Estilos de Borde</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
       {[
         { clase: 'ig-border-solid', nombre: 'solid' },
         { clase: 'ig-border-dashed', nombre: 'dashed' },
@@ -128,7 +128,7 @@ export const BorderRadius = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Border Radius</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-lg:ig-grid-cols-7 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 lg:ig-grid-cols-7 ig-gap-4">
       {[
         { clase: 'ig-rounded-none', nombre: 'none' },
         { clase: 'ig-rounded-sm', nombre: 'sm' },
@@ -151,7 +151,7 @@ export const RadiusPorEsquina = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Radius por Esquina</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
       <div className="ig-text-center">
         <div className="ig-w-20 ig-h-20 ig-bg-brand ig-rounded-tl-xl ig-mx-auto ig-mb-2"></div>
         <code className="ig-text-xs ig-text-muted">ig-rounded-tl-xl</code>

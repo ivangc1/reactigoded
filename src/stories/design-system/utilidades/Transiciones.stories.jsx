@@ -11,7 +11,7 @@ export const TransicionesBasicas = () => (
       Pasa el cursor sobre los elementos para ver las transiciones.
     </p>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
       <div className="ig-text-center">
         <div className="ig-bg-brand ig-w-20 ig-h-20 ig-rounded ig-mx-auto ig-mb-2 ig-transition ig-hover:ig-bg-secondary"></div>
         <code className="ig-text-xs ig-text-muted">ig-transition</code>
@@ -39,7 +39,7 @@ export const PropiedadesDeTransicion = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Propiedades de Transición</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <code className="ig-text-sm ig-text-muted ig-block ig-mb-3">ig-transition-colors</code>
         <button className="ig-bg-brand ig-text-on-brand ig-px-4 ig-py-2 ig-rounded ig-transition-colors ig-duration-300 ig-hover:ig-bg-secondary">
@@ -174,7 +174,7 @@ export const EjemplosCards = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones en Cards</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
       <div className="ig-card ig-transition-shadow ig-duration-300 ig-hover:ig-shadow-xl ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Sombra en Hover</h3>
@@ -203,7 +203,7 @@ export const TransicionesDeGrupo = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones en Grupo (group-hover)</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-group ig-card ig-cursor-pointer ig-hover:ig-shadow-xl ig-transition-shadow">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading ig-mb-2 ig-group-hover:ig-text-brand ig-transition-colors">

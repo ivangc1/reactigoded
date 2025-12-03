@@ -8,7 +8,7 @@ export const SombrasDeBox = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Box Shadows</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-8 ig-p-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-8 ig-p-4">
       {[
         { clase: 'ig-shadow-none', nombre: 'none' },
         { clase: 'ig-shadow-sm', nombre: 'sm' },
@@ -32,7 +32,7 @@ export const SombrasEnCards = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Sombras en Cards</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
       <div className="ig-bg-surface ig-rounded-lg ig-shadow-sm ig-p-4">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Sombra Sutil</h3>
         <p className="ig-text-body ig-text-sm">
@@ -64,7 +64,7 @@ export const SombraInner = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Sombra Inner</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Input con sombra inner</h3>
         <input
@@ -88,7 +88,7 @@ export const Opacidad = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Opacidad</h2>
 
-    <div className="ig-grid ig-grid-cols-3 ig-md:ig-grid-cols-6 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-3 md:ig-grid-cols-6 ig-gap-4">
       {[0, 10, 25, 50, 75, 100].map((valor) => (
         <div key={valor} className="ig-text-center">
           <div className={`ig-w-full ig-h-16 ig-bg-brand ig-opacity-${valor} ig-rounded ig-mb-2`}></div>
@@ -99,7 +99,7 @@ export const Opacidad = () => (
 
     <div className="ig-mt-8">
       <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Más valores de opacidad</h3>
-      <div className="ig-grid ig-grid-cols-4 ig-md:ig-grid-cols-8 ig-gap-2">
+      <div className="ig-grid ig-grid-cols-4 md:ig-grid-cols-8 ig-gap-2">
         {[5, 20, 30, 40, 60, 70, 80, 90, 95].map((valor) => (
           <div key={valor} className="ig-text-center">
             <div className={`ig-w-full ig-h-10 ig-bg-secondary ig-opacity-${valor} ig-rounded ig-mb-1`}></div>
@@ -115,7 +115,7 @@ export const Blur = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Blur (Desenfoque)</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
       {[
         { clase: 'ig-blur-none', nombre: 'none' },
         { clase: 'ig-blur-sm', nombre: 'sm' },
@@ -161,7 +161,7 @@ export const GradientesSombra = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Combinación: Gradientes y Sombras</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
       <div className="ig-bg-gradient-to-br ig-from-brand ig-to-secondary ig-rounded-lg ig-shadow-lg ig-p-6 ig-text-white">
         <h3 className="ig-font-semibold ig-mb-2">Gradiente + Sombra</h3>
         <p className="ig-text-sm ig-opacity-90">Card con gradiente y sombra lg</p>

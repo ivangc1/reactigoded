@@ -245,7 +245,7 @@ export const EspaciadoDeLetras = () => (
 
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Line Height</h3>
-        <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
+        <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
           {[
             { clase: 'ig-leading-none', nombre: 'none (1)' },
             { clase: 'ig-leading-tight', nombre: 'tight (1.25)' },

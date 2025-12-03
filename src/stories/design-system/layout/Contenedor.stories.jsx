@@ -133,7 +133,7 @@ export const AnchosDePantalla = () => (
 
     <div className="ig-mt-6 ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Referencia de max-width</h3>
-      <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-2 ig-text-sm">
+      <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-2 ig-text-sm">
         <code className="ig-text-muted">ig-max-w-xs: 20rem</code>
         <code className="ig-text-muted">ig-max-w-sm: 24rem</code>
         <code className="ig-text-muted">ig-max-w-md: 28rem</code>
@@ -155,7 +155,7 @@ export const Alturas = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Alturas</h2>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
       {[
         { clase: 'ig-h-8', desc: '2rem' },
         { clase: 'ig-h-12', desc: '3rem' },

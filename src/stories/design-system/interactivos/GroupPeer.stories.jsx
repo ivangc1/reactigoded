@@ -12,7 +12,7 @@ export const GroupHover = () => (
       <code className="ig-bg-muted ig-px-1 ig-rounded">group-hover:*</code> en los hijos.
     </p>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-group ig-card ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading ig-group-hover:ig-text-brand ig-transition-colors">
@@ -99,7 +99,7 @@ export const PeerBasico = () => (
           />
           <label
             htmlFor="peer-input"
-            className="ig-absolute ig-left-3 ig-top-2.5 ig-text-muted ig-transition-all ig-peer-focus:ig--translate-y-6 ig-peer-focus:ig-scale-75 ig-peer-focus:ig-text-brand ig-peer-placeholder-shown:ig-translate-y-0 ig-peer-placeholder-shown:ig-scale-100"
+            className="ig-absolute ig-left-3 ig-top-2.5 ig-text-muted ig-transition-all peer-focus:ig--translate-y-6 peer-focus:ig-scale-75 peer-focus:ig-text-brand peer-placeholder-shown:ig-translate-y-0 peer-placeholder-shown:ig-scale-100"
           >
             Escribe algo
           </label>
@@ -123,7 +123,7 @@ export const PeerChecked = () => (
           {['Opción A', 'Opción B', 'Opción C'].map((opcion) => (
             <label key={opcion} className="ig-relative ig-cursor-pointer">
               <input type="checkbox" className="ig-peer ig-sr-only" />
-              <span className="ig-block ig-px-4 ig-py-2 ig-border-2 ig-border-default ig-rounded-lg ig-peer-checked:ig-border-brand ig-peer-checked:ig-bg-brand/10 ig-peer-checked:ig-text-brand ig-transition-all">
+              <span className="ig-block ig-px-4 ig-py-2 ig-border-2 ig-border-default ig-rounded-lg peer-checked:ig-border-brand peer-checked:ig-bg-brand/10 peer-checked:ig-text-brand ig-transition-all">
                 {opcion}
               </span>
             </label>
@@ -146,8 +146,8 @@ export const PeerChecked = () => (
                 className="ig-peer ig-sr-only"
                 defaultChecked={i === 1}
               />
-              <span className="ig-block ig-p-4 ig-border-2 ig-border-default ig-rounded-lg ig-text-center ig-peer-checked:ig-border-brand ig-peer-checked:ig-bg-brand/10 ig-transition-all">
-                <span className="ig-block ig-font-semibold ig-text-heading ig-peer-checked:ig-text-brand">
+              <span className="ig-block ig-p-4 ig-border-2 ig-border-default ig-rounded-lg ig-text-center peer-checked:ig-border-brand peer-checked:ig-bg-brand/10 ig-transition-all">
+                <span className="ig-block ig-font-semibold ig-text-heading peer-checked:ig-text-brand">
                   {plan.nombre}
                 </span>
                 <span className="ig-block ig-text-2xl ig-font-bold ig-text-brand">{plan.precio}</span>
@@ -176,10 +176,10 @@ export const PeerInvalid = () => (
             placeholder="tu@email.com"
             required
           />
-          <p className="ig-text-sm ig-text-danger ig-mt-1 ig-hidden ig-peer-invalid:ig-block">
+          <p className="ig-text-sm ig-text-danger ig-mt-1 ig-hidden peer-invalid:ig-block">
             Por favor ingresa un email válido.
           </p>
-          <p className="ig-text-sm ig-text-success ig-mt-1 ig-hidden ig-peer-valid:ig-block">
+          <p className="ig-text-sm ig-text-success ig-mt-1 ig-hidden peer-valid:ig-block">
             ✓ Email válido
           </p>
         </div>
@@ -191,12 +191,12 @@ export const PeerInvalid = () => (
           <label className="ig-form-label">Nombre (mín. 3 caracteres)</label>
           <input
             type="text"
-            className="ig-peer ig-input ig-peer-invalid:ig-border-danger ig-peer-valid:ig-border-success"
+            className="ig-peer ig-input peer-invalid:ig-border-danger peer-valid:ig-border-success"
             minLength={3}
             required
             placeholder="Tu nombre"
           />
-          <p className="ig-text-sm ig-text-danger ig-mt-1 ig-opacity-0 ig-peer-invalid:ig-opacity-100 ig-transition-opacity">
+          <p className="ig-text-sm ig-text-danger ig-mt-1 ig-opacity-0 peer-invalid:ig-opacity-100 ig-transition-opacity">
             El nombre debe tener al menos 3 caracteres.
           </p>
         </div>
@@ -220,7 +220,7 @@ export const PeerDisabled = () => (
           </div>
           <input
             type="text"
-            className="ig-input ig-mt-2 ig-peer-checked:ig-opacity-100 ig-opacity-50 ig-transition-opacity"
+            className="ig-input ig-mt-2 peer-checked:ig-opacity-100 ig-opacity-50 ig-transition-opacity"
             placeholder="Campo condicional"
             disabled
           />
@@ -245,7 +245,7 @@ export const EjemploCompleto = () => (
         />
         <label
           htmlFor="nombre-completo"
-          className="ig-absolute ig-left-3 ig-top-4 ig-text-muted ig-text-sm ig-transition-all ig-origin-left ig-peer-placeholder-shown:ig-top-4 ig-peer-placeholder-shown:ig-text-base ig-peer-focus:ig-top-1 ig-peer-focus:ig-text-xs ig-peer-focus:ig-text-brand ig-peer-not-placeholder-shown:ig-top-1 ig-peer-not-placeholder-shown:ig-text-xs"
+          className="ig-absolute ig-left-3 ig-top-4 ig-text-muted ig-text-sm ig-transition-all ig-origin-left peer-placeholder-shown:ig-top-4 peer-placeholder-shown:ig-text-base peer-focus:ig-top-1 peer-focus:ig-text-xs peer-focus:ig-text-brand peer-not-placeholder-shown:ig-top-1 peer-not-placeholder-shown:ig-text-xs"
         >
           Nombre completo
         </label>
@@ -266,7 +266,7 @@ export const EjemploCompleto = () => (
                 value={plan.id}
                 className="ig-peer ig-sr-only"
               />
-              <span className="ig-block ig-p-3 ig-border-2 ig-border-default ig-rounded-lg ig-peer-checked:ig-border-brand ig-peer-checked:ig-bg-brand/10 ig-transition-all ig-text-center">
+              <span className="ig-block ig-p-3 ig-border-2 ig-border-default ig-rounded-lg peer-checked:ig-border-brand peer-checked:ig-bg-brand/10 ig-transition-all ig-text-center">
                 <span className="ig-font-medium ig-text-body">{plan.nombre}</span>
                 <span className="ig-block ig-text-sm ig-text-muted">{plan.precio}</span>
               </span>

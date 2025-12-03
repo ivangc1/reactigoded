@@ -17,7 +17,7 @@ export const CardBasica = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Card Básica</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <Card>
         <div className="ig-card-body">
           <h3 className="ig-text-lg ig-font-semibold ig-text-heading ig-mb-2">Título de la card</h3>
@@ -45,7 +45,7 @@ export const VariantesDeColor = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Variantes de Color</h2>
     <p className="ig-text-body ig-mb-6">Cards con borde izquierdo acentuado.</p>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-lg:ig-grid-cols-3 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 lg:ig-grid-cols-3 ig-gap-4">
       <Card variant="brand">
         <div className="ig-card-body">
           <h4 className="ig-font-semibold ig-text-heading">Card Brand</h4>
@@ -95,7 +95,7 @@ export const VariantesDeEstilo = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Variantes de Estilo</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <Card variant="bordered">
         <div className="ig-card-body">
           <h4 className="ig-font-semibold ig-text-heading">Card Bordered</h4>
@@ -131,7 +131,7 @@ export const CardsFilled = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Cards con Fondo Tintado</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-lg:ig-grid-cols-3 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 lg:ig-grid-cols-3 ig-gap-4">
       <div className="ig-card ig-card-brand-filled">
         <div className="ig-card-body">
           <h4 className="ig-font-semibold ig-text-heading">Brand Filled</h4>
@@ -167,7 +167,7 @@ export const CardConImagen = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Card con Imagen</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
       <Card>
         <div className="ig-card-image ig-card-image-top ig-h-40 ig-bg-muted ig-flex ig-items-center ig-justify-center">
           <span className="ig-text-4xl">🖼️</span>
@@ -284,7 +284,7 @@ export const EjemplosReales = () => (
       </Card>
 
       {/* Stats cards */}
-      <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
+      <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
         {[
           { label: 'Usuarios', value: '2,543', color: 'brand' },
           { label: 'Ingresos', value: '$45.2k', color: 'success' },

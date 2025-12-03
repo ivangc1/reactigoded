@@ -49,7 +49,7 @@ export const ColoresLatinos = () => (
       <code className="ig-text-sm ig-bg-muted ig-px-1 ig-rounded ig-mx-1">-nox</code> (modo oscuro).
     </p>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
       <ColorSwatch
         name="Vitreus (Vidrio)"
         cssVar="--ig-vitreus"
@@ -91,7 +91,7 @@ export const AliasesSemanticos = () => (
       Para uso cotidiano, puedes usar nombres familiares que apuntan a los colores latinos.
     </p>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-lg:ig-grid-cols-3 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 lg:ig-grid-cols-3 ig-gap-4">
       <ColorSwatch
         name="Brand"
         cssVar="--ig-brand"
@@ -206,7 +206,7 @@ export const ClasesDeFondo = () => (
       Usa estas clases para aplicar colores de fondo.
     </p>
 
-    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-4">
       <div className="ig-bg-brand ig-p-4 ig-rounded-lg ig-text-center">
         <span className="ig-text-on-brand ig-font-semibold">ig-bg-brand</span>
       </div>

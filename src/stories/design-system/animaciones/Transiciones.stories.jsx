@@ -8,7 +8,7 @@ export const TransicionesVsAnimaciones = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones vs Animaciones</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Transiciones</h3>
         <p className="ig-text-body ig-text-sm ig-mb-4">
@@ -68,7 +68,7 @@ export const TransicionesEnCards = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones en Cards</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
       <div className="ig-card ig-transition-shadow ig-duration-300 ig-hover:ig-shadow-xl ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">Shadow Transition</h3>
@@ -126,7 +126,7 @@ export const TransicionesConGrupo = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Transiciones con Grupo</h2>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-group ig-card ig-cursor-pointer ig-overflow-hidden">
         <div className="ig-h-32 ig-bg-brand ig-transition-transform ig-duration-500 ig-group-hover:ig-scale-110"></div>
         <div className="ig-card-body">

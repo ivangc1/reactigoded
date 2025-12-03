@@ -83,7 +83,7 @@ export const Tamanos = () => (
 
     <div className="ig-mt-6 ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Props disponibles</h3>
-      <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-5 ig-gap-2 ig-text-sm">
+      <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-5 ig-gap-2 ig-text-sm">
         <code className="ig-text-muted">size="xs"</code>
         <code className="ig-text-muted">size="sm"</code>
         <code className="ig-text-muted">(default)</code>

@@ -48,7 +48,7 @@ export const NotScreenReaderOnly = () => (
     <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <pre className="ig-text-sm ig-text-body ig-bg-muted ig-p-4 ig-rounded ig-overflow-x-auto">
 {`<!-- Oculto en móvil, visible en desktop -->
-<span class="ig-sr-only ig-md:ig-not-sr-only">
+<span class="ig-sr-only md:ig-not-sr-only">
   Este texto se muestra en pantallas medianas y mayores
 </span>`}
       </pre>
@@ -218,7 +218,7 @@ export const ColorContraste = () => (
       El sistema de colores está diseñado para cumplir con WCAG 2.1 AA.
     </p>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
       <div className="ig-bg-brand ig-text-on-brand ig-p-4 ig-rounded-lg">
         <strong>Brand</strong>
         <p className="ig-text-sm">Texto sobre fondo brand</p>

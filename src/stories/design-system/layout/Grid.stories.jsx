@@ -197,19 +197,19 @@ export const EjemplosDashboard = () => (
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Layout típico de dashboard</h3>
         <div className="ig-grid ig-grid-cols-12 ig-gap-4">
-          <div className="ig-col-span-12 ig-md:ig-col-span-8">
+          <div className="ig-col-span-12 md:ig-col-span-8">
             <Cell className="ig-h-32">Gráfico principal (8 cols)</Cell>
           </div>
-          <div className="ig-col-span-12 ig-md:ig-col-span-4">
+          <div className="ig-col-span-12 md:ig-col-span-4">
             <Cell className="ig-h-32">Estadísticas (4 cols)</Cell>
           </div>
-          <div className="ig-col-span-12 ig-md:ig-col-span-4">
+          <div className="ig-col-span-12 md:ig-col-span-4">
             <Cell className="ig-h-24">Card 1 (4 cols)</Cell>
           </div>
-          <div className="ig-col-span-12 ig-md:ig-col-span-4">
+          <div className="ig-col-span-12 md:ig-col-span-4">
             <Cell className="ig-h-24">Card 2 (4 cols)</Cell>
           </div>
-          <div className="ig-col-span-12 ig-md:ig-col-span-4">
+          <div className="ig-col-span-12 md:ig-col-span-4">
             <Cell className="ig-h-24">Card 3 (4 cols)</Cell>
           </div>
         </div>
@@ -217,7 +217,7 @@ export const EjemplosDashboard = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Galería de imágenes</h3>
-        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-2">
+        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-2">
           {Array.from({ length: 8 }, (_, i) => (
             <div key={i} className="ig-aspect-square ig-bg-muted ig-rounded-lg ig-flex ig-items-center ig-justify-center">
               <span className="ig-text-muted">Imagen {i + 1}</span>

@@ -149,7 +149,7 @@ export const HasDisabled = () => (
       El contenedor refleja el estado deshabilitado de sus hijos.
     </p>
 
-    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
       <div className="ig-p-4 ig-bg-surface ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Campo activo</h3>
         <input type="text" className="ig-input" placeholder="Puedes escribir aquí" />
