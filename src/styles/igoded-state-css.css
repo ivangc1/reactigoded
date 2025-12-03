@@ -14,7 +14,7 @@ Requiere igoded-design.css para las clases base.
 CÓMO USAR:
 1. Importa igoded-design.css PRIMERO
 2. Importa este archivo DESPUÉS
-3. Usa variantes así: <div class="ig-hover:ig-bg-brand ig-focus:ig-ring">
+3. Usa variantes así: <div class="hover:ig-bg-brand focus:ig-ring">
 
 ESTADOS INCLUIDOS:
 - Interacción: hover, focus, active, focus-visible, disabled, focus-within
@@ -24,9 +24,9 @@ ESTADOS INCLUIDOS:
 - Media: print, portrait, landscape, forced-colors, prefers-contrast
 
 PREFIJOS:
-- ig-hover:ig-* → :hover
-- ig-focus:ig-* → :focus
-- ig-active:ig-* → :active
+- hover:ig-* → :hover
+- focus:ig-* → :focus
+- active:ig-* → :active
 - etc.
 
 ═══════════════════════════════════════════════════════════════════════════════

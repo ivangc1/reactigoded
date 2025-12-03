@@ -71,7 +71,7 @@ export const GroupFocus = () => (
           className="ig-input ig-peer"
           placeholder="Input con label animado"
         />
-        <label className="ig-absolute ig-left-3 ig--top-2.5 ig-bg-surface ig-px-1 ig-text-sm ig-text-muted ig-group-focus-within:ig-text-brand ig-transition-colors">
+        <label className="ig-absolute ig-left-3 ig--top-2.5 ig-bg-surface ig-px-1 ig-text-sm ig-text-muted group-focus-within:ig-text-brand ig-transition-colors">
           Email
         </label>
       </div>
