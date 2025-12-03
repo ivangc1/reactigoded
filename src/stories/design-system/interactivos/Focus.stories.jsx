@@ -57,7 +57,7 @@ export const FocusVisible = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Focus Visible</h2>
     <p className="ig-text-body ig-mb-6">
-      <code className="ig-bg-muted ig-px-1 ig-rounded">ig-focus-visible</code> solo muestra
+      <code className="ig-bg-muted ig-px-1 ig-rounded">focus-visible:ig-*</code> solo muestra
       el estilo cuando se navega con teclado, no al hacer clic.
     </p>
 
@@ -81,7 +81,7 @@ export const FocusWithin = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Focus Within</h2>
     <p className="ig-text-body ig-mb-6">
-      <code className="ig-bg-muted ig-px-1 ig-rounded">ig-focus-within</code> aplica estilos
+      <code className="ig-bg-muted ig-px-1 ig-rounded">focus-within:ig-*</code> aplica estilos
       al padre cuando cualquier hijo tiene focus.
     </p>
 

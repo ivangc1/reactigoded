@@ -9,7 +9,7 @@ export const GroupHover = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Group Hover</h2>
     <p className="ig-text-body ig-mb-6">
       Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-group</code> en el padre y
-      <code className="ig-bg-muted ig-px-1 ig-rounded">group-hover:*</code> en los hijos.
+      <code className="ig-bg-muted ig-px-1 ig-rounded">group-hover:ig-*</code> en los hijos.
     </p>
 
     <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
@@ -84,7 +84,7 @@ export const PeerBasico = () => (
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Peer Básico</h2>
     <p className="ig-text-body ig-mb-6">
       Usa <code className="ig-bg-muted ig-px-1 ig-rounded">ig-peer</code> en un elemento y
-      <code className="ig-bg-muted ig-px-1 ig-rounded">peer-*:</code> en elementos hermanos siguientes.
+      <code className="ig-bg-muted ig-px-1 ig-rounded">peer-*:ig-*</code> en elementos hermanos siguientes.
     </p>
 
     <div className="ig-space-y-6 ig-max-w-md">

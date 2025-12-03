@@ -8,7 +8,7 @@ export const HoverBasico = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Hover Básico</h2>
     <p className="ig-text-body ig-mb-6">
-      Las clases <code className="ig-bg-muted ig-px-1 ig-rounded">ig-hover:*</code> aplican estilos
+      Las clases <code className="ig-bg-muted ig-px-1 ig-rounded">hover:ig-*</code> aplican estilos
       cuando el cursor está sobre el elemento.
     </p>
 
