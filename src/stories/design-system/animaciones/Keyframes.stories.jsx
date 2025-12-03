@@ -8,7 +8,7 @@ export const AnimacionesBasicas = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Animaciones Básicas</h2>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-6">
       <div className="ig-text-center">
         <div className="ig-w-16 ig-h-16 ig-bg-brand ig-rounded ig-mx-auto ig-mb-2 ig-animate-spin"></div>
         <code className="ig-text-xs ig-text-muted">ig-animate-spin</code>
@@ -39,7 +39,7 @@ export const AnimacionesDeAtencion = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Animaciones de Atención</h2>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-6">
       <div className="ig-text-center">
         <div className="ig-w-16 ig-h-16 ig-bg-danger ig-rounded ig-mx-auto ig-mb-2 ig-animate-shake"></div>
         <code className="ig-text-xs ig-text-muted">ig-animate-shake</code>
@@ -87,7 +87,7 @@ export const AnimacionesDeSlide = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Animaciones de Slide</h2>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-6">
       <div className="ig-text-center">
         <div className="ig-w-16 ig-h-16 ig-bg-brand ig-rounded ig-mx-auto ig-mb-2 ig-animate-slide-up"></div>
         <code className="ig-text-xs ig-text-muted">ig-animate-slide-up</code>
@@ -119,7 +119,7 @@ export const AnimacionesDeZoom = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Animaciones de Zoom/Scale</h2>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-6">
       <div className="ig-text-center">
         <div className="ig-w-16 ig-h-16 ig-bg-brand ig-rounded ig-mx-auto ig-mb-2 ig-animate-scale-in"></div>
         <code className="ig-text-xs ig-text-muted">ig-animate-scale-in</code>
@@ -220,7 +220,7 @@ export const TodasLasAnimaciones = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Todas las Animaciones</h2>
 
-    <div className="ig-grid ig-grid-cols-3 md:ig-grid-cols-5 lg:ig-grid-cols-7 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-3 ig-md:ig-grid-cols-5 ig-lg:ig-grid-cols-7 ig-gap-4">
       {[
         'spin', 'ping', 'pulse', 'bounce', 'shake',
         'fade-in', 'fade-out', 'slide-up', 'slide-down',

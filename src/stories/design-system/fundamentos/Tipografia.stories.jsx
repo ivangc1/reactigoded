@@ -220,7 +220,7 @@ export const EstilosDeTexto = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Estilos de Texto</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <code className="ig-text-sm ig-text-muted ig-block ig-mb-2">ig-italic</code>
         <p className="ig-italic ig-text-lg">Texto en itálica</p>

@@ -53,7 +53,7 @@ export const ColoresSolidosEnTemas = () => (
       Los colores de marca se mantienen consistentes pero ajustan su intensidad para cada tema.
     </p>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 lg:ig-grid-cols-6 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-lg:ig-grid-cols-6 ig-gap-4">
       {[
         { bg: 'brand', nombre: 'Brand' },
         { bg: 'secondary', nombre: 'Secondary' },
@@ -107,7 +107,7 @@ export const ComponentesEnDarkMode = () => (
 
     <div className="ig-space-y-6">
       {/* Cards */}
-      <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
+      <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
         <div className="ig-card">
           <div className="ig-card-body">
             <h4 className="ig-font-semibold ig-text-heading">Card Normal</h4>

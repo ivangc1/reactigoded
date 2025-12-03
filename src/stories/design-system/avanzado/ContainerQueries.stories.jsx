@@ -38,7 +38,7 @@ export const BreakpointsDeContenedor = () => (
 
     <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Breakpoints disponibles</h3>
-      <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-3">
+      <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-3">
         {[
           { bp: '@xs', size: '320px' },
           { bp: '@sm', size: '384px' },
@@ -92,7 +92,7 @@ export const CardResponsiva = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Card Responsiva al Contenedor</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
       {/* Card en contenedor pequeño */}
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-2">En espacio reducido</h3>

@@ -1,4 +1,5 @@
 import '../src/styles/igoded-design.css';
+import '../src/styles/igoded-state-css.css';
 
 /** @type { import('@storybook/react').Preview } */
 const preview = {

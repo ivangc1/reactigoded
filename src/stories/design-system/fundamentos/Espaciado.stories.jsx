@@ -72,7 +72,7 @@ export const ClasesDePadding = () => (
       Aplica espaciado interior a los elementos.
     </p>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-4">
       <div className="ig-bg-surface ig-rounded-lg ig-border ig-border-default ig-overflow-hidden">
         <div className="ig-p-3 ig-border-b ig-border-subtle">
           <code className="ig-text-sm ig-text-muted">ig-p-4 (todos los lados)</code>
@@ -120,7 +120,7 @@ export const ClasesDePadding = () => (
 
     <div className="ig-mt-6 ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
       <h3 className="ig-font-semibold ig-text-heading ig-mb-2">Referencia rápida</h3>
-      <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-2 ig-text-sm">
+      <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-2 ig-text-sm">
         <code className="ig-text-muted">ig-p-* → todos</code>
         <code className="ig-text-muted">ig-px-* → horizontal</code>
         <code className="ig-text-muted">ig-py-* → vertical</code>

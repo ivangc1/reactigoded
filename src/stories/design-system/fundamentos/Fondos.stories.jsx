@@ -131,7 +131,7 @@ export const ClasesUtilitarias = () => (
     <div className="ig-space-y-4">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Fondos de Sistema</h3>
-        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-5 ig-gap-2">
+        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-5 ig-gap-2">
           <div className="ig-bg-sunken ig-p-4 ig-rounded ig-text-center">
             <span className="ig-text-xs">ig-bg-sunken</span>
           </div>
@@ -152,7 +152,7 @@ export const ClasesUtilitarias = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Fondos de Color</h3>
-        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-2">
+        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-2">
           <div className="ig-bg-brand ig-p-4 ig-rounded ig-text-center">
             <span className="ig-text-xs ig-text-on-brand">ig-bg-brand</span>
           </div>
@@ -176,7 +176,7 @@ export const ClasesUtilitarias = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Fondos Básicos</h3>
-        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-2">
+        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-2">
           <div className="ig-bg-transparent ig-p-4 ig-rounded ig-border ig-border-dashed ig-border-default ig-text-center">
             <span className="ig-text-xs">ig-bg-transparent</span>
           </div>
@@ -202,7 +202,7 @@ export const Gradientes = () => (
     <div className="ig-space-y-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Gradientes Predefinidos</h3>
-        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-4">
+        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-4">
           <div className="ig-gradient-brand ig-p-6 ig-rounded-lg ig-text-center">
             <span className="ig-text-sm ig-font-semibold" style={{ color: 'white' }}>ig-gradient-brand</span>
           </div>
@@ -226,7 +226,7 @@ export const Gradientes = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Gradientes con Dirección</h3>
-        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-4">
+        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-4">
           <div className="ig-gradient-to-r-brand ig-p-6 ig-rounded-lg ig-text-center">
             <span className="ig-text-xs" style={{ color: 'white' }}>to-r-brand (→)</span>
           </div>

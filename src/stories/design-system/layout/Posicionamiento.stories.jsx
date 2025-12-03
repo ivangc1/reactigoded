@@ -144,7 +144,7 @@ export const ZIndex = () => (
 
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <h3 className="ig-font-semibold ig-text-heading ig-mb-3">Variables de z-index semánticos</h3>
-        <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-2 ig-text-sm">
+        <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-2 ig-text-sm">
           <code className="ig-text-muted">--ig-z-dropdown: 1000</code>
           <code className="ig-text-muted">--ig-z-sticky: 1020</code>
           <code className="ig-text-muted">--ig-z-fixed: 1030</code>
@@ -186,7 +186,7 @@ export const Overflow = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Overflow</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border ig-border-default">
         <code className="ig-text-sm ig-text-muted ig-block ig-mb-3">ig-overflow-hidden</code>
         <div className="ig-w-full ig-h-24 ig-overflow-hidden ig-bg-muted ig-rounded">

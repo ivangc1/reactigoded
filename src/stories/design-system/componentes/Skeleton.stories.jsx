@@ -67,7 +67,7 @@ export const SkeletonCard = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Skeleton de Card</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 lg:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-lg:ig-grid-cols-3 ig-gap-6">
       {[1, 2, 3].map((i) => (
         <div key={i} className="ig-card">
           <div className="ig-skeleton ig-h-40 ig-rounded-t-lg"></div>
@@ -214,7 +214,7 @@ export const ComparacionContenido = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Comparación: Skeleton vs Contenido</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-8">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-8">
       {/* Skeleton */}
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Cargando...</h3>

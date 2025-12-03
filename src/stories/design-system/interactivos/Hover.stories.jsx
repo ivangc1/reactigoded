@@ -32,7 +32,7 @@ export const HoverColores = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Hover en Colores</h2>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 ig-gap-4">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-3 ig-gap-4">
       <div className="ig-bg-brand ig-hover:ig-bg-secondary ig-text-on-brand ig-p-4 ig-rounded ig-transition-colors ig-cursor-pointer ig-text-center">
         Brand → Secondary
       </div>
@@ -68,7 +68,7 @@ export const HoverTransformaciones = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Hover con Transformaciones</h2>
 
-    <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6 ig-p-4">
+    <div className="ig-grid ig-grid-cols-2 ig-md:ig-grid-cols-4 ig-gap-6 ig-p-4">
       <div className="ig-text-center">
         <div className="ig-bg-brand ig-w-20 ig-h-20 ig-rounded ig-mx-auto ig-transition-transform ig-hover:ig-scale-110 ig-cursor-pointer"></div>
         <code className="ig-text-xs ig-text-muted ig-mt-2 ig-block">ig-hover:ig-scale-110</code>
@@ -96,7 +96,7 @@ export const HoverSombras = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Hover con Sombras</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
       <div className="ig-bg-surface ig-p-6 ig-rounded-lg ig-border ig-border-default ig-shadow-sm ig-hover:ig-shadow-lg ig-transition-shadow ig-cursor-pointer">
         <h3 className="ig-font-semibold ig-text-heading">Shadow SM → LG</h3>
         <p className="ig-text-body ig-text-sm">Incremento de sombra</p>
@@ -144,7 +144,7 @@ export const HoverEnCards = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Hover en Cards</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-3 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-3 ig-gap-6">
       <div className="ig-card ig-hover:ig-border-brand ig-transition-colors ig-cursor-pointer">
         <div className="ig-card-body">
           <h3 className="ig-font-semibold ig-text-heading">Borde activo</h3>

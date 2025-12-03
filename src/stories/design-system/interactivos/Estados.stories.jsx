@@ -184,7 +184,7 @@ export const EstadosSemanticos = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Estados Semánticos</h2>
 
-    <div className="ig-grid ig-grid-cols-1 md:ig-grid-cols-2 ig-gap-6">
+    <div className="ig-grid ig-grid-cols-1 ig-md:ig-grid-cols-2 ig-gap-6">
       <div className="ig-bg-surface ig-p-4 ig-rounded-lg ig-border-l-4 ig-border-success">
         <h3 className="ig-font-semibold ig-text-success ig-mb-1">Éxito</h3>
         <p className="ig-text-body ig-text-sm">La operación se completó correctamente.</p>
