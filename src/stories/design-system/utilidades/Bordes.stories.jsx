@@ -8,7 +8,7 @@ export const AnchosDeBorde = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Anchos de Borde</h2>
 
-    <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+    <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
       <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 lg:ig-grid-cols-5 ig-gap-6">
         {[
           { clase: 'ig-border-0', nombre: '0' },
@@ -18,10 +18,10 @@ export const AnchosDeBorde = () => (
           { clase: 'ig-border-8', nombre: '8px' },
         ].map(({ clase, nombre }) => (
           <div key={clase} className="ig-text-center">
-            <div className={`ig-w-28 ig-h-28 ig-bg-neutral-100 ig-border-4 ig-border-brand ig-rounded-lg ig-mx-auto ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-              <span className="ig-text-neutral-900 ig-font-bold ig-text-lg">{nombre}</span>
+            <div className={`ig-w-28 ig-h-28 ig-bg-surface ig-border-4 ig-border-brand ig-rounded-lg ig-mx-auto ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+              <span className="ig-text-heading ig-font-bold ig-text-lg">{nombre}</span>
             </div>
-            <code className="ig-text-sm ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+            <code className="ig-text-sm ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
           </div>
         ))}
       </div>
@@ -36,7 +36,7 @@ export const BordesPorLado = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Bordes por Lado</h2>
 
-    <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+    <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
       <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 lg:ig-grid-cols-6 ig-gap-6">
         {[
           { clase: 'ig-border-t-4', label: 'Top' },
@@ -47,10 +47,10 @@ export const BordesPorLado = () => (
           { clase: 'ig-border-y-4', label: 'Y (T+B)' },
         ].map(({ clase, label }) => (
           <div key={clase} className="ig-text-center">
-            <div className={`ig-w-28 ig-h-28 ig-bg-neutral-100 ${clase} ig-border-brand ig-rounded-lg ig-mx-auto ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-              <span className="ig-text-neutral-900 ig-font-bold ig-text-lg">{label}</span>
+            <div className={`ig-w-28 ig-h-28 ig-bg-surface ${clase} ig-border-brand ig-rounded-lg ig-mx-auto ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+              <span className="ig-text-heading ig-font-bold ig-text-lg">{label}</span>
             </div>
-            <code className="ig-text-sm ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+            <code className="ig-text-sm ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
           </div>
         ))}
       </div>
@@ -65,7 +65,7 @@ export const ColoresDeBorde = () => (
     <div className="ig-space-y-8">
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Semánticos</h3>
-        <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+        <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
           <div className="ig-grid ig-grid-cols-3 ig-gap-6">
             {[
               { clase: 'ig-border-subtle', nombre: 'Subtle' },
@@ -73,10 +73,10 @@ export const ColoresDeBorde = () => (
               { clase: 'ig-border-strong', nombre: 'Strong' },
             ].map(({ clase, nombre }) => (
               <div key={clase} className="ig-text-center">
-                <div className={`ig-h-24 ig-bg-neutral-100 ig-border-4 ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-                  <span className="ig-text-neutral-900 ig-font-bold">{nombre}</span>
+                <div className={`ig-h-24 ig-bg-surface ig-border-4 ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+                  <span className="ig-text-heading ig-font-bold">{nombre}</span>
                 </div>
-                <code className="ig-text-sm ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+                <code className="ig-text-sm ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
               </div>
             ))}
           </div>
@@ -85,7 +85,7 @@ export const ColoresDeBorde = () => (
 
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Por Color</h3>
-        <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+        <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
           <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-3 lg:ig-grid-cols-6 ig-gap-6">
             {[
               { clase: 'ig-border-brand', nombre: 'Brand' },
@@ -96,10 +96,10 @@ export const ColoresDeBorde = () => (
               { clase: 'ig-border-info', nombre: 'Info' },
             ].map(({ clase, nombre }) => (
               <div key={clase} className="ig-text-center">
-                <div className={`ig-h-24 ig-bg-neutral-100 ig-border-4 ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-                  <span className="ig-text-neutral-900 ig-font-bold">{nombre}</span>
+                <div className={`ig-h-24 ig-bg-surface ig-border-4 ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+                  <span className="ig-text-heading ig-font-bold">{nombre}</span>
                 </div>
-                <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+                <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
               </div>
             ))}
           </div>
@@ -113,7 +113,7 @@ export const EstilosDeBorde = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Estilos de Borde</h2>
 
-    <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+    <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
       <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6">
         {[
           { clase: 'ig-border-solid', nombre: 'Solid' },
@@ -122,10 +122,10 @@ export const EstilosDeBorde = () => (
           { clase: 'ig-border-double', nombre: 'Double' },
         ].map(({ clase, nombre }) => (
           <div key={clase} className="ig-text-center">
-            <div className={`ig-h-28 ig-bg-neutral-100 ig-border-4 ig-border-brand ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-              <span className="ig-text-neutral-900 ig-font-bold ig-text-lg">{nombre}</span>
+            <div className={`ig-h-28 ig-bg-surface ig-border-4 ig-border-brand ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+              <span className="ig-text-heading ig-font-bold ig-text-lg">{nombre}</span>
             </div>
-            <code className="ig-text-sm ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+            <code className="ig-text-sm ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
           </div>
         ))}
       </div>
@@ -137,7 +137,7 @@ export const BorderRadius = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Border Radius</h2>
 
-    <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+    <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
       <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 lg:ig-grid-cols-7 ig-gap-6">
         {[
           { clase: 'ig-rounded-none', nombre: 'none' },
@@ -149,10 +149,10 @@ export const BorderRadius = () => (
           { clase: 'ig-rounded-full', nombre: 'full' },
         ].map(({ clase, nombre }) => (
           <div key={clase} className="ig-text-center">
-            <div className={`ig-w-24 ig-h-24 ig-bg-brand ig-flex ig-items-center ig-justify-center ig-text-neutral-100 ig-font-bold ${clase} ig-mx-auto ig-mb-3`}>
+            <div className={`ig-w-24 ig-h-24 ig-bg-brand ig-flex ig-items-center ig-justify-center ig-text-heading ig-font-bold ${clase} ig-mx-auto ig-mb-3`}>
               {nombre}
             </div>
-            <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+            <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
           </div>
         ))}
       </div>
@@ -164,7 +164,7 @@ export const RadiusPorEsquina = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Radius por Esquina</h2>
 
-    <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+    <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
       <div className="ig-grid ig-grid-cols-2 md:ig-grid-cols-4 ig-gap-6">
         {[
           { clase: 'ig-rounded-tl-xl', label: 'TL', bg: 'ig-bg-brand' },
@@ -177,10 +177,10 @@ export const RadiusPorEsquina = () => (
           { clase: 'ig-rounded-r-xl', label: 'Right', bg: 'ig-bg-secondary' },
         ].map(({ clase, label, bg }) => (
           <div key={clase} className="ig-text-center">
-            <div className={`ig-w-24 ig-h-24 ${bg} ig-flex ig-items-center ig-justify-center ig-text-neutral-100 ig-font-bold ${clase} ig-mx-auto ig-mb-3`}>
+            <div className={`ig-w-24 ig-h-24 ${bg} ig-flex ig-items-center ig-justify-center ig-text-heading ig-font-bold ${clase} ig-mx-auto ig-mb-3`}>
               {label}
             </div>
-            <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+            <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
           </div>
         ))}
       </div>
@@ -192,34 +192,34 @@ export const Dividers = () => (
   <div>
     <h2 className="ig-text-2xl ig-font-bold ig-text-heading ig-mb-6">Dividers</h2>
 
-    <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+    <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
       <div className="ig-space-y-8">
         <div>
-          <p className="ig-text-sm ig-font-bold ig-text-neutral-900 ig-mb-3">Divisor manual con border-t:</p>
-          <div className="ig-bg-neutral-100 ig-rounded-lg ig-border-2 ig-border-brand">
-            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Elemento 1</div>
+          <p className="ig-text-sm ig-font-bold ig-text-heading ig-mb-3">Divisor manual con border-t:</p>
+          <div className="ig-bg-surface ig-rounded-lg ig-border-2 ig-border-brand">
+            <div className="ig-p-4 ig-text-body ig-font-medium">Elemento 1</div>
             <div className="ig-border-t-2 ig-border-brand"></div>
-            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Elemento 2</div>
+            <div className="ig-p-4 ig-text-body ig-font-medium">Elemento 2</div>
             <div className="ig-border-t-2 ig-border-brand"></div>
-            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Elemento 3</div>
+            <div className="ig-p-4 ig-text-body ig-font-medium">Elemento 3</div>
           </div>
         </div>
 
         <div>
-          <p className="ig-text-sm ig-font-bold ig-text-neutral-900 ig-mb-3">Con ig-divide-y (automático):</p>
-          <div className="ig-bg-neutral-100 ig-rounded-lg ig-border-2 ig-border-secondary ig-divide-y-2 ig-divide-secondary">
-            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Con ig-divide-y</div>
-            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Automático</div>
-            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Entre hijos</div>
+          <p className="ig-text-sm ig-font-bold ig-text-heading ig-mb-3">Con ig-divide-y (automático):</p>
+          <div className="ig-bg-surface ig-rounded-lg ig-border-2 ig-border-secondary ig-divide-y-2 ig-divide-secondary">
+            <div className="ig-p-4 ig-text-body ig-font-medium">Con ig-divide-y</div>
+            <div className="ig-p-4 ig-text-body ig-font-medium">Automático</div>
+            <div className="ig-p-4 ig-text-body ig-font-medium">Entre hijos</div>
           </div>
         </div>
 
         <div>
-          <p className="ig-text-sm ig-font-bold ig-text-neutral-900 ig-mb-3">Con ig-divide-x (horizontal):</p>
-          <div className="ig-flex ig-bg-neutral-100 ig-rounded-lg ig-border-2 ig-border-success ig-divide-x-2 ig-divide-success">
-            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-900 ig-font-medium">Col 1</div>
-            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-900 ig-font-medium">Col 2</div>
-            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-900 ig-font-medium">Col 3</div>
+          <p className="ig-text-sm ig-font-bold ig-text-heading ig-mb-3">Con ig-divide-x (horizontal):</p>
+          <div className="ig-flex ig-bg-surface ig-rounded-lg ig-border-2 ig-border-success ig-divide-x-2 ig-divide-success">
+            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-body ig-font-medium">Col 1</div>
+            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-body ig-font-medium">Col 2</div>
+            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-body ig-font-medium">Col 3</div>
           </div>
         </div>
       </div>
@@ -234,7 +234,7 @@ export const Ring = () => (
     <div className="ig-space-y-8">
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Anchos de Ring</h3>
-        <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+        <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
           <div className="ig-flex ig-flex-wrap ig-gap-6">
             {[
               { clase: 'ig-ring-0', nombre: '0' },
@@ -244,10 +244,10 @@ export const Ring = () => (
               { clase: 'ig-ring-4', nombre: '4' },
             ].map(({ clase, nombre }) => (
               <div key={clase} className="ig-text-center">
-                <div className={`ig-w-24 ig-h-24 ig-bg-neutral-100 ${clase} ig-ring-brand ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-                  <span className="ig-text-neutral-900 ig-font-bold ig-text-lg">{nombre}</span>
+                <div className={`ig-w-24 ig-h-24 ig-bg-surface ${clase} ig-ring-brand ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+                  <span className="ig-text-heading ig-font-bold ig-text-lg">{nombre}</span>
                 </div>
-                <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+                <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
               </div>
             ))}
           </div>
@@ -256,7 +256,7 @@ export const Ring = () => (
 
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Colores de Ring</h3>
-        <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+        <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
           <div className="ig-flex ig-flex-wrap ig-gap-6">
             {[
               { clase: 'ig-ring-brand', nombre: 'Brand' },
@@ -267,10 +267,10 @@ export const Ring = () => (
               { clase: 'ig-ring-info', nombre: 'Info' },
             ].map(({ clase, nombre }) => (
               <div key={clase} className="ig-text-center">
-                <div className={`ig-w-24 ig-h-24 ig-bg-neutral-100 ig-ring-4 ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
-                  <span className="ig-text-neutral-900 ig-font-bold">{nombre}</span>
+                <div className={`ig-w-24 ig-h-24 ig-bg-surface ig-ring-4 ${clase} ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center`}>
+                  <span className="ig-text-heading ig-font-bold">{nombre}</span>
                 </div>
-                <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">{clase}</code>
+                <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">{clase}</code>
               </div>
             ))}
           </div>
@@ -279,19 +279,19 @@ export const Ring = () => (
 
       <div>
         <h3 className="ig-font-semibold ig-text-heading ig-mb-4">Ring Inset</h3>
-        <div className="ig-bg-neutral-400 ig-p-8 ig-rounded-xl">
+        <div className="ig-bg-muted ig-p-8 ig-rounded-xl">
           <div className="ig-flex ig-gap-8">
             <div className="ig-text-center">
-              <div className="ig-w-28 ig-h-28 ig-bg-neutral-100 ig-ring-4 ig-ring-brand ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center">
-                <span className="ig-text-neutral-900 ig-font-bold">Normal</span>
+              <div className="ig-w-28 ig-h-28 ig-bg-surface ig-ring-4 ig-ring-brand ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center">
+                <span className="ig-text-heading ig-font-bold">Normal</span>
               </div>
-              <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">ig-ring-4</code>
+              <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">ig-ring-4</code>
             </div>
             <div className="ig-text-center">
-              <div className="ig-w-28 ig-h-28 ig-bg-neutral-100 ig-ring-4 ig-ring-inset ig-ring-brand ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center">
-                <span className="ig-text-neutral-900 ig-font-bold">Inset</span>
+              <div className="ig-w-28 ig-h-28 ig-bg-surface ig-ring-4 ig-ring-inset ig-ring-brand ig-rounded-lg ig-mb-3 ig-flex ig-items-center ig-justify-center">
+                <span className="ig-text-heading ig-font-bold">Inset</span>
               </div>
-              <code className="ig-text-xs ig-font-mono ig-bg-neutral-900 ig-text-neutral-100 ig-px-2 ig-py-1 ig-rounded">ig-ring-inset</code>
+              <code className="ig-text-xs ig-font-mono ig-bg-elevated ig-text-body ig-px-2 ig-py-1 ig-rounded ig-border ig-border-default">ig-ring-inset</code>
             </div>
           </div>
         </div>
