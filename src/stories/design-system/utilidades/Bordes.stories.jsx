@@ -197,29 +197,29 @@ export const Dividers = () => (
         <div>
           <p className="ig-text-sm ig-font-bold ig-text-neutral-900 ig-mb-3">Divisor manual con border-t:</p>
           <div className="ig-bg-neutral-100 ig-rounded-lg ig-border-2 ig-border-brand">
-            <div className="ig-p-4 ig-text-neutral-100 ig-font-medium">Elemento 1</div>
+            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Elemento 1</div>
             <div className="ig-border-t-2 ig-border-brand"></div>
-            <div className="ig-p-4 ig-text-neutral-100 ig-font-medium">Elemento 2</div>
+            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Elemento 2</div>
             <div className="ig-border-t-2 ig-border-brand"></div>
-            <div className="ig-p-4 ig-text-neutral-100 ig-font-medium">Elemento 3</div>
+            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Elemento 3</div>
           </div>
         </div>
 
         <div>
           <p className="ig-text-sm ig-font-bold ig-text-neutral-900 ig-mb-3">Con ig-divide-y (automático):</p>
           <div className="ig-bg-neutral-100 ig-rounded-lg ig-border-2 ig-border-secondary ig-divide-y-2 ig-divide-secondary">
-            <div className="ig-p-4 ig-text-neutral-100 ig-font-medium">Con ig-divide-y</div>
-            <div className="ig-p-4 ig-text-neutral-100 ig-font-medium">Automático</div>
-            <div className="ig-p-4 ig-text-neutral-100 ig-font-medium">Entre hijos</div>
+            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Con ig-divide-y</div>
+            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Automático</div>
+            <div className="ig-p-4 ig-text-neutral-900 ig-font-medium">Entre hijos</div>
           </div>
         </div>
 
         <div>
           <p className="ig-text-sm ig-font-bold ig-text-neutral-900 ig-mb-3">Con ig-divide-x (horizontal):</p>
           <div className="ig-flex ig-bg-neutral-100 ig-rounded-lg ig-border-2 ig-border-success ig-divide-x-2 ig-divide-success">
-            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-100 ig-font-medium">Col 1</div>
-            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-100 ig-font-medium">Col 2</div>
-            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-100 ig-font-medium">Col 3</div>
+            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-900 ig-font-medium">Col 1</div>
+            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-900 ig-font-medium">Col 2</div>
+            <div className="ig-p-4 ig-flex-1 ig-text-center ig-text-neutral-900 ig-font-medium">Col 3</div>
           </div>
         </div>
       </div>
