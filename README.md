@@ -208,3 +208,4 @@ scripts/
 ## Licencia
 
 MIT — ver [LICENSE](./LICENSE).
+
