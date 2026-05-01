@@ -51625,102 +51625,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
   field-sizing: fixed;
 }
 
-.hover\:ig-modal-sm:hover {
-  max-width: var(--ig-modal-w-sm);
-}
-
-.focus\:ig-modal-sm:focus {
-  max-width: var(--ig-modal-w-sm);
-}
-
-.active\:ig-modal-sm:active {
-  max-width: var(--ig-modal-w-sm);
-}
-
-.focus-visible\:ig-modal-sm:focus-visible {
-  max-width: var(--ig-modal-w-sm);
-}
-
-.disabled\:ig-modal-sm:disabled {
-  max-width: var(--ig-modal-w-sm);
-}
-
-.ig-group:hover .group-hover\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-
-.hover\:ig-modal-md:hover {
-  max-width: var(--ig-modal-w-md);
-}
-
-.focus\:ig-modal-md:focus {
-  max-width: var(--ig-modal-w-md);
-}
-
-.active\:ig-modal-md:active {
-  max-width: var(--ig-modal-w-md);
-}
-
-.focus-visible\:ig-modal-md:focus-visible {
-  max-width: var(--ig-modal-w-md);
-}
-
-.disabled\:ig-modal-md:disabled {
-  max-width: var(--ig-modal-w-md);
-}
-
-.ig-group:hover .group-hover\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-
-.hover\:ig-modal-lg:hover {
-  max-width: var(--ig-modal-w-lg);
-}
-
-.focus\:ig-modal-lg:focus {
-  max-width: var(--ig-modal-w-lg);
-}
-
-.active\:ig-modal-lg:active {
-  max-width: var(--ig-modal-w-lg);
-}
-
-.focus-visible\:ig-modal-lg:focus-visible {
-  max-width: var(--ig-modal-w-lg);
-}
-
-.disabled\:ig-modal-lg:disabled {
-  max-width: var(--ig-modal-w-lg);
-}
-
-.ig-group:hover .group-hover\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-
-.hover\:ig-modal-xl:hover {
-  max-width: var(--ig-modal-w-xl);
-}
-
-.focus\:ig-modal-xl:focus {
-  max-width: var(--ig-modal-w-xl);
-}
-
-.active\:ig-modal-xl:active {
-  max-width: var(--ig-modal-w-xl);
-}
-
-.focus-visible\:ig-modal-xl:focus-visible {
-  max-width: var(--ig-modal-w-xl);
-}
-
-.disabled\:ig-modal-xl:disabled {
-  max-width: var(--ig-modal-w-xl);
-}
-
-.ig-group:hover .group-hover\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
-}
-
 .hover\:ig-dialog-sm:hover {
   max-width: min(90vw, 24rem);
 }
@@ -60655,18 +60559,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .focus-within\:ig-field-sizing-fixed:focus-within {
   field-sizing: fixed;
 }
-.focus-within\:ig-modal-sm:focus-within {
-  max-width: var(--ig-modal-w-sm);
-}
-.focus-within\:ig-modal-md:focus-within {
-  max-width: var(--ig-modal-w-md);
-}
-.focus-within\:ig-modal-lg:focus-within {
-  max-width: var(--ig-modal-w-lg);
-}
-.focus-within\:ig-modal-xl:focus-within {
-  max-width: var(--ig-modal-w-xl);
-}
 .focus-within\:ig-dialog-sm:focus-within {
   max-width: min(90vw, 24rem);
 }
@@ -67451,18 +67343,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .first\:ig-field-sizing-fixed:first-child {
   field-sizing: fixed;
-}
-.first\:ig-modal-sm:first-child {
-  max-width: var(--ig-modal-w-sm);
-}
-.first\:ig-modal-md:first-child {
-  max-width: var(--ig-modal-w-md);
-}
-.first\:ig-modal-lg:first-child {
-  max-width: var(--ig-modal-w-lg);
-}
-.first\:ig-modal-xl:first-child {
-  max-width: var(--ig-modal-w-xl);
 }
 .first\:ig-dialog-sm:first-child {
   max-width: min(90vw, 24rem);
@@ -74249,18 +74129,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .last\:ig-field-sizing-fixed:last-child {
   field-sizing: fixed;
 }
-.last\:ig-modal-sm:last-child {
-  max-width: var(--ig-modal-w-sm);
-}
-.last\:ig-modal-md:last-child {
-  max-width: var(--ig-modal-w-md);
-}
-.last\:ig-modal-lg:last-child {
-  max-width: var(--ig-modal-w-lg);
-}
-.last\:ig-modal-xl:last-child {
-  max-width: var(--ig-modal-w-xl);
-}
 .last\:ig-dialog-sm:last-child {
   max-width: min(90vw, 24rem);
 }
@@ -81045,18 +80913,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .odd\:ig-field-sizing-fixed:nth-child(odd) {
   field-sizing: fixed;
-}
-.odd\:ig-modal-sm:nth-child(odd) {
-  max-width: var(--ig-modal-w-sm);
-}
-.odd\:ig-modal-md:nth-child(odd) {
-  max-width: var(--ig-modal-w-md);
-}
-.odd\:ig-modal-lg:nth-child(odd) {
-  max-width: var(--ig-modal-w-lg);
-}
-.odd\:ig-modal-xl:nth-child(odd) {
-  max-width: var(--ig-modal-w-xl);
 }
 .odd\:ig-dialog-sm:nth-child(odd) {
   max-width: min(90vw, 24rem);
@@ -87843,18 +87699,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .even\:ig-field-sizing-fixed:nth-child(even) {
   field-sizing: fixed;
 }
-.even\:ig-modal-sm:nth-child(even) {
-  max-width: var(--ig-modal-w-sm);
-}
-.even\:ig-modal-md:nth-child(even) {
-  max-width: var(--ig-modal-w-md);
-}
-.even\:ig-modal-lg:nth-child(even) {
-  max-width: var(--ig-modal-w-lg);
-}
-.even\:ig-modal-xl:nth-child(even) {
-  max-width: var(--ig-modal-w-xl);
-}
 .even\:ig-dialog-sm:nth-child(even) {
   max-width: min(90vw, 24rem);
 }
@@ -94639,18 +94483,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .only\:ig-field-sizing-fixed:only-child {
   field-sizing: fixed;
-}
-.only\:ig-modal-sm:only-child {
-  max-width: var(--ig-modal-w-sm);
-}
-.only\:ig-modal-md:only-child {
-  max-width: var(--ig-modal-w-md);
-}
-.only\:ig-modal-lg:only-child {
-  max-width: var(--ig-modal-w-lg);
-}
-.only\:ig-modal-xl:only-child {
-  max-width: var(--ig-modal-w-xl);
 }
 .only\:ig-dialog-sm:only-child {
   max-width: min(90vw, 24rem);
@@ -101437,18 +101269,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .first-of-type\:ig-field-sizing-fixed:first-of-type {
   field-sizing: fixed;
 }
-.first-of-type\:ig-modal-sm:first-of-type {
-  max-width: var(--ig-modal-w-sm);
-}
-.first-of-type\:ig-modal-md:first-of-type {
-  max-width: var(--ig-modal-w-md);
-}
-.first-of-type\:ig-modal-lg:first-of-type {
-  max-width: var(--ig-modal-w-lg);
-}
-.first-of-type\:ig-modal-xl:first-of-type {
-  max-width: var(--ig-modal-w-xl);
-}
 .first-of-type\:ig-dialog-sm:first-of-type {
   max-width: min(90vw, 24rem);
 }
@@ -108233,18 +108053,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .last-of-type\:ig-field-sizing-fixed:last-of-type {
   field-sizing: fixed;
-}
-.last-of-type\:ig-modal-sm:last-of-type {
-  max-width: var(--ig-modal-w-sm);
-}
-.last-of-type\:ig-modal-md:last-of-type {
-  max-width: var(--ig-modal-w-md);
-}
-.last-of-type\:ig-modal-lg:last-of-type {
-  max-width: var(--ig-modal-w-lg);
-}
-.last-of-type\:ig-modal-xl:last-of-type {
-  max-width: var(--ig-modal-w-xl);
 }
 .last-of-type\:ig-dialog-sm:last-of-type {
   max-width: min(90vw, 24rem);
@@ -115031,18 +114839,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .only-of-type\:ig-field-sizing-fixed:only-of-type {
   field-sizing: fixed;
 }
-.only-of-type\:ig-modal-sm:only-of-type {
-  max-width: var(--ig-modal-w-sm);
-}
-.only-of-type\:ig-modal-md:only-of-type {
-  max-width: var(--ig-modal-w-md);
-}
-.only-of-type\:ig-modal-lg:only-of-type {
-  max-width: var(--ig-modal-w-lg);
-}
-.only-of-type\:ig-modal-xl:only-of-type {
-  max-width: var(--ig-modal-w-xl);
-}
 .only-of-type\:ig-dialog-sm:only-of-type {
   max-width: min(90vw, 24rem);
 }
@@ -121827,18 +121623,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .checked\:ig-field-sizing-fixed:checked {
   field-sizing: fixed;
-}
-.checked\:ig-modal-sm:checked {
-  max-width: var(--ig-modal-w-sm);
-}
-.checked\:ig-modal-md:checked {
-  max-width: var(--ig-modal-w-md);
-}
-.checked\:ig-modal-lg:checked {
-  max-width: var(--ig-modal-w-lg);
-}
-.checked\:ig-modal-xl:checked {
-  max-width: var(--ig-modal-w-xl);
 }
 .checked\:ig-dialog-sm:checked {
   max-width: min(90vw, 24rem);
@@ -128625,18 +128409,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .valid\:ig-field-sizing-fixed:valid {
   field-sizing: fixed;
 }
-.valid\:ig-modal-sm:valid {
-  max-width: var(--ig-modal-w-sm);
-}
-.valid\:ig-modal-md:valid {
-  max-width: var(--ig-modal-w-md);
-}
-.valid\:ig-modal-lg:valid {
-  max-width: var(--ig-modal-w-lg);
-}
-.valid\:ig-modal-xl:valid {
-  max-width: var(--ig-modal-w-xl);
-}
 .valid\:ig-dialog-sm:valid {
   max-width: min(90vw, 24rem);
 }
@@ -135421,18 +135193,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .invalid\:ig-field-sizing-fixed:invalid {
   field-sizing: fixed;
-}
-.invalid\:ig-modal-sm:invalid {
-  max-width: var(--ig-modal-w-sm);
-}
-.invalid\:ig-modal-md:invalid {
-  max-width: var(--ig-modal-w-md);
-}
-.invalid\:ig-modal-lg:invalid {
-  max-width: var(--ig-modal-w-lg);
-}
-.invalid\:ig-modal-xl:invalid {
-  max-width: var(--ig-modal-w-xl);
 }
 .invalid\:ig-dialog-sm:invalid {
   max-width: min(90vw, 24rem);
@@ -142219,18 +141979,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .required\:ig-field-sizing-fixed:required {
   field-sizing: fixed;
 }
-.required\:ig-modal-sm:required {
-  max-width: var(--ig-modal-w-sm);
-}
-.required\:ig-modal-md:required {
-  max-width: var(--ig-modal-w-md);
-}
-.required\:ig-modal-lg:required {
-  max-width: var(--ig-modal-w-lg);
-}
-.required\:ig-modal-xl:required {
-  max-width: var(--ig-modal-w-xl);
-}
 .required\:ig-dialog-sm:required {
   max-width: min(90vw, 24rem);
 }
@@ -149015,18 +148763,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .optional\:ig-field-sizing-fixed:optional {
   field-sizing: fixed;
-}
-.optional\:ig-modal-sm:optional {
-  max-width: var(--ig-modal-w-sm);
-}
-.optional\:ig-modal-md:optional {
-  max-width: var(--ig-modal-w-md);
-}
-.optional\:ig-modal-lg:optional {
-  max-width: var(--ig-modal-w-lg);
-}
-.optional\:ig-modal-xl:optional {
-  max-width: var(--ig-modal-w-xl);
 }
 .optional\:ig-dialog-sm:optional {
   max-width: min(90vw, 24rem);
@@ -155813,18 +155549,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .read-only\:ig-field-sizing-fixed:read-only {
   field-sizing: fixed;
 }
-.read-only\:ig-modal-sm:read-only {
-  max-width: var(--ig-modal-w-sm);
-}
-.read-only\:ig-modal-md:read-only {
-  max-width: var(--ig-modal-w-md);
-}
-.read-only\:ig-modal-lg:read-only {
-  max-width: var(--ig-modal-w-lg);
-}
-.read-only\:ig-modal-xl:read-only {
-  max-width: var(--ig-modal-w-xl);
-}
 .read-only\:ig-dialog-sm:read-only {
   max-width: min(90vw, 24rem);
 }
@@ -162609,18 +162333,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .read-write\:ig-field-sizing-fixed:read-write {
   field-sizing: fixed;
-}
-.read-write\:ig-modal-sm:read-write {
-  max-width: var(--ig-modal-w-sm);
-}
-.read-write\:ig-modal-md:read-write {
-  max-width: var(--ig-modal-w-md);
-}
-.read-write\:ig-modal-lg:read-write {
-  max-width: var(--ig-modal-w-lg);
-}
-.read-write\:ig-modal-xl:read-write {
-  max-width: var(--ig-modal-w-xl);
 }
 .read-write\:ig-dialog-sm:read-write {
   max-width: min(90vw, 24rem);
@@ -169407,18 +169119,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .indeterminate\:ig-field-sizing-fixed:indeterminate {
   field-sizing: fixed;
 }
-.indeterminate\:ig-modal-sm:indeterminate {
-  max-width: var(--ig-modal-w-sm);
-}
-.indeterminate\:ig-modal-md:indeterminate {
-  max-width: var(--ig-modal-w-md);
-}
-.indeterminate\:ig-modal-lg:indeterminate {
-  max-width: var(--ig-modal-w-lg);
-}
-.indeterminate\:ig-modal-xl:indeterminate {
-  max-width: var(--ig-modal-w-xl);
-}
 .indeterminate\:ig-dialog-sm:indeterminate {
   max-width: min(90vw, 24rem);
 }
@@ -176203,18 +175903,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .in-range\:ig-field-sizing-fixed:in-range {
   field-sizing: fixed;
-}
-.in-range\:ig-modal-sm:in-range {
-  max-width: var(--ig-modal-w-sm);
-}
-.in-range\:ig-modal-md:in-range {
-  max-width: var(--ig-modal-w-md);
-}
-.in-range\:ig-modal-lg:in-range {
-  max-width: var(--ig-modal-w-lg);
-}
-.in-range\:ig-modal-xl:in-range {
-  max-width: var(--ig-modal-w-xl);
 }
 .in-range\:ig-dialog-sm:in-range {
   max-width: min(90vw, 24rem);
@@ -183001,18 +182689,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .out-of-range\:ig-field-sizing-fixed:out-of-range {
   field-sizing: fixed;
 }
-.out-of-range\:ig-modal-sm:out-of-range {
-  max-width: var(--ig-modal-w-sm);
-}
-.out-of-range\:ig-modal-md:out-of-range {
-  max-width: var(--ig-modal-w-md);
-}
-.out-of-range\:ig-modal-lg:out-of-range {
-  max-width: var(--ig-modal-w-lg);
-}
-.out-of-range\:ig-modal-xl:out-of-range {
-  max-width: var(--ig-modal-w-xl);
-}
 .out-of-range\:ig-dialog-sm:out-of-range {
   max-width: min(90vw, 24rem);
 }
@@ -189797,18 +189473,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .placeholder-shown\:ig-field-sizing-fixed:placeholder-shown {
   field-sizing: fixed;
-}
-.placeholder-shown\:ig-modal-sm:placeholder-shown {
-  max-width: var(--ig-modal-w-sm);
-}
-.placeholder-shown\:ig-modal-md:placeholder-shown {
-  max-width: var(--ig-modal-w-md);
-}
-.placeholder-shown\:ig-modal-lg:placeholder-shown {
-  max-width: var(--ig-modal-w-lg);
-}
-.placeholder-shown\:ig-modal-xl:placeholder-shown {
-  max-width: var(--ig-modal-w-xl);
 }
 .placeholder-shown\:ig-dialog-sm:placeholder-shown {
   max-width: min(90vw, 24rem);
@@ -196595,18 +196259,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .autofill\:ig-field-sizing-fixed:autofill {
   field-sizing: fixed;
 }
-.autofill\:ig-modal-sm:autofill {
-  max-width: var(--ig-modal-w-sm);
-}
-.autofill\:ig-modal-md:autofill {
-  max-width: var(--ig-modal-w-md);
-}
-.autofill\:ig-modal-lg:autofill {
-  max-width: var(--ig-modal-w-lg);
-}
-.autofill\:ig-modal-xl:autofill {
-  max-width: var(--ig-modal-w-xl);
-}
 .autofill\:ig-dialog-sm:autofill {
   max-width: min(90vw, 24rem);
 }
@@ -203391,18 +203043,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .default\:ig-field-sizing-fixed:default {
   field-sizing: fixed;
-}
-.default\:ig-modal-sm:default {
-  max-width: var(--ig-modal-w-sm);
-}
-.default\:ig-modal-md:default {
-  max-width: var(--ig-modal-w-md);
-}
-.default\:ig-modal-lg:default {
-  max-width: var(--ig-modal-w-lg);
-}
-.default\:ig-modal-xl:default {
-  max-width: var(--ig-modal-w-xl);
 }
 .default\:ig-dialog-sm:default {
   max-width: min(90vw, 24rem);
@@ -210189,18 +209829,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .empty\:ig-field-sizing-fixed:empty {
   field-sizing: fixed;
 }
-.empty\:ig-modal-sm:empty {
-  max-width: var(--ig-modal-w-sm);
-}
-.empty\:ig-modal-md:empty {
-  max-width: var(--ig-modal-w-md);
-}
-.empty\:ig-modal-lg:empty {
-  max-width: var(--ig-modal-w-lg);
-}
-.empty\:ig-modal-xl:empty {
-  max-width: var(--ig-modal-w-xl);
-}
 .empty\:ig-dialog-sm:empty {
   max-width: min(90vw, 24rem);
 }
@@ -216985,18 +216613,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .target\:ig-field-sizing-fixed:target {
   field-sizing: fixed;
-}
-.target\:ig-modal-sm:target {
-  max-width: var(--ig-modal-w-sm);
-}
-.target\:ig-modal-md:target {
-  max-width: var(--ig-modal-w-md);
-}
-.target\:ig-modal-lg:target {
-  max-width: var(--ig-modal-w-lg);
-}
-.target\:ig-modal-xl:target {
-  max-width: var(--ig-modal-w-xl);
 }
 .target\:ig-dialog-sm:target {
   max-width: min(90vw, 24rem);
@@ -223783,18 +223399,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .open\:ig-field-sizing-fixed[open] {
   field-sizing: fixed;
 }
-.open\:ig-modal-sm[open] {
-  max-width: var(--ig-modal-w-sm);
-}
-.open\:ig-modal-md[open] {
-  max-width: var(--ig-modal-w-md);
-}
-.open\:ig-modal-lg[open] {
-  max-width: var(--ig-modal-w-lg);
-}
-.open\:ig-modal-xl[open] {
-  max-width: var(--ig-modal-w-xl);
-}
 .open\:ig-dialog-sm[open] {
   max-width: min(90vw, 24rem);
 }
@@ -230579,18 +230183,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .ig-group:focus .group-focus\:ig-field-sizing-fixed {
   field-sizing: fixed;
-}
-.ig-group:focus .group-focus\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-group:focus .group-focus\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-group:focus .group-focus\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-group:focus .group-focus\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
 }
 .ig-group:focus .group-focus\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
@@ -237377,18 +236969,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .ig-group:active .group-active\:ig-field-sizing-fixed {
   field-sizing: fixed;
 }
-.ig-group:active .group-active\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-group:active .group-active\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-group:active .group-active\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-group:active .group-active\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
-}
 .ig-group:active .group-active\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
 }
@@ -244173,18 +243753,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .ig-group:focus-within .group-focus-within\:ig-field-sizing-fixed {
   field-sizing: fixed;
-}
-.ig-group:focus-within .group-focus-within\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-group:focus-within .group-focus-within\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-group:focus-within .group-focus-within\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-group:focus-within .group-focus-within\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
 }
 .ig-group:focus-within .group-focus-within\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
@@ -250971,18 +250539,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .ig-peer:hover ~ .peer-hover\:ig-field-sizing-fixed {
   field-sizing: fixed;
 }
-.ig-peer:hover ~ .peer-hover\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:hover ~ .peer-hover\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:hover ~ .peer-hover\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:hover ~ .peer-hover\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
-}
 .ig-peer:hover ~ .peer-hover\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
 }
@@ -257767,18 +257323,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .ig-peer:focus ~ .peer-focus\:ig-field-sizing-fixed {
   field-sizing: fixed;
-}
-.ig-peer:focus ~ .peer-focus\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:focus ~ .peer-focus\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:focus ~ .peer-focus\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:focus ~ .peer-focus\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
 }
 .ig-peer:focus ~ .peer-focus\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
@@ -264565,18 +264109,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .ig-peer:checked ~ .peer-checked\:ig-field-sizing-fixed {
   field-sizing: fixed;
 }
-.ig-peer:checked ~ .peer-checked\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:checked ~ .peer-checked\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:checked ~ .peer-checked\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:checked ~ .peer-checked\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
-}
 .ig-peer:checked ~ .peer-checked\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
 }
@@ -271361,18 +270893,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .ig-peer:valid ~ .peer-valid\:ig-field-sizing-fixed {
   field-sizing: fixed;
-}
-.ig-peer:valid ~ .peer-valid\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:valid ~ .peer-valid\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:valid ~ .peer-valid\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:valid ~ .peer-valid\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
 }
 .ig-peer:valid ~ .peer-valid\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
@@ -278159,18 +277679,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .ig-peer:invalid ~ .peer-invalid\:ig-field-sizing-fixed {
   field-sizing: fixed;
 }
-.ig-peer:invalid ~ .peer-invalid\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:invalid ~ .peer-invalid\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:invalid ~ .peer-invalid\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:invalid ~ .peer-invalid\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
-}
 .ig-peer:invalid ~ .peer-invalid\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
 }
@@ -284956,18 +284464,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 .ig-peer:disabled ~ .peer-disabled\:ig-field-sizing-fixed {
   field-sizing: fixed;
 }
-.ig-peer:disabled ~ .peer-disabled\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:disabled ~ .peer-disabled\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:disabled ~ .peer-disabled\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:disabled ~ .peer-disabled\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
-}
 .ig-peer:disabled ~ .peer-disabled\:ig-dialog-sm {
   max-width: min(90vw, 24rem);
 }
@@ -291752,18 +291248,6 @@ Variantes: hover, focus, active, focus-visible, disabled, group-hover */
 }
 .ig-peer:required ~ .peer-required\:ig-field-sizing-fixed {
   field-sizing: fixed;
-}
-.ig-peer:required ~ .peer-required\:ig-modal-sm {
-  max-width: var(--ig-modal-w-sm);
-}
-.ig-peer:required ~ .peer-required\:ig-modal-md {
-  max-width: var(--ig-modal-w-md);
-}
-.ig-peer:required ~ .peer-required\:ig-modal-lg {
-  max-width: var(--ig-modal-w-lg);
-}
-.ig-peer:required ~ .peer-required\:ig-modal-xl {
-  max-width: var(--ig-modal-w-xl);
 }
 .ig-peer:required ~ .peer-required\:ig-dialog-sm {
   max-width: min(90vw, 24rem);

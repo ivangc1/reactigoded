@@ -1,0 +1,179 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Fundamentos/Design Tokens" />
+
+# Design Tokens
+
+Toda la consistencia visual del DS sale de variables CSS `--ig-*`. Cambiar una
+variable en `:root` cambia la apariencia en todos los componentes que la usan
+— es el punto canónico para customización por aplicación consumidora.
+
+## Colores semánticos
+
+Cada variante semántica está respaldada por un color base con nombre latino.
+Las variantes son las que aparecen en `Button`, `Badge`, `Spinner`, `Alert`…
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+    gap: "1rem",
+    margin: "1.5rem 0",
+  }}
+>
+  {[
+    { name: "brand", token: "--ig-brand", source: "vitreus" },
+    { name: "secondary", token: "--ig-secondary", source: "axis" },
+    { name: "success", token: "--ig-success", source: "laurus" },
+    { name: "warning", token: "--ig-warning", source: "rutilus" },
+    { name: "danger", token: "--ig-danger", source: "malum" },
+    { name: "info", token: "--ig-info", source: "axis" },
+  ].map((c) => (
+    <div
+      key={c.name}
+      style={{
+        border: "1px solid var(--ig-border-subtle, #444)",
+        borderRadius: 8,
+        overflow: "hidden",
+        fontFamily: "var(--ig-font-mono, monospace)",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ background: `var(${c.token})`, height: 80 }} />
+      <div style={{ padding: "0.5rem 0.75rem" }}>
+        <strong>{c.name}</strong>
+        <br />
+        <code>{c.token}</code>
+        <br />
+        <span style={{ opacity: 0.6 }}>(--ig-{c.source})</span>
+      </div>
+    </div>
+  ))}
+</div>
+
+## Superficies
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: "1rem",
+    margin: "1.5rem 0",
+  }}
+>
+  {[
+    "--ig-bg-base",
+    "--ig-bg-surface",
+    "--ig-bg-elevated",
+    "--ig-text-heading",
+    "--ig-text-body",
+    "--ig-text-muted",
+    "--ig-text-disabled",
+  ].map((token) => (
+    <div
+      key={token}
+      style={{
+        border: "1px solid var(--ig-border-subtle, #444)",
+        borderRadius: 8,
+        padding: "1rem",
+        background: `var(${token})`,
+        fontFamily: "var(--ig-font-mono, monospace)",
+        fontSize: 12,
+        minHeight: 60,
+      }}
+    >
+      <code>{token}</code>
+    </div>
+  ))}
+</div>
+
+## Espaciado
+
+Todos los espaciados son múltiplos de `--ig-space-unit` (por defecto `0.25rem`
+= 4px). Disponibles: `0, 0-5, 1, 1-5, 2, 2-5, 3, 3-5, 4, 5, 6, 7, 8, 9, 10, 11,
+12, 14, 16, 20, 24, 28, 32, 36, 40`.
+
+<div style={{ margin: "1.5rem 0" }}>
+  {[1, 2, 3, 4, 6, 8, 12, 16, 24, 40].map((n) => (
+    <div
+      key={n}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        marginBottom: 4,
+        fontFamily: "var(--ig-font-mono, monospace)",
+        fontSize: 12,
+      }}
+    >
+      <code style={{ minWidth: 120 }}>--ig-space-{n}</code>
+      <div
+        style={{
+          background: "var(--ig-brand)",
+          height: 16,
+          width: `var(--ig-space-${n})`,
+        }}
+      />
+    </div>
+  ))}
+</div>
+
+## Tipografía
+
+<div style={{ margin: "1.5rem 0" }}>
+  <div style={{ marginBottom: "1rem" }}>
+    <code>--ig-font-heading</code>
+    <h1
+      style={{
+        fontFamily: "var(--ig-font-heading)",
+        margin: "0.25rem 0 0",
+      }}
+    >
+      Heading — Electrolize
+    </h1>
+  </div>
+  <div style={{ marginBottom: "1rem" }}>
+    <code>--ig-font-base</code>
+    <p
+      style={{
+        fontFamily: "var(--ig-font-base)",
+        margin: "0.25rem 0 0",
+        fontSize: 16,
+      }}
+    >
+      Body — Saira. Tipografía cómoda para textos largos.
+    </p>
+  </div>
+  <div>
+    <code>--ig-font-mono</code>
+    <pre
+      style={{
+        fontFamily: "var(--ig-font-mono)",
+        margin: "0.25rem 0 0",
+        fontSize: 14,
+      }}
+    >
+      Monospace — JetBrains Mono. Para código y tokens.
+    </pre>
+  </div>
+</div>
+
+## Cómo customizar
+
+Override en tu `:root` para reemplazar valores globalmente:
+
+```css
+:root {
+  --ig-brand: #5b21b6;       /* tu morado de marca */
+  --ig-space-unit: 0.3rem;   /* escalar todo el spacing */
+  --ig-font-base: "Inter", system-ui, sans-serif;
+}
+```
+
+Si solo quieres tocar un componente concreto, override por scope CSS:
+
+```css
+.mi-vista .ig-btn {
+  --ig-btn-radius: 999px;
+}
+```

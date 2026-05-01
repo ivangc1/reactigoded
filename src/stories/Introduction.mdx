@@ -1,0 +1,94 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Introducción" />
+
+# Igoded Design System
+
+Componentes React tipados + sistema CSS utility-first state-driven.
+
+- ⚛️ React 19 + TypeScript estricto
+- 🎨 CSS variables con tokens semánticos (`--ig-*`)
+- 🌗 Light / dark via atributo `data-theme` en `<html>`
+- ♿ A11y validado con `axe-core` en cada story
+- 🧪 Tests unitarios (Vitest happy-dom) + interaction tests (browser via Playwright)
+
+---
+
+## Instalación
+
+```bash
+npm install reactigoded
+```
+
+## Uso
+
+### 1. Importa los estilos una sola vez en tu app
+
+```tsx
+// _app.tsx, layout.tsx, main.tsx... una sola vez
+import "reactigoded/styles/all.css";
+
+// O por separado si prefieres dividir:
+// import "reactigoded/styles/design.css";
+// import "reactigoded/styles/state.css";
+```
+
+### 2. Usa los componentes
+
+```tsx
+import { Button, Badge, Spinner } from "reactigoded";
+
+export function MiVista() {
+  return (
+    <>
+      <Button variant="brand">Aceptar</Button>
+      <Badge variant="success" pill>OK</Badge>
+      <Spinner size="lg" />
+    </>
+  );
+}
+```
+
+### 3. Cambio de tema
+
+El tema se controla con el atributo `data-theme` en `<html>`. Para cambiarlo
+puedes usar el hook que viene incluido:
+
+```tsx
+import { useTheme } from "reactigoded";
+
+export function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <button onClick={toggleTheme}>
+      {theme === "dark" ? "☀️" : "🌙"}
+    </button>
+  );
+}
+```
+
+---
+
+## Convenciones
+
+- **Nombres de clase**: todas las clases del DS empiezan por `ig-` (`ig-btn`, `ig-card`, `ig-flex`…). Esto evita choques con Tailwind, Bootstrap o cualquier otra librería de utilidades.
+- **Variantes**: las 6 variantes semánticas (`brand`, `secondary`, `success`, `warning`, `danger`, `info`) están alineadas en todos los componentes.
+- **Tamaños**: `xs` · `sm` · `md` (default) · `lg` · `xl`. `md` no añade clase modificadora.
+- **`ref` como prop normal**: aprovechamos React 19; no hace falta `forwardRef`.
+- **Type-safe**: cada componente exporta su tipo `Props` y los unions de variantes/sizes para reutilizar en tu app.
+
+---
+
+## Testing
+
+El paquete se valida internamente con tres niveles:
+
+1. **Tests happy-dom** — comportamiento de cada componente, render condicional, refs.
+2. **Stories como tests** — `addon-vitest` ejecuta cada story en Chromium real, captura regresiones de render y corre las funciones `play()` como interaction tests.
+3. **A11y** — `addon-a11y` corre `axe-core` en cada story; las violaciones rompen la build.
+
+Antes de publicar:
+
+```bash
+npm run verify   # lint + typecheck + tests + build
+```

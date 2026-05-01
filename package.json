@@ -1,35 +1,133 @@
 {
-  "name": "repo",
-  "private": true,
-  "version": "0.0.0",
+  "name": "reactigoded",
+  "version": "1.0.0-beta.0",
+  "description": "Igoded Design System — componentes React + CSS utility-first state-driven",
+  "license": "MIT",
+  "author": "ivangc1",
+  "homepage": "https://github.com/ivangc1/reactigoded#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivangc1/reactigoded.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ivangc1/reactigoded/issues"
+  },
+  "keywords": [
+    "react",
+    "react-19",
+    "design-system",
+    "component-library",
+    "components",
+    "ui-kit",
+    "ui-library",
+    "typescript",
+    "headless",
+    "accessibility",
+    "a11y",
+    "wcag-aa",
+    "css",
+    "utility-first",
+    "igoded"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles/design.css": "./dist/styles/igoded-design.css",
+    "./styles/state.css": "./dist/styles/igoded-state-css.css",
+    "./styles/all.css": "./dist/styles/index.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "browserslist": [
+    "last 2 chrome versions",
+    "last 2 firefox versions",
+    "last 2 safari versions",
+    "last 2 edge versions",
+    "not dead"
+  ],
   "scripts": {
+    "_comment_prepare": "Aplica patches con patch-package SOLO en dev local (npm install desde git checkout). NO se ejecuta cuando un consumer instala reactigoded como dep.",
+    "prepare": "patch-package",
     "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
+    "build": "tsc -p tsconfig.build.json && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:storybook": "vitest run --project storybook",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "verify:unit": "npm run lint && npm run typecheck && npm run test:unit && npm run build",
+    "verify:storybook": "npm run test:storybook",
+    "verify": "npm run verify:unit && npm run verify:storybook",
+    "clean": "rm -rf dist storybook-static coverage node_modules/.vite",
+    "prepublishOnly": "npm run verify"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
   },
   "dependencies": {
-    "clsx": "^2.1.1",
-    "prop-types": "^15.8.1",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "clsx": "^2.1.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@storybook/addon-docs": "^10.1.0",
-    "@storybook/react-vite": "^10.1.0",
-    "@types/react": "^19.2.5",
+    "@eslint/js": "^10.0.1",
+    "@storybook/addon-a11y": "^10.3.6",
+    "@storybook/addon-docs": "^10.3.6",
+    "@storybook/addon-themes": "^10.3.6",
+    "@storybook/addon-vitest": "^10.3.6",
+    "@storybook/react-vite": "^10.3.6",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "eslint-plugin-storybook": "10.1.0",
-    "globals": "^16.5.0",
-    "storybook": "^10.1.0",
-    "vite": "^7.2.4"
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/browser": "^4.1.5",
+    "@vitest/browser-playwright": "^4.1.5",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^10.2.1",
+    "eslint-plugin-jest-dom": "^5.5.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-storybook": "^10.3.6",
+    "eslint-plugin-testing-library": "^7.16.2",
+    "globals": "^17.5.0",
+    "happy-dom": "^20.9.0",
+    "patch-package": "^8.0.1",
+    "playwright": "^1.59.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "storybook": "^10.3.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.1",
+    "vite": "^8.0.10",
+    "vite-plugin-dts": "^5.0.0",
+    "vitest": "^4.1.5"
   }
 }

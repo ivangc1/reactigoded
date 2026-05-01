@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "storybook-static",
+    "src/**/*.stories.*",
+    "src/**/*.test.*",
+    "src/test/**",
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/App.css",
+    "src/vite-env.d.ts"
+  ]
+}

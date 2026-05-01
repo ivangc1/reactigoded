@@ -155,8 +155,7 @@ PARTE 3: COMPONENTES
   75. CARDS..............................................................  9756
   76. ALERTS.............................................................  9908
   77. BADGES............................................................. 10030
-  78. MODAL.............................................................. 10125
-  78b. DIALOG (ELEMENTO NATIVO)........................................... 10255
+  78. DIALOG / MODAL (ELEMENTO NATIVO).................................... 10120
   79. AVATAR............................................................. 10433
   80. SPINNER............................................................ 10541
   81. PROGRESS........................................................... 10590
@@ -751,7 +750,8 @@ CUÁNDO USAR:
   /* Textos principales - modo oscuro */
   --ig-text-heading: var(--ig-vitreus);
   --ig-text-body: var(--ig-cinis);
-  --ig-text-muted: #708888;
+  /* WCAG AA: 5.31 sobre bg-muted #152020 (era 4.42 con #708888) */
+  --ig-text-muted: #7e9696;
   --ig-text-disabled: #405050;
 
   /* Textos sobre colores Igoded como FONDO (modo dark por defecto)
@@ -771,7 +771,8 @@ CUÁNDO USAR:
   :root {
     --ig-text-heading: var(--ig-vitreus);
     --ig-text-body: var(--ig-cinis);
-    --ig-text-muted: #7a7288;
+    /* WCAG AA: 4.85 sobre bg-muted #f3f0f7 (era 4.06 con #7a7288) */
+    --ig-text-muted: #6e6679;
     --ig-text-disabled: #a8a0b8;
 
     /* En light, los fondos de color son oscuros, texto claro */
@@ -787,7 +788,8 @@ CUÁNDO USAR:
 [data-theme="light"] {
   --ig-text-heading: var(--ig-vitreus);
   --ig-text-body: var(--ig-cinis);
-  --ig-text-muted: #7a7288;
+  /* WCAG AA: 4.85 sobre bg-muted #f3f0f7 (era 4.06 con #7a7288) */
+  --ig-text-muted: #6e6679;
   --ig-text-disabled: #a8a0b8;
   --ig-text-on-vitreus: var(--ig-fundus-lux);
   --ig-text-on-axis: var(--ig-fundus-lux);
@@ -800,7 +802,8 @@ CUÁNDO USAR:
 [data-theme="dark"] {
   --ig-text-heading: var(--ig-vitreus);
   --ig-text-body: var(--ig-cinis);
-  --ig-text-muted: #708888;
+  /* WCAG AA: 5.31 sobre bg-muted #152020 (era 4.42 con #708888) */
+  --ig-text-muted: #7e9696;
   --ig-text-disabled: #405050;
   --ig-text-on-vitreus: var(--ig-fundus-nox);
   --ig-text-on-axis: var(--ig-fundus-nox);
@@ -2451,7 +2454,7 @@ COMPONENTES CON VARIABLES:
 - Links: color, hover, glow, visited (en reset)
 
 CÓMO USAR: Cambia las variables en tu propio :root para personalizar.
-Ejemplo: --ig-alert-padding o --ig-modal-radius.
+Ejemplo: --ig-alert-padding o --ig-tooltip-bg.
 */
 
 :root {
@@ -2481,14 +2484,11 @@ Ejemplo: --ig-alert-padding o --ig-modal-radius.
   --ig-alert-info-border: var(--ig-axis);
   --ig-alert-info-text: var(--ig-axis);
 
-  /* === MODAL === */
-  --ig-modal-backdrop: var(--ig-black-alpha-50);
-  --ig-modal-bg: var(--ig-bg-elevated);
-  --ig-modal-radius: var(--ig-rounded-xl);
-  --ig-modal-w-sm: 24rem;
-  --ig-modal-w-md: 32rem;
-  --ig-modal-w-lg: 42rem;
-  --ig-modal-w-xl: 56rem;
+  /* MODAL — los tokens `--ig-modal-*` se eliminaron junto con las clases
+     legacy `.ig-modal-*`. El componente actual usa `<dialog>` (sección 78b)
+     con tokens `--ig-bg-elevated` y `--ig-rounded-xl` directamente.
+     Los tokens `--ig-z-modal` y `--ig-z-modal-backdrop` se mantienen como
+     utilities z-index genéricas. */
 
   /* === TOOLTIP === */
   --ig-tooltip-bg: var(--ig-neutral-900);
@@ -9160,51 +9160,11 @@ CÓMO USAR:
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-laurus) 30%, transparent);
 }
 
-/* Estados de color adicionales (6 colores) */
-.ig-input-brand,
-.ig-input.brand {
-  border-color: var(--ig-vitreus);
-}
-.ig-input-brand:focus,
-.ig-input.brand:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-vitreus) 30%, transparent);
-}
-
-.ig-input-secondary,
-.ig-input.secondary {
-  border-color: var(--ig-axis);
-}
-.ig-input-secondary:focus,
-.ig-input.secondary:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-axis) 30%, transparent);
-}
-
-.ig-input-warning,
-.ig-input.warning {
-  border-color: var(--ig-rutilus);
-}
-.ig-input-warning:focus,
-.ig-input.warning:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-rutilus) 30%, transparent);
-}
-
-.ig-input-danger,
-.ig-input.danger {
-  border-color: var(--ig-malum);
-}
-.ig-input-danger:focus,
-.ig-input.danger:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-malum) 30%, transparent);
-}
-
-.ig-input-info,
-.ig-input.info {
-  border-color: var(--ig-axis);
-}
-.ig-input-info:focus,
-.ig-input.info:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-axis) 30%, transparent);
-}
+/*
+Las variantes de color del Input (`ig-input-{brand,secondary,info,danger,
+warning}`) se eliminaron porque ningún componente del DS las expone como prop
+y mantenerlas inflaba el bundle CSS sin valor para el consumer.
+*/
 
 /*
 Placeholder color utilities
@@ -10102,6 +10062,46 @@ MODIFICADORES:
   color: var(--ig-text-body);
 }
 
+.ig-badge-outline-brand {
+  background-color: transparent;
+  border: 1px solid var(--ig-vitreus);
+  color: var(--ig-vitreus);
+}
+
+.ig-badge-outline-secondary {
+  background-color: transparent;
+  border: 1px solid var(--ig-axis);
+  color: var(--ig-axis);
+}
+
+.ig-badge-outline-success {
+  background-color: transparent;
+  border: 1px solid var(--ig-laurus);
+  color: var(--ig-laurus);
+}
+
+.ig-badge-outline-warning {
+  background-color: transparent;
+  border: 1px solid var(--ig-rutilus);
+  color: var(--ig-rutilus);
+}
+
+.ig-badge-outline-danger {
+  background-color: transparent;
+  border: 1px solid var(--ig-malum);
+  color: var(--ig-malum);
+}
+
+.ig-badge-outline-info {
+  background-color: transparent;
+  border: 1px solid var(--ig-axis);
+  color: var(--ig-axis);
+}
+
+.ig-badge-pill {
+  border-radius: var(--ig-rounded-full);
+}
+
 .ig-badge-sm {
   padding: 0 var(--ig-space-1-5);
   font-size: 0.625rem;
@@ -10122,142 +10122,12 @@ MODIFICADORES:
 
 /*
 ═══════════════════════════════════════════════════════════════════════════════
-78. MODAL
+78. DIALOG / MODAL (ELEMENTO NATIVO)
 ═══════════════════════════════════════════════════════════════════════════════
 
-QUÉ ES: Ventanas emergentes que bloquean la interacción con el fondo.
-
-ESTRUCTURA:
-<div class="ig-modal-backdrop">
-  <div class="ig-modal">
-    <div class="ig-modal-header">
-      <h2>Título</h2>
-      <button class="ig-modal-close">×</button>
-    </div>
-    <div class="ig-modal-body">
-      Contenido del modal
-    </div>
-    <div class="ig-modal-footer">
-      <button class="ig-btn ig-btn-ghost">Cancelar</button>
-      <button class="ig-btn ig-btn-brand">Confirmar</button>
-    </div>
-  </div>
-</div>
-
-TAMAÑOS:
-- ig-modal-sm: pequeño (24rem)
-- ig-modal-md: medio (32rem) - por defecto
-- ig-modal-lg: grande (42rem)
-- ig-modal-xl: extra grande (56rem)
-- ig-modal-full: pantalla completa
-
-NOTA: El JS de abrir/cerrar no está incluido. Controla la visibilidad
-añadiendo/quitando una clase o cambiando display.
-*/
-
-.ig-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--ig-space-4);
-  background-color: var(--ig-modal-backdrop);
-  z-index: var(--ig-z-modal-backdrop);
-  animation: var(--ig-anim-fade-in);
-}
-
-.ig-modal {
-  position: relative;
-  width: 100%;
-  max-width: var(--ig-modal-w-md);
-  max-height: calc(100vh - var(--ig-space-8));
-  background-color: var(--ig-modal-bg);
-  border-radius: var(--ig-modal-radius);
-  box-shadow: var(--ig-shadow-xl);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  z-index: var(--ig-z-modal);
-  animation: var(--ig-anim-scale-in);
-}
-
-.ig-modal-sm { max-width: var(--ig-modal-w-sm); }
-.ig-modal-md { max-width: var(--ig-modal-w-md); }
-.ig-modal-lg { max-width: var(--ig-modal-w-lg); }
-.ig-modal-xl { max-width: var(--ig-modal-w-xl); }
-
-.ig-modal-full {
-  max-width: none;
-  max-height: none;
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-}
-
-.ig-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--ig-space-4);
-  border-bottom: 1px solid var(--ig-border-subtle);
-}
-
-.ig-modal-header h2,
-.ig-modal-header h3 {
-  margin: 0;
-  font-size: var(--ig-text-lg);
-  font-weight: var(--ig-fw-semibold);
-  color: var(--ig-text-heading);
-}
-
-.ig-modal-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--ig-rounded-md);
-  cursor: pointer;
-  color: var(--ig-text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  transition: var(--ig-transition-fast);
-}
-
-.ig-modal-close:hover {
-  background-color: var(--ig-bg-muted);
-  color: var(--ig-text-heading);
-}
-
-.ig-modal-body {
-  flex: 1;
-  padding: var(--ig-space-4);
-  overflow-y: auto;
-}
-
-.ig-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--ig-space-3);
-  padding: var(--ig-space-4);
-  border-top: 1px solid var(--ig-border-subtle);
-  background-color: var(--ig-bg-muted);
-}
-
-
-/*
-═══════════════════════════════════════════════════════════════════════════════
-78b. DIALOG (ELEMENTO NATIVO)
-═══════════════════════════════════════════════════════════════════════════════
-
-QUÉ ES: Estilos para el elemento <dialog> nativo de HTML.
-A diferencia de .ig-modal (que usa divs), <dialog> es semántico y accesible
-por defecto, con manejo de foco y cierre con ESC incluido.
+QUÉ ES: Estilos para el elemento <dialog> nativo de HTML, base del componente
+React `<Modal>`. La variante legacy con `<div class="ig-modal">` se eliminó
+porque <dialog> es semántico y accesible por defecto (foco-trap, ESC, top-layer).
 
 VENTAJAS DE <dialog>:
 - Accesibilidad incorporada (traps focus, role="dialog")
@@ -10580,6 +10450,7 @@ TAMAÑOS:
 .ig-spinner-info { border-top-color: var(--ig-axis); }
 
 /* Tamaños */
+.ig-spinner-xs { width: 0.75rem; height: 0.75rem; border-width: 1.5px; }
 .ig-spinner-sm { width: 1rem; height: 1rem; border-width: 2px; }
 .ig-spinner-lg { width: 2rem; height: 2rem; border-width: 3px; }
 .ig-spinner-xl { width: 3rem; height: 3rem; border-width: 4px; }

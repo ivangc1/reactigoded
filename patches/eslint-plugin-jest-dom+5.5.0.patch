@@ -1,0 +1,102 @@
+diff --git a/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-attribute.js b/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-attribute.js
+index 9af75d7..6e32b8d
+--- a/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-attribute.js
++++ b/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-attribute.js
+@@ -28,7 +28,7 @@ const create = context => ({
+     context.report({
+       node: node.parent,
+       message: `Use toHaveAttribute instead of asserting on getAttribute`,
+-      fix: fixer => [fixer.removeRange([node.callee.object.range[1], node.range[1]]), fixer.replaceTextRange([node.parent.parent.property.range[0], node.parent.parent.parent.range[1]], `not.toHaveAttribute(${context.getSourceCode().getText(node.arguments[0])})`)]
++      fix: fixer => [fixer.removeRange([node.callee.object.range[1], node.range[1]]), fixer.replaceTextRange([node.parent.parent.property.range[0], node.parent.parent.parent.range[1]], `not.toHaveAttribute(${context.sourceCode.getText(node.arguments[0])})`)]
+     });
+   },
+   [`CallExpression[callee.property.name='getAttribute'][parent.callee.name='expect'][parent.parent.property.name=/toContain$|toMatch$/]`](node) {
+@@ -82,7 +82,7 @@ const create = context => ({
+     context.report({
+       node: node.parent,
+       message: `Use toHaveAttribute instead of asserting on hasAttribute`,
+-      fix: fixer => [fixer.removeRange([node.callee.object.range[1], node.range[1]]), fixer.replaceTextRange([node.parent.parent.property.range[0], node.parent.parent.parent.range[1]], `${node.parent.parent.property.name === "toBeFalsy" ? "not." : ""}toHaveAttribute(${context.getSourceCode().getText(node.arguments[0])})`)]
++      fix: fixer => [fixer.removeRange([node.callee.object.range[1], node.range[1]]), fixer.replaceTextRange([node.parent.parent.property.range[0], node.parent.parent.parent.range[1]], `${node.parent.parent.property.name === "toBeFalsy" ? "not." : ""}toHaveAttribute(${context.sourceCode.getText(node.arguments[0])})`)]
+     });
+   }
+ });
+diff --git a/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-class.js b/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-class.js
+index 44ae965..c4ef474
+--- a/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-class.js
++++ b/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-class.js
+@@ -143,7 +143,7 @@ const create = context => ({
+   [[`CallExpression[callee.object.callee.name=expect][callee.property.name=toHaveAttribute][arguments.0.type=/Literal/][arguments.1.type=/Literal$/]`, `CallExpression[callee.object.callee.name=expect][callee.property.name=toHaveProperty][arguments.0.type=/Literal/][arguments.1.type=/Literal$/]`].join(",")](node) {
+     const matcher = node.callee.property;
+     const [classArg, classValueArg] = node.arguments;
+-    const classNameValue = context.getSourceCode().getText(classArg).slice(1, -1);
++    const classNameValue = context.sourceCode.getText(classArg).slice(1, -1);
+     if (matcher.name === "toHaveAttribute" && classNameValue !== "class" || matcher.name === "toHaveProperty" && classNameValue !== "className") {
+       return;
+     }
+@@ -165,7 +165,7 @@ const create = context => ({
+     //[callee.object.property.name=/toHaveAttribute|toHaveProperty/][arguments.0.value=class][arguments.1.type=/Literal$/]
+     const matcher = node.callee.property;
+     const [classArg, classValueArg] = node.arguments;
+-    const classNameValue = context.getSourceCode().getText(classArg).slice(1, -1);
++    const classNameValue = context.sourceCode.getText(classArg).slice(1, -1);
+     if (matcher.name === "toHaveAttribute" && classNameValue !== "class" || matcher.name === "toHaveProperty" && classNameValue !== "className") {
+       return;
+     }
+@@ -187,7 +187,7 @@ const create = context => ({
+     const matcher = node.callee.property;
+     const [classArg, classValue] = node.arguments;
+     const classValueArg = classValue.arguments[0];
+-    const classNameValue = context.getSourceCode().getText(classArg).slice(1, -1);
++    const classNameValue = context.sourceCode.getText(classArg).slice(1, -1);
+     if (matcher.name === "toHaveAttribute" && classNameValue !== "class" || matcher.name === "toHaveProperty" && classNameValue !== "className") {
+       return;
+     }
+diff --git a/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-style.js b/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-style.js
+index 76bf8d4..bdacdea
+--- a/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-style.js
++++ b/node_modules/eslint-plugin-jest-dom/dist/rules/prefer-to-have-style.js
+@@ -31,7 +31,7 @@ const create = context => {
+     return `[${(0, _context.getSourceCode)(context).getText(styleName)}]`;
+   }
+   function getReplacementStyleParam(styleName, styleValue) {
+-    return styleName.type === "Literal" ? `{${camelCase(styleName.value)}: ${context.getSourceCode().getText(styleValue)}}` : `${(0, _context.getSourceCode)(context).getText(styleName).slice(0, -1)}: ${styleValue.type === "TemplateLiteral" ? (0, _context.getSourceCode)(context).getText(styleValue).substring(1) : `${styleValue.value}\``}`;
++    return styleName.type === "Literal" ? `{${camelCase(styleName.value)}: ${context.sourceCode.getText(styleValue)}}` : `${(0, _context.getSourceCode)(context).getText(styleName).slice(0, -1)}: ${styleValue.type === "TemplateLiteral" ? (0, _context.getSourceCode)(context).getText(styleValue).substring(1) : `${styleValue.value}\``}`;
+   }
+   return {
+     //expect(el.style.foo).toBe("bar");
+@@ -43,7 +43,7 @@ const create = context => {
+         node: node.property,
+         message: "Use toHaveStyle instead of asserting on element style",
+         fix(fixer) {
+-          return [fixer.removeRange([node.object.range[1], styleName.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceText(styleValue, `{${styleName.name}:${context.getSourceCode().getText(styleValue)}}`)];
++          return [fixer.removeRange([node.object.range[1], styleName.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceText(styleValue, `{${styleName.name}:${context.sourceCode.getText(styleValue)}}`)];
+         }
+       });
+     },
+@@ -56,7 +56,7 @@ const create = context => {
+         node: node.property,
+         message: "Use toHaveStyle instead of asserting on element style",
+         fix(fixer) {
+-          return [fixer.removeRange([node.object.range[1], styleName.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceText(styleValue, `{${styleName.name}:${context.getSourceCode().getText(styleValue)}}`)];
++          return [fixer.removeRange([node.object.range[1], styleName.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceText(styleValue, `{${styleName.name}:${context.sourceCode.getText(styleValue)}}`)];
+         }
+       });
+     },
+@@ -142,7 +142,7 @@ const create = context => {
+           if (!styleValue || !["Literal", "TemplateLiteral"].includes(styleValue.type)) {
+             return null;
+           }
+-          return [fixer.removeRange([node.object.range[1], node.property.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceTextRange([styleName.range[0], styleValue.range[1]], `{${getReplacementObjectProperty(styleName)}: ${context.getSourceCode().getText(styleValue)}}`)];
++          return [fixer.removeRange([node.object.range[1], node.property.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceTextRange([styleName.range[0], styleValue.range[1]], `{${getReplacementObjectProperty(styleName)}: ${context.sourceCode.getText(styleValue)}}`)];
+         }
+       });
+     },
+@@ -157,7 +157,7 @@ const create = context => {
+           if (!styleValue || !["Literal", "TemplateLiteral"].includes(styleValue.type)) {
+             return null;
+           }
+-          return [fixer.removeRange([node.object.range[1], node.property.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceTextRange([styleName.range[0], styleValue.range[1]], `{${getReplacementObjectProperty(styleName)}: ${context.getSourceCode().getText(styleValue)}}`)];
++          return [fixer.removeRange([node.object.range[1], node.property.range[1]]), fixer.replaceText(matcher, "toHaveStyle"), fixer.replaceTextRange([styleName.range[0], styleValue.range[1]], `{${getReplacementObjectProperty(styleName)}: ${context.sourceCode.getText(styleValue)}}`)];
+         }
+       });
+     }
