@@ -1,0 +1,41 @@
+/*
+═══════════════════════════════════════════════════════════════════════════════
+IGODED FONTS — opt-in, carga las fuentes Google del DS
+═══════════════════════════════════════════════════════════════════════════════
+
+QUÉ CONTIENE: un solo `@import url(...)` a Google Fonts para las 3 fuentes
+que usa el design system:
+  - Electrolize  → titulares (`--ig-font-heading`)
+  - Saira        → cuerpo (`--ig-font-base`)
+  - JetBrains Mono → código (`--ig-font-mono`)
+
+POR QUÉ OPT-IN (desde `1.0.0-beta.3`):
+- Importar Google Fonts desde un paquete npm es invasivo: mete request
+  remoto en cualquier consumer, fricciona con CSP estricta, añade
+  superficie de privacidad y bloquea/altera performance.
+- Algunos consumers ya cargan sus propias fuentes o usan self-hosting.
+- Para Storybook/demo del DS sí queremos las fuentes oficiales.
+
+QUÉ HACE `igoded-tokens.css` AHORA:
+- Declara `--ig-font-base / --ig-font-heading / --ig-font-mono` con FALLBACK
+  system-ui/serif/monospace. Si no importas `fonts.css`, el DS funciona pero
+  con tipografía del sistema.
+
+USO:
+
+  // Si quieres las fuentes Google oficiales:
+  import "reactigoded/styles/design.css";
+  import "reactigoded/styles/fonts.css";
+
+  // Si self-hosteas las fuentes o usas otras, NO importes fonts.css y
+  // sobreescribe los tokens en tu propio CSS:
+  :root {
+    --ig-font-base: "Inter", system-ui, sans-serif;
+  }
+
+ALTERNATIVA RECOMENDADA: self-host las fuentes con `next/font` (Next.js),
+`@fontsource/*` o `<link rel="preload">` propio en tu HTML. Eso evita el
+request remoto y mejora LCP.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Electrolize&family=JetBrains+Mono:wght@400;500;700&family=Saira:wght@300;400;500;600;700&display=swap');

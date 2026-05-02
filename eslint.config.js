@@ -81,7 +81,8 @@ export default defineConfig([
   // sustituye `context.getSourceCode()` por `context.sourceCode` en
   // `dist/context.js` + 3 reglas afectadas. El patch vive en
   // `patches/eslint-plugin-jest-dom+5.5.0.patch` y se aplica
-  // automáticamente con el script `postinstall` del package.json.
+  // automáticamente con el script `prepare` del package.json (`npm install`
+  // local lo invoca; el consumer del paquete final NO lo ejecuta).
   // Cuando v6 (o un fork bajo @eslint-community / @testing-library) salga,
   // basta `npm install` la versión nueva y `rm patches/eslint-plugin-jest-dom+*`.
   {

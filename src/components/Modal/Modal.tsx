@@ -66,6 +66,12 @@ export function Modal({
 }: ModalProps) {
   const innerRef = useRef<HTMLDialogElement>(null);
   const [headerId, setHeaderId] = useState<string | null>(null);
+  // Flag para distinguir cierres programáticos (consumer cambió `open` a
+  // false) de cierres user-driven (ESC, click fuera, .close() manual).
+  // Sin esto, dialog.close() en el effect dispara el evento `close` del
+  // <dialog> y eso llamaba a onClose otra vez aunque el consumer ya hubiera
+  // sincronizado el estado. Desde 1.0.0-beta.3 evitamos el doble disparo.
+  const closingFromSyncRef = useRef(false);
 
   const setHeaderIdStable = useCallback((id: string | null) => {
     setHeaderId(id);
@@ -83,6 +89,9 @@ export function Modal({
     if (open && !dialog.open) {
       dialog.showModal();
     } else if (!open && dialog.open) {
+      // Marca antes de close() para que el handler `onClose` del <dialog>
+      // sepa que el cierre ya viene "consumido" por la prop.
+      closingFromSyncRef.current = true;
       dialog.close();
     }
   }, [open]);
@@ -128,7 +137,15 @@ export function Modal({
         )}
         aria-labelledby={ariaLabelledByFromConsumer ?? headerId ?? undefined}
         aria-busy={loading || undefined}
-        onClose={() => onClose?.()}
+        onClose={() => {
+          // Si el cierre viene de sincronización con `open=false`, no
+          // dispares onClose otra vez — el consumer ya sabe.
+          if (closingFromSyncRef.current) {
+            closingFromSyncRef.current = false;
+            return;
+          }
+          onClose?.();
+        }}
         onClick={(e) => {
           if (!closeOnBackdrop) return;
           // El click en el backdrop tiene como target el propio <dialog>,

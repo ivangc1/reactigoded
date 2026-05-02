@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useTabs } from "./TabsContext";
@@ -25,10 +26,14 @@ export function Tab({
   ref,
   ...rest
 }: TabProps) {
-  const { selected, setSelected, baseId, orientation } = useTabs();
+  const { selected, setSelected, baseId, orientation, register } = useTabs();
   const isActive = selected === value;
   const tabId = `${baseId}-tab-${value}`;
   const panelId = `${baseId}-panel-${value}`;
+
+  // Registra este Tab al montar; el primer Tab montado es la selección
+  // inicial cuando el consumer omite `value` y `defaultValue`.
+  useEffect(() => register(value), [register, value]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     onKeyDown?.(e);

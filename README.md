@@ -4,12 +4,15 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.2` — arquitectura CSS de 4 ejes
-> (`tokens` / `base` / `components` / `design` meta-importer), Storybook
-> branded con `<title>` rebrandeado, foundations docs en MDX, naming
-> uniforme, API homogénea (`Button` y `Card` con eje `appearance`, `Toast`
-> renombra `default` → `neutral`). 0 deprecaciones, listo para consumir como
-> dependencia.
+> **Estado**: `1.0.0-beta.3` — pasada agresiva pre-`1.0.0`: a11y real
+> (Input/Select/Textarea `aria-describedby` merge correcto; Rating con
+> roving tabindex + flechas; Dropdown excluye `aria-disabled`; Tabs
+> auto-selecciona el primer Tab); SSR-safe Toast (sin hydration mismatch);
+> Modal sin doble `onClose`; nuevo color cardinal `cyaneus` para diferenciar
+> `info` de `secondary`; Google Fonts movido a `fonts.css` opt-in (no se
+> impone request remoto al consumer); `vite.config` deja de meter dts en
+> `storybook build`; tema dark-first uniforme. 0 deprecaciones, listo para
+> consumir como dependencia.
 
 ## Instalación
 
@@ -230,8 +233,9 @@ Targets oficiales (últimas 2 versiones de Chrome, Firefox, Safari, Edge):
 npm run dev              # playground (http://localhost:5173)
 npm run storybook        # docs/demos (http://localhost:6006)
 npm run build            # dist/ con index.js + index.cjs + .d.ts + styles/
-npm run test:unit        # vitest happy-dom (~285 tests)
-npm run test:storybook   # vitest browser Chromium + axe-a11y (~175 tests)
+npm run test:unit        # vitest happy-dom (suite completa)
+npm run test:unit:ci     # como test:unit, con isolate=true + pool=forks (CI estricto)
+npm run test:storybook   # vitest browser Chromium + axe-a11y
 npm run verify           # lint + typecheck + test:unit + build + test:storybook
 ```
 

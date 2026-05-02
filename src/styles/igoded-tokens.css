@@ -41,17 +41,24 @@ PARTE 1: VARIABLES CSS
 1. IMPORTS / FUENTES
 ═══════════════════════════════════════════════════════════════════════════════
 
-QUÉ ES: Cargamos las fuentes desde Google Fonts.
+FUENTES QUE EL DS ESPERA:
+- Electrolize: titulares (`--ig-font-heading`).
+- Saira: cuerpo (`--ig-font-base`).
+- JetBrains Mono: código (`--ig-font-mono`).
 
-FUENTES QUE USAMOS:
-- Electrolize: para títulos. Tiene rollo técnico/futurista, muy legible.
-- Saira: para texto normal. Es moderna pero no cansa al leer párrafos largos.
-- JetBrains Mono: para código. Ligaduras y claridad para programar.
+CARGA: este archivo NO carga las fuentes desde 1.0.0-beta.3 (antes hacía
+`@import url(...)` a Google Fonts y eso metía request remoto en cualquier
+consumer). Los tokens `--ig-font-*` declaran fallbacks system-ui/serif/
+monospace, así que el DS funciona sin fuentes Google.
 
-POR QUÉ ESTAS: Combinan bien juntas y tienen personalidad sin ser raras.
+Para tener las fuentes oficiales en tu app:
+
+  import "reactigoded/styles/fonts.css";
+
+…o self-hostea con `next/font`, `@fontsource/*`, etc. y sobreescribe los
+tokens. Storybook importa `fonts.css` para que el catálogo se vea con la
+tipografía oficial.
 */
-
-@import url('https://fonts.googleapis.com/css2?family=Electrolize&family=JetBrains+Mono:wght@400;500;700&family=Saira:wght@300;400;500;600;700&display=swap');
 
 
 /*
@@ -136,6 +143,17 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-malum-lux: #6b001e;    /* oklch(33.5% 0.134 16) */
   --ig-malum-nox: #feb7cf;    /* oklch(85.2% 0.087 357) */
 
+  /* ═══ CYANEUS (Info / Cian-Azul) ═══
+     Color cardinal añadido en 1.0.0-beta.3 para diferenciar `info` de
+     `secondary` (que apunta a axis/violet). Antes ambos colores eran
+     idénticos visualmente; ahora info usa un cian-azul propio.
+     - lux: cian oscuro. Oscurecido a #0a4452 (era #0c5d6e) para que el
+       texto del alert-info (texto cyaneus-lux sobre fondo
+       cyaneus-alpha-20 mezclado con bg-base #faf9fc) cumpla AA ≥4.5:1.
+     - nox: cian claro, ratio ≥7:1 sobre #0c1515 (fundus-nox). */
+  --ig-cyaneus-lux: #0a4452;  /* oklch(34% 0.060 213) */
+  --ig-cyaneus-nox: #7adcec;  /* oklch(85% 0.080 207) */
+
   /* ═══ Variables adaptativas (modo oscuro por defecto) ═══ */
   --ig-fundus: var(--ig-fundus-nox);
   --ig-vitreus: var(--ig-vitreus-nox);
@@ -144,6 +162,7 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus: var(--ig-rutilus-nox);
   --ig-laurus: var(--ig-laurus-nox);
   --ig-malum: var(--ig-malum-nox);
+  --ig-cyaneus: var(--ig-cyaneus-nox);
 }
 
 @media (prefers-color-scheme: light) {
@@ -155,6 +174,7 @@ ESPECIFICACIONES TÉCNICAS:
     --ig-rutilus: var(--ig-rutilus-lux);
     --ig-laurus: var(--ig-laurus-lux);
     --ig-malum: var(--ig-malum-lux);
+    --ig-cyaneus: var(--ig-cyaneus-lux);
   }
 }
 
@@ -166,6 +186,7 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus: var(--ig-rutilus-lux);
   --ig-laurus: var(--ig-laurus-lux);
   --ig-malum: var(--ig-malum-lux);
+  --ig-cyaneus: var(--ig-cyaneus-lux);
 }
 
 [data-theme="dark"] {
@@ -176,6 +197,7 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus: var(--ig-rutilus-nox);
   --ig-laurus: var(--ig-laurus-nox);
   --ig-malum: var(--ig-malum-nox);
+  --ig-cyaneus: var(--ig-cyaneus-nox);
 }
 
 
@@ -252,6 +274,13 @@ Abajo tienes variables listas para usar con opacidades comunes (10%, 20%, 30%, 5
   --ig-malum-alpha-30: color-mix(in srgb, var(--ig-malum) 30%, transparent);
   --ig-malum-alpha-50: color-mix(in srgb, var(--ig-malum) 50%, transparent);
   --ig-malum-alpha-70: color-mix(in srgb, var(--ig-malum) 70%, transparent);
+
+  /* ═══ CYANEUS (Info) con transparencias ═══ */
+  --ig-cyaneus-alpha-10: color-mix(in srgb, var(--ig-cyaneus) 10%, transparent);
+  --ig-cyaneus-alpha-20: color-mix(in srgb, var(--ig-cyaneus) 20%, transparent);
+  --ig-cyaneus-alpha-30: color-mix(in srgb, var(--ig-cyaneus) 30%, transparent);
+  --ig-cyaneus-alpha-50: color-mix(in srgb, var(--ig-cyaneus) 50%, transparent);
+  --ig-cyaneus-alpha-70: color-mix(in srgb, var(--ig-cyaneus) 70%, transparent);
 
   /* ═══ Negro y blanco con transparencias (overlays, sombras) ═══ */
   --ig-black-alpha-10: color-mix(in srgb, black 10%, transparent);
@@ -392,6 +421,7 @@ CUÁNDO USAR:
   --ig-text-on-rutilus: var(--ig-fundus-nox);
   --ig-text-on-laurus: var(--ig-fundus-nox);
   --ig-text-on-malum: var(--ig-fundus-nox);
+  --ig-text-on-cyaneus: var(--ig-fundus-nox);
 }
 
 @media (prefers-color-scheme: light) {
@@ -409,6 +439,7 @@ CUÁNDO USAR:
     --ig-text-on-rutilus: var(--ig-fundus-lux);
     --ig-text-on-laurus: var(--ig-fundus-lux);
     --ig-text-on-malum: var(--ig-fundus-lux);
+    --ig-text-on-cyaneus: var(--ig-fundus-lux);
   }
 }
 
@@ -424,6 +455,7 @@ CUÁNDO USAR:
   --ig-text-on-rutilus: var(--ig-fundus-lux);
   --ig-text-on-laurus: var(--ig-fundus-lux);
   --ig-text-on-malum: var(--ig-fundus-lux);
+  --ig-text-on-cyaneus: var(--ig-fundus-lux);
 }
 
 [data-theme="dark"] {
@@ -438,6 +470,7 @@ CUÁNDO USAR:
   --ig-text-on-rutilus: var(--ig-fundus-nox);
   --ig-text-on-laurus: var(--ig-fundus-nox);
   --ig-text-on-malum: var(--ig-fundus-nox);
+  --ig-text-on-cyaneus: var(--ig-fundus-nox);
 }
 
 
@@ -507,7 +540,7 @@ MAPEO:
 - success → laurus (el laurel de la victoria)
 - warning → rutilus (el resplandor de aviso)
 - danger → malum (el fruto del error)
-- info → axis (el color de interacción)
+- info → cyaneus (cian-azul propio, distinto de axis/violet desde 1.0.0-beta.3)
 
 CUÁNDO USAR:
 Puedes usar cualquiera de los dos sistemas:
@@ -525,7 +558,7 @@ Estas variables son solo aliases para familiaridad.
   --ig-success: var(--ig-laurus);
   --ig-warning: var(--ig-rutilus);
   --ig-danger: var(--ig-malum);
-  --ig-info: var(--ig-axis);
+  --ig-info: var(--ig-cyaneus);
 
   /* Texto sobre colores semánticos (apuntan a los cardinales para heredar modo) */
   --ig-text-on-brand: var(--ig-text-on-vitreus);
@@ -533,7 +566,7 @@ Estas variables son solo aliases para familiaridad.
   --ig-text-on-success: var(--ig-text-on-laurus);
   --ig-text-on-warning: var(--ig-text-on-rutilus);  /* hereda el cambio dark/light */
   --ig-text-on-danger: var(--ig-text-on-malum);
-  --ig-text-on-info: var(--ig-text-on-axis);
+  --ig-text-on-info: var(--ig-text-on-cyaneus);
 }
 
 
@@ -2106,10 +2139,11 @@ Ejemplo: --ig-alert-padding o --ig-tooltip-bg.
   --ig-alert-danger-border: var(--ig-malum);
   --ig-alert-danger-text: var(--ig-malum);
 
-  /* Alert Info */
-  --ig-alert-info-bg: var(--ig-axis-alpha-20);
-  --ig-alert-info-border: var(--ig-axis);
-  --ig-alert-info-text: var(--ig-axis);
+  /* Alert Info — desde 1.0.0-beta.3 usa cyaneus (cian-azul propio) en
+     vez de axis para no colisionar visualmente con secondary. */
+  --ig-alert-info-bg: var(--ig-cyaneus-alpha-20);
+  --ig-alert-info-border: var(--ig-cyaneus);
+  --ig-alert-info-text: var(--ig-cyaneus);
 
   /* MODAL — los tokens `--ig-modal-*` se eliminaron junto con las clases
      legacy `.ig-modal-*`. El componente actual usa `<dialog>` (sección 78b)

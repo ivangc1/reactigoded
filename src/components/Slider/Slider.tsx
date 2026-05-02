@@ -48,8 +48,19 @@ export function Slider({
   ...rest
 }: SliderProps) {
   const isControlled = value !== undefined;
-  const initial =
-    typeof defaultValue === "number" ? defaultValue : Number(min) || 0;
+  // `defaultValue` puede llegar como string ("60") o readonly array (que el
+  // <input> nativo no soporta para type="range"). Normalizamos a número
+  // finito; si no se puede, caemos a `min`. Antes de 1.0.0-beta.3 un
+  // defaultValue="60" dejaba `internal=0` mientras el DOM mostraba 60.
+  const minNum = Number(min);
+  const safeMin = Number.isFinite(minNum) ? minNum : 0;
+  const parsedDefault =
+    typeof defaultValue === "number"
+      ? defaultValue
+      : typeof defaultValue === "string" && defaultValue.length > 0
+        ? Number(defaultValue)
+        : NaN;
+  const initial = Number.isFinite(parsedDefault) ? parsedDefault : safeMin;
   const [internal, setInternal] = useState<number>(initial);
 
   const current = isControlled ? Number(value) : internal;

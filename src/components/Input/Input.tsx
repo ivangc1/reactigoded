@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 
 export type InputSize = "sm" | "md" | "lg";
 export type InputState = "default" | "error" | "success";
@@ -13,6 +14,9 @@ export interface InputProps
   /**
    * IDs de elementos descriptivos (típicamente `Helper`/`ErrorText`) que se
    * combinan en `aria-describedby`. Acepta un id o lista de ids.
+   *
+   * Si pasas también `aria-describedby` directo (vía rest), AMBOS se
+   * concatenan en el atributo final — desde `1.0.0-beta.3`.
    *
    * @example
    * const helperId = useId();
@@ -38,13 +42,12 @@ export function Input({
   ref,
   ...rest
 }: InputProps) {
-  const describedByValue = Array.isArray(describedBy)
-    ? describedBy.filter(Boolean).join(" ") || undefined
-    : describedBy;
+  const { "aria-describedby": ariaDescribedByNative, ...inputRest } = rest;
+  const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
 
   return (
     <input
-      {...rest}
+      {...inputRest}
       ref={ref}
       className={cn(
         "ig-input",

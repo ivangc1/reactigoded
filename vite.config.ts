@@ -30,6 +30,7 @@ function copyDesignSystemStyles(): PluginOption {
         "igoded-base.css",
         "igoded-components.css",
         "igoded-design.css",
+        "igoded-fonts.css",
         "igoded-reset.css",
         "igoded-state-css.css",
       ];
@@ -50,13 +51,21 @@ function copyDesignSystemStyles(): PluginOption {
 // https://vite.dev/config/
 //
 // Dual mode:
-//   `npm run dev`     → playground en dev (sirve src/main.tsx + src/App.tsx)
-//   `npm run build`   → library mode (empaqueta src/index.ts a dist/)
+//   `npm run dev`         → playground (serve src/main.tsx)
+//   `npm run build`       → library mode (empaqueta src/index.ts a dist/)
+//   `npm run storybook`   → Storybook builder (NO library mode)
+//   `storybook build`     → Storybook static (NO library mode)
 //
-// El switch lo controla la env var STORYBOOK (la pone Storybook al arrancar).
-// En build de paquete, generamos también tipos `.d.ts` con vite-plugin-dts.
-export default defineConfig(({ mode }) => {
-  const isLibBuild = mode === "production";
+// El switch lib build se activa SOLO cuando es realmente un build de
+// librería: `command === "build"` (no es dev), `mode === "production"`
+// (no playground), y NO hay `STORYBOOK=true` en env (Storybook lo setea
+// al arrancar). Sin este guard, `storybook build` pasaba mode=production
+// y disparaba dts plugin + copyDesignSystemStyles innecesariamente.
+export default defineConfig(({ command, mode }) => {
+  const isLibBuild =
+    command === "build" &&
+    mode === "production" &&
+    process.env["STORYBOOK"] !== "true";
 
   return {
     plugins: [

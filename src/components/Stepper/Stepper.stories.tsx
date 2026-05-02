@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 import { Stepper, Step } from "./index";
 import { Button } from "../Button";
 
@@ -60,13 +61,21 @@ export const Labeled: Story = {
 };
 
 export const Interactivo: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Interaction test: pulsar 'Siguiente' avanza el step activo y aplica `aria-current=\"step\"` al siguiente.",
+      },
+    },
+  },
   render: () => {
     function Demo() {
       const [active, setActive] = useState(0);
       const total = 4;
       return (
         <div className="ig-story-stack ig-story-stack--full">
-          <Stepper active={active} labeled>
+          <Stepper active={active} labeled ariaLabel="Demo">
             <Step label="Inicio" />
             <Step label="Detalles" />
             <Step label="Revisión" />
@@ -97,5 +106,19 @@ export const Interactivo: Story = {
       );
     }
     return <Demo />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    // Estado inicial active=0: el primer dot tiene aria-current="step".
+    const initial = canvasElement.querySelectorAll('[aria-current="step"]');
+    await expect(initial).toHaveLength(1);
+    const initialContent = initial[0]?.textContent ?? "";
+    await expect(initialContent).toBe("1");
+    const next = canvas.getByRole("button", { name: "Siguiente" });
+    await userEvent.click(next);
+    // Tras 1 click, active=1: el segundo dot lleva aria-current.
+    const after = canvasElement.querySelectorAll('[aria-current="step"]');
+    await expect(after).toHaveLength(1);
+    await expect(after[0]?.textContent ?? "").toBe("2");
   },
 };

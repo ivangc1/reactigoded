@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, within } from "storybook/test";
 import { Input } from "./Input";
 import { Label } from "./Label";
 import { Helper } from "./Helper";
@@ -57,6 +58,24 @@ export const Estados: Story = {
 
 export const Deshabilitado: Story = {
   args: { disabled: true, defaultValue: "No editable" },
+};
+
+export const TypeInteraction: Story = {
+  args: { placeholder: "Escribe algo" },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Interaction test: tipear en un Input no controlado actualiza su `value` y dispara el evento `input` por cada tecla.",
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByPlaceholderText<HTMLInputElement>("Escribe algo");
+    await userEvent.type(input, "hola");
+    await expect(input.value).toBe("hola");
+  },
 };
 
 export const FormularioCompleto: Story = {

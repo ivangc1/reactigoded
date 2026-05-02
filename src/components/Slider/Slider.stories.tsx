@@ -1,6 +1,10 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { fn } from "storybook/test";
+import { expect, fn, within } from "storybook/test";
+
+// Nota: el `args.onChange` (vi.fn) tampoco es viable para verificar input
+// nativo bajo Playwright headless porque React filtra eventos sintéticos
+// no provenientes de su own listener. Dejamos solo smoke render + a11y.
 import { Slider } from "./Slider";
 
 const meta = {
@@ -55,6 +59,24 @@ export const Pasos: Story = {
 
 export const Deshabilitado: Story = {
   args: { disabled: true, showValue: true, defaultValue: 50 },
+};
+
+export const RenderEstadoInicial: Story = {
+  args: { showValue: true, defaultValue: 42, formatValue: (v) => `${String(v)}%` },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Smoke test (sin `play`): el render coincide con `defaultValue` y aplica `formatValue`. Los tests de keyboard real viven en `Slider.test.tsx` (happy-dom), porque Chromium headless intercepta ArrowRight sobre `type=range` de forma inconsistente y React tampoco capta dispatchEvent('input') manual sin el setter low-level.",
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const slider = canvas.getByLabelText<HTMLInputElement>("Volumen");
+    await expect(Number(slider.value)).toBe(42);
+    await expect(slider).toHaveAttribute("aria-valuetext", "42%");
+  },
 };
 
 export const OnValueChange: Story = {

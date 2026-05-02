@@ -1,5 +1,6 @@
 import type { SelectHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 
 export type SelectState = "default" | "error" | "success";
 
@@ -8,7 +9,8 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   state?: SelectState;
   /**
    * IDs de elementos descriptivos (`Helper`/`ErrorText`) combinados en
-   * `aria-describedby`. Acepta un id o lista de ids.
+   * `aria-describedby`. Acepta un id o lista de ids. Si pasas también
+   * `aria-describedby` directo (vía rest), AMBOS se concatenan.
    */
   describedBy?: string | string[];
   ref?: Ref<HTMLSelectElement>;
@@ -35,12 +37,11 @@ export function Select({
   ref,
   ...rest
 }: SelectProps) {
-  const describedByValue = Array.isArray(describedBy)
-    ? describedBy.filter(Boolean).join(" ") || undefined
-    : describedBy;
+  const { "aria-describedby": ariaDescribedByNative, ...selectRest } = rest;
+  const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
   return (
     <select
-      {...rest}
+      {...selectRest}
       ref={ref}
       className={cn(
         "ig-select",

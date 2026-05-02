@@ -86,7 +86,10 @@ button {
   font-weight: var(--ig-fw-semibold);
   font-size: var(--ig-text-sm);
   background-color: var(--ig-vitreus);
-  color: var(--ig-fundus-lux);
+  /* Adaptativo al tema desde 1.0.0-beta.3: antes era --ig-fundus-lux fijo,
+     que en tema dark daba contraste bajo (texto casi blanco sobre teal
+     claro). --ig-text-on-vitreus se invierte automáticamente en dark/light. */
+  color: var(--ig-text-on-vitreus);
   border: none;
   border-radius: var(--ig-rounded-md);
   padding: var(--ig-space-2) var(--ig-space-4);

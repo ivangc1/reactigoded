@@ -16,7 +16,9 @@ const config: StorybookConfig = {
     options: {},
   },
   docs: {
-    defaultName: "Documentación",
+    // ASCII evita unicode en URLs (`%C3%B3n`) que rompía bookmarks y SEO.
+    // Las páginas MDX de Foundations sí están en español ("Fundamentos/...").
+    defaultName: "Docs",
   },
   // Inyecta meta tags + un MutationObserver que reescribe el `<title>` cada
   // vez que Storybook lo cambia (el router del manager pone "<story> ⋅ Storybook"

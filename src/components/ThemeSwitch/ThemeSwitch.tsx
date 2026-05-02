@@ -97,9 +97,11 @@ export function ThemeSwitch({
   const stored = useStoredTheme(storageKey);
   const [override, setOverride] = useState<Theme | null>(null);
 
+  // Default `dark` desde `1.0.0-beta.3` para alinear con `useTheme` y el
+  // branding dark-first del DS (manager.ts también arranca dark).
   const current: Theme = isControlled
     ? themeProp
-    : (override ?? stored ?? defaultTheme ?? "light");
+    : (override ?? stored ?? defaultTheme ?? "dark");
 
   useEffect(() => {
     if (attribute && typeof document !== "undefined") {
@@ -129,11 +131,16 @@ export function ThemeSwitch({
           ? "Dark"
           : "Light";
 
+  // Permite que el consumer sobreescriba `aria-label` (i18n). Si no pasa
+  // nada, default ES. Antes de 1.0.0-beta.3 el hardcoded ganaba al rest
+  // por el orden de props, ahora respeta lo que venga.
+  const { "aria-label": ariaLabelOverride, ...switchRest } = rest;
+
   return (
     <Switch
-      {...rest}
+      {...switchRest}
       {...(ref !== undefined ? { ref } : {})}
-      aria-label="Cambiar entre tema claro y oscuro"
+      aria-label={ariaLabelOverride ?? "Cambiar entre tema claro y oscuro"}
       checked={current === "dark"}
       onChange={toggle}
     >

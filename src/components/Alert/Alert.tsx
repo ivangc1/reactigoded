@@ -91,7 +91,7 @@ export function Alert({
           {icon}
         </span>
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="ig-alert-content">
         {title && <div className="ig-alert-title">{title}</div>}
         {children !== undefined && (
           <div className="ig-alert-description">{children}</div>

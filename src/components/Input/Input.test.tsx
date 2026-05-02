@@ -124,4 +124,26 @@ describe("InputGroup / InputAddon", () => {
       "aria-describedby",
     );
   });
+
+  it("aria-describedby nativo del consumer SOBREVIVE sin describedBy prop (regression beta.3)", () => {
+    render(<Input placeholder="x" aria-describedby="helper-1" />);
+    expect(screen.getByPlaceholderText("x")).toHaveAttribute(
+      "aria-describedby",
+      "helper-1",
+    );
+  });
+
+  it("aria-describedby nativo + describedBy prop se concatenan (regression beta.3)", () => {
+    render(
+      <Input
+        placeholder="x"
+        aria-describedby="native-id"
+        describedBy={["prop-id-1", "prop-id-2"]}
+      />,
+    );
+    expect(screen.getByPlaceholderText("x")).toHaveAttribute(
+      "aria-describedby",
+      "native-id prop-id-1 prop-id-2",
+    );
+  });
 });

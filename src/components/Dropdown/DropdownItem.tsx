@@ -2,6 +2,7 @@ import type {
   AnchorHTMLAttributes,
   ButtonHTMLAttributes,
   KeyboardEvent,
+  MouseEvent,
   Ref,
 } from "react";
 import { cn } from "@/utils/cn";
@@ -28,6 +29,14 @@ type AnchorItemProps = CommonProps &
 
 export type DropdownItemProps = ButtonItemProps | AnchorItemProps;
 
+/**
+ * Selector que excluye items NO-activables. Desde 1.0.0-beta.3 también
+ * excluye `aria-disabled="true"` (los anchors no tienen `disabled` HTML
+ * pero sí lo expresan vía aria, y antes seguían navegables).
+ */
+const NAVIGABLE_ITEM_SELECTOR =
+  '[role="menuitem"]:not([disabled]):not([aria-disabled="true"])';
+
 function handleNavKeys(
   e: KeyboardEvent<HTMLElement>,
   menuRef: { current: HTMLDivElement | null },
@@ -41,9 +50,8 @@ function handleNavKeys(
     return;
   }
   const items = Array.from(
-    menuRef.current?.querySelectorAll<HTMLElement>(
-      '[role="menuitem"]:not([disabled])',
-    ) ?? [],
+    menuRef.current?.querySelectorAll<HTMLElement>(NAVIGABLE_ITEM_SELECTOR) ??
+      [],
   );
   if (items.length === 0) return;
   const idx = items.indexOf(e.currentTarget);
@@ -63,6 +71,11 @@ function handleNavKeys(
  * Si recibe `href` renderiza un `<a>`, si no un `<button>`. Cierra el menu
  * al activarse cuando `Dropdown.closeOnSelect` está activo (por defecto).
  * Soporta navegación con ↑/↓/Home/End entre los items hermanos.
+ *
+ * **Roving tabindex consistente desde 1.0.0-beta.3**: tanto buttons como
+ * anchors usan `tabIndex={-1}` (los menuitems no deben ser tab stops del
+ * documento; el foco entra al menú vía el trigger). Items con
+ * `aria-disabled="true"` se saltan en la nav por flechas Y bloquean clicks.
  */
 export function DropdownItem(props: DropdownItemProps) {
   const { setOpen, triggerRef, menuRef, closeOnSelect } = useDropdown();
@@ -72,6 +85,12 @@ export function DropdownItem(props: DropdownItemProps) {
     setOpen(false);
     triggerRef.current?.focus();
   };
+
+  // True si el item está marcado como aria-disabled. Los browsers no
+  // bloquean clicks por defecto en estos items (no es como `disabled` en
+  // <button>), así que lo hacemos manualmente.
+  const isAriaDisabled = props["aria-disabled"] === true ||
+    props["aria-disabled"] === "true";
 
   if (props.href !== undefined) {
     const {
@@ -94,13 +113,24 @@ export function DropdownItem(props: DropdownItemProps) {
           active && "ig-dropdown-item-active",
           className,
         )}
-        onClick={(e) => {
+        onClick={(e: MouseEvent<HTMLAnchorElement>) => {
+          if (isAriaDisabled) {
+            e.preventDefault();
+            return;
+          }
           onClick?.(e);
           if (!e.defaultPrevented) close();
         }}
         onKeyDown={(e) => {
           onKeyDown?.(e);
-          if (!e.defaultPrevented) handleNavKeys(e, menuRef);
+          if (e.defaultPrevented) return;
+          // Activación por teclado: Enter en <a> activa nativo, pero Space
+          // no — y para aria-disabled hay que bloquear ambos.
+          if (isAriaDisabled && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            return;
+          }
+          handleNavKeys(e, menuRef);
         }}
       >
         {children}
@@ -123,13 +153,18 @@ export function DropdownItem(props: DropdownItemProps) {
       {...rest}
       type={type}
       role="menuitem"
+      tabIndex={-1}
       className={cn(
         "ig-dropdown-item",
         danger && "ig-dropdown-item-danger",
         active && "ig-dropdown-item-active",
         className,
       )}
-      onClick={(e) => {
+      onClick={(e: MouseEvent<HTMLButtonElement>) => {
+        if (isAriaDisabled) {
+          e.preventDefault();
+          return;
+        }
         onClick?.(e);
         if (!e.defaultPrevented) close();
       }}

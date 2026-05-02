@@ -57,3 +57,102 @@ describe("Rating", () => {
     expect(screen.getByRole("radio", { name: "1 estrella" })).not.toBeChecked();
   });
 });
+
+describe("Rating — roving tabindex + keyboard nav (WAI-ARIA APG)", () => {
+  it("solo la estrella checked tiene tabIndex=0; el resto -1", () => {
+    render(<Rating value={3} max={5} />);
+    const stars = screen.getAllByRole("radio");
+    expect(stars[0]).toHaveAttribute("tabindex", "-1");
+    expect(stars[1]).toHaveAttribute("tabindex", "-1");
+    expect(stars[2]).toHaveAttribute("tabindex", "0"); // value=3
+    expect(stars[3]).toHaveAttribute("tabindex", "-1");
+    expect(stars[4]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("sin valor (value=0): la primera estrella es tab stop", () => {
+    render(<Rating value={0} max={5} />);
+    const stars = screen.getAllByRole("radio");
+    expect(stars[0]).toHaveAttribute("tabindex", "0");
+    stars.slice(1).forEach((s) => {
+      expect(s).toHaveAttribute("tabindex", "-1");
+    });
+  });
+
+  it("readOnly: todas las estrellas tabIndex=-1", () => {
+    render(<Rating value={3} readOnly />);
+    screen.getAllByRole("radio").forEach((s) => {
+      expect(s).toHaveAttribute("tabindex", "-1");
+    });
+  });
+
+  it("ArrowRight selecciona la siguiente estrella y mueve foco", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={2} onValueChange={onValueChange} />);
+    const star2 = screen.getByRole("radio", { name: "2 estrellas" });
+    star2.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onValueChange).toHaveBeenLastCalledWith(3);
+    expect(screen.getByRole("radio", { name: "3 estrellas" })).toHaveFocus();
+  });
+
+  it("ArrowLeft selecciona la anterior", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={3} onValueChange={onValueChange} />);
+    const star3 = screen.getByRole("radio", { name: "3 estrellas" });
+    star3.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(onValueChange).toHaveBeenLastCalledWith(2);
+    expect(screen.getByRole("radio", { name: "2 estrellas" })).toHaveFocus();
+  });
+
+  it("ArrowRight tope = max (no se sale)", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={5} max={5} onValueChange={onValueChange} />);
+    const last = screen.getByRole("radio", { name: "5 estrellas" });
+    last.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onValueChange).toHaveBeenLastCalledWith(5);
+    expect(last).toHaveFocus();
+  });
+
+  it("ArrowLeft tope = 1 (no se sale)", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={1} onValueChange={onValueChange} />);
+    const first = screen.getByRole("radio", { name: "1 estrella" });
+    first.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(onValueChange).toHaveBeenLastCalledWith(1);
+    expect(first).toHaveFocus();
+  });
+
+  it("Home → primera estrella, End → última", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={3} max={5} onValueChange={onValueChange} />);
+    const star3 = screen.getByRole("radio", { name: "3 estrellas" });
+    star3.focus();
+    await userEvent.keyboard("{End}");
+    expect(onValueChange).toHaveBeenLastCalledWith(5);
+    expect(screen.getByRole("radio", { name: "5 estrellas" })).toHaveFocus();
+    await userEvent.keyboard("{Home}");
+    expect(onValueChange).toHaveBeenLastCalledWith(1);
+    expect(screen.getByRole("radio", { name: "1 estrella" })).toHaveFocus();
+  });
+
+  it("Space/Enter sobre una estrella la selecciona", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={0} onValueChange={onValueChange} />);
+    const first = screen.getByRole("radio", { name: "1 estrella" });
+    first.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onValueChange).toHaveBeenLastCalledWith(1);
+  });
+
+  it("readOnly ignora keyboard nav", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={3} readOnly onValueChange={onValueChange} />);
+    const star3 = screen.getByRole("radio", { name: "3 estrellas" });
+    star3.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+});

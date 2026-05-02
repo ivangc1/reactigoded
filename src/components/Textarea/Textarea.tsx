@@ -1,5 +1,6 @@
 import type { TextareaHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 
 export type TextareaState = "default" | "error" | "success";
 
@@ -11,7 +12,8 @@ export interface TextareaProps
   state?: TextareaState;
   /**
    * IDs de elementos descriptivos (`Helper`/`ErrorText`) combinados en
-   * `aria-describedby`. Acepta un id o lista de ids.
+   * `aria-describedby`. Acepta un id o lista de ids. Si pasas también
+   * `aria-describedby` directo (vía rest), AMBOS se concatenan.
    */
   describedBy?: string | string[];
   ref?: Ref<HTMLTextAreaElement>;
@@ -56,12 +58,11 @@ export function Textarea({
   ref,
   ...rest
 }: TextareaProps) {
-  const describedByValue = Array.isArray(describedBy)
-    ? describedBy.filter(Boolean).join(" ") || undefined
-    : describedBy;
+  const { "aria-describedby": ariaDescribedByNative, ...textareaRest } = rest;
+  const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
   return (
     <textarea
-      {...rest}
+      {...textareaRest}
       ref={ref}
       className={cn(
         auto ? "ig-textarea-auto" : "ig-textarea",

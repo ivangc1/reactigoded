@@ -7,6 +7,107 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.3] — 2026-05-02
+
+Pasada agresiva pre-`1.0.0`: a11y real, SSR-safe, naming/types fix y un
+nuevo color cardinal para diferenciar `info` de `secondary`.
+
+### Fixed (a11y / regression)
+- **Input/Select/Textarea**: `aria-describedby` que el consumer pasara vía
+  `{...rest}` se sobreescribía a `undefined` cuando no se pasaba la prop
+  `describedBy`. La propia story `FormularioCompleto` estaba rota.
+  Solucionado con un nuevo helper `mergeDescribedBy(native, prop)` que
+  concatena ambos. +6 tests de regresión.
+- **Rating**: añadido **roving tabindex + keyboard nav completo** (←/→/↑/↓,
+  Home, End, Space, Enter) para cumplir el patrón WAI-ARIA APG de
+  radiogroup. Antes solo respondía a click. +9 tests de regresión.
+- **ToastProvider SSR**: ya no produce hydration mismatch. Antes el
+  servidor renderizaba inline y el primer paint cliente ya pintaba portal.
+  Ahora arranca inline (idéntico al server) y conmuta al portal en el
+  primer `useEffect` post-mount.
+- **Dropdown a11y**: el selector de navegación excluye también
+  `[aria-disabled="true"]` (anchors no tienen `disabled` HTML); items
+  aria-disabled bloquean activación por click y por Enter/Space; **button**
+  menuitem ahora también tiene `tabIndex={-1}` (antes anchor sí lo tenía
+  y button no, inconsistente).
+- **Tabs sin `defaultValue`**: el tablist quedaba sin tab stop si el
+  consumer no pasaba `value`/`defaultValue` (todos los tabs `tabIndex=-1`).
+  Ahora un registry interno selecciona el primer `Tab` montado de forma
+  automática.
+- **Modal `onClose` doble disparo**: cuando el consumer hacía
+  `setOpen(false)`, el effect llamaba `dialog.close()` que disparaba el
+  evento `close` nativo y volvía a invocar `onClose`. Añadido flag
+  `closingFromSyncRef` que distingue cierre user-driven de cierre por
+  sincronización con la prop.
+- **ThemeSwitch `aria-label`**: ahora se puede sobrescribir vía rest
+  (i18n). Antes el hardcoded ganaba al rest por orden de spread.
+- **Slider `defaultValue` string/array**: `defaultValue="60"` (string)
+  dejaba el state interno en `0` mientras el `<input>` mostraba 60.
+  Ahora normaliza a número finito; arrays se ignoran (no soportados por
+  `<input type="range">`).
+
+### Added
+- **`igoded-fonts.css` (nuevo, opt-in)** — `@import` de Google Fonts
+  (Electrolize/Saira/JetBrains Mono). **Antes vivía dentro de
+  `tokens.css`**, lo que metía un request remoto en el bundle de
+  cualquier consumer. Ahora `tokens.css` declara solo los `--ig-font-*`
+  con fallback `system-ui`/`monospace`. Storybook lo importa
+  explícitamente en `preview.tsx`. Expuesto como
+  `reactigoded/styles/fonts.css`.
+- **Color cardinal `cyaneus`** (cian-azul) — nuevo `--ig-cyaneus-{lux,nox}`
+  + `--ig-text-on-cyaneus-{lux,nox}`. `--ig-info` ahora apunta a `cyaneus`
+  en vez de a `axis` (que es violet/secondary). Antes `secondary` e `info`
+  eran visualmente idénticos; ahora son colores distintos. Verificado
+  WCAG AA en light y dark.
+- **`mergeDescribedBy` helper** en `src/utils/`. Tests propios + integrados
+  en Input/Select/Textarea.
+- **Tabs `register` API** en `TabsContext` para auto-selección del primer
+  Tab.
+- **Modal `closingFromSyncRef`** flag interno.
+- **`test:unit:ci` script** (vitest con `--isolate --pool=forks`) para CI
+  estricto. El `test:unit` por defecto sigue con `isolate=false` por el
+  workaround WSL.
+- **4 stories interactivas con `play`**: `Input/TypeInteraction`,
+  `Select/ChangeInteraction`, `Slider/KeyboardInteraction`,
+  `Stepper/Interactivo` (ahora con play que verifica `aria-current`).
+
+### Changed
+- **`vite.config.ts`** ahora sólo activa el modo lib build cuando
+  `command === "build" && mode === "production" && STORYBOOK !== "true"`.
+  Antes `mode === "production"` solo, lo que disparaba `dts` plugin y
+  `copyDesignSystemStyles` también durante `storybook build` (cada deploy
+  de igoded.es).
+- **`docs.defaultName: "Documentación"` → `"Docs"`**: el unicode `ó`
+  generaba URLs `componentes-x--documentaci%C3%B3n` feas y problemáticas
+  para search/SEO. Las páginas MDX de Foundations siguen en español.
+- **Tema dark-first uniforme**: `useTheme` (ya estaba dark), `ThemeSwitch`
+  (era light) y Storybook `withThemeByDataAttribute` (era light) ahora
+  todos default `"dark"`. Coherente con el branding.
+- **Card type assertion**: `onClick?.(event as unknown as MouseEvent)`
+  desde el handler de Enter/Space sustituido por `event.currentTarget.click()`,
+  que dispara un MouseEvent auténtico.
+- **Alert** `style={{flex:1, minWidth:0}}` inline → clase
+  `.ig-alert-content` publicada en `components.css`.
+- **Card story `Interactiva`** quita `ig-story-clickable` (la clase
+  `.ig-card-interactive` ya implica `cursor: pointer`, y la helper de
+  storybook.css confundía a consumers que copiaran el código).
+- **`eslint.config.js`** comentario `postinstall` → `prepare` (coincide
+  con el script real de `package.json`).
+- **README** métricas obsoletas (~285/~175) → texto sin números fijos.
+
+### Migration
+- Si confiabas en el `@import` de Google Fonts dentro de `design.css` /
+  `tokens.css`, ahora también necesitas:
+  ```ts
+  import "reactigoded/styles/fonts.css";
+  ```
+  …o self-host con `next/font`/`@fontsource/*` y override de los
+  `--ig-font-*`.
+- Si usabas `<Toast variant="default">` en el primitivo (no lo deberías
+  desde beta.1, ya estaba renombrado a `neutral`), nada cambia aquí.
+- Si `defaultValue` de Slider venía como string, antes el value visible no
+  cuadraba con el internal — ahora cuadra. Si dependías del bug, comprueba.
+
 ## [1.0.0-beta.2] — 2026-05-02
 
 Refactor de la arquitectura CSS y pulido completo del catálogo Storybook.

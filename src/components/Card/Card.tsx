@@ -1,9 +1,4 @@
-import type {
-  HTMLAttributes,
-  KeyboardEvent,
-  MouseEvent,
-  Ref,
-} from "react";
+import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export type CardVariant =
@@ -82,7 +77,10 @@ export function Card({
     if (event.defaultPrevented) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onClick?.(event as unknown as MouseEvent<HTMLDivElement>);
+      // Disparamos un click nativo en vez de hacer cast sospechoso de
+      // KeyboardEvent → MouseEvent. El click sintético propaga
+      // correctamente y React invoca `onClick` con un evento auténtico.
+      event.currentTarget.click();
     }
   };
 

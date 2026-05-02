@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { fn } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 import { Select } from "./Select";
 
 const meta = {
@@ -43,3 +43,21 @@ export const Error: Story = { args: { state: "error" } };
 export const Success: Story = { args: { state: "success", defaultValue: "pro" } };
 
 export const Deshabilitado: Story = { args: { disabled: true } };
+
+export const ChangeInteraction: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Interaction test: cambiar la opción dispara `onChange` con el nuevo `value`.",
+      },
+    },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const select = canvas.getByLabelText<HTMLSelectElement>("Plan");
+    await userEvent.selectOptions(select, "pro");
+    await expect(select.value).toBe("pro");
+    await expect(args.onChange).toHaveBeenCalled();
+  },
+};

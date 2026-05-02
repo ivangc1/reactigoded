@@ -829,7 +829,7 @@ CUÁNDO USAR:
 .ig-divide-success > * + * { border-color: var(--ig-laurus); }
 .ig-divide-warning > * + * { border-color: var(--ig-rutilus); }
 .ig-divide-danger > * + * { border-color: var(--ig-malum); }
-.ig-divide-info > * + * { border-color: var(--ig-axis); }
+.ig-divide-info > * + * { border-color: var(--ig-cyaneus); }
 
 /* Estilos de divide */
 .ig-divide-solid > * + * { border-style: solid; }
@@ -1929,7 +1929,7 @@ TAMAÑOS: sm, lg
 .ig-marker-success::marker { color: var(--ig-laurus); }
 .ig-marker-warning::marker { color: var(--ig-rutilus); }
 .ig-marker-danger::marker { color: var(--ig-malum); }
-.ig-marker-info::marker { color: var(--ig-axis); }
+.ig-marker-info::marker { color: var(--ig-cyaneus); }
 .ig-marker-muted::marker { color: var(--ig-text-muted); }
 
 /* Marker con tamaño diferente */
@@ -2139,7 +2139,7 @@ CÓMO USAR:
 .ig-text-success { color: var(--ig-laurus); }
 .ig-text-warning { color: var(--ig-rutilus); }
 .ig-text-danger { color: var(--ig-malum); }
-.ig-text-info { color: var(--ig-axis); }
+.ig-text-info { color: var(--ig-cyaneus); }
 
 /* Neutros */
 .ig-text-neutral-50 { color: var(--ig-neutral-50); }
@@ -2212,7 +2212,7 @@ CÓMO USAR:
 .ig-bg-success { background-color: var(--ig-laurus); }
 .ig-bg-warning { background-color: var(--ig-rutilus); }
 .ig-bg-danger { background-color: var(--ig-malum); }
-.ig-bg-info { background-color: var(--ig-axis); }
+.ig-bg-info { background-color: var(--ig-cyaneus); }
 
 /* Neutros */
 .ig-bg-neutral-50 { background-color: var(--ig-neutral-50); }
@@ -2358,7 +2358,7 @@ y son más fáciles de usar para casos comunes.
 .ig-from-success { --ig-gradient-from: var(--ig-laurus); }
 .ig-from-warning { --ig-gradient-from: var(--ig-rutilus); }
 .ig-from-danger { --ig-gradient-from: var(--ig-malum); }
-.ig-from-info { --ig-gradient-from: var(--ig-axis); }
+.ig-from-info { --ig-gradient-from: var(--ig-cyaneus); }
 
 /* FROM con opacidad */
 .ig-from-black\/10 { --ig-gradient-from: rgb(0 0 0 / 0.1); }
@@ -2384,7 +2384,7 @@ y son más fáciles de usar para casos comunes.
 .ig-via-success { --ig-gradient-via: var(--ig-laurus); }
 .ig-via-warning { --ig-gradient-via: var(--ig-rutilus); }
 .ig-via-danger { --ig-gradient-via: var(--ig-malum); }
-.ig-via-info { --ig-gradient-via: var(--ig-axis); }
+.ig-via-info { --ig-gradient-via: var(--ig-cyaneus); }
 
 /* TO - color final
    Colores: brand, secondary, success, warning, danger, info
@@ -2398,7 +2398,7 @@ y son más fáciles de usar para casos comunes.
 .ig-to-success { --ig-gradient-to: var(--ig-laurus); }
 .ig-to-warning { --ig-gradient-to: var(--ig-rutilus); }
 .ig-to-danger { --ig-gradient-to: var(--ig-malum); }
-.ig-to-info { --ig-gradient-to: var(--ig-axis); }
+.ig-to-info { --ig-gradient-to: var(--ig-cyaneus); }
 
 /* TO con opacidad */
 .ig-to-black\/10 { --ig-gradient-to: rgb(0 0 0 / 0.1); }
@@ -2468,7 +2468,7 @@ EJEMPLOS:
 .ig-gradient-success { background: linear-gradient(135deg, var(--ig-laurus), var(--ig-laurus-lux)); }
 .ig-gradient-warning { background: linear-gradient(135deg, var(--ig-rutilus), var(--ig-rutilus-lux)); }
 .ig-gradient-danger { background: linear-gradient(135deg, var(--ig-malum), var(--ig-malum-lux)); }
-.ig-gradient-info { background: linear-gradient(135deg, var(--ig-axis), var(--ig-axis-lux)); }
+.ig-gradient-info { background: linear-gradient(135deg, var(--ig-cyaneus), var(--ig-cyaneus-lux)); }
 
 /* Gradiente firma Igoded (todos los cardinales) */
 .ig-gradient-igoded { background: var(--ig-gradient-igoded); }
@@ -2483,7 +2483,7 @@ EJEMPLOS:
 .ig-gradient-to-t-success { background: linear-gradient(to top, var(--ig-laurus-nox), var(--ig-laurus-lux)); }
 .ig-gradient-to-t-warning { background: linear-gradient(to top, var(--ig-rutilus-nox), var(--ig-rutilus-lux)); }
 .ig-gradient-to-t-danger { background: linear-gradient(to top, var(--ig-malum-nox), var(--ig-malum-lux)); }
-.ig-gradient-to-t-info { background: linear-gradient(to top, var(--ig-axis-nox), var(--ig-axis-lux)); }
+.ig-gradient-to-t-info { background: linear-gradient(to top, var(--ig-cyaneus-nox), var(--ig-cyaneus-lux)); }
 
 /* To Bottom (↓) */
 .ig-gradient-to-b-brand { background: linear-gradient(to bottom, var(--ig-vitreus-lux), var(--ig-vitreus-nox)); }
@@ -2491,7 +2491,7 @@ EJEMPLOS:
 .ig-gradient-to-b-success { background: linear-gradient(to bottom, var(--ig-laurus-lux), var(--ig-laurus-nox)); }
 .ig-gradient-to-b-warning { background: linear-gradient(to bottom, var(--ig-rutilus-lux), var(--ig-rutilus-nox)); }
 .ig-gradient-to-b-danger { background: linear-gradient(to bottom, var(--ig-malum-lux), var(--ig-malum-nox)); }
-.ig-gradient-to-b-info { background: linear-gradient(to bottom, var(--ig-axis-lux), var(--ig-axis-nox)); }
+.ig-gradient-to-b-info { background: linear-gradient(to bottom, var(--ig-cyaneus-lux), var(--ig-cyaneus-nox)); }
 
 /* To Right (→) */
 .ig-gradient-to-r-brand { background: linear-gradient(to right, var(--ig-vitreus-nox), var(--ig-vitreus-lux)); }
@@ -2499,7 +2499,7 @@ EJEMPLOS:
 .ig-gradient-to-r-success { background: linear-gradient(to right, var(--ig-laurus-nox), var(--ig-laurus-lux)); }
 .ig-gradient-to-r-warning { background: linear-gradient(to right, var(--ig-rutilus-nox), var(--ig-rutilus-lux)); }
 .ig-gradient-to-r-danger { background: linear-gradient(to right, var(--ig-malum-nox), var(--ig-malum-lux)); }
-.ig-gradient-to-r-info { background: linear-gradient(to right, var(--ig-axis-nox), var(--ig-axis-lux)); }
+.ig-gradient-to-r-info { background: linear-gradient(to right, var(--ig-cyaneus-nox), var(--ig-cyaneus-lux)); }
 
 /* To Left (←) */
 .ig-gradient-to-l-brand { background: linear-gradient(to left, var(--ig-vitreus-nox), var(--ig-vitreus-lux)); }
@@ -2507,7 +2507,7 @@ EJEMPLOS:
 .ig-gradient-to-l-success { background: linear-gradient(to left, var(--ig-laurus-nox), var(--ig-laurus-lux)); }
 .ig-gradient-to-l-warning { background: linear-gradient(to left, var(--ig-rutilus-nox), var(--ig-rutilus-lux)); }
 .ig-gradient-to-l-danger { background: linear-gradient(to left, var(--ig-malum-nox), var(--ig-malum-lux)); }
-.ig-gradient-to-l-info { background: linear-gradient(to left, var(--ig-axis-nox), var(--ig-axis-lux)); }
+.ig-gradient-to-l-info { background: linear-gradient(to left, var(--ig-cyaneus-nox), var(--ig-cyaneus-lux)); }
 
 /* To Top Right (↗) */
 .ig-gradient-to-tr-brand { background: linear-gradient(to top right, var(--ig-vitreus-nox), var(--ig-vitreus-lux)); }
@@ -2515,7 +2515,7 @@ EJEMPLOS:
 .ig-gradient-to-tr-success { background: linear-gradient(to top right, var(--ig-laurus-nox), var(--ig-laurus-lux)); }
 .ig-gradient-to-tr-warning { background: linear-gradient(to top right, var(--ig-rutilus-nox), var(--ig-rutilus-lux)); }
 .ig-gradient-to-tr-danger { background: linear-gradient(to top right, var(--ig-malum-nox), var(--ig-malum-lux)); }
-.ig-gradient-to-tr-info { background: linear-gradient(to top right, var(--ig-axis-nox), var(--ig-axis-lux)); }
+.ig-gradient-to-tr-info { background: linear-gradient(to top right, var(--ig-cyaneus-nox), var(--ig-cyaneus-lux)); }
 
 /* To Top Left (↖) */
 .ig-gradient-to-tl-brand { background: linear-gradient(to top left, var(--ig-vitreus-nox), var(--ig-vitreus-lux)); }
@@ -2523,7 +2523,7 @@ EJEMPLOS:
 .ig-gradient-to-tl-success { background: linear-gradient(to top left, var(--ig-laurus-nox), var(--ig-laurus-lux)); }
 .ig-gradient-to-tl-warning { background: linear-gradient(to top left, var(--ig-rutilus-nox), var(--ig-rutilus-lux)); }
 .ig-gradient-to-tl-danger { background: linear-gradient(to top left, var(--ig-malum-nox), var(--ig-malum-lux)); }
-.ig-gradient-to-tl-info { background: linear-gradient(to top left, var(--ig-axis-nox), var(--ig-axis-lux)); }
+.ig-gradient-to-tl-info { background: linear-gradient(to top left, var(--ig-cyaneus-nox), var(--ig-cyaneus-lux)); }
 
 /* To Bottom Right (↘) */
 .ig-gradient-to-br-brand { background: linear-gradient(to bottom right, var(--ig-vitreus-lux), var(--ig-vitreus-nox)); }
@@ -2531,7 +2531,7 @@ EJEMPLOS:
 .ig-gradient-to-br-success { background: linear-gradient(to bottom right, var(--ig-laurus-lux), var(--ig-laurus-nox)); }
 .ig-gradient-to-br-warning { background: linear-gradient(to bottom right, var(--ig-rutilus-lux), var(--ig-rutilus-nox)); }
 .ig-gradient-to-br-danger { background: linear-gradient(to bottom right, var(--ig-malum-lux), var(--ig-malum-nox)); }
-.ig-gradient-to-br-info { background: linear-gradient(to bottom right, var(--ig-axis-lux), var(--ig-axis-nox)); }
+.ig-gradient-to-br-info { background: linear-gradient(to bottom right, var(--ig-cyaneus-lux), var(--ig-cyaneus-nox)); }
 
 /* To Bottom Left (↙) */
 .ig-gradient-to-bl-brand { background: linear-gradient(to bottom left, var(--ig-vitreus-lux), var(--ig-vitreus-nox)); }
@@ -2539,7 +2539,7 @@ EJEMPLOS:
 .ig-gradient-to-bl-success { background: linear-gradient(to bottom left, var(--ig-laurus-lux), var(--ig-laurus-nox)); }
 .ig-gradient-to-bl-warning { background: linear-gradient(to bottom left, var(--ig-rutilus-lux), var(--ig-rutilus-nox)); }
 .ig-gradient-to-bl-danger { background: linear-gradient(to bottom left, var(--ig-malum-lux), var(--ig-malum-nox)); }
-.ig-gradient-to-bl-info { background: linear-gradient(to bottom left, var(--ig-axis-lux), var(--ig-axis-nox)); }
+.ig-gradient-to-bl-info { background: linear-gradient(to bottom left, var(--ig-cyaneus-lux), var(--ig-cyaneus-nox)); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    GRADIENTES RADIALES - 6 colores
@@ -2550,7 +2550,7 @@ EJEMPLOS:
 .ig-gradient-radial-success { background: radial-gradient(circle, var(--ig-laurus-lux), var(--ig-laurus-nox)); }
 .ig-gradient-radial-warning { background: radial-gradient(circle, var(--ig-rutilus-lux), var(--ig-rutilus-nox)); }
 .ig-gradient-radial-danger { background: radial-gradient(circle, var(--ig-malum-lux), var(--ig-malum-nox)); }
-.ig-gradient-radial-info { background: radial-gradient(circle, var(--ig-axis-lux), var(--ig-axis-nox)); }
+.ig-gradient-radial-info { background: radial-gradient(circle, var(--ig-cyaneus-lux), var(--ig-cyaneus-nox)); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    GRADIENTES CÓNICOS - 6 colores
@@ -2561,7 +2561,7 @@ EJEMPLOS:
 .ig-gradient-conic-success { background: conic-gradient(from 0deg, var(--ig-laurus-lux), var(--ig-laurus), var(--ig-laurus-nox), var(--ig-laurus), var(--ig-laurus-lux)); }
 .ig-gradient-conic-warning { background: conic-gradient(from 0deg, var(--ig-rutilus-lux), var(--ig-rutilus), var(--ig-rutilus-nox), var(--ig-rutilus), var(--ig-rutilus-lux)); }
 .ig-gradient-conic-danger { background: conic-gradient(from 0deg, var(--ig-malum-lux), var(--ig-malum), var(--ig-malum-nox), var(--ig-malum), var(--ig-malum-lux)); }
-.ig-gradient-conic-info { background: conic-gradient(from 0deg, var(--ig-axis-lux), var(--ig-axis), var(--ig-axis-nox), var(--ig-axis), var(--ig-axis-lux)); }
+.ig-gradient-conic-info { background: conic-gradient(from 0deg, var(--ig-cyaneus-lux), var(--ig-cyaneus), var(--ig-cyaneus-nox), var(--ig-cyaneus), var(--ig-cyaneus-lux)); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TEXTO CON GRADIENTE - 6 colores
@@ -2603,7 +2603,7 @@ EJEMPLOS:
 }
 
 .ig-text-gradient-info {
-  background: linear-gradient(135deg, var(--ig-axis), var(--ig-axis-lux));
+  background: linear-gradient(135deg, var(--ig-cyaneus), var(--ig-cyaneus-lux));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -2725,7 +2725,7 @@ CÓMO USAR:
 .ig-border-success { border-color: var(--ig-laurus); }
 .ig-border-warning { border-color: var(--ig-rutilus); }
 .ig-border-danger { border-color: var(--ig-malum); }
-.ig-border-info { border-color: var(--ig-axis); }
+.ig-border-info { border-color: var(--ig-cyaneus); }
 
 .ig-border-transparent { border-color: transparent; }
 .ig-border-white { border-color: #ffffff; }
@@ -2890,7 +2890,7 @@ drop-shadow: crea sombra de la FORMA REAL del elemento
 .ig-drop-shadow-success { filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ig-laurus) 30%, transparent)); }
 .ig-drop-shadow-warning { filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ig-rutilus) 30%, transparent)); }
 .ig-drop-shadow-danger { filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ig-malum) 30%, transparent)); }
-.ig-drop-shadow-info { filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ig-axis) 30%, transparent)); }
+.ig-drop-shadow-info { filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ig-cyaneus) 30%, transparent)); }
 
 /* Drop shadows intensos - 6 variantes */
 .ig-drop-shadow-brand-lg { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--ig-vitreus) 40%, transparent)); }
@@ -2898,7 +2898,7 @@ drop-shadow: crea sombra de la FORMA REAL del elemento
 .ig-drop-shadow-success-lg { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--ig-laurus) 40%, transparent)); }
 .ig-drop-shadow-warning-lg { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--ig-rutilus) 40%, transparent)); }
 .ig-drop-shadow-danger-lg { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--ig-malum) 40%, transparent)); }
-.ig-drop-shadow-info-lg { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--ig-axis) 40%, transparent)); }
+.ig-drop-shadow-info-lg { filter: drop-shadow(0 8px 12px color-mix(in srgb, var(--ig-cyaneus) 40%, transparent)); }
 
 
 /*
@@ -2928,7 +2928,7 @@ NOTA: A diferencia de box-shadow, text-shadow no soporta spread ni inset.
 .ig-text-shadow-success { text-shadow: 0 2px 8px color-mix(in srgb, var(--ig-laurus) 50%, transparent); }
 .ig-text-shadow-warning { text-shadow: 0 2px 8px color-mix(in srgb, var(--ig-rutilus) 50%, transparent); }
 .ig-text-shadow-danger { text-shadow: 0 2px 8px color-mix(in srgb, var(--ig-malum) 50%, transparent); }
-.ig-text-shadow-info { text-shadow: 0 2px 8px color-mix(in srgb, var(--ig-axis) 50%, transparent); }
+.ig-text-shadow-info { text-shadow: 0 2px 8px color-mix(in srgb, var(--ig-cyaneus) 50%, transparent); }
 
 /* Efecto glow de texto - 6 variantes */
 .ig-text-glow-brand { text-shadow: 0 0 10px color-mix(in srgb, var(--ig-vitreus) 70%, transparent), 0 0 20px color-mix(in srgb, var(--ig-vitreus) 40%, transparent); }
@@ -2936,7 +2936,7 @@ NOTA: A diferencia de box-shadow, text-shadow no soporta spread ni inset.
 .ig-text-glow-success { text-shadow: 0 0 10px color-mix(in srgb, var(--ig-laurus) 70%, transparent), 0 0 20px color-mix(in srgb, var(--ig-laurus) 40%, transparent); }
 .ig-text-glow-warning { text-shadow: 0 0 10px color-mix(in srgb, var(--ig-rutilus) 70%, transparent), 0 0 20px color-mix(in srgb, var(--ig-rutilus) 40%, transparent); }
 .ig-text-glow-danger { text-shadow: 0 0 10px color-mix(in srgb, var(--ig-malum) 70%, transparent), 0 0 20px color-mix(in srgb, var(--ig-malum) 40%, transparent); }
-.ig-text-glow-info { text-shadow: 0 0 10px color-mix(in srgb, var(--ig-axis) 70%, transparent), 0 0 20px color-mix(in srgb, var(--ig-axis) 40%, transparent); }
+.ig-text-glow-info { text-shadow: 0 0 10px color-mix(in srgb, var(--ig-cyaneus) 70%, transparent), 0 0 20px color-mix(in srgb, var(--ig-cyaneus) 40%, transparent); }
 
 /* Glow intenso de texto - 6 variantes */
 .ig-text-glow-brand-lg { text-shadow: 0 0 15px color-mix(in srgb, var(--ig-vitreus) 80%, transparent), 0 0 30px color-mix(in srgb, var(--ig-vitreus) 50%, transparent), 0 0 45px color-mix(in srgb, var(--ig-vitreus) 25%, transparent); }
@@ -2944,7 +2944,7 @@ NOTA: A diferencia de box-shadow, text-shadow no soporta spread ni inset.
 .ig-text-glow-success-lg { text-shadow: 0 0 15px color-mix(in srgb, var(--ig-laurus) 80%, transparent), 0 0 30px color-mix(in srgb, var(--ig-laurus) 50%, transparent), 0 0 45px color-mix(in srgb, var(--ig-laurus) 25%, transparent); }
 .ig-text-glow-warning-lg { text-shadow: 0 0 15px color-mix(in srgb, var(--ig-rutilus) 80%, transparent), 0 0 30px color-mix(in srgb, var(--ig-rutilus) 50%, transparent), 0 0 45px color-mix(in srgb, var(--ig-rutilus) 25%, transparent); }
 .ig-text-glow-danger-lg { text-shadow: 0 0 15px color-mix(in srgb, var(--ig-malum) 80%, transparent), 0 0 30px color-mix(in srgb, var(--ig-malum) 50%, transparent), 0 0 45px color-mix(in srgb, var(--ig-malum) 25%, transparent); }
-.ig-text-glow-info-lg { text-shadow: 0 0 15px color-mix(in srgb, var(--ig-axis) 80%, transparent), 0 0 30px color-mix(in srgb, var(--ig-axis) 50%, transparent), 0 0 45px color-mix(in srgb, var(--ig-axis) 25%, transparent); }
+.ig-text-glow-info-lg { text-shadow: 0 0 15px color-mix(in srgb, var(--ig-cyaneus) 80%, transparent), 0 0 30px color-mix(in srgb, var(--ig-cyaneus) 50%, transparent), 0 0 45px color-mix(in srgb, var(--ig-cyaneus) 25%, transparent); }
 
 /* Efecto de grabado (texto hundido) */
 .ig-text-shadow-inset { text-shadow: 0 1px 0 rgb(255 255 255 / 0.3), 0 -1px 0 rgb(0 0 0 / 0.2); }
@@ -3039,7 +3039,7 @@ CUÁNDO USAR: Con moderación. Los glows cansan la vista si hay muchos.
   50% { box-shadow: 0 0 30px color-mix(in srgb, var(--ig-malum) 60%, transparent); }
 }
 @keyframes glow-pulse-info {
-  0%, 100% { box-shadow: 0 0 10px color-mix(in srgb, var(--ig-axis) 30%, transparent); }
+  0%, 100% { box-shadow: 0 0 10px color-mix(in srgb, var(--ig-cyaneus) 30%, transparent); }
   50% { box-shadow: 0 0 30px color-mix(in srgb, var(--ig-axis) 60%, transparent); }
 }
 
@@ -3121,10 +3121,10 @@ CUÁNDO USAR:
 }
 
 .ig-glass-info {
-  background: color-mix(in srgb, var(--ig-axis) 15%, var(--ig-glass-bg));
+  background: color-mix(in srgb, var(--ig-cyaneus) 15%, var(--ig-glass-bg));
   backdrop-filter: blur(var(--ig-glass-blur));
   -webkit-backdrop-filter: blur(var(--ig-glass-blur));
-  border: 1px solid color-mix(in srgb, var(--ig-axis) 20%, var(--ig-glass-border));
+  border: 1px solid color-mix(in srgb, var(--ig-cyaneus) 20%, var(--ig-glass-border));
 }
 
 /* Glass con intensidades - 3 niveles */
@@ -3239,11 +3239,11 @@ sobre un fondo uniforme.
 }
 
 .ig-neuo-info {
-  background: color-mix(in srgb, var(--ig-axis) 8%, var(--ig-neuo-bg));
+  background: color-mix(in srgb, var(--ig-cyaneus) 8%, var(--ig-neuo-bg));
 }
 .ig-neuo-info.ig-neuo-raised {
-  box-shadow: 6px 6px 12px color-mix(in srgb, var(--ig-axis) 15%, rgb(0 0 0 / 0.15)),
-              -6px -6px 12px color-mix(in srgb, var(--ig-axis) 10%, rgb(255 255 255 / 0.8));
+  box-shadow: 6px 6px 12px color-mix(in srgb, var(--ig-cyaneus) 15%, rgb(0 0 0 / 0.15)),
+              -6px -6px 12px color-mix(in srgb, var(--ig-cyaneus) 10%, rgb(255 255 255 / 0.8));
 }
 
 
@@ -4488,7 +4488,7 @@ Para iconos como imagen, usa filter o mask-image.
 .ig-fill-success { fill: var(--ig-laurus); }
 .ig-fill-warning { fill: var(--ig-rutilus); }
 .ig-fill-danger { fill: var(--ig-malum); }
-.ig-fill-info { fill: var(--ig-axis); }
+.ig-fill-info { fill: var(--ig-cyaneus); }
 
 /* Stroke (trazo SVG)
    Colores: brand, secondary, success, warning, danger, info
@@ -4504,7 +4504,7 @@ Para iconos como imagen, usa filter o mask-image.
 .ig-stroke-success { stroke: var(--ig-laurus); }
 .ig-stroke-warning { stroke: var(--ig-rutilus); }
 .ig-stroke-danger { stroke: var(--ig-malum); }
-.ig-stroke-info { stroke: var(--ig-axis); }
+.ig-stroke-info { stroke: var(--ig-cyaneus); }
 
 /* Stroke width (grosor del trazo) */
 .ig-stroke-0 { stroke-width: 0; }
@@ -5306,7 +5306,7 @@ CÓMO USAR:
 .ig-outline-success { outline-color: var(--ig-laurus); }
 .ig-outline-warning { outline-color: var(--ig-rutilus); }
 .ig-outline-danger { outline-color: var(--ig-malum); }
-.ig-outline-info { outline-color: var(--ig-axis); }
+.ig-outline-info { outline-color: var(--ig-cyaneus); }
 
 /* Focus ring (usando box-shadow) */
 .ig-ring {
@@ -5353,7 +5353,7 @@ CÓMO USAR:
 }
 
 .ig-ring-info {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-axis) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-cyaneus) 50%, transparent);
 }
 
 .ig-ring-inset {
@@ -5901,8 +5901,8 @@ CÓMO USAR:
 
 /* Info (axis) - Información */
 .ig-btn-info {
-  background-color: var(--ig-axis);
-  color: var(--ig-text-on-axis);
+  background-color: var(--ig-cyaneus);
+  color: var(--ig-text-on-cyaneus);
 }
 .ig-btn-info:hover { filter: brightness(1.1); }
 .ig-btn-info:active { filter: brightness(0.95); }
@@ -5976,11 +5976,11 @@ CÓMO USAR:
 
 .ig-btn-outline-info {
   background-color: transparent;
-  border-color: var(--ig-axis);
-  color: var(--ig-axis);
+  border-color: var(--ig-cyaneus);
+  color: var(--ig-cyaneus);
 }
 .ig-btn-outline-info:hover {
-  background-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
   color: var(--ig-fundus-lux);
 }
 
@@ -6039,10 +6039,10 @@ CÓMO USAR:
 
 .ig-btn-ghost-info {
   background-color: transparent;
-  color: var(--ig-axis);
+  color: var(--ig-cyaneus);
 }
 .ig-btn-ghost-info:hover {
-  background-color: color-mix(in srgb, var(--ig-axis) 10%, transparent);
+  background-color: color-mix(in srgb, var(--ig-cyaneus) 10%, transparent);
 }
 
 /* Link - Parece enlace */
@@ -6249,7 +6249,7 @@ UI: muted, subtle
 .ig-placeholder-success::placeholder { color: var(--ig-laurus); opacity: 0.7; }
 .ig-placeholder-warning::placeholder { color: var(--ig-rutilus); opacity: 0.7; }
 .ig-placeholder-danger::placeholder { color: var(--ig-malum); opacity: 0.7; }
-.ig-placeholder-info::placeholder { color: var(--ig-axis); opacity: 0.7; }
+.ig-placeholder-info::placeholder { color: var(--ig-cyaneus); opacity: 0.7; }
 
 /*
 Selection color utilities
@@ -6265,7 +6265,7 @@ UI: default (usa variables de tema)
 .ig-selection-success::selection { background: color-mix(in srgb, var(--ig-laurus) 40%, transparent); color: inherit; }
 .ig-selection-warning::selection { background: color-mix(in srgb, var(--ig-rutilus) 40%, transparent); color: inherit; }
 .ig-selection-danger::selection { background: color-mix(in srgb, var(--ig-malum) 40%, transparent); color: inherit; }
-.ig-selection-info::selection { background: color-mix(in srgb, var(--ig-axis) 40%, transparent); color: inherit; }
+.ig-selection-info::selection { background: color-mix(in srgb, var(--ig-cyaneus) 40%, transparent); color: inherit; }
 
 /* También para ::-moz-selection (Firefox legacy, aunque ya soporta ::selection) */
 .ig-selection-brand::-moz-selection { background: color-mix(in srgb, var(--ig-vitreus) 40%, transparent); color: inherit; }
@@ -6273,7 +6273,7 @@ UI: default (usa variables de tema)
 .ig-selection-success::-moz-selection { background: color-mix(in srgb, var(--ig-laurus) 40%, transparent); color: inherit; }
 .ig-selection-warning::-moz-selection { background: color-mix(in srgb, var(--ig-rutilus) 40%, transparent); color: inherit; }
 .ig-selection-danger::-moz-selection { background: color-mix(in srgb, var(--ig-malum) 40%, transparent); color: inherit; }
-.ig-selection-info::-moz-selection { background: color-mix(in srgb, var(--ig-axis) 40%, transparent); color: inherit; }
+.ig-selection-info::-moz-selection { background: color-mix(in srgb, var(--ig-cyaneus) 40%, transparent); color: inherit; }
 
 /* Tamaños */
 .ig-input-sm {
@@ -6581,8 +6581,8 @@ CÓMO FUNCIONA:
   border-color: var(--ig-malum);
 }
 .ig-checkbox-info input[type="checkbox"]:checked + .ig-checkbox-mark {
-  background-color: var(--ig-axis);
-  border-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
+  border-color: var(--ig-cyaneus);
 }
 
 /* Radio */
@@ -6665,8 +6665,8 @@ CÓMO FUNCIONA:
   border-color: var(--ig-malum);
 }
 .ig-radio-info input[type="radio"]:checked + .ig-radio-mark {
-  background-color: var(--ig-axis);
-  border-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
+  border-color: var(--ig-cyaneus);
 }
 
 
@@ -6775,7 +6775,7 @@ CÓMO FUNCIONA:
   background-color: var(--ig-malum);
 }
 .ig-switch-info input[type="checkbox"]:checked + .ig-switch-track {
-  background-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
 }
 
 
@@ -6840,7 +6840,7 @@ PARTES OPCIONALES:
   border-left: 4px solid var(--ig-malum);
 }
 .ig-card-info {
-  border-left: 4px solid var(--ig-axis);
+  border-left: 4px solid var(--ig-cyaneus);
 }
 
 /* Variantes de color con fondo tintado */
@@ -6865,8 +6865,8 @@ PARTES OPCIONALES:
   border-color: var(--ig-malum);
 }
 .ig-card-info-filled {
-  background-color: color-mix(in srgb, var(--ig-axis) 10%, var(--ig-card-bg));
-  border-color: var(--ig-axis);
+  background-color: color-mix(in srgb, var(--ig-cyaneus) 10%, var(--ig-card-bg));
+  border-color: var(--ig-cyaneus);
 }
 
 .ig-card-bordered {
@@ -7000,6 +7000,11 @@ PARTES:
   color: var(--ig-alert-info-text);
 }
 
+.ig-alert-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .ig-alert-icon {
   flex-shrink: 0;
   width: var(--ig-alert-icon-size);
@@ -7120,7 +7125,7 @@ MODIFICADORES:
 }
 
 .ig-badge-info {
-  background-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
   color: var(--ig-fundus-lux);
 }
 
@@ -7162,8 +7167,8 @@ MODIFICADORES:
 
 .ig-badge-outline-info {
   background-color: transparent;
-  border: 1px solid var(--ig-axis);
-  color: var(--ig-axis);
+  border: 1px solid var(--ig-cyaneus);
+  color: var(--ig-cyaneus);
 }
 
 .ig-badge-pill {
@@ -7515,7 +7520,7 @@ TAMAÑOS:
 .ig-spinner-success { border-top-color: var(--ig-laurus); }
 .ig-spinner-warning { border-top-color: var(--ig-rutilus); }
 .ig-spinner-danger { border-top-color: var(--ig-malum); }
-.ig-spinner-info { border-top-color: var(--ig-axis); }
+.ig-spinner-info { border-top-color: var(--ig-cyaneus); }
 
 /* Tamaños */
 .ig-spinner-xs { width: 0.75rem; height: 0.75rem; border-width: 1.5px; }
@@ -7570,7 +7575,7 @@ MODIFICADORES:
 .ig-progress-success .ig-progress-bar { background-color: var(--ig-laurus); }
 .ig-progress-warning .ig-progress-bar { background-color: var(--ig-rutilus); }
 .ig-progress-danger .ig-progress-bar { background-color: var(--ig-malum); }
-.ig-progress-info .ig-progress-bar { background-color: var(--ig-axis); }
+.ig-progress-info .ig-progress-bar { background-color: var(--ig-cyaneus); }
 
 .ig-progress-sm { height: 0.25rem; }
 .ig-progress-lg { height: 0.75rem; }
@@ -7836,11 +7841,11 @@ Para tooltips más complejos, considera usar una librería JS.
 .ig-tooltip-danger.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-malum); }
 .ig-tooltip-danger.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-malum); }
 
-.ig-tooltip-info::before { background-color: var(--ig-axis); }
-.ig-tooltip-info::after { border-top-color: var(--ig-axis); }
-.ig-tooltip-info.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-axis); }
-.ig-tooltip-info.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-axis); }
-.ig-tooltip-info.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-axis); }
+.ig-tooltip-info::before { background-color: var(--ig-cyaneus); }
+.ig-tooltip-info::after { border-top-color: var(--ig-cyaneus); }
+.ig-tooltip-info.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-cyaneus); }
+.ig-tooltip-info.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-cyaneus); }
+.ig-tooltip-info.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-cyaneus); }
 
 
 /*
@@ -7949,8 +7954,8 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
 }
 .ig-tabs-info .ig-tab-active,
 .ig-tabs-info .ig-tab.active {
-  color: var(--ig-axis);
-  border-bottom-color: var(--ig-axis);
+  color: var(--ig-cyaneus);
+  border-bottom-color: var(--ig-cyaneus);
 }
 
 .ig-tabs-content {
@@ -8016,7 +8021,7 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
 }
 .ig-tabs-pills.ig-tabs-info .ig-tab-active,
 .ig-tabs-pills.ig-tabs-info .ig-tab.active {
-  background-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
   color: var(--ig-fundus-lux);
 }
 
@@ -8074,8 +8079,8 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
 }
 .ig-tabs-vertical.ig-tabs-info .ig-tab-active,
 .ig-tabs-vertical.ig-tabs-info .ig-tab.active {
-  color: var(--ig-axis);
-  border-right-color: var(--ig-axis);
+  color: var(--ig-cyaneus);
+  border-right-color: var(--ig-cyaneus);
 }
 
 .ig-tabs-vertical .ig-tabs-content {
@@ -8453,8 +8458,8 @@ VARIANTES DE COLOR (6 colores):
   border-color: var(--ig-malum);
 }
 .ig-pagination-info .ig-pagination-active {
-  background-color: var(--ig-axis);
-  border-color: var(--ig-axis);
+  background-color: var(--ig-cyaneus);
+  border-color: var(--ig-cyaneus);
 }
 
 .ig-pagination-ellipsis {
@@ -8629,7 +8634,7 @@ VARIANTES:
 .ig-toast-success { border-left-color: var(--ig-laurus); }
 .ig-toast-warning { border-left-color: var(--ig-rutilus); }
 .ig-toast-danger { border-left-color: var(--ig-malum); }
-.ig-toast-info { border-left-color: var(--ig-axis); }
+.ig-toast-info { border-left-color: var(--ig-cyaneus); }
 .ig-toast-brand { border-left-color: var(--ig-vitreus); }
 .ig-toast-secondary { border-left-color: var(--ig-axis); }
 
@@ -8642,7 +8647,7 @@ VARIANTES:
 .ig-toast-success .ig-toast-icon { color: var(--ig-laurus); }
 .ig-toast-warning .ig-toast-icon { color: var(--ig-rutilus); }
 .ig-toast-danger .ig-toast-icon { color: var(--ig-malum); }
-.ig-toast-info .ig-toast-icon { color: var(--ig-axis); }
+.ig-toast-info .ig-toast-icon { color: var(--ig-cyaneus); }
 .ig-toast-brand .ig-toast-icon { color: var(--ig-vitreus); }
 .ig-toast-secondary .ig-toast-icon { color: var(--ig-axis); }
 
@@ -8722,7 +8727,7 @@ VARIANTES DE COLOR (6 colores):
 .ig-divider-success { background-color: var(--ig-laurus); }
 .ig-divider-warning { background-color: var(--ig-rutilus); }
 .ig-divider-danger { background-color: var(--ig-malum); }
-.ig-divider-info { background-color: var(--ig-axis); }
+.ig-divider-info { background-color: var(--ig-cyaneus); }
 
 .ig-divider-vertical {
   display: inline-block;
@@ -8739,7 +8744,7 @@ VARIANTES DE COLOR (6 colores):
 .ig-divider-vertical.ig-divider-success { background-color: var(--ig-laurus); }
 .ig-divider-vertical.ig-divider-warning { background-color: var(--ig-rutilus); }
 .ig-divider-vertical.ig-divider-danger { background-color: var(--ig-malum); }
-.ig-divider-vertical.ig-divider-info { background-color: var(--ig-axis); }
+.ig-divider-vertical.ig-divider-info { background-color: var(--ig-cyaneus); }
 
 .ig-divider-dashed {
   background: none;
@@ -8752,7 +8757,7 @@ VARIANTES DE COLOR (6 colores):
 .ig-divider-dashed.ig-divider-success { border-top-color: var(--ig-laurus); }
 .ig-divider-dashed.ig-divider-warning { border-top-color: var(--ig-rutilus); }
 .ig-divider-dashed.ig-divider-danger { border-top-color: var(--ig-malum); }
-.ig-divider-dashed.ig-divider-info { border-top-color: var(--ig-axis); }
+.ig-divider-dashed.ig-divider-info { border-top-color: var(--ig-cyaneus); }
 
 .ig-divider-with-text {
   display: flex;
@@ -8793,8 +8798,8 @@ VARIANTES DE COLOR (6 colores):
 .ig-divider-with-text.ig-divider-danger { color: var(--ig-malum); }
 
 .ig-divider-with-text.ig-divider-info::before,
-.ig-divider-with-text.ig-divider-info::after { background-color: var(--ig-axis); }
-.ig-divider-with-text.ig-divider-info { color: var(--ig-axis); }
+.ig-divider-with-text.ig-divider-info::after { background-color: var(--ig-cyaneus); }
+.ig-divider-with-text.ig-divider-info { color: var(--ig-cyaneus); }
 
 
 /*
@@ -9257,9 +9262,9 @@ CUÁNDO USAR:
 }
 
 .ig-chip-info {
-  background-color: color-mix(in srgb, var(--ig-axis) 15%, transparent);
-  border-color: var(--ig-axis);
-  color: var(--ig-axis);
+  background-color: color-mix(in srgb, var(--ig-cyaneus) 15%, transparent);
+  border-color: var(--ig-cyaneus);
+  color: var(--ig-cyaneus);
 }
 
 /* Tamaños */
@@ -9674,7 +9679,7 @@ CUÁNDO USAR:
 .ig-timeline-dot-success { background-color: var(--ig-laurus); }
 .ig-timeline-dot-warning { background-color: var(--ig-rutilus); }
 .ig-timeline-dot-danger { background-color: var(--ig-malum); }
-.ig-timeline-dot-info { background-color: var(--ig-axis); }
+.ig-timeline-dot-info { background-color: var(--ig-cyaneus); }
 
 .ig-timeline-content {
   padding-left: var(--ig-space-2);

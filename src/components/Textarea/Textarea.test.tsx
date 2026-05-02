@@ -31,4 +31,26 @@ describe("Textarea", () => {
     await userEvent.type(el, "linea 1{enter}linea 2");
     expect(el).toHaveValue("linea 1\nlinea 2");
   });
+
+  it("aria-describedby nativo SOBREVIVE sin describedBy (regression beta.3)", () => {
+    render(<Textarea aria-label="bio" aria-describedby="helper-1" />);
+    expect(screen.getByLabelText("bio")).toHaveAttribute(
+      "aria-describedby",
+      "helper-1",
+    );
+  });
+
+  it("aria-describedby nativo + describedBy se concatenan (regression beta.3)", () => {
+    render(
+      <Textarea
+        aria-label="bio"
+        aria-describedby="native-id"
+        describedBy={["a", "b"]}
+      />,
+    );
+    expect(screen.getByLabelText("bio")).toHaveAttribute(
+      "aria-describedby",
+      "native-id a b",
+    );
+  });
 });

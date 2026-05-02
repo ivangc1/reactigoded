@@ -12,6 +12,11 @@ import { withThemeByDataAttribute } from "@storybook/addon-themes";
 //                   directamente en HTML, lo cual ningún componente hace).
 import "../src/styles/igoded-design.css";
 import "../src/styles/igoded-reset.css";
+// fonts.css carga Google Fonts (Electrolize/Saira/JetBrains Mono). Es opt-in
+// para los consumers del paquete, pero en Storybook lo queremos para que la
+// demo vea la tipografía oficial. Si no se importa aquí, los componentes
+// caen al fallback system-ui declarado en tokens.css.
+import "../src/styles/igoded-fonts.css";
 // CSS interno de Storybook (clases ig-story-* para layouts de stories).
 // No se publica al paquete.
 import "./storybook.css";
@@ -52,7 +57,9 @@ const preview: Preview = {
   decorators: [
     withThemeByDataAttribute({
       themes: { light: "light", dark: "dark" },
-      defaultTheme: "light",
+      // dark-first: alineado con useTheme y ThemeSwitch desde 1.0.0-beta.3.
+      // El consumer puede alternar desde la toolbar.
+      defaultTheme: "dark",
       attributeName: "data-theme",
       parentSelector: "html",
     }),

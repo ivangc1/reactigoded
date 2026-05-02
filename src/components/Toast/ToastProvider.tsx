@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -104,17 +105,40 @@ export function ToastProvider({
     };
   }, []);
 
+  // SSR-safe: durante render server `document` no existe; durante el primer
+  // render cliente document.body sí existe pero usar el portal ya rompería
+  // hydration mismatch (server pintó inline → cliente pinta vía portal).
+  // Solución idiomática React 19: `useSyncExternalStore` con server snapshot
+  // `false` y client snapshot `true`. El primer render cliente coincide con
+  // server (mounted=false → inline); React detecta el cambio sin necesidad
+  // de setState dentro de useEffect (que la regla `set-state-in-effect`
+  // prohíbe).
+  const mounted = useSyncExternalStore(
+    () => () => {
+      /* no resubscriptions: 'mounted' is a one-shot transition */
+    },
+    () => true,
+    () => false,
+  );
+
   const value = useMemo<ToastContextValue>(
     () => ({ toast, dismiss, dismissAll }),
     [toast, dismiss, dismissAll],
   );
 
-  // Resuelve container del portal: si se pasa `null` explícitamente, render
-  // inline. Si se pasa undefined, usa document.body cuando exista.
+  // Resuelve container del portal:
+  // - container === null → render inline siempre.
+  // - container HTMLElement → ese.
+  // - container undefined + cliente montado → document.body.
+  // - todo lo demás (server o pre-mount) → null = render inline.
   const portalTarget =
     container === null
       ? null
-      : (container ?? (typeof document !== "undefined" ? document.body : null));
+      : container !== undefined
+        ? container
+        : mounted
+          ? document.body
+          : null;
 
   const containerNode = (
     <div

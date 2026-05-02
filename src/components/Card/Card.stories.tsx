@@ -137,7 +137,7 @@ export const Interactiva: Story = {
     <Card
       interactive
       elevated
-      className="ig-story-card-md ig-story-clickable"
+      className="ig-story-card-md"
       role="button"
       tabIndex={0}
       aria-label="Ir al detalle"
