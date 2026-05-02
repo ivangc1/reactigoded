@@ -35,7 +35,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const ConValor: Story = {
   args: { showValue: true },
@@ -70,7 +70,7 @@ export const OnValueChange: Story = {
     function Demo() {
       const [value, setValue] = useState(60);
       return (
-        <div style={{ display: "grid", gap: 12, maxWidth: 320 }}>
+        <div className="ig-story-stack ig-story-stack--md">
           <Slider
             aria-label="Volumen"
             min={0}

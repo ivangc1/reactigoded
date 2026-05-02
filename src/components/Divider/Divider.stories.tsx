@@ -34,24 +34,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Variantes: Story = {
   render: () => (
-    <div style={{ width: 320 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       {(
         ["default", "brand", "secondary", "success", "warning", "danger", "info"] as const
       ).map((v) => (
-        <div key={v} style={{ marginBottom: 12 }}>
-          <span
-            style={{
-              fontSize: 13,
-              color: "var(--ig-text-body)",
-              fontFamily: "var(--ig-font-mono)",
-            }}
-          >
-            {v}
-          </span>
+        <div key={v}>
+          <span className="ig-story-label">{v}</span>
           <Divider variant={v} />
         </div>
       ))}
@@ -65,7 +57,7 @@ export const Discontinuo: Story = {
 
 export const Vertical: Story = {
   render: () => (
-    <div style={{ display: "flex", alignItems: "center", height: 60, gap: 12 }}>
+    <div className="ig-story-row" style={{ height: "3.75rem" }}>
       <span>Izquierda</span>
       <Divider vertical />
       <span>Centro</span>

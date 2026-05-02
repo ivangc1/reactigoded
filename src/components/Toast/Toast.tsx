@@ -2,7 +2,7 @@ import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export type ToastVariant =
-  | "default"
+  | "neutral"
   | "success"
   | "warning"
   | "danger"
@@ -10,7 +10,7 @@ export type ToastVariant =
   | "brand"
   | "secondary";
 
-const DEFAULT_ICONS: Record<Exclude<ToastVariant, "default">, string> = {
+const DEFAULT_ICONS: Record<Exclude<ToastVariant, "neutral">, string> = {
   success: "✓",
   warning: "!",
   danger: "✕",
@@ -21,7 +21,7 @@ const DEFAULT_ICONS: Record<Exclude<ToastVariant, "default">, string> = {
 
 export interface ToastProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
-  /** Color/semántica del toast. Por defecto `"default"` (sin border-left coloreado). */
+  /** Color/semántica del toast. Por defecto `"neutral"` (sin border-left coloreado). */
   variant?: ToastVariant;
   /** Título destacado en la parte superior. */
   title?: ReactNode;
@@ -29,7 +29,7 @@ export interface ToastProps
   message?: ReactNode;
   /**
    * Icono al inicio. `undefined` muestra el icono por defecto del variant
-   * (excepto "default", que no tiene). Pasa `false` para ocultarlo o un nodo
+   * (excepto "neutral", que no tiene). Pasa `false` para ocultarlo o un nodo
    * propio para sustituirlo.
    */
   icon?: ReactNode | false;
@@ -64,7 +64,7 @@ export interface ToastProps
  * }
  */
 export function Toast({
-  variant = "default",
+  variant = "neutral",
   title,
   message,
   icon,
@@ -82,7 +82,7 @@ export function Toast({
       ? null
       : icon !== undefined
         ? icon
-        : variant === "default"
+        : variant === "neutral"
           ? null
           : DEFAULT_ICONS[variant];
 
@@ -94,7 +94,7 @@ export function Toast({
       aria-live={isAlertRole ? "assertive" : "polite"}
       className={cn(
         "ig-toast",
-        variant !== "default" && `ig-toast-${variant}`,
+        variant !== "neutral" && `ig-toast-${variant}`,
         className,
       )}
     >

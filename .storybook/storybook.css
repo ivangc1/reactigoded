@@ -1,0 +1,98 @@
+/*
+═══════════════════════════════════════════════════════════════════════════════
+STORYBOOK ONLY — clases helper para layouts de stories
+═══════════════════════════════════════════════════════════════════════════════
+
+Este CSS NO se publica al paquete (solo se carga en Storybook). Sustituye los
+inline styles inconsistentes que tenían las stories (`gap: 8`, `gap: 12`,
+`gap: 16`, `maxWidth: 320/360/...`) por clases reusables que respetan los
+tokens del DS.
+
+NOMENCLATURA: prefijo `ig-story-*` (no choca con clases publicadas `ig-*`).
+
+USO:
+  <div className="ig-story-stack ig-story-stack--sm">…</div>
+  <div className="ig-story-row">…</div>
+  <div className="ig-story-grid ig-story-grid--cols-3">…</div>
+  <div className="ig-story-frame">…</div>
+*/
+
+/* Stack vertical (grid-rows) — para listas de variantes/tamaños/estados. */
+.ig-story-stack {
+  display: grid;
+  gap: var(--ig-space-4);
+}
+
+.ig-story-stack--sm  { max-width: 20rem; }
+.ig-story-stack--md  { max-width: 24rem; }
+.ig-story-stack--lg  { max-width: 36rem; }
+.ig-story-stack--xl  { max-width: 48rem; }
+.ig-story-stack--full { max-width: none; }
+
+/* Fila horizontal — para galerías de variantes en un mismo eje. */
+.ig-story-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ig-space-3);
+}
+
+.ig-story-row--start { align-items: flex-start; }
+.ig-story-row--end   { align-items: flex-end; }
+.ig-story-row--gap-sm { gap: var(--ig-space-2); }
+.ig-story-row--gap-lg { gap: var(--ig-space-6); }
+
+/* Grid genérico para demos de tarjetas/tiles. */
+.ig-story-grid {
+  display: grid;
+  gap: var(--ig-space-4);
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+.ig-story-grid--cols-2 { grid-template-columns: repeat(2, 1fr); }
+.ig-story-grid--cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* Marco con borde y padding generoso — útil para Tooltip, Popover… que
+   necesitan espacio alrededor para que el flotante quepa. */
+.ig-story-frame {
+  display: grid;
+  place-items: center;
+  padding: var(--ig-space-12);
+  border: 1px dashed var(--ig-border-subtle);
+  border-radius: var(--ig-rounded-lg);
+  background: var(--ig-bg-surface);
+  min-height: 14rem;
+}
+
+.ig-story-frame--lg { padding: var(--ig-space-16); min-height: 20rem; }
+
+/* Formulario de demo — ancho cómodo para inputs/selects/textareas. */
+.ig-story-form {
+  display: grid;
+  gap: var(--ig-space-3);
+  max-width: 24rem;
+}
+
+/* Layout fullscreen interno para Sidebar / Navbar demos (cuando la story usa
+   `parameters.layout = "fullscreen"`). */
+.ig-story-shell {
+  display: flex;
+  height: 100vh;
+}
+
+.ig-story-shell__main {
+  flex: 1;
+  padding: var(--ig-space-6);
+  display: grid;
+  gap: var(--ig-space-3);
+  align-content: start;
+}
+
+/* Etiqueta sutil sobre un grupo de demos (para anotar la variante). */
+.ig-story-label {
+  font-size: var(--ig-text-xs);
+  font-weight: var(--ig-fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ig-text-muted);
+}

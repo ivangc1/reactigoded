@@ -75,7 +75,7 @@ const SampleTable = (props: React.ComponentProps<typeof Table>) => (
   </Table>
 );
 
-export const Default: Story = { render: (args) => <SampleTable {...args} /> };
+export const PorDefecto: Story = { render: (args) => <SampleTable {...args} /> };
 export const Striped: Story = {
   args: { striped: true },
   render: (args) => <SampleTable {...args} />,
@@ -119,7 +119,7 @@ export const ConCaptionYFooter: Story = {
 export const Scrollable: Story = {
   args: { scrollable: true, hover: true },
   render: (args) => (
-    <div style={{ maxWidth: "320px" }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Table {...args}>
         <TableHead>
           <TableRow>

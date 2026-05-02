@@ -25,7 +25,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = { args: {} };
+export const PorDefecto: Story = { args: {} };
 
 export const SinPersistencia: Story = {
   args: {
@@ -55,7 +55,7 @@ export const Controlled: Story = {
     const ControlledExample = () => {
       const [theme, setTheme] = useState<Theme>("light");
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div className="ig-story-stack ig-story-stack--full">
           <ThemeSwitch
             theme={theme}
             onThemeChange={setTheme}
@@ -98,7 +98,7 @@ export const LabelCustom: Story = {
 
 export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+    <div className="ig-story-stack ig-story-stack--full">
       <ThemeSwitch storageKey={null} attribute={null} variant="brand" />
       <ThemeSwitch storageKey={null} attribute={null} variant="success" />
       <ThemeSwitch storageKey={null} attribute={null} variant="warning" />

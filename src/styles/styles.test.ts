@@ -8,6 +8,10 @@ const designCss = readFileSync(
   resolve(__dirname, "./igoded-design.css"),
   "utf8",
 );
+const tokensCss = readFileSync(
+  resolve(__dirname, "./igoded-tokens.css"),
+  "utf8",
+);
 
 describe("igoded-design.css — a11y media queries", () => {
   it("respeta prefers-reduced-motion globalmente", () => {
@@ -37,22 +41,45 @@ describe("igoded-design.css — a11y media queries", () => {
       /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.ig-dialog\[open\][\s\S]*?animation:\s*none/,
     );
   });
+
+  it("design.css importa tokens.css (split 1.0.0-beta.1)", () => {
+    // Tras el split de tokens, design.css depende de tokens.css vía @import.
+    expect(designCss).toMatch(/@import\s+["']\.\/igoded-tokens\.css["']\s*;/);
+  });
 });
 
-describe("igoded-design.css — tokens contraste WCAG AA", () => {
+describe("igoded-tokens.css — tokens contraste WCAG AA", () => {
   it("--ig-text-muted en light cumple ratio AA sobre bg-muted", () => {
     // Tras el fix de pasada 6: light usa #6e6679 (4.85 > 4.5).
     // Hay varios bloques [data-theme="light"] (uno por sección de tokens),
     // verificamos solo que existe la declaración correcta en algún sitio.
-    expect(designCss).toMatch(/--ig-text-muted:\s*#6e6679/);
+    expect(tokensCss).toMatch(/--ig-text-muted:\s*#6e6679/);
     // Y que la versión vieja (4.06, fail) no esté.
-    expect(designCss).not.toMatch(/--ig-text-muted:\s*#7a7288/);
+    expect(tokensCss).not.toMatch(/--ig-text-muted:\s*#7a7288/);
   });
 
   it("--ig-text-muted en dark cumple ratio AA sobre bg-muted", () => {
     // Tras el fix de pasada 6: dark usa #7e9696 (5.31 > 4.5).
-    expect(designCss).toMatch(/--ig-text-muted:\s*#7e9696/);
+    expect(tokensCss).toMatch(/--ig-text-muted:\s*#7e9696/);
     // Y que la versión vieja (4.42, fail) no esté.
-    expect(designCss).not.toMatch(/--ig-text-muted:\s*#708888/);
+    expect(tokensCss).not.toMatch(/--ig-text-muted:\s*#708888/);
+  });
+
+  it("tokens.css contiene los 7 colores cardinales (Fundus + 6)", () => {
+    expect(tokensCss).toMatch(/--ig-fundus:/);
+    expect(tokensCss).toMatch(/--ig-vitreus:/);
+    expect(tokensCss).toMatch(/--ig-axis:/);
+    expect(tokensCss).toMatch(/--ig-cinis:/);
+    expect(tokensCss).toMatch(/--ig-laurus:/);
+    expect(tokensCss).toMatch(/--ig-rutilus:/);
+    expect(tokensCss).toMatch(/--ig-malum:/);
+  });
+
+  it("tokens.css NO contiene clases de componentes (solo tokens y keyframes)", () => {
+    // No debería haber selectores `.ig-btn`, `.ig-card`, etc. en tokens.css —
+    // esos viven en design.css.
+    expect(tokensCss).not.toMatch(/^\.ig-btn\s*\{/m);
+    expect(tokensCss).not.toMatch(/^\.ig-card\s*\{/m);
+    expect(tokensCss).not.toMatch(/^\.ig-modal\s*\{/m);
   });
 });

@@ -29,12 +29,12 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Variantes: Story = {
   args: { children: undefined },
   render: () => (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div className="ig-story-row ig-story-row--gap-sm">
       <Chip variant="brand">Brand</Chip>
       <Chip variant="secondary">Secondary</Chip>
       <Chip variant="success">Success</Chip>
@@ -48,7 +48,7 @@ export const Variantes: Story = {
 export const Tamaños: Story = {
   args: { children: undefined },
   render: () => (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    <div className="ig-story-row ig-story-row--gap-sm">
       <Chip size="sm">Small</Chip>
       <Chip size="md">Medium</Chip>
       <Chip size="lg">Large</Chip>
@@ -71,7 +71,7 @@ export const Seleccionable: Story = {
       const [active, setActive] = useState<string | null>("react");
       const tags = ["react", "vue", "svelte", "solid"];
       return (
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="ig-story-row ig-story-row--gap-sm">
           {tags.map((t) => (
             <Chip
               key={t}

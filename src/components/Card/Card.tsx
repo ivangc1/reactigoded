@@ -1,4 +1,9 @@
-import type { HTMLAttributes, Ref } from "react";
+import type {
+  HTMLAttributes,
+  KeyboardEvent,
+  MouseEvent,
+  Ref,
+} from "react";
 import { cn } from "@/utils/cn";
 
 export type CardVariant =
@@ -9,11 +14,20 @@ export type CardVariant =
   | "danger"
   | "info";
 
+/**
+ * Apariencia visual cuando hay `variant`:
+ * - `"outline"` (default): borde del color, fondo neutro → `ig-card-<variant>`.
+ * - `"filled"`: fondo sólido del color → `ig-card-<variant>-filled`.
+ *
+ * Sin `variant` la apariencia se ignora (la card es plana).
+ */
+export type CardAppearance = "outline" | "filled";
+
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  /** Color de la card. Outline por defecto; con `filled` aplica fondo sólido. */
+  /** Color semántico de la card. */
   variant?: CardVariant;
-  /** Variante con fondo sólido (`ig-card-<variant>-filled`). */
-  filled?: boolean;
+  /** Apariencia visual. Por defecto `"outline"`. Solo aplica si hay `variant`. */
+  appearance?: CardAppearance;
   /** Borde más marcado. */
   bordered?: boolean;
   /** Sombra elevada. */
@@ -32,13 +46,22 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
  * Combina con `CardHeader`, `CardBody`, `CardFooter`, `CardImage`,
  * `CardDivider` para layouts compuestos.
  *
- * Si la card actúa como botón (`interactive`), el consumidor debe pasar
- * `role="button"` + `tabIndex={0}` + `onClick`/`onKeyDown` para que sea
- * accesible por teclado.
+ * **Card como botón**: pasa `interactive` + `role="button"` + `tabIndex={0}` +
+ * `onClick`. Cuando se cumplen las 3 condiciones, la card activa Enter/Space
+ * automáticamente como un `<button>` nativo (la keyboard activation es
+ * obligatoria por WAI-ARIA APG si añades `role="button"` a un elemento no
+ * interactivo). Si pasas tu propio `onKeyDown`, el handler interno se
+ * encadena después — tu lógica corre primero y puedes llamar
+ * `event.preventDefault()` para evitar la activación por defecto.
+ *
+ * @example
+ * <Card interactive role="button" tabIndex={0} onClick={() => navigate("/x")}>
+ *   <CardBody>Click o Enter/Space para navegar</CardBody>
+ * </Card>
  */
 export function Card({
   variant,
-  filled = false,
+  appearance = "outline",
   bordered = false,
   elevated = false,
   glass = false,
@@ -46,14 +69,36 @@ export function Card({
   className,
   children,
   ref,
+  role,
+  onClick,
+  onKeyDown,
   ...rest
 }: CardProps) {
+  const actsAsButton = interactive && role === "button" && Boolean(onClick);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    onKeyDown?.(event);
+    if (!actsAsButton) return;
+    if (event.defaultPrevented) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick?.(event as unknown as MouseEvent<HTMLDivElement>);
+    }
+  };
+
+  const variantClass =
+    variant &&
+    (appearance === "filled" ? `ig-card-${variant}-filled` : `ig-card-${variant}`);
+
   return (
     <div
       ref={ref}
+      role={role}
+      onClick={onClick}
+      onKeyDown={actsAsButton || onKeyDown ? handleKeyDown : undefined}
       className={cn(
         "ig-card",
-        variant && (filled ? `ig-card-${variant}-filled` : `ig-card-${variant}`),
+        variantClass,
         bordered && "ig-card-bordered",
         elevated && "ig-card-elevated",
         glass && "ig-card-glass",

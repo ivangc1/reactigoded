@@ -7,6 +7,84 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] — 2026-05-02
+
+Pasada de pulido orientada a percepción del catálogo Storybook + saneamiento
+de la API pública antes del `1.0.0`.
+
+### Added
+- `igoded-tokens.css` (nuevo, ~98 KB) — solo variables `--ig-*`, keyframes y
+  `@font-face`, sin clases de componentes. Útil para consumers que construyen
+  su propia capa de componentes sobre los tokens del DS.
+  Expuesto como `reactigoded/styles/tokens.css`.
+- `igoded-reset.css` (nuevo, ~5 KB) — estilos por defecto para HTML nativo
+  (h1-h6, p, a, button, input, table…). **Opt-in**, no se importa
+  automáticamente con `design.css`. Expuesto como
+  `reactigoded/styles/reset.css`.
+- `Button.appearance="link"` — quinta apariencia (aplica `ig-btn-link`,
+  ignora variant).
+- `Card.appearance="outline"|"filled"` — sustituye al flag `filled` (ver
+  Changed).
+- Card activación Enter/Space automática cuando `interactive` +
+  `role="button"` + `onClick`. Encadenable con `onKeyDown` del consumer
+  (preventDefault cancela). +6 tests.
+- `.storybook/manager.ts` con branding Igoded (createTheme dark,
+  Vitreus/Axis colors, brandTitle "Igoded Design System", fonts Saira +
+  JetBrains Mono).
+- `.storybook/storybook.css` con clases helper `ig-story-{stack,row,grid,
+  frame,form,shell,label}` para layouts de stories. NO se publica al paquete.
+- Foundations docs MDX: `Spacing.mdx` (visualización de los 25 tokens
+  `--ig-space-*`, equivalencias Tailwind, guidance) y `Contrast.mdx`
+  (9 pares texto+fondo verificados WCAG AA + garantías a11y de CI).
+
+### Changed
+- **CSS reset extraído** de `igoded-design.css` a `igoded-reset.css` opt-in.
+  En `design.css` queda solo `*, *::before, *::after { box-sizing: border-box }`
+  (necesario para el sizing de los componentes). Eliminado el comentario
+  legacy "ESTÁ COMENTADO A PROPÓSITO" que mentía sobre el estado del reset.
+- **CSS modular split**: `igoded-design.css` ahora `@import`a
+  `igoded-tokens.css` internamente. Self-containment preservado (consumer
+  que importa solo `design.css` recibe lo mismo que antes).
+- **Storybook preview**: eliminado wrapper global con padding/100vh que
+  rompía `layout: "fullscreen"` en Navbar/Sidebar. Eliminado import de
+  `state.css` (7.1 MB innecesarios en HMR). Backgrounds reactivados con
+  4 valores tokenizados (base/surface/muted/sunken).
+- **Stories en español uniforme**: 28 archivos renombrados
+  `Default→PorDefecto`, `Variants→Variantes`, `Sizes→Tamaños`. Otros nombres
+  ya en ES (`ConImagen`, `Compuesta`, `Interactiva`, etc.) o nombres
+  técnicos propios (`Pills`, `Vertical`, `KeepMounted`, `BackdropBlur`)
+  intactos.
+- **External assets fuera del catálogo**: pravatar/placehold.co reemplazados
+  por SVG data URIs inline; 11 emojis de Sidebar reemplazados por SVG inline
+  feather-style (consistencia visual entre SO/navegadores).
+- **Storybook propFilter** excluye HTML attributes heredados
+  (HTMLAttributes, AriaAttributes, DOMAttributes,
+  {Button,Input,Textarea,Select,Anchor}HTMLAttributes) — Controls panel
+  muestra solo props del propio package.
+- **Glass Navbar story**: gradiente Tailwind genérico
+  (#4f46e5/#ec4899/#f59e0b) → gradientes con tokens
+  `--ig-vitreus-alpha-*` + `--ig-axis-alpha-*` sobre `--ig-bg-base`.
+- **~40 inline styles repetidos** en stories migrados a clases
+  `.ig-story-*`. Los inline styles component-internal (sizing de Card,
+  padding de inputs internos, márgenes decorativos) se conservan.
+- Comentario WCAG en `igoded-design.css:437` corregido AAA → AA (coincide
+  con keyword `wcag-aa` y los memos reales de tokens).
+
+### Breaking
+- `Button.variant="outline"|"ghost"|"link"` → migrar a
+  `Button.appearance="outline"|"ghost"|"link"`. `ButtonVariant` se reduce a
+  los 6 colores semánticos. Razón: dos ejes ortogonales
+  (color × estilo visual) en vez de mezclar 9 valores en uno.
+- `Card.filled` (boolean flag) → migrar a `Card.appearance="filled"`. El
+  comportamiento default (`appearance="outline"`) es idéntico.
+- `Toast.variant="default"` → renombrado a `"neutral"` por consistencia con
+  Alert. Comportamiento idéntico (no añade clase de variant).
+- Estilos para HTML nativo (`<h1>`, `<p>`, `<a>`, `<table>`…) ya **no se
+  cargan** desde `reactigoded/styles/design.css`. Si los necesitas, importa
+  también `reactigoded/styles/reset.css`.
+
+## [1.0.0-beta.0] — 2026-05-01
+
 Cambios desde la migración inicial JSX→TSX. Agrupa el trabajo de las 6
 auditorías profundas previas a `1.0.0`.
 

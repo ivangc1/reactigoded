@@ -43,7 +43,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   render: (args) => {
     const [open, setOpen] = useState(false);
     return (
@@ -71,14 +71,14 @@ export const Default: Story = {
   },
 };
 
-export const Sizes: Story = {
+export const Tamaños: Story = {
   render: () => {
     const [size, setSize] = useState<
       "sm" | "md" | "lg" | "xl" | "full" | null
     >(null);
     return (
       <>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="ig-story-row ig-story-row--gap-sm">
           {(["sm", "md", "lg", "xl", "full"] as const).map((s) => (
             <Button key={s} variant="secondary" onClick={() => { setSize(s); }}>
               {s}

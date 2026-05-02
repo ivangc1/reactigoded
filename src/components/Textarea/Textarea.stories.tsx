@@ -28,7 +28,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Auto: Story = {
   args: { auto: true, defaultValue: "Crece automáticamente al añadir texto." },
@@ -36,7 +36,7 @@ export const Auto: Story = {
 
 export const Estados: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 8, maxWidth: 360 }}>
+    <div className="ig-story-form">
       <Textarea aria-label="Default" placeholder="Default" rows={3} />
       <Textarea
         aria-label="Success"

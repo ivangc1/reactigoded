@@ -33,11 +33,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Grupo: Story = {
   render: () => (
-    <div role="radiogroup" aria-label="Plan" style={{ display: "grid", gap: 6 }}>
+    <div role="radiogroup" aria-label="Plan" className="ig-story-stack ig-story-stack--sm">
       <Radio name="plan" value="free" defaultChecked>
         Free
       </Radio>
@@ -53,7 +53,7 @@ export const Grupo: Story = {
 
 export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 6 }}>
+    <div className="ig-story-stack ig-story-stack--sm">
       {(
         ["brand", "secondary", "success", "warning", "danger", "info"] as const
       ).map((v) => (
@@ -71,7 +71,7 @@ export const Deshabilitado: Story = {
 
 export const SelectInteraction: Story = {
   render: () => (
-    <div role="radiogroup" aria-label="Plan" style={{ display: "grid", gap: 6 }}>
+    <div role="radiogroup" aria-label="Plan" className="ig-story-stack ig-story-stack--sm">
       <Radio name="plan-int" value="free" data-testid="r-free">Free</Radio>
       <Radio name="plan-int" value="pro" data-testid="r-pro">Pro</Radio>
     </div>

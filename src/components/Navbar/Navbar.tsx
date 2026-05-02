@@ -26,7 +26,7 @@ export interface NavbarProps extends HTMLAttributes<HTMLElement> {
  *     <NavbarLink href="/precios">Precios</NavbarLink>
  *   </NavbarNav>
  *   <NavbarActions>
- *     <Button variant="ghost">Login</Button>
+ *     <Button appearance="ghost">Login</Button>
  *     <Button variant="brand">Sign Up</Button>
  *   </NavbarActions>
  * </Navbar>

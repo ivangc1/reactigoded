@@ -96,7 +96,7 @@ export const Controlled: Story = {
     const ControlledExample = () => {
       const [value, setValue] = useState<string | null>("b");
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div className="ig-story-stack ig-story-stack--full">
           <div>
             Abierto: <strong>{value ?? "ninguno"}</strong>
           </div>

@@ -1,0 +1,217 @@
+/*
+═══════════════════════════════════════════════════════════════════════════════
+IGODED RESET — opt-in
+═══════════════════════════════════════════════════════════════════════════════
+
+QUÉ ES: Estilos por defecto para HTML nativo (h1-h6, p, a, button, input,
+table, etc.) usando los tokens `--ig-*` del design system.
+
+CUÁNDO IMPORTARLO:
+- Si NO usas Tailwind, Bootstrap u otro framework con su propio reset.
+- Si quieres que `<h1>`, `<p>`, `<a>`, `<table>`, `<code>`… ya tengan estilo
+  Igoded sin aplicar clases manualmente.
+
+CUÁNDO NO IMPORTARLO:
+- Si usas Tailwind preflight, Bootstrap reboot o cualquier otro reset que ya
+  estiliza estos elementos. Importar este reset encima provocará dobles
+  declaraciones y choques de especificidad.
+
+REQUIERE: `igoded-design.css` (los tokens `--ig-*` se definen ahí).
+
+USO:
+  import "reactigoded/styles/design.css";  // primero (tokens + componentes)
+  import "reactigoded/styles/reset.css";   // opcional, después
+*/
+
+html {
+  font-family: var(--ig-font-base);
+  font-size: var(--ig-text-base);
+  line-height: var(--ig-leading-normal);
+  color: var(--ig-text-body);
+  background-color: var(--ig-bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--ig-font-heading);
+  font-weight: var(--ig-fw-bold);
+  line-height: var(--ig-leading-tight);
+  color: var(--ig-text-heading);
+  margin-top: 0;
+  margin-bottom: var(--ig-space-4);
+}
+
+h1 { font-size: var(--ig-text-5xl); }
+h2 { font-size: var(--ig-text-4xl); }
+h3 { font-size: var(--ig-text-3xl); }
+h4 { font-size: var(--ig-text-2xl); }
+h5 { font-size: var(--ig-text-xl); }
+h6 { font-size: var(--ig-text-lg); }
+
+p {
+  margin-top: 0;
+  margin-bottom: var(--ig-space-4);
+}
+
+a {
+  color: var(--ig-link-color);
+  text-decoration: none;
+  transition: color var(--ig-transition-fast);
+}
+
+a:hover {
+  color: var(--ig-link-color-hover);
+  text-shadow: var(--ig-link-glow);
+}
+
+a:visited {
+  color: var(--ig-link-color-visited);
+}
+
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--ig-focus-ring);
+  border-radius: var(--ig-rounded-sm);
+}
+
+button {
+  font-family: var(--ig-font-base);
+  font-weight: var(--ig-fw-semibold);
+  font-size: var(--ig-text-sm);
+  background-color: var(--ig-vitreus);
+  color: var(--ig-fundus-lux);
+  border: none;
+  border-radius: var(--ig-rounded-md);
+  padding: var(--ig-space-2) var(--ig-space-4);
+  cursor: pointer;
+  transition: all var(--ig-transition-fast);
+}
+
+button:hover {
+  filter: brightness(1.1);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--ig-focus-ring);
+}
+
+button:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  font-family: var(--ig-font-base);
+  font-size: var(--ig-text-base);
+  padding: var(--ig-space-2) var(--ig-space-3);
+  background-color: var(--ig-input-bg);
+  color: var(--ig-input-text);
+  border: 1px solid var(--ig-input-border);
+  border-radius: var(--ig-rounded-md);
+  transition: all var(--ig-transition-fast);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--ig-input-placeholder);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--ig-input-border-focus);
+  box-shadow: var(--ig-input-ring);
+}
+
+input:disabled, textarea:disabled, select:disabled {
+  background-color: var(--ig-input-bg-disabled);
+  color: var(--ig-input-text-disabled);
+  cursor: not-allowed;
+}
+
+img, video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+ul, ol {
+  padding-left: var(--ig-space-6);
+  margin-top: 0;
+  margin-bottom: var(--ig-space-4);
+}
+
+li {
+  margin-bottom: var(--ig-space-1);
+}
+
+code {
+  font-family: var(--ig-font-mono);
+  font-size: 0.875em;
+  background-color: var(--ig-bg-muted);
+  padding: var(--ig-space-0-5) var(--ig-space-1);
+  border-radius: var(--ig-rounded-sm);
+}
+
+pre {
+  font-family: var(--ig-font-mono);
+  background-color: var(--ig-bg-muted);
+  padding: var(--ig-space-4);
+  border-radius: var(--ig-rounded-md);
+  overflow-x: auto;
+  margin-top: 0;
+  margin-bottom: var(--ig-space-4);
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+blockquote {
+  margin: 0 0 var(--ig-space-4) 0;
+  padding-left: var(--ig-space-4);
+  border-left: 3px solid var(--ig-axis);
+  color: var(--ig-text-muted);
+  font-style: italic;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--ig-border-default);
+  margin: var(--ig-space-6) 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--ig-space-4);
+}
+
+th, td {
+  padding: var(--ig-space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--ig-border-default);
+}
+
+th {
+  font-weight: var(--ig-fw-semibold);
+  color: var(--ig-text-heading);
+  background-color: var(--ig-bg-sunken);
+}
+
+::selection {
+  background-color: var(--ig-selection-bg);
+  color: var(--ig-selection-text);
+}

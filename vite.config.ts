@@ -8,9 +8,13 @@ import { mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Copia los CSS del design system a dist/styles/ y genera un index.css que
-// hace `@import` de ambos (no concatenación, para no duplicar bytes).
+// hace `@import` de los 4 (no concatenación, para no duplicar bytes).
 // Cubre los `exports` declarados en package.json:
-//   "./styles/design.css", "./styles/state.css", "./styles/all.css".
+//   "./styles/tokens.css"  → solo variables --ig-* + keyframes (~80 KB)
+//   "./styles/design.css"  → tokens (vía @import interno) + componentes
+//   "./styles/reset.css"   → estilos por defecto para HTML nativo (opt-in)
+//   "./styles/state.css"   → utilities pseudo-class (opt-in, 7.1 MB)
+//   "./styles/all.css"     → atajo: design + reset + state vía @import
 function copyDesignSystemStyles(): PluginOption {
   return {
     name: "copy-design-system-styles",
@@ -20,16 +24,28 @@ function copyDesignSystemStyles(): PluginOption {
       const outDir = resolve(__dirname, "dist/styles");
       mkdirSync(outDir, { recursive: true });
       copyFileSync(
+        resolve(srcDir, "igoded-tokens.css"),
+        resolve(outDir, "igoded-tokens.css"),
+      );
+      copyFileSync(
         resolve(srcDir, "igoded-design.css"),
         resolve(outDir, "igoded-design.css"),
+      );
+      copyFileSync(
+        resolve(srcDir, "igoded-reset.css"),
+        resolve(outDir, "igoded-reset.css"),
       );
       copyFileSync(
         resolve(srcDir, "igoded-state-css.css"),
         resolve(outDir, "igoded-state-css.css"),
       );
-      // `all.css` referencia los otros dos vía @import — no copiar bytes.
+      // `all.css` referencia los otros vía @import — no copiar bytes.
       // El consumer puede usar este path como punto único de entrada CSS.
-      const allCss = `@import "./igoded-design.css";\n@import "./igoded-state-css.css";\n`;
+      // Orden: design (tokens vía @import interno + componentes) → reset → state.
+      const allCss =
+        `@import "./igoded-design.css";\n` +
+        `@import "./igoded-reset.css";\n` +
+        `@import "./igoded-state-css.css";\n`;
       writeFileSync(resolve(outDir, "index.css"), allCss);
     },
   };

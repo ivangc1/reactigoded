@@ -33,11 +33,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Tamaños: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 8, maxWidth: 320 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Input size="sm" placeholder="Small" />
       <Input size="md" placeholder="Medium" />
       <Input size="lg" placeholder="Large" />
@@ -47,7 +47,7 @@ export const Tamaños: Story = {
 
 export const Estados: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 8, maxWidth: 320 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Input placeholder="Default" />
       <Input state="success" placeholder="Success" defaultValue="Email válido" />
       <Input state="error" placeholder="Error" defaultValue="usuario@malformado" />
@@ -61,7 +61,7 @@ export const Deshabilitado: Story = {
 
 export const FormularioCompleto: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 16, maxWidth: 360 }}>
+    <div className="ig-story-form">
       <div>
         <Label htmlFor="email" required>
           Email
@@ -106,7 +106,7 @@ export const ConDescribedBy: Story = {
       const helperId = useId();
       const errorId = useId();
       return (
-        <div style={{ display: "grid", gap: 16, maxWidth: 360 }}>
+        <div className="ig-story-form">
           <div>
             <Label htmlFor="user-email" required>
               Email
@@ -133,7 +133,7 @@ export const ConDescribedBy: Story = {
 
 export const ConGrupo: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 12, maxWidth: 320 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <InputGroup>
         <InputAddon>$</InputAddon>
         <Input type="number" placeholder="0.00" />

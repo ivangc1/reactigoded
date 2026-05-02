@@ -27,7 +27,7 @@ function App() {
         }}
       >
         <h1 className="ig-text-3xl ig-font-bold">Igoded Design System</h1>
-        <Button variant="outline" size="sm" onClick={toggleTheme}>
+        <Button appearance="outline" size="sm" onClick={toggleTheme}>
           {theme === "dark" ? "☀️ Claro" : "🌙 Oscuro"}
         </Button>
       </header>
@@ -41,9 +41,9 @@ function App() {
           <Button variant="warning">Warning</Button>
           <Button variant="danger">Danger</Button>
           <Button variant="info">Info</Button>
-          <Button variant="outline">Outline</Button>
-          <Button variant="ghost">Ghost</Button>
-          <Button variant="link">Link</Button>
+          <Button appearance="outline">Outline</Button>
+          <Button appearance="ghost">Ghost</Button>
+          <Button appearance="link">Link</Button>
         </div>
       </section>
 

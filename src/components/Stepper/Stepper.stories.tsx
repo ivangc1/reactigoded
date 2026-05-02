@@ -37,7 +37,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   render: (args) => (
     <Stepper {...args}>
       <Step />
@@ -65,14 +65,14 @@ export const Interactivo: Story = {
       const [active, setActive] = useState(0);
       const total = 4;
       return (
-        <div style={{ display: "grid", gap: 16 }}>
+        <div className="ig-story-stack ig-story-stack--full">
           <Stepper active={active} labeled>
             <Step label="Inicio" />
             <Step label="Detalles" />
             <Step label="Revisión" />
             <Step label="Hecho" />
           </Stepper>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="ig-story-row ig-story-row--gap-sm">
             <Button
               variant="secondary"
               size="sm"

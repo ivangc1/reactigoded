@@ -5,14 +5,16 @@ import { ToastProvider } from "./ToastProvider";
 import { useToast } from "./ToastContext";
 
 describe("Toast — primitivo", () => {
-  it("aplica ig-toast y NO añade clase de variant cuando variant=default", () => {
+  it("aplica ig-toast y NO añade clase de variant cuando variant=neutral", () => {
     const { container } = render(<Toast title="x" />);
     const node = container.querySelector(".ig-toast");
     expect(node).not.toBeNull();
-    expect(node?.className).not.toMatch(/ig-toast-(success|warning|danger|info|brand|secondary|default)/);
+    expect(node?.className).not.toMatch(
+      /ig-toast-(success|warning|danger|info|brand|secondary|neutral)/,
+    );
   });
 
-  it("aplica clase de variant cuando es != default", () => {
+  it("aplica clase de variant cuando es != neutral", () => {
     const { container } = render(<Toast variant="success" title="x" />);
     expect(container.querySelector(".ig-toast")).toHaveClass(
       "ig-toast-success",
@@ -48,7 +50,7 @@ describe("Toast — primitivo", () => {
     expect(container.querySelector(".ig-toast-icon")).toBeNull();
   });
 
-  it("default variant no muestra icono salvo override explícito", () => {
+  it("neutral variant no muestra icono salvo override explícito", () => {
     const { container, rerender } = render(<Toast title="ok" />);
     expect(container.querySelector(".ig-toast-icon")).toBeNull();
     rerender(<Toast title="ok" icon="ℹ" />);

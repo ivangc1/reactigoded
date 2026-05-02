@@ -28,11 +28,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 8 }}>
+    <div className="ig-story-stack ig-story-stack--sm">
       {(
         ["brand", "secondary", "success", "warning", "danger", "info"] as const
       ).map((v) => (

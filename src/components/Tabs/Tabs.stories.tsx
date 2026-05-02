@@ -35,7 +35,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   render: (args) => (
     <Tabs {...args}>
       <TabList ariaLabel="Cuenta">

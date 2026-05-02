@@ -31,7 +31,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   render: (args) => (
     <Navbar {...args}>
       <NavbarBrand href="#">
@@ -45,7 +45,7 @@ export const Default: Story = {
         <NavbarLink href="#">Docs</NavbarLink>
       </NavbarNav>
       <NavbarActions>
-        <Button variant="ghost">Login</Button>
+        <Button appearance="ghost">Login</Button>
         <Button variant="brand">Sign Up</Button>
       </NavbarActions>
     </Navbar>
@@ -79,10 +79,15 @@ export const Glass: Story = {
   args: { glass: true, sticky: true },
   render: (args) => (
     <div
+      // Fondo con tokens del DS (Vitreus + Axis sobre fundus). Antes usaba un
+      // gradiente Tailwind genérico (#4f46e5/#ec4899/#f59e0b) que no
+      // representaba la identidad igoded.
       style={{
         minHeight: "100vh",
         backgroundImage:
-          "linear-gradient(135deg, #4f46e5 0%, #ec4899 50%, #f59e0b 100%)",
+          "radial-gradient(circle at 18% 14%, color-mix(in srgb, var(--ig-vitreus) 35%, transparent) 0%, transparent 36rem)," +
+          "radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--ig-axis) 32%, transparent) 0%, transparent 38rem)," +
+          "linear-gradient(180deg, var(--ig-bg-base), var(--ig-bg-sunken))",
       }}
     >
       <Navbar {...args}>
@@ -94,7 +99,7 @@ export const Glass: Story = {
           <NavbarLink href="#">Sobre</NavbarLink>
         </NavbarNav>
         <NavbarActions>
-          <Button variant="ghost">Login</Button>
+          <Button appearance="ghost">Login</Button>
         </NavbarActions>
       </Navbar>
     </div>

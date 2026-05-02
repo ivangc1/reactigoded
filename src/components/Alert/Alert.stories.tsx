@@ -41,11 +41,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
-export const Variants: Story = {
+export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 8, maxWidth: 480 }}>
+    <div className="ig-story-stack ig-story-stack--xl">
       <Alert variant="success" title="Guardado">
         Cambios persistidos correctamente.
       </Alert>
@@ -116,7 +116,7 @@ export const ControlledDismissible: Story = {
     function ControlledDemo() {
       const [open, setOpen] = useState(true);
       return (
-        <div style={{ display: "grid", gap: 12, maxWidth: 480 }}>
+        <div className="ig-story-stack ig-story-stack--xl">
           <Alert
             variant="warning"
             title="Aviso controlado"

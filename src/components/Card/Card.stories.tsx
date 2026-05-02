@@ -9,6 +9,26 @@ import {
 } from "./index";
 import { Button } from "../Button";
 
+// Imagen de demo embebida (data URI SVG, gradiente Vitreus→Axis con un patrón
+// ligero). Sin placehold.co — sin dependencias externas en el catálogo.
+const demoImage =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300">` +
+      `<defs>` +
+        `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+          `<stop offset="0%" stop-color="#5eded5"/>` +
+          `<stop offset="100%" stop-color="#d4c2f9"/>` +
+        `</linearGradient>` +
+        `<pattern id="p" width="40" height="40" patternUnits="userSpaceOnUse">` +
+          `<circle cx="20" cy="20" r="1.2" fill="#0c1515" opacity="0.18"/>` +
+        `</pattern>` +
+      `</defs>` +
+      `<rect width="600" height="300" fill="url(#g)"/>` +
+      `<rect width="600" height="300" fill="url(#p)"/>` +
+    `</svg>`,
+  );
+
 const meta = {
   title: "Componentes/Card",
   component: Card,
@@ -33,7 +53,11 @@ const meta = {
         "info",
       ],
     },
-    filled: { control: "boolean" },
+    appearance: {
+      control: "select",
+      options: ["outline", "filled"],
+      table: { defaultValue: { summary: "outline" } },
+    },
     bordered: { control: "boolean" },
     elevated: { control: "boolean" },
     glass: { control: "boolean" },
@@ -44,7 +68,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   render: (args) => (
     <Card {...args} style={{ maxWidth: 320 }}>
       <CardBody>Contenido simple de la card.</CardBody>
@@ -69,13 +93,13 @@ export const Compuesta: Story = {
   ),
 };
 
-export const Variants: Story = {
+export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 12, maxWidth: 360 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Card variant="brand">
         <CardBody>brand (outline)</CardBody>
       </Card>
-      <Card variant="success" filled>
+      <Card variant="success" appearance="filled">
         <CardBody>success filled</CardBody>
       </Card>
       <Card variant="danger" bordered>
@@ -91,11 +115,7 @@ export const Variants: Story = {
 export const ConImagen: Story = {
   render: () => (
     <Card style={{ maxWidth: 320 }} elevated>
-      <CardImage
-        src="https://placehold.co/600x300/png"
-        alt="Placeholder"
-        top
-      />
+      <CardImage src={demoImage} alt="Decorativa" top />
       <CardBody>
         <strong>Card con imagen</strong>
         <p>La imagen `top` se ancla a las esquinas superiores.</p>
@@ -105,6 +125,14 @@ export const ConImagen: Story = {
 };
 
 export const Interactiva: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Cuando `interactive` + `role=\"button\"` + `onClick` están presentes, la card activa **Enter / Space** automáticamente como un `<button>` nativo. Sigue siendo el consumer quien decide si la card se comporta como botón (tu `tabIndex={0}` y tu `aria-label`).",
+      },
+    },
+  },
   render: () => (
     <Card
       interactive
@@ -117,7 +145,7 @@ export const Interactiva: Story = {
         // demo
       }}
     >
-      <CardBody>Hover y click me. Es focusable por teclado.</CardBody>
+      <CardBody>Click, Enter o Space para activar. Es focusable por teclado.</CardBody>
     </Card>
   ),
 };

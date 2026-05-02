@@ -9,26 +9,24 @@ const meta = {
     docs: {
       description: {
         component:
-          "Botón base del design system. 9 variantes de color × 5 tamaños, soporte de estado `loading`, modo `block` (ancho completo) y modo `icon` (cuadrado).",
+          "Botón base del design system. **API en dos ejes ortogonales**: `variant` (color semántico, 6 opciones) × `appearance` (estilo visual: `solid`/`outline`/`ghost`/`link`). 5 tamaños, estado `loading`, modo `block` (ancho completo) y modo `icon` (cuadrado).",
       },
     },
   },
   argTypes: {
     variant: {
-      description: "Variante de color/estilo. Cada una mapea a `.ig-btn-<variant>`.",
+      description:
+        "Color semántico. `appearance=\"solid\"` → `.ig-btn-<variant>`; combinado con `outline`/`ghost` → `.ig-btn-<appearance>-<variant>`.",
       control: "select",
-      options: [
-        "brand",
-        "secondary",
-        "success",
-        "warning",
-        "danger",
-        "info",
-        "outline",
-        "ghost",
-        "link",
-      ],
+      options: ["brand", "secondary", "success", "warning", "danger", "info"],
       table: { defaultValue: { summary: "brand" } },
+    },
+    appearance: {
+      description:
+        "Apariencia visual. `solid` (fondo color), `outline` (borde + transparente), `ghost` (sin borde), `link` (aspecto de enlace).",
+      control: "select",
+      options: ["solid", "outline", "ghost", "link"],
+      table: { defaultValue: { summary: "solid" } },
     },
     size: {
       description: "Tamaño. `md` no añade clase modificadora.",
@@ -48,13 +46,6 @@ const meta = {
       description: "Botón cuadrado solo-icono.",
       control: "boolean",
     },
-    appearance: {
-      description:
-        "Apariencia (solo cuando `variant` es color). Combina con la variant para producir `ig-btn-outline-<variant>` o `ig-btn-ghost-<variant>`.",
-      control: "select",
-      options: ["solid", "outline", "ghost"],
-      table: { defaultValue: { summary: "solid" } },
-    },
     disabled: { control: "boolean" },
     onClick: { action: "click" },
   },
@@ -69,10 +60,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Variantes: Story = {
   args: { children: undefined },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Las 6 variantes semánticas con `appearance=\"solid\"` (default).",
+      },
+    },
+  },
   render: () => (
     <div className="ig-flex ig-flex-wrap ig-gap-3">
       <Button variant="brand">Brand</Button>
@@ -81,9 +80,6 @@ export const Variantes: Story = {
       <Button variant="warning">Warning</Button>
       <Button variant="danger">Danger</Button>
       <Button variant="info">Info</Button>
-      <Button variant="outline">Outline</Button>
-      <Button variant="ghost">Ghost</Button>
-      <Button variant="link">Link</Button>
     </div>
   ),
 };
@@ -160,6 +156,26 @@ export const AppearanceGhost: Story = {
       <Button variant="warning" appearance="ghost">Warning</Button>
       <Button variant="danger" appearance="ghost">Danger</Button>
       <Button variant="info" appearance="ghost">Info</Button>
+    </div>
+  ),
+};
+
+export const AppearanceLink: Story = {
+  args: { children: undefined },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`appearance=\"link\"` aplica `.ig-btn-link` (aspecto de enlace de texto). El `variant` se ignora porque la clase es plana.",
+      },
+    },
+  },
+  render: () => (
+    <div className="ig-flex ig-flex-wrap ig-gap-3">
+      <Button appearance="link">Saber más</Button>
+      <Button appearance="link" disabled>
+        Disabled link
+      </Button>
     </div>
   ),
 };

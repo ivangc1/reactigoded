@@ -106,15 +106,23 @@ describe("Button", () => {
     );
   });
 
-  it("appearance se ignora cuando variant ya es plano (outline/ghost/link)", () => {
+  it("appearance=link ignora variant y aplica ig-btn-link", () => {
     render(
-      <Button variant="outline" appearance="ghost">
-        Plano
+      <Button variant="danger" appearance="link">
+        Saber más
       </Button>,
     );
-    const btn = screen.getByRole("button", { name: "Plano" });
-    // Usa ig-btn-outline plano, no ig-btn-ghost-outline (sin sentido).
-    expect(btn).toHaveClass("ig-btn", "ig-btn-outline");
-    expect(btn).not.toHaveClass("ig-btn-ghost-outline");
+    const btn = screen.getByRole("button", { name: "Saber más" });
+    expect(btn).toHaveClass("ig-btn", "ig-btn-link");
+    expect(btn).not.toHaveClass("ig-btn-danger");
+    expect(btn).not.toHaveClass("ig-btn-outline-danger");
+  });
+
+  it("appearance=outline sin variant explícito usa el default brand", () => {
+    render(<Button appearance="outline">Outline brand</Button>);
+    expect(screen.getByRole("button", { name: "Outline brand" })).toHaveClass(
+      "ig-btn",
+      "ig-btn-outline-brand",
+    );
   });
 });

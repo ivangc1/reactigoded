@@ -36,19 +36,19 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: 320 }}>
+      <div className="ig-story-stack ig-story-stack--md">
         <Story />
       </div>
     ),
   ],
 };
 
-export const Variants: Story = {
+export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 12, width: 320 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Progress value={20} variant="brand" />
       <Progress value={40} variant="success" />
       <Progress value={60} variant="warning" />
@@ -58,9 +58,9 @@ export const Variants: Story = {
   ),
 };
 
-export const Sizes: Story = {
+export const Tamaños: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 12, width: 320 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Progress value={50} size="sm" variant="brand" />
       <Progress value={50} size="md" variant="brand" />
       <Progress value={50} size="lg" variant="brand" />
@@ -72,7 +72,7 @@ export const Indeterminate: Story = {
   args: { indeterminate: true, variant: "brand" },
   decorators: [
     (Story) => (
-      <div style={{ width: 320 }}>
+      <div className="ig-story-stack ig-story-stack--md">
         <Story />
       </div>
     ),
@@ -83,7 +83,7 @@ export const ConLabelCustom: Story = {
   args: { value: 70, ariaLabel: "Subiendo archivo (70%)" },
   decorators: [
     (Story) => (
-      <div style={{ width: 320 }}>
+      <div className="ig-story-stack ig-story-stack--md">
         <Story />
       </div>
     ),

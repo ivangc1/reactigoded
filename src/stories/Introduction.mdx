@@ -25,12 +25,20 @@ npm install reactigoded
 ### 1. Importa los estilos una sola vez en tu app
 
 ```tsx
-// _app.tsx, layout.tsx, main.tsx... una sola vez
-import "reactigoded/styles/all.css";
+// _app.tsx, layout.tsx, main.tsx… una sola vez.
+// Mínimo necesario para que los componentes se vean:
+import "reactigoded/styles/design.css";
 
-// O por separado si prefieres dividir:
-// import "reactigoded/styles/design.css";
-// import "reactigoded/styles/state.css";
+// Opcional: estilos por defecto para HTML nativo (h1-h6, p, a, table…).
+// NO lo importes si ya usas Tailwind preflight, Bootstrap reboot u otro reset.
+import "reactigoded/styles/reset.css";
+
+// Opcional: utilities pseudo-class (`hover:ig-bg-brand`, `focus:…`, etc.).
+// 7.1 MB sin gzip — solo si usas las utilities directamente en HTML.
+import "reactigoded/styles/state.css";
+
+// Atajo: los 3 vía @import (sin duplicar bytes).
+// import "reactigoded/styles/all.css";
 ```
 
 ### 2. Usa los componentes

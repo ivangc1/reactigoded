@@ -36,31 +36,68 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Iconos SVG inline (16×16, currentColor) — sin emojis para que el catálogo se
+// vea igual en cualquier SO/navegador.
+const Icon = ({
+  d,
+  size = 18,
+}: {
+  d: string;
+  size?: number;
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.75"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d={d} />
+  </svg>
+);
+
+const I = {
+  star: <Icon d="M12 3l2.7 6 6.3.6-4.8 4.3 1.5 6.1L12 17l-5.7 3 1.5-6.1L3 9.6 9.3 9z" />,
+  home: <Icon d="M3 11l9-8 9 8M5 9.5V21h14V9.5" />,
+  folder: <Icon d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />,
+  users: <Icon d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />,
+  plug: <Icon d="M9 7V3M15 7V3M5 11h14v3a7 7 0 0 1-14 0v-3zM12 21v-3" />,
+  chart: <Icon d="M3 21h18M6 17V9M12 17V5M18 17v-6" />,
+  settings: <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />,
+  bolt: <Icon d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />,
+  plus: <Icon d="M12 5v14M5 12h14" />,
+  upload: <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />,
+  refresh: <Icon d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />,
+};
+
 const Demo = () => (
   <>
-    <SidebarHeader icon={<span style={{ fontSize: 22 }}>🌟</span>}>
-      Mi App
-    </SidebarHeader>
+    <SidebarHeader icon={I.star}>Mi App</SidebarHeader>
     <SidebarNav>
       <SidebarSection>Principal</SidebarSection>
-      <SidebarItem href="#inicio" icon="🏠" active>
+      <SidebarItem href="#inicio" icon={I.home} active>
         Inicio
       </SidebarItem>
-      <SidebarItem href="#proyectos" icon="📁">
+      <SidebarItem href="#proyectos" icon={I.folder}>
         Proyectos
       </SidebarItem>
-      <SidebarItem href="#equipo" icon="👥">
+      <SidebarItem href="#equipo" icon={I.users}>
         Equipo
       </SidebarItem>
       <SidebarDivider />
       <SidebarSection>Herramientas</SidebarSection>
-      <SidebarItem href="#integraciones" icon="🔌">
+      <SidebarItem href="#integraciones" icon={I.plug}>
         Integraciones
       </SidebarItem>
-      <SidebarItem href="#informes" icon="📊">
+      <SidebarItem href="#informes" icon={I.chart}>
         Informes
       </SidebarItem>
-      <SidebarItem href="#ajustes" icon="⚙️">
+      <SidebarItem href="#ajustes" icon={I.settings}>
         Ajustes
       </SidebarItem>
     </SidebarNav>
@@ -70,13 +107,13 @@ const Demo = () => (
   </>
 );
 
-export const Default: Story = {
+export const PorDefecto: Story = {
   render: (args) => (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="ig-story-shell">
       <Sidebar {...args}>
         <Demo />
       </Sidebar>
-      <main style={{ flex: 1, padding: 24 }}>
+      <main className="ig-story-shell__main">
         <h2>Contenido principal</h2>
         <p>La sidebar arranca expandida. Pulsa ☰ para colapsar.</p>
       </main>
@@ -87,11 +124,11 @@ export const Default: Story = {
 export const Colapsada: Story = {
   args: { defaultCollapsed: true },
   render: (args) => (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="ig-story-shell">
       <Sidebar {...args}>
         <Demo />
       </Sidebar>
-      <main style={{ flex: 1, padding: 24 }}>
+      <main className="ig-story-shell__main">
         <h2>Modo "rail"</h2>
         <p>Solo iconos visibles. Pulsa ☰ para expandir.</p>
       </main>
@@ -112,16 +149,16 @@ export const Controlled: Story = {
     function ControlledDemo() {
       const [collapsed, setCollapsed] = useState(false);
       return (
-        <div style={{ display: "flex", height: "100vh" }}>
+        <div className="ig-story-shell">
           <Sidebar collapsed={collapsed} onCollapsedChange={setCollapsed}>
             <Demo />
           </Sidebar>
-          <main style={{ flex: 1, padding: 24, display: "grid", gap: 12 }}>
+          <main className="ig-story-shell__main">
             <h2>Sidebar controlado</h2>
             <p>
               Estado actual: <strong>{collapsed ? "colapsada" : "expandida"}</strong>
             </p>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="ig-story-row ig-story-row--gap-sm">
               <Button onClick={() => { setCollapsed(false); }}>Expandir</Button>
               <Button
                 variant="secondary"
@@ -140,21 +177,19 @@ export const Controlled: Story = {
 
 export const ConBotones: Story = {
   render: () => (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="ig-story-shell">
       <Sidebar>
-        <SidebarHeader icon={<span style={{ fontSize: 22 }}>⚡</span>}>
-          Acciones
-        </SidebarHeader>
+        <SidebarHeader icon={I.bolt}>Acciones</SidebarHeader>
         <SidebarNav>
-          <SidebarItem icon="➕">Nuevo proyecto</SidebarItem>
-          <SidebarItem icon="📤">Importar</SidebarItem>
-          <SidebarItem icon="🔄">Sincronizar</SidebarItem>
+          <SidebarItem icon={I.plus}>Nuevo proyecto</SidebarItem>
+          <SidebarItem icon={I.upload}>Importar</SidebarItem>
+          <SidebarItem icon={I.refresh}>Sincronizar</SidebarItem>
         </SidebarNav>
         <SidebarFooter>
           <SidebarToggle />
         </SidebarFooter>
       </Sidebar>
-      <main style={{ flex: 1, padding: 24 }}>
+      <main className="ig-story-shell__main">
         <h2>Items como botones</h2>
         <p>Los items sin <code>href</code> renderizan un <code>&lt;button&gt;</code>.</p>
       </main>
@@ -172,11 +207,11 @@ export const ToggleInteraction: Story = {
     },
   },
   render: () => (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="ig-story-shell">
       <Sidebar>
         <SidebarHeader>App</SidebarHeader>
         <SidebarNav>
-          <SidebarItem href="#" icon="🏠">
+          <SidebarItem href="#" icon={I.home}>
             Inicio
           </SidebarItem>
         </SidebarNav>
@@ -184,7 +219,7 @@ export const ToggleInteraction: Story = {
           <SidebarToggle />
         </SidebarFooter>
       </Sidebar>
-      <main style={{ flex: 1, padding: 24 }}>contenido</main>
+      <main className="ig-story-shell__main">Contenido</main>
     </div>
   ),
   play: async ({ canvasElement }) => {

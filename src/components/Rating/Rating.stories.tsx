@@ -27,11 +27,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Tamaños: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div className="ig-story-stack ig-story-stack--full">
       <Rating size="sm" value={4} readOnly ariaLabel="Pequeño" />
       <Rating size="md" value={4} readOnly ariaLabel="Mediano" />
       <Rating size="lg" value={4} readOnly ariaLabel="Grande" />

@@ -38,19 +38,22 @@ const meta = {
     placement: "top",
     children: <Button>Hover me</Button>,
   },
+  // El tooltip flota fuera del trigger; necesita espacio en todos los lados
+  // para no recortarse contra el borde del iframe. `ig-story-frame` aporta
+  // padding generoso + min-height + un marco discreto.
+  decorators: [
+    (Story) => (
+      <div className="ig-story-frame">
+        <Story />
+      </div>
+    ),
+  ],
 } satisfies Meta<typeof Tooltip>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ padding: 60 }}>
-        <Story />
-      </div>
-    ),
-  ],
+export const PorDefecto: Story = {
   render: (args) => (
     <Tooltip {...args}>
       <Button>Hover me</Button>
@@ -61,13 +64,13 @@ export const Default: Story = {
 export const Placements: Story = {
   decorators: [
     (Story) => (
-      <div style={{ padding: 80 }}>
+      <div className="ig-story-frame ig-story-frame--lg">
         <Story />
       </div>
     ),
   ],
   render: () => (
-    <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+    <div className="ig-story-row ig-story-row--gap-lg">
       <Tooltip text="Arriba" placement="top">
         <Button variant="secondary">top</Button>
       </Tooltip>
@@ -84,16 +87,9 @@ export const Placements: Story = {
   ),
 };
 
-export const Variants: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ padding: 60 }}>
-        <Story />
-      </div>
-    ),
-  ],
+export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "flex", gap: 16 }}>
+    <div className="ig-story-row">
       <Tooltip text="Brand" variant="brand">
         <Button>brand</Button>
       </Tooltip>
@@ -108,7 +104,6 @@ export const Variants: Story = {
 };
 
 export const A11yInteraction: Story = {
-  decorators: [(Story) => <div style={{ padding: 60 }}><Story /></div>],
   parameters: {
     docs: {
       description: {
@@ -119,7 +114,9 @@ export const A11yInteraction: Story = {
   },
   render: () => (
     <Tooltip text="Eliminar elemento" placement="top">
-      <Button icon aria-label="Eliminar">×</Button>
+      <Button icon aria-label="Eliminar">
+        ×
+      </Button>
     </Tooltip>
   ),
   play: async ({ canvasElement }) => {

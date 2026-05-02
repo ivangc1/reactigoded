@@ -21,7 +21,7 @@ const meta = {
     variant: {
       control: "select",
       options: [
-        "default",
+        "neutral",
         "success",
         "warning",
         "danger",
@@ -33,7 +33,7 @@ const meta = {
     dismissible: { control: "boolean" },
   },
   args: {
-    variant: "default",
+    variant: "neutral",
     title: "Guardado",
     message: "Los cambios se guardaron correctamente.",
     dismissible: true,
@@ -43,7 +43,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Success: Story = { args: { variant: "success" } };
 export const Warning: Story = {
@@ -58,9 +58,9 @@ export const Info: Story = {
 
 export const TodasLasVariantes: Story = {
   render: () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="ig-story-stack ig-story-stack--lg">
       {(
-        ["default", "success", "warning", "danger", "info", "brand", "secondary"] as const
+        ["neutral", "success", "warning", "danger", "info", "brand", "secondary"] as const
       ).map((v) => (
         <Toast
           key={v}
@@ -127,9 +127,9 @@ export const FireInteraction: Story = {
 function Demo() {
   const { toast, dismissAll } = useToast();
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-      <Button onClick={() => toast({ title: "Hola", variant: "default" })}>
-        Default
+    <div className="ig-story-row ig-story-row--gap-sm">
+      <Button onClick={() => toast({ title: "Hola", variant: "neutral" })}>
+        Neutral
       </Button>
       <Button
         variant="success"
@@ -173,7 +173,7 @@ function PositionsDemo() {
     "bottom-center",
   ];
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+    <div className="ig-story-row ig-story-row--gap-sm">
       {positions.map((p) => (
         <Button
           key={p}

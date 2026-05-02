@@ -1,0 +1,106 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Fundamentos/Contraste" />
+
+# Contraste y accesibilidad
+
+Todos los pares texto+fondo del DS cumplen **WCAG AA** (≥4.5:1 para texto
+normal, ≥3:1 para texto grande/elementos UI). El contraste lo verifica
+`axe-core` en cada story de Storybook (las violaciones rompen la build).
+
+> El comentario histórico de "WCAG AAA" en `igoded-design.css` se corrigió a
+> AA en `1.0.0-beta.1`. La keyword en `package.json` también es `wcag-aa`. Si
+> ves "AAA" en algún sitio, es legacy.
+
+## Pares de texto + fondo
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))",
+    gap: "1rem",
+    margin: "1.5rem 0",
+  }}
+>
+  {[
+    { fg: "--ig-text-heading", bg: "--ig-bg-base", ratio: "≥7:1", role: "heading" },
+    { fg: "--ig-text-body", bg: "--ig-bg-base", ratio: "≥7:1", role: "body" },
+    { fg: "--ig-text-body", bg: "--ig-bg-surface", ratio: "≥6:1", role: "body en card" },
+    { fg: "--ig-text-muted", bg: "--ig-bg-base", ratio: "≥4.5:1", role: "muted (AA)" },
+    { fg: "--ig-text-muted", bg: "--ig-bg-muted", ratio: "≥4.5:1", role: "muted en bg-muted" },
+    { fg: "--ig-text-on-vitreus", bg: "--ig-vitreus", ratio: "≥7:1", role: "sobre brand" },
+    { fg: "--ig-text-on-laurus", bg: "--ig-laurus", ratio: "≥7:1", role: "sobre success" },
+    { fg: "--ig-text-on-rutilus", bg: "--ig-rutilus", ratio: "≥7:1", role: "sobre warning" },
+    { fg: "--ig-text-on-malum", bg: "--ig-malum", ratio: "≥7:1", role: "sobre danger" },
+  ].map((p) => (
+    <div
+      key={`${p.fg}-${p.bg}`}
+      style={{
+        border: "1px solid var(--ig-border-subtle)",
+        borderRadius: "var(--ig-rounded-md)",
+        overflow: "hidden",
+        fontFamily: "var(--ig-font-mono)",
+        fontSize: 12,
+      }}
+    >
+      <div
+        style={{
+          background: `var(${p.bg})`,
+          color: `var(${p.fg})`,
+          padding: "1rem",
+          display: "grid",
+          gap: "0.25rem",
+        }}
+      >
+        <strong style={{ fontFamily: "var(--ig-font-heading)", fontSize: 16 }}>
+          Aa
+        </strong>
+        <span style={{ fontFamily: "var(--ig-font-base)", fontSize: 13 }}>
+          The quick brown fox
+        </span>
+      </div>
+      <div style={{ padding: "0.5rem 0.75rem", background: "var(--ig-bg-surface)" }}>
+        <code>{p.fg}</code>
+        <br />
+        <code>on {p.bg}</code>
+        <br />
+        <span style={{ color: "var(--ig-text-muted)" }}>
+          {p.ratio} · {p.role}
+        </span>
+      </div>
+    </div>
+  ))}
+</div>
+
+## Garantías a11y verificadas en CI
+
+- **`prefers-reduced-motion`**: regla universal en `igoded-design.css` que
+  reduce a `0.01ms` la duración de animaciones y transiciones para usuarios
+  con motion sensitivity. Modal `<dialog>` tiene override específico que
+  cancela `animation` también.
+- **`prefers-contrast: more`**: bordes refuerzan a 2px (`.ig-btn`, `.ig-input`,
+  `.ig-card`), `currentColor` en bordes default/subtle.
+- **`forced-colors: active` (Windows High Contrast Mode)**: focus-visible usa
+  `Highlight` system color; bordes usan `currentColor`.
+- **`axe-core` en cada story**: 175 stories pasan auditoría completa de a11y
+  (incluye violaciones de contraste — las atrapa el `addon-a11y` con `test:
+  "error"`).
+
+## Override por consumer
+
+Si tu marca exige contrastes mayores (AAA estricto) o cambias paleta,
+sobreescribe los tokens `--ig-text-*` en `:root`:
+
+```css
+:root {
+  /* Forzar texto muted más oscuro = mejor contraste sobre bg-muted. */
+  --ig-text-muted: #4a4452;       /* light theme */
+}
+
+[data-theme="dark"] {
+  --ig-text-muted: #9aafaf;       /* dark theme */
+}
+```
+
+Mantén siempre el ratio 4.5:1 mínimo (mide con
+[contrast-ratio.com](https://contrast-ratio.com) o las DevTools de Chrome).

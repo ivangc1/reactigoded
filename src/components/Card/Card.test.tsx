@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import {
   Card,
   CardHeader,
@@ -26,14 +27,25 @@ describe("Card", () => {
     expect(screen.getByTestId("c")).not.toHaveClass("ig-card-brand-filled");
   });
 
-  it("aplica variant filled con la clase correcta", () => {
+  it("aplica appearance=filled con la clase correcta", () => {
     render(
-      <Card variant="success" filled data-testid="c">
+      <Card variant="success" appearance="filled" data-testid="c">
         x
       </Card>,
     );
     expect(screen.getByTestId("c")).toHaveClass("ig-card-success-filled");
     expect(screen.getByTestId("c")).not.toHaveClass("ig-card-success");
+  });
+
+  it("appearance se ignora si no hay variant (card plana)", () => {
+    render(
+      <Card appearance="filled" data-testid="c">
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el).toHaveClass("ig-card");
+    expect(el.className).not.toMatch(/ig-card-(brand|secondary|success|warning|danger|info)/);
   });
 
   it("acumula modificadores bordered/elevated/glass/interactive", () => {
@@ -55,6 +67,120 @@ describe("Card", () => {
     const ref = createRef<HTMLDivElement>();
     render(<Card ref={ref}>x</Card>);
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
+  });
+});
+
+describe("Card — keyboard activation cuando interactive + role=button", () => {
+  it("Enter dispara onClick si interactive + role=button", async () => {
+    const onClick = vi.fn();
+    render(
+      <Card
+        interactive
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const card = screen.getByTestId("c");
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Space dispara onClick si interactive + role=button", async () => {
+    const onClick = vi.fn();
+    render(
+      <Card
+        interactive
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const card = screen.getByTestId("c");
+    card.focus();
+    await userEvent.keyboard(" ");
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("NO activa por teclado si falta role=button", async () => {
+    const onClick = vi.fn();
+    render(
+      <Card interactive tabIndex={0} onClick={onClick} data-testid="c">
+        x
+      </Card>,
+    );
+    const card = screen.getByTestId("c");
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("NO activa por teclado si no es interactive", async () => {
+    const onClick = vi.fn();
+    render(
+      <Card role="button" tabIndex={0} onClick={onClick} data-testid="c">
+        x
+      </Card>,
+    );
+    const card = screen.getByTestId("c");
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("encadena onKeyDown del consumer antes del handler interno", async () => {
+    const order: string[] = [];
+    const onKeyDown = vi.fn(() => order.push("consumer"));
+    const onClick = vi.fn(() => order.push("click"));
+    render(
+      <Card
+        interactive
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const card = screen.getByTestId("c");
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["consumer", "click"]);
+  });
+
+  it("preventDefault en onKeyDown del consumer cancela la activación interna", async () => {
+    const onKeyDown = vi.fn((e: React.KeyboardEvent) => {
+      e.preventDefault();
+    });
+    const onClick = vi.fn();
+    render(
+      <Card
+        interactive
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const card = screen.getByTestId("c");
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onKeyDown).toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
 

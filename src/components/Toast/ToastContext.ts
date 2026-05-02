@@ -6,7 +6,7 @@ export interface ToastOptions {
   title?: ReactNode;
   /** Mensaje secundario. */
   message?: ReactNode;
-  /** Variant semántico. Por defecto `"default"`. */
+  /** Variant semántico. Por defecto `"neutral"`. */
   variant?: ToastVariant;
   /**
    * Tiempo en ms hasta auto-dismiss. `0` desactiva el auto-dismiss (queda

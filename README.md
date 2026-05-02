@@ -2,7 +2,7 @@
 
 Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre el CSS utility-first state-driven (`igoded-design.css` +
-`igoded-state-css.css`).
+`igoded-reset.css` opt-in + `igoded-state-css.css`).
 
 > **Estado**: `1.0.0-beta.0` — reescritura completa, 0 deprecaciones, listo
 > para consumir como dependencia.
@@ -19,23 +19,36 @@ pnpm add reactigoded
 
 ## CSS imports
 
-Tres entradas, eliges qué cargar:
+Cinco entradas, eliges qué cargar:
 
 ```ts
-// Recomendado: solo el CSS de componentes (~470 KB sin gzip)
+// Solo tokens (--ig-*) + keyframes (~80 KB). Útil si construyes tu propia
+// capa de componentes encima del DS sin querer cargar las clases `.ig-*`.
+import "reactigoded/styles/tokens.css";
+
+// Tokens (vía @import interno) + componentes (~470 KB). Lo habitual.
 import "reactigoded/styles/design.css";
 
+// Opcional: estilos por defecto para HTML nativo (h1-h6, p, a, button, input,
+// table, code, blockquote…). Útil si NO usas Tailwind/Bootstrap. **No** lo
+// importes si ya tienes otro reset, choca por especificidad.
+import "reactigoded/styles/reset.css";
+
 // Opcional: utilities pseudo-class (hover:ig-bg-brand, focus:..., etc.)
-// 7.1 MB sin gzip — solo si usas las utilities directamente en HTML
+// 7.1 MB sin gzip — solo si usas las utilities directamente en HTML.
 import "reactigoded/styles/state.css";
 
-// Atajo: importa los dos vía @import (sin duplicar bytes)
+// Atajo: importa design + reset + state vía @import (sin duplicar bytes).
 import "reactigoded/styles/all.css";
 ```
 
 > El `<dialog>` de `<Modal>` y los componentes con flex/transition usan
-> `var(--ig-*)` definidos en `design.css`. **Si solo importas `state.css`,
-> los componentes no tendrán estilo.**
+> `var(--ig-*)` definidos en `design.css`. **Si solo importas `state.css` o
+> `reset.css`, los componentes no tendrán estilo.**
+
+> El `reset.css` se separó del `design.css` en `1.0.0-beta.1` (antes estaba
+> activo dentro de `design.css`). Si actualizas desde una beta anterior y
+> notas que tu HTML nativo perdió estilos, importa `reset.css`.
 
 ## Uso
 
@@ -183,7 +196,7 @@ src/
 ├── components/         # 32 carpetas (1 por componente raíz)
 ├── hooks/              # useTheme
 ├── utils/              # cn (wrapper de clsx)
-├── styles/             # igoded-design.css + igoded-state-css.css
+├── styles/             # igoded-design.css + igoded-reset.css + igoded-state-css.css
 └── index.ts            # entry del paquete
 scripts/
 └── strip-orphan-css.mjs  # limpia utilities de state-css apuntando a tokens eliminados

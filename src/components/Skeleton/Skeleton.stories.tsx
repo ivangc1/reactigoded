@@ -24,16 +24,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const PorDefecto: Story = {};
 
 export const Variantes: Story = {
   render: () => (
-    <div style={{ display: "grid", gap: 16, maxWidth: 360 }}>
+    <div className="ig-story-stack ig-story-stack--md">
       <Skeleton variant="title" />
       <Skeleton variant="text" />
       <Skeleton variant="text" style={{ width: "80%" }} />
       <Skeleton variant="text" style={{ width: "60%" }} />
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+      <div className="ig-story-row">
         <Skeleton variant="avatar" />
         <div style={{ flex: 1 }}>
           <Skeleton variant="text" />
