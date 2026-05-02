@@ -94,7 +94,9 @@
     "verify": "npm run verify:unit && npm run verify:storybook && npm run verify:size",
     "size": "size-limit",
     "clean": "rm -rf dist storybook-static coverage node_modules/.vite",
-    "prepublishOnly": "npm run verify"
+    "prepublishOnly": "npm run verify",
+    "chromatic": "chromatic --exit-zero-on-changes",
+    "chromatic:ci": "chromatic --exit-once-uploaded"
   },
   "size-limit": [
     {
