@@ -7,6 +7,14 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed (BREAKING)
+- **`engines.node`**: `>=20` → `>=22`. Node 20 (Iron) llegó a EOL el
+  2026-04-30 y ya no recibe parches de seguridad. El VPS de despliegue
+  (Debian 13) corre Node 22.22 LTS (Jod), que pasa a ser el floor
+  soportado oficialmente. Consumers en Node 20 verán un `EBADENGINE`
+  warning de npm pero el paquete sigue funcionando — el bump es
+  declarativo, no rompe runtime.
+
 ## [1.0.0-beta.4] — 2026-05-02
 
 Última pasada de pulido pre-`1.0.0`. Cierra los hallazgos de la auditoría
