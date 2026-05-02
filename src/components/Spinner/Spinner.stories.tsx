@@ -24,7 +24,7 @@ const meta = {
       options: ["xs", "sm", "md", "lg", "xl"],
       table: { defaultValue: { summary: "md" } },
     },
-    ariaLabel: {
+    "aria-label": {
       description: "Texto accesible para lectores de pantalla (`aria-label`).",
       control: "text",
       table: { defaultValue: { summary: "Cargando…" } },
@@ -67,5 +67,5 @@ export const Tamaños: Story = {
 };
 
 export const LabelPersonalizado: Story = {
-  args: { ariaLabel: "Procesando pago, espera un momento…" },
+  args: { "aria-label": "Procesando pago, espera un momento…" },
 };

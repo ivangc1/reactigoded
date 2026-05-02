@@ -11,8 +11,6 @@ import { cn } from "@/utils/cn";
 export interface BreadcrumbProps extends HTMLAttributes<HTMLElement> {
   /** Separador entre items. Por defecto `"/"`. Puede ser nodo (icono). */
   separator?: ReactNode;
-  /** Texto a11y para el `<nav>`. */
-  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -25,19 +23,20 @@ export interface BreadcrumbProps extends HTMLAttributes<HTMLElement> {
  */
 export function Breadcrumb({
   separator = "/",
-  ariaLabel = "Migas de pan",
   className,
   children,
   ref,
   ...rest
 }: BreadcrumbProps) {
   const items = Children.toArray(children).filter(isValidElement);
+  // 1.0.0-beta.4: aria-label del rest (HTML std).
+  const { "aria-label": ariaLabelOverride, ...navRest } = rest;
 
   return (
     <nav
-      {...rest}
+      {...navRest}
       ref={ref}
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Migas de pan"}
       className={cn("ig-breadcrumb", className)}
     >
       {items.map((item, idx) => (

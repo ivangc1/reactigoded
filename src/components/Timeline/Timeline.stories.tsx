@@ -18,7 +18,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {
-  args: { ariaLabel: "Historial de proyecto" },
+  args: { "aria-label": "Historial de proyecto" },
   render: (args) => (
     <Timeline {...args}>
       <TimelineItem
@@ -50,7 +50,7 @@ export const PorDefecto: Story = {
 
 export const ConIconosEnElPunto: Story = {
   render: () => (
-    <Timeline ariaLabel="Pasos">
+    <Timeline aria-label="Pasos">
       <TimelineItem
         date="Paso 1"
         title="Configurar entorno"
@@ -84,7 +84,7 @@ export const ConIconosEnElPunto: Story = {
 
 export const ContenidoCustom: Story = {
   render: () => (
-    <Timeline ariaLabel="Versiones">
+    <Timeline aria-label="Versiones">
       <TimelineItem dotVariant="brand">
         <div className="ig-timeline-date">v1.2.0 — 20 Ene 2025</div>
         <div className="ig-timeline-title">Soporte multi-idioma</div>
@@ -103,7 +103,7 @@ export const ContenidoCustom: Story = {
 
 export const TodasLasVariantes: Story = {
   render: () => (
-    <Timeline ariaLabel="Variantes">
+    <Timeline aria-label="Variantes">
       <TimelineItem date="default" title="Default" dotVariant="default" />
       <TimelineItem date="brand" title="Brand" dotVariant="brand" />
       <TimelineItem date="secondary" title="Secondary" dotVariant="secondary" />

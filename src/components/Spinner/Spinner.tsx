@@ -16,36 +16,37 @@ export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: SpinnerVariant;
   /** Tamaño. `"md"` por defecto. */
   size?: SpinnerSize;
-  /** Texto accesible para lectores de pantalla (`aria-label` del status). */
-  ariaLabel?: string;
   ref?: Ref<HTMLSpanElement>;
 }
 
 /**
  * Spinner — indicador de carga circular animado.
  *
- * Aplica `role="status"` y `aria-label` para que los lectores de pantalla
- * anuncien el estado de carga.
+ * Aplica `role="status"` y `aria-label` (default "Cargando…") para que los
+ * lectores de pantalla anuncien el estado de carga. Pasa `aria-label` para
+ * personalizar (i18n o contexto específico).
  *
  * @example
  * <Spinner />
  * <Spinner variant="success" size="lg" />
- * <Spinner ariaLabel="Procesando pago…" />
+ * <Spinner aria-label="Procesando pago…" />
  */
 export function Spinner({
   variant = "brand",
   size = "md",
-  ariaLabel = "Cargando…",
   className,
   ref,
   ...rest
 }: SpinnerProps) {
+  // 1.0.0-beta.4: aria-label se extrae del rest (HTML std). Antes existía
+  // una prop `ariaLabel` separada. Migration: rename ariaLabel→aria-label.
+  const { "aria-label": ariaLabelOverride, ...spanRest } = rest;
   return (
     <span
-      {...rest}
+      {...spanRest}
       ref={ref}
       role="status"
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Cargando…"}
       className={cn(
         "ig-spinner",
         `ig-spinner-${variant}`,

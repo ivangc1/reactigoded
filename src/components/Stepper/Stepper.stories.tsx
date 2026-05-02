@@ -18,12 +18,12 @@ const meta = {
   argTypes: {
     active: { control: { type: "number", min: 0 } },
     labeled: { control: "boolean" },
-    ariaLabel: { control: "text" },
+    "aria-label": { control: "text" },
   },
   args: {
     active: 1,
     labeled: false,
-    ariaLabel: "Checkout",
+    "aria-label": "Checkout",
     children: (
       <>
         <Step />
@@ -75,7 +75,7 @@ export const Interactivo: Story = {
       const total = 4;
       return (
         <div className="ig-story-stack ig-story-stack--full">
-          <Stepper active={active} labeled ariaLabel="Demo">
+          <Stepper active={active} labeled aria-label="Demo">
             <Step label="Inicio" />
             <Step label="Detalles" />
             <Step label="Revisión" />

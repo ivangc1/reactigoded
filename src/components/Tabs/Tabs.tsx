@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -82,29 +83,65 @@ export function Tabs({
     [isControlled, onValueChange],
   );
 
-  // Registro de Tabs montados. El primer Tab registrado, si todavía no hay
-  // selección efectiva, se auto-selecciona. Esto soluciona el caso edge de
-  // `<Tabs>` sin `defaultValue`: antes todos los tabs quedaban con
-  // `tabIndex=-1` y el grupo era inaccesible por teclado.
+  // Registro de Tabs montados. Resuelve dos casos edge sin pisar la
+  // intención del consumer:
+  //  (a) `<Tabs>` sin `defaultValue`/`value` → el primer Tab registrado se
+  //      auto-selecciona (el `internal` arrancó como "").
+  //  (b) `<Tabs defaultValue="missing">` → tras montar TODOS los Tabs, si
+  //      el internal actual no matchea ninguno, fallback al primero +
+  //      console.warn dev-only. Lo hacemos en un useEffect independiente
+  //      con timeout 0, no dentro del register, para que NO se dispare
+  //      durante la fase de registro tab-a-tab.
+  //  En modo controlled: warning sin auto-corregir.
   const registeredRef = useRef<string[]>([]);
+  const warnedRef = useRef(false);
+  const [registryVersion, setRegistryVersion] = useState(0);
+
   const register = useCallback((tabValue: string) => {
     if (!registeredRef.current.includes(tabValue)) {
       registeredRef.current.push(tabValue);
+      // Notifica al efecto de validación post-mount.
+      setRegistryVersion((v) => v + 1);
     }
-    // Auto-selección del primer Tab si nadie está seleccionado y estamos
-    // en modo uncontrolled.
-    if (!isControlled && internal === "" && registeredRef.current.length === 1) {
+    // Caso (a): auto-select inmediato si todavía no hay selección.
+    if (!isControlled && internal === "") {
       setInternal(tabValue);
     }
     return () => {
       registeredRef.current = registeredRef.current.filter(
         (v) => v !== tabValue,
       );
+      setRegistryVersion((v) => v + 1);
     };
-    // `internal` y `isControlled` se leen al efecto del Tab — no incluirlos
-    // como deps porque eso reejecutaría register en cada render del Tab.
+    // `internal`/`isControlled` se leen DENTRO del efecto del Tab, no en
+    // cada render del Tabs — no incluir como deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Validación post-mount para defaultValue/value inválido (caso b).
+  // Se ejecuta después de que los Tabs hayan registrado sus values,
+  // evitando falsos positivos durante el registro intermedio.
+  useEffect(() => {
+    if (registeredRef.current.length === 0) return;
+    const effective = isControlled ? value : internal;
+    if (effective === "") return; // caso (a) ya cubierto en register
+    if (registeredRef.current.includes(effective)) return;
+    const firstRegistered = registeredRef.current[0];
+    if (firstRegistered === undefined) return;
+    if (!warnedRef.current && import.meta.env.DEV) {
+      warnedRef.current = true;
+      const propName = isControlled ? "value" : "defaultValue";
+      const action = isControlled
+        ? "El tablist queda sin tab stop accesible. Pasa un value que coincida con un Tab montado."
+        : `Cayendo a "${firstRegistered}". Pasa un defaultValue que coincida con el value de un Tab.`;
+      console.warn(
+        `[reactigoded] <Tabs ${propName}="${effective}"> no matchea ningún <Tab>. ${action}`,
+      );
+    }
+    if (!isControlled) {
+      setInternal(firstRegistered);
+    }
+  }, [registryVersion, internal, value, isControlled]);
 
   const ctxValue = useMemo(
     () => ({ selected, setSelected, baseId, orientation, register }),

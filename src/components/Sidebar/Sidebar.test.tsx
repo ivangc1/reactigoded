@@ -38,7 +38,7 @@ describe("Sidebar — root", () => {
 
   it("aria-label custom", () => {
     render(
-      <Sidebar ariaLabel="Menú admin">
+      <Sidebar aria-label="Menú admin">
         <SidebarNav />
       </Sidebar>,
     );
@@ -171,7 +171,7 @@ describe("SidebarHeader / Divider / Section / Nav / Footer", () => {
   });
 
   it("Nav es un <nav> con aria-label custom", () => {
-    render(<SidebarNav ariaLabel="Admin">x</SidebarNav>);
+    render(<SidebarNav aria-label="Admin">x</SidebarNav>);
     expect(
       screen.getByRole("navigation", { name: /admin/i }),
     ).toHaveClass("ig-sidebar-nav");

@@ -94,6 +94,15 @@ export function Modal({
       closingFromSyncRef.current = true;
       dialog.close();
     }
+    // Cleanup: si el componente se desmonta entre `closingFromSyncRef=true`
+    // y el evento `close` nativo (ej. desmontaje rápido del padre, navegación
+    // SPA durante una animación de cierre), reseteamos la ref. Sin esto, en
+    // un escenario raro de re-mount + reuso de instancia React, el flag
+    // podría quedar stale. Estética: el state muere con el unmount, no es
+    // leak real, pero queda explícitamente correcto.
+    return () => {
+      closingFromSyncRef.current = false;
+    };
   }, [open]);
 
   // Bloquear ESC si closeOnEsc=false (el evento `cancel` precede al cierre).

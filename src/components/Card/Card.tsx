@@ -1,4 +1,5 @@
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
 
 export type CardVariant =
@@ -70,6 +71,23 @@ export function Card({
   ...rest
 }: CardProps) {
   const actsAsButton = interactive && role === "button" && Boolean(onClick);
+
+  // Dev-only warning: si un consumer pone `interactive` + `onClick` pero
+  // omite `role="button"`, la card NO activa por teclado (Enter/Space).
+  // Esto es probablemente un descuido. Avisamos UNA vez por instancia.
+  // Usamos `import.meta.env.DEV` (Vite-aware) en vez de `process.env.NODE_ENV`
+  // porque process no existe en navegadores reales (Storybook + Chromium).
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedRef.current) return;
+    if (interactive && Boolean(onClick) && role !== "button") {
+      warnedRef.current = true;
+      console.warn(
+        '[reactigoded] <Card interactive onClick={...}> sin role="button" no responde a Enter/Space por teclado. Añade role="button" + tabIndex={0} para a11y completa, o quita interactive si la card no es realmente accionable.',
+      );
+    }
+  }, [interactive, onClick, role]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event);

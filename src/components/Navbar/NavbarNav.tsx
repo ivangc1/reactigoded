@@ -2,25 +2,25 @@ import { type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface NavbarNavProps extends HTMLAttributes<HTMLElement> {
-  /** Etiqueta accesible del `<nav>`. */
-  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
 /**
- * NavbarNav — `<nav>` que contiene los `NavbarLink`s del navbar.
+ * NavbarNav — `<nav>` que contiene los `NavbarLink`s del navbar. `aria-label`
+ * por defecto "Principal"; sobreescribible vía atributo HTML estándar.
  */
 export function NavbarNav({
   className,
-  ariaLabel = "Principal",
   ref,
   ...rest
 }: NavbarNavProps) {
+  // 1.0.0-beta.4: aria-label del rest (HTML std).
+  const { "aria-label": ariaLabelOverride, ...navRest } = rest;
   return (
     <nav
-      {...rest}
+      {...navRest}
       ref={ref}
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Principal"}
       className={cn("ig-navbar-nav", className)}
     />
   );

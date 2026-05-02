@@ -3,12 +3,14 @@
 IGODED TOKENS — variables CSS del design system
 ═══════════════════════════════════════════════════════════════════════════════
 
-QUÉ CONTIENE: 100% variables CSS y declaraciones a nivel de "metadata":
+QUÉ CONTIENE: 100% variables CSS y keyframes:
 - Tokens (`--ig-*`): colores, fondos, textos, espaciado, tipografía,
   bordes, sombras, glows, glassmorphism, neumorphism, gradientes,
   transiciones, z-index, breakpoints, etc.
 - Keyframes (`@keyframes ig-*`) usados por las clases de animación.
-- `@font-face` (importa Electrolize / Saira / JetBrains Mono).
+- (Las fuentes Google Fonts vivían aquí antes de `1.0.0-beta.3`. Ahora
+  están en `igoded-fonts.css` como import opt-in para no meter request
+  remoto en cualquier consumer del paquete.)
 
 QUÉ NO CONTIENE — **cero selectores globales**:
 - `box-sizing: border-box` baseline → `igoded-base.css` (desde `1.0.0-beta.2`).
@@ -63,28 +65,30 @@ tipografía oficial.
 
 /*
 ═══════════════════════════════════════════════════════════════════════════════
-2. COLORES IGODED (FUNDUS + 6 CARDINALES)
+2. COLORES IGODED (FUNDUS + 7 CARDINALES)
 ═══════════════════════════════════════════════════════════════════════════════
 
-QUÉ ES: Sistema de 7 colores con nomenclatura latina. Cada color tiene dos
-variantes: -lux (para modo light) y -nox (para modo dark).
-Todos cumplen WCAG AA (≥4.5:1 texto normal, ≥3:1 UI/grandes).
+QUÉ ES: Sistema de 8 colores con nomenclatura latina (Fundus + 7 cardinales).
+Cada cardinal tiene dos variantes: -lux (para modo light) y -nox (para modo
+dark). Todos cumplen WCAG AA (≥4.5:1 texto normal, ≥3:1 UI/grandes).
 
 FUNDUS (Fondo):
   Base inmutable del sistema. Los otros colores se leen sobre él.
   - fundus-lux: #faf9fc — casi blanco con tinte violeta sutil
   - fundus-nox: #0c1515 — casi negro con tinte teal sutil
 
-LOS 6 COLORES:
+LOS 7 CARDINALES:
 ┌───────────┬─────────────┬─────────────────────────────────────────────────────┐
 │ Nombre    │ Significado │ Uso                                                 │
 ├───────────┼─────────────┼─────────────────────────────────────────────────────┤
 │ VITREUS   │ Vidrio      │ Marca, títulos, identidad. Transparencia y solidez. │
-│ AXIS      │ Eje         │ Enlaces, info. Dirección y movimiento.              │
+│ AXIS      │ Eje         │ Secondary, indigo. Dirección y movimiento.          │
 │ CINIS     │ Ceniza      │ Texto body. Residuo material neutro.                │
 │ RUTILUS   │ Resplandor  │ Warning. Luz cálida de aviso.                       │
 │ LAURUS    │ Laurel      │ Success. La planta de la victoria.                  │
 │ MALUM     │ Manzana/Mal │ Danger. El fruto del error.                         │
+│ CYANEUS   │ Cian        │ Info. Cian-azul propio (desde 1.0.0-beta.3, antes   │
+│           │             │ info era alias de axis y se confundía con secondary)│
 └───────────┴─────────────┴─────────────────────────────────────────────────────┘
 
 CÓMO FUNCIONAN EN LOS MODOS:

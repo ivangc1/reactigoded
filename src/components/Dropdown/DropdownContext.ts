@@ -19,6 +19,26 @@ export interface DropdownContextValue {
 
 export const DropdownContext = createContext<DropdownContextValue | null>(null);
 
+/**
+ * Hook que expone el contexto de un `<Dropdown>` (open, setOpen, ids para
+ * `aria-controls`/`aria-labelledby`, refs al trigger/menu, closeOnSelect).
+ * Lo usan internamente `DropdownTrigger`, `DropdownMenu` y `DropdownItem`.
+ * También útil si construyes tu propio item custom o quieres cerrar el
+ * dropdown desde código en respuesta a algún evento externo.
+ *
+ * @example
+ * function CustomItem() {
+ *   const { setOpen } = useDropdown();
+ *   const router = useRouter();
+ *   return (
+ *     <DropdownItem onClick={() => { router.push("/perfil"); setOpen(false); }}>
+ *       Ir a perfil
+ *     </DropdownItem>
+ *   );
+ * }
+ *
+ * @throws Error si se usa fuera de `<Dropdown>`.
+ */
 export function useDropdown(): DropdownContextValue {
   const ctx = useContext(DropdownContext);
   if (!ctx) {

@@ -21,8 +21,6 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   defaultActive?: number;
   /** Si true, usa el layout con labels debajo (`ig-stepper-labeled`). */
   labeled?: boolean;
-  /** Texto a11y para el wrapper. */
-  ariaLabel?: string;
   /** Una lista de `Step`. */
   children: ReactNode;
   ref?: Ref<HTMLDivElement>;
@@ -43,7 +41,6 @@ export function Stepper({
   active: activeProp,
   defaultActive = 0,
   labeled = false,
-  ariaLabel = "Progreso",
   className,
   children,
   ref,
@@ -55,12 +52,15 @@ export function Stepper({
   const active = activeProp ?? defaultActive;
   const steps = Children.toArray(children).filter(isValidElement);
 
+  // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
+  const { "aria-label": ariaLabelOverride, ...divRest } = rest;
+
   return (
     <div
-      {...rest}
+      {...divRest}
       ref={ref}
       role="group"
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Progreso"}
       className={cn(labeled ? "ig-stepper-labeled" : "ig-stepper", className)}
     >
       {steps.map((step, idx) => {

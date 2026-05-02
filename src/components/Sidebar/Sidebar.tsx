@@ -15,8 +15,6 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
   defaultCollapsed?: boolean;
   /** Callback al cambiar collapsed. */
   onCollapsedChange?: (collapsed: boolean) => void;
-  /** Texto a11y para el `<aside>`. Por defecto `"Navegación lateral"`. */
-  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -41,12 +39,13 @@ export function Sidebar({
   collapsed: collapsedProp,
   defaultCollapsed = false,
   onCollapsedChange,
-  ariaLabel = "Navegación lateral",
   className,
   children,
   ref,
   ...rest
 }: SidebarProps) {
+  // 1.0.0-beta.4: aria-label del rest (HTML std).
+  const { "aria-label": ariaLabelOverride, ...asideRest } = rest;
   const isControlled = collapsedProp !== undefined;
   const [internal, setInternal] = useState(defaultCollapsed);
   const collapsed = isControlled ? collapsedProp : internal;
@@ -67,9 +66,9 @@ export function Sidebar({
   return (
     <SidebarContext.Provider value={ctxValue}>
       <aside
-        {...rest}
+        {...asideRest}
         ref={ref}
-        aria-label={ariaLabel}
+        aria-label={ariaLabelOverride ?? "Navegación lateral"}
         className={cn(
           "ig-sidebar",
           collapsed && "ig-sidebar-collapsed",

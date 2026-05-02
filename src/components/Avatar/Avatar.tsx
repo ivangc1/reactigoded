@@ -17,8 +17,6 @@ interface AvatarBase extends HTMLAttributes<HTMLDivElement> {
   rounded?: boolean;
   /** Punto de estado en la esquina inferior derecha. */
   status?: AvatarStatus;
-  /** Texto accesible para el contenedor (lo marca como role="img"). */
-  ariaLabel?: string;
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -48,16 +46,17 @@ export function Avatar(props: AvatarProps) {
     rounded = false,
     status,
     className,
-    ariaLabel,
     ref,
     src,
     alt,
     initials,
+    "aria-label": ariaLabel,
     ...divProps
   } = props as AvatarBase & {
     src?: string;
     alt?: string;
     initials?: string;
+    "aria-label"?: string;
   };
 
   return (

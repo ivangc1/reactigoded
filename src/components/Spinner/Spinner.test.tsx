@@ -11,7 +11,7 @@ describe("Spinner", () => {
   });
 
   it("permite ariaLabel personalizado", () => {
-    render(<Spinner ariaLabel="Procesando pago" />);
+    render(<Spinner aria-label="Procesando pago" />);
     const el = screen.getByRole("status");
     expect(el).toHaveAttribute("aria-label", "Procesando pago");
   });

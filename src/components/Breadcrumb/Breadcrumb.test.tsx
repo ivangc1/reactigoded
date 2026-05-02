@@ -17,7 +17,7 @@ describe("Breadcrumb", () => {
 
   it("aria-label custom", () => {
     render(
-      <Breadcrumb ariaLabel="Ruta">
+      <Breadcrumb aria-label="Ruta">
         <BreadcrumbItem href="/">x</BreadcrumbItem>
       </Breadcrumb>,
     );

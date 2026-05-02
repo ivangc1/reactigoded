@@ -4,15 +4,14 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.3` — pasada agresiva pre-`1.0.0`: a11y real
-> (Input/Select/Textarea `aria-describedby` merge correcto; Rating con
-> roving tabindex + flechas; Dropdown excluye `aria-disabled`; Tabs
-> auto-selecciona el primer Tab); SSR-safe Toast (sin hydration mismatch);
-> Modal sin doble `onClose`; nuevo color cardinal `cyaneus` para diferenciar
-> `info` de `secondary`; Google Fonts movido a `fonts.css` opt-in (no se
-> impone request remoto al consumer); `vite.config` deja de meter dts en
-> `storybook build`; tema dark-first uniforme. 0 deprecaciones, listo para
-> consumir como dependencia.
+> **Estado**: `1.0.0-beta.4` — última pasada pre-`1.0.0`: API HTML
+> estándar uniforme (`aria-label` directo en vez de prop `ariaLabel` en 12
+> componentes); Rating clamp robusto (`value > max`, max no entero);
+> Tabs registry post-mount (defaultValue inválido cae al primer Tab); Slider
+> filtra arrays al DOM; size-limit en CI con budgets por archivo (~10.7 KB
+> ESM gzip · ~67 KB components.css gzip); `vite.lib.config.ts` separado;
+> `Fundamentos/Variantes` MDX nuevo. 0 deprecaciones. **Listo para `1.0.0`
+> tras 1-2 semanas de soak time.**
 
 ## Instalación
 
@@ -26,34 +25,41 @@ pnpm add reactigoded
 
 ## CSS imports
 
-7 entradas en `1.0.0-beta.2`. Lo habitual: importa solo `design.css`.
+8 entradas en `1.0.0-beta.4`. Lo habitual: importa solo `design.css` (+ opcionalmente `fonts.css` si quieres las tipografías Google del DS).
 
 ```ts
-// 100% variables --ig-* + keyframes + @font-face. Cero selectores globales.
-// Útil si quieres construir tus propios componentes sobre los tokens del DS
-// sin cargar nada más.
-import "reactigoded/styles/tokens.css";   // ~98 KB
+// 100% variables --ig-* + keyframes. Cero selectores globales, cero
+// requests remotos. Útil si construyes tus propios componentes sobre los
+// tokens del DS sin cargar nada más.
+import "reactigoded/styles/tokens.css";     // ~98 KB
 
 // Globales mínimos: box-sizing + html scroll + scrollbars + ::selection +
 // prefers-reduced-motion / contrast / forced-colors. Garantías a11y +
 // scrollbar tematizada. Requiere tokens.css.
-import "reactigoded/styles/base.css";     // ~3 KB
+import "reactigoded/styles/base.css";       // ~4 KB
 
 // Solo clases .ig-* (utilities + componentes). Cero globales. Requiere
 // tokens.css + base.css.
-import "reactigoded/styles/components.css"; // ~270 KB
+import "reactigoded/styles/components.css"; // ~363 KB
 
 // Atajo: tokens + base + components vía @import. Lo habitual.
-import "reactigoded/styles/design.css";   // ~370 KB total
+import "reactigoded/styles/design.css";     // ~370 KB total
 
 // Estilos por defecto para HTML nativo (h1-h6, p, a, button, input, table,
 // code, blockquote…). NO lo importes si ya usas Tailwind preflight,
 // Bootstrap reboot u otro reset.
-import "reactigoded/styles/reset.css";    // ~5 KB
+import "reactigoded/styles/reset.css";      // ~5.5 KB
+
+// Tipografías Google Fonts oficiales del DS (Electrolize / Saira / JetBrains
+// Mono). Opt-in desde 1.0.0-beta.3: el paquete ya NO impone request remoto
+// al consumer. Si no lo importas, los componentes caen al fallback
+// system-ui declarado en tokens.css. Recomendado: self-host con next/font
+// o @fontsource/* para mejor LCP, privacidad y CSP.
+import "reactigoded/styles/fonts.css";      // ~2 KB (solo @import a Google Fonts)
 
 // Utilities pseudo-class (hover:ig-bg-brand, focus:..., etc.) — solo si
 // usas las utilities directamente en HTML.
-import "reactigoded/styles/state.css";    // ~7.1 MB
+import "reactigoded/styles/state.css";      // ~7.1 MB
 
 // Atajo final: design + reset + state vía @import (sin duplicar bytes).
 import "reactigoded/styles/all.css";
@@ -61,13 +67,15 @@ import "reactigoded/styles/all.css";
 
 ### Escenarios típicos
 
-| Caso de uso                              | Imports                              |
-|------------------------------------------|--------------------------------------|
-| Uso normal del DS                        | `design.css`                         |
-| DS + estilos para HTML nativo            | `design.css` + `reset.css`           |
-| Solo tokens, construyo encima            | `tokens.css`                         |
-| Tokens + a11y baseline, mis componentes  | `tokens.css` + `base.css`            |
-| Tema custom, mismas clases del DS        | `design.css` + override `:root`      |
+| Caso de uso                                       | Imports                                    |
+|---------------------------------------------------|--------------------------------------------|
+| Uso normal del DS                                 | `design.css`                               |
+| DS + tipografías oficiales Google Fonts           | `design.css` + `fonts.css`                 |
+| DS + estilos para HTML nativo                     | `design.css` + `reset.css`                 |
+| DS completo con HTML nativo y utilities pseudo    | `all.css` (+ `fonts.css` aparte si quieres)|
+| Solo tokens, construyo encima                     | `tokens.css`                               |
+| Tokens + a11y baseline, mis componentes           | `tokens.css` + `base.css`                  |
+| Tema custom, mismas clases del DS                 | `design.css` + override `:root`            |
 
 > El `<dialog>` de `<Modal>` y los componentes con flex/transition usan
 > `var(--ig-*)` definidos en `design.css`. **Si solo importas `state.css` o
@@ -181,8 +189,20 @@ script blocking en `<head>` que aplique `data-theme` antes del paint:
 ```html
 <script>
   (function () {
-    var t = localStorage.getItem("theme") || "light";
-    document.documentElement.dataset.theme = t;
+    // Orden de prioridad: storage > preferencia del sistema > dark (default
+    // del DS desde 1.0.0-beta.3 — branding dark-first). Sin esto, hay un
+    // flash de tema incorrecto entre el primer paint server y el primer
+    // paint cliente cuando el usuario tiene tema persistido distinto.
+    try {
+      var stored = localStorage.getItem("theme");
+      var systemDark =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var t = stored || (systemDark ? "dark" : "light") || "dark";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {
+      document.documentElement.dataset.theme = "dark";
+    }
   })();
 </script>
 ```

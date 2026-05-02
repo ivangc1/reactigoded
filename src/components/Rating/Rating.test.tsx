@@ -156,3 +156,60 @@ describe("Rating — roving tabindex + keyboard nav (WAI-ARIA APG)", () => {
     expect(onValueChange).not.toHaveBeenCalled();
   });
 });
+
+describe("Rating — clamp inputs inválidos (regression beta.4)", () => {
+  it("value > max clampa a max sin romper roving tabindex", () => {
+    render(<Rating value={10} max={5} />);
+    const stars = screen.getAllByRole("radio");
+    expect(stars).toHaveLength(5);
+    // value clampado a 5 → la última estrella checked y tab stop
+    expect(stars[4]).toBeChecked();
+    expect(stars[4]).toHaveAttribute("tabindex", "0");
+    // Resto -1
+    expect(stars[0]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("value < 0 clampa a 0 (ningún radio checked, primer star tab stop)", () => {
+    render(<Rating value={-3} max={5} />);
+    const stars = screen.getAllByRole("radio");
+    stars.forEach((s) => {
+      expect(s).not.toBeChecked();
+    });
+    expect(stars[0]).toHaveAttribute("tabindex", "0");
+  });
+
+  it("defaultValue > max se clampa al inicializar internal", () => {
+    render(<Rating defaultValue={99} max={5} />);
+    const stars = screen.getAllByRole("radio");
+    expect(stars[4]).toBeChecked();
+  });
+
+  it("max no entero se redondea hacia abajo", () => {
+    render(<Rating value={2} max={3.7} />);
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+  });
+
+  it("max < 1 fuerza al menos 1 estrella", () => {
+    render(<Rating max={0} />);
+    expect(screen.getAllByRole("radio")).toHaveLength(1);
+  });
+
+  it("ArrowRight en última estrella NO se sale (clamp, no wrap)", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={5} max={5} onValueChange={onValueChange} />);
+    const last = screen.getByRole("radio", { name: "5 estrellas" });
+    last.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onValueChange).toHaveBeenLastCalledWith(5);
+    expect(last).toHaveFocus();
+  });
+
+  it("End respeta safeMax (no max raw)", async () => {
+    const onValueChange = vi.fn();
+    render(<Rating value={1} max={3.9} onValueChange={onValueChange} />);
+    const first = screen.getByRole("radio", { name: "1 estrella" });
+    first.focus();
+    await userEvent.keyboard("{End}");
+    expect(onValueChange).toHaveBeenLastCalledWith(3); // floor(3.9)=3
+  });
+});

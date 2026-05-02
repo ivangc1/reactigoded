@@ -38,7 +38,7 @@ type Story = StoryObj<typeof meta>;
 export const PorDefecto: Story = {
   render: (args) => (
     <Tabs {...args}>
-      <TabList ariaLabel="Cuenta">
+      <TabList aria-label="Cuenta">
         <Tab value="perfil">Perfil</Tab>
         <Tab value="notificaciones">Notificaciones</Tab>
         <Tab value="seguridad">Seguridad</Tab>
@@ -70,7 +70,7 @@ export const Vertical: Story = {
   args: { orientation: "vertical", variant: "secondary" },
   render: (args) => (
     <Tabs {...args}>
-      <TabList ariaLabel="Settings">
+      <TabList aria-label="Settings">
         <Tab value="perfil">Perfil</Tab>
         <Tab value="notificaciones">Notificaciones</Tab>
         <Tab value="seguridad">Seguridad</Tab>
@@ -110,7 +110,7 @@ export const KeepMounted: Story = {
   },
   render: () => (
     <Tabs defaultValue="a">
-      <TabList ariaLabel="Demo keepMounted">
+      <TabList aria-label="Demo keepMounted">
         <Tab value="a">A (mounted)</Tab>
         <Tab value="b">B (mounted)</Tab>
         <Tab value="c">C (lazy)</Tab>
@@ -151,7 +151,7 @@ export const KeyboardNavInteraction: Story = {
   },
   render: () => (
     <Tabs defaultValue="a">
-      <TabList ariaLabel="Demo nav">
+      <TabList aria-label="Demo nav">
         <Tab value="a">A</Tab>
         <Tab value="b">B</Tab>
         <Tab value="c">C</Tab>

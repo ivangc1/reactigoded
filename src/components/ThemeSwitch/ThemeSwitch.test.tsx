@@ -19,12 +19,25 @@ describe("ThemeSwitch", () => {
     expect(screen.getByText("Dark")).toBeInTheDocument();
   });
 
-  it("hidrata desde localStorage si hay valor guardado", () => {
+  it("hidrata desde localStorage si hay valor guardado (dark)", () => {
     window.localStorage.setItem("theme", "dark");
     render(<ThemeSwitch />);
     expect(screen.getByRole("switch")).toBeChecked();
     expect(screen.getByText("Dark")).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+
+  it("storage='light' GANA al default dark-first (regression beta.4)", () => {
+    // Caso crítico: el DS arranca dark por defecto desde 1.0.0-beta.3, pero
+    // si el usuario YA persistió 'light' en una sesión previa, ese valor
+    // debe ganar al default. Sin esto, el default pisaría su preferencia.
+    window.localStorage.setItem("theme", "light");
+    render(<ThemeSwitch />);
+    expect(screen.getByRole("switch")).not.toBeChecked();
+    expect(screen.getByText("Light")).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    // El effect aplica current="light" al storage, NO sobrescribe a dark.
+    expect(window.localStorage.getItem("theme")).toBe("light");
   });
 
   it("toggle desde dark→light aplica data-theme y persiste en localStorage", async () => {

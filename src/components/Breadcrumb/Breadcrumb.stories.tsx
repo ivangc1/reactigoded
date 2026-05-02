@@ -15,9 +15,9 @@ const meta = {
   },
   argTypes: {
     separator: { control: "text" },
-    ariaLabel: { control: "text" },
+    "aria-label": { control: "text" },
   },
-  args: { separator: "/", ariaLabel: "Migas de pan" },
+  args: { separator: "/", "aria-label": "Migas de pan" },
 } satisfies Meta<typeof Breadcrumb>;
 
 export default meta;

@@ -18,8 +18,6 @@ export interface RatingProps
   size?: RatingSize;
   /** Callback al elegir un valor. */
   onValueChange?: (value: number) => void;
-  /** Etiqueta accesible para el grupo (`aria-label` del radiogroup). */
-  ariaLabel?: string;
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -32,13 +30,18 @@ export interface RatingProps
  * - **Roving tabindex**: solo la estrella seleccionada (o la primera si
  *   no hay selección) tiene `tabIndex=0`; el resto `tabIndex=-1`.
  * - **Keyboard**:
- *   - `ArrowRight` / `ArrowDown` → siguiente estrella + selecciona.
- *   - `ArrowLeft`  / `ArrowUp`   → anterior estrella + selecciona.
+ *   - `ArrowRight` / `ArrowDown` → siguiente estrella + selecciona (clamp en `max`).
+ *   - `ArrowLeft`  / `ArrowUp`   → anterior estrella + selecciona (clamp en 1).
  *   - `Home` → primera estrella (valor 1).
  *   - `End`  → última estrella (valor `max`).
  *   - `Space` / `Enter` → selecciona la estrella focuseada.
  *
  * Soporta controlled (`value`+`onValueChange`) y uncontrolled (`defaultValue`).
+ *
+ * **Robustez frente a inputs inválidos** (desde `1.0.0-beta.4`):
+ * - `value` o `defaultValue` fuera de `[0, max]` se clampa silenciosamente.
+ * - `max` no entero se redondea hacia abajo, mínimo 1.
+ * - Las flechas no envuelven (clamp, no wrap) — patrón estándar APG.
  *
  * @example
  * <Rating defaultValue={3} max={5} />
@@ -52,14 +55,23 @@ export function Rating({
   readOnly = false,
   size = "md",
   onValueChange,
-  ariaLabel = "Puntuación",
   className,
   ref,
   ...rest
 }: RatingProps) {
+  // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
+  const { "aria-label": ariaLabelOverride, ...divRest } = rest;
   const isControlled = valueProp !== undefined;
-  const [internal, setInternal] = useState<number>(defaultValue);
-  const value = isControlled ? valueProp : internal;
+  // `defaultValue` viene del consumer y puede ser cualquier número. Lo
+  // clampamos a [0, max] al inicializar (0 = "ninguna estrella seleccionada").
+  const safeMax = Math.max(1, Math.floor(max));
+  const clampedDefault = Math.min(Math.max(defaultValue, 0), safeMax);
+  const [internal, setInternal] = useState<number>(clampedDefault);
+  const rawValue = isControlled ? valueProp : internal;
+  // Si el consumer pasa value=10 con max=5, en vez de romper la a11y
+  // (focusableValue=10 → ningún radio matchea → tablist sin tab stop) lo
+  // clampamos al rango válido. Lo mismo si value < 0.
+  const value = Math.min(Math.max(rawValue, 0), safeMax);
   const [hover, setHover] = useState<number | null>(null);
   const display = hover ?? value;
 
@@ -69,7 +81,7 @@ export function Rating({
 
   const setValueAndFocus = (v: number, target: HTMLElement | null) => {
     if (readOnly) return;
-    const clamped = Math.min(Math.max(v, 1), max);
+    const clamped = Math.min(Math.max(v, 1), safeMax);
     if (!isControlled) setInternal(clamped);
     onValueChange?.(clamped);
     // Mover foco al nuevo radio
@@ -88,7 +100,7 @@ export function Rating({
       case "ArrowRight":
       case "ArrowDown": {
         event.preventDefault();
-        const next = Math.min(v + 1, max);
+        const next = Math.min(v + 1, safeMax);
         setValueAndFocus(next, buttons[next - 1] ?? null);
         break;
       }
@@ -106,7 +118,7 @@ export function Rating({
       }
       case "End": {
         event.preventDefault();
-        setValueAndFocus(max, buttons[max - 1] ?? null);
+        setValueAndFocus(safeMax, buttons[safeMax - 1] ?? null);
         break;
       }
       case " ":
@@ -126,10 +138,10 @@ export function Rating({
     // <button role="radio" tabIndex>), patrón estándar de WAI-ARIA APG.
     // eslint-disable-next-line jsx-a11y/interactive-supports-focus
     <div
-      {...rest}
+      {...divRest}
       ref={ref}
       role="radiogroup"
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Puntuación"}
       className={cn(
         "ig-rating",
         readOnly && "ig-rating-readonly",
@@ -140,7 +152,7 @@ export function Rating({
         if (!readOnly) setHover(null);
       }}
     >
-      {Array.from({ length: max }, (_, i) => {
+      {Array.from({ length: safeMax }, (_, i) => {
         const v = i + 1;
         const filled = v <= display;
         const isFocusable = v === focusableValue;

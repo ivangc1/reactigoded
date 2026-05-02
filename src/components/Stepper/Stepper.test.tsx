@@ -18,7 +18,7 @@ describe("Stepper", () => {
 
   it("aria-label custom", () => {
     render(
-      <Stepper active={0} ariaLabel="Checkout">
+      <Stepper active={0} aria-label="Checkout">
         <Step />
       </Stepper>,
     );

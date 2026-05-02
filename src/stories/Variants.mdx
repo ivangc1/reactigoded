@@ -1,0 +1,89 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Fundamentos/Variantes" />
+
+# Variantes
+
+Las 6 variantes semánticas del DS — alineadas en todos los componentes que
+las exponen (`Button`, `Alert`, `Badge`, `Card`, `Toast`, `Spinner`,
+`Tooltip`, `Pagination`, `Tabs`, `Chip`, `Switch`, `Checkbox`, `Radio`,
+`Slider`).
+
+Desde `1.0.0-beta.3` cada variante mapea a un color cardinal **distinto y
+no solapado**. Antes `secondary` e `info` apuntaban ambos a `axis` (violet)
+y eran visualmente idénticos; ahora `info` tiene su propio cardinal
+`cyaneus` (cian-azul).
+
+## Mapeo `variant` → cardinal
+
+<div className="ig-foundation-grid ig-foundation-grid--lg">
+  {[
+    { variant: "brand", cardinal: "vitreus", description: "Marca, identidad" },
+    { variant: "secondary", cardinal: "axis", description: "Acción secundaria, indigo" },
+    { variant: "success", cardinal: "laurus", description: "Éxito, confirmación" },
+    { variant: "warning", cardinal: "rutilus", description: "Aviso, atención" },
+    { variant: "danger", cardinal: "malum", description: "Error, destructivo" },
+    { variant: "info", cardinal: "cyaneus", description: "Información, neutral cian (NUEVO en beta.3)" },
+  ].map((v) => (
+    <div key={v.variant} className="ig-foundation-swatch">
+      <div
+        className="ig-foundation-swatch__color"
+        style={{ background: `var(--ig-${v.cardinal})` }}
+      />
+      <div className="ig-foundation-swatch__meta">
+        <strong>{v.variant}</strong>
+        <br />
+        <code>{`var(--ig-${v.cardinal})`}</code>
+        <br />
+        <span style={{ opacity: 0.7 }}>{v.description}</span>
+      </div>
+    </div>
+  ))}
+</div>
+
+## Variante neutral
+
+Algunos componentes (`Alert`, `Toast`) además aceptan `variant="neutral"`
+para mensajes sin color semántico (informativo plano). Internamente NO
+añade clase de variant, queda con el estilo base del componente.
+
+## Color cardinal completo (Fundus + 7)
+
+El sistema completo:
+
+| Cardinal | Latín     | Uso primario              | Variantes asociadas   |
+|----------|-----------|---------------------------|-----------------------|
+| FUNDUS   | Fondo     | Fondo base del documento  | (no es variant)       |
+| VITREUS  | Vidrio    | Marca, títulos            | `brand`               |
+| AXIS     | Eje       | Indigo, secondary         | `secondary`           |
+| CINIS    | Ceniza    | Texto body                | (no es variant)       |
+| LAURUS   | Laurel    | Verde éxito               | `success`             |
+| RUTILUS  | Resplandor| Naranja aviso             | `warning`             |
+| MALUM    | Manzana   | Rojo error                | `danger`              |
+| CYANEUS  | Cian      | Azul información          | `info` (desde beta.3) |
+
+Cada cardinal tiene `lux` (modo light) y `nox` (modo dark). El alias
+adaptativo `var(--ig-<cardinal>)` cambia automáticamente según
+`data-theme` en `<html>`.
+
+## Override por consumer
+
+Si tu marca usa otros colores, puedes redefinir cualquier cardinal en tu
+`:root`:
+
+```css
+:root {
+  --ig-vitreus-lux: #1a4d2e;
+  --ig-vitreus-nox: #6cd9a8;
+}
+```
+
+Todos los componentes que usen `variant="brand"` heredan automáticamente
+el cambio. Misma idea para los otros cardinales y para las variantes
+semánticas (`--ig-info`, `--ig-success`, etc., que son aliases del cardinal
+correspondiente).
+
+> **Cuidado con el contraste**: si cambias un cardinal, verifica que el
+> texto sobre fondo siga cumpliendo WCAG AA (≥4.5:1 texto normal, ≥3:1
+> grandes/UI). Sobre todo si tocas los `-lux` en light mode (los textos
+> se calculan sobre fondos translúcidos en componentes como `Alert`).

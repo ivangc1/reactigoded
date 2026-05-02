@@ -32,10 +32,10 @@ export const PorDefecto: Story = {};
 export const Tamaños: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--full">
-      <Rating size="sm" value={4} readOnly ariaLabel="Pequeño" />
-      <Rating size="md" value={4} readOnly ariaLabel="Mediano" />
-      <Rating size="lg" value={4} readOnly ariaLabel="Grande" />
-      <Rating size="xl" value={4} readOnly ariaLabel="Extra grande" />
+      <Rating size="sm" value={4} readOnly aria-label="Pequeño" />
+      <Rating size="md" value={4} readOnly aria-label="Mediano" />
+      <Rating size="lg" value={4} readOnly aria-label="Grande" />
+      <Rating size="xl" value={4} readOnly aria-label="Extra grande" />
     </div>
   ),
 };

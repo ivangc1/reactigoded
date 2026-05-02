@@ -5,7 +5,7 @@ import { Timeline, TimelineItem } from "./index";
 describe("Timeline", () => {
   it("renderiza con role=list y aria-label", () => {
     render(
-      <Timeline ariaLabel="Historial">
+      <Timeline aria-label="Historial">
         <TimelineItem date="X" title="Y" />
       </Timeline>,
     );

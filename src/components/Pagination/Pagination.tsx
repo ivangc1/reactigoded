@@ -25,8 +25,6 @@ export interface PaginationProps
   prevLabel?: string;
   /** Texto del botón siguiente. */
   nextLabel?: string;
-  /** Texto a11y para el `<nav>`. */
-  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -91,20 +89,23 @@ export function Pagination({
   variant,
   prevLabel = "Anterior",
   nextLabel = "Siguiente",
-  ariaLabel = "Paginación",
   className,
   ref,
   ...rest
 }: PaginationProps) {
+  // 1.0.0-beta.4: aria-label se extrae del rest (HTML std). Antes existía
+  // una prop `ariaLabel` separada — eliminada por consistencia con el
+  // resto de componentes que ya usan rest. Migration: rename ariaLabel→aria-label.
+  const { "aria-label": ariaLabelOverride, ...navRest } = rest;
   const pages = buildPages(currentPage, totalPages, siblingCount);
   const canPrev = currentPage > 1;
   const canNext = currentPage < totalPages;
 
   return (
     <nav
-      {...rest}
+      {...navRest}
       ref={ref}
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Paginación"}
       className={cn(
         "ig-pagination",
         variant && `ig-pagination-${variant}`,

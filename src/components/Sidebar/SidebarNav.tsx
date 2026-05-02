@@ -2,24 +2,26 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface SidebarNavProps extends HTMLAttributes<HTMLElement> {
-  /** Texto a11y para el `<nav>`. Por defecto `"Principal"`. */
-  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
-/** SidebarNav — `<nav>` que envuelve los items de navegación. */
+/**
+ * SidebarNav — `<nav>` que envuelve los items de navegación. `aria-label`
+ * por defecto "Principal"; sobreescribible vía rest.
+ */
 export function SidebarNav({
-  ariaLabel = "Principal",
   className,
   children,
   ref,
   ...rest
 }: SidebarNavProps) {
+  // 1.0.0-beta.4: aria-label del rest (HTML std).
+  const { "aria-label": ariaLabelOverride, ...navRest } = rest;
   return (
     <nav
-      {...rest}
+      {...navRest}
       ref={ref}
-      aria-label={ariaLabel}
+      aria-label={ariaLabelOverride ?? "Principal"}
       className={cn("ig-sidebar-nav", className)}
     >
       {children}

@@ -7,7 +7,7 @@ import { Tabs, TabList, Tab, TabPanel, useTabs } from "./index";
 function basicTabs(props?: Partial<React.ComponentProps<typeof Tabs>>) {
   return (
     <Tabs {...props}>
-      <TabList ariaLabel="Demo">
+      <TabList aria-label="Demo">
         <Tab value="a">Alpha</Tab>
         <Tab value="b">Beta</Tab>
         <Tab value="c">Gamma</Tab>

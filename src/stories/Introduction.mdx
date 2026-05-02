@@ -38,6 +38,11 @@ import "reactigoded/styles/reset.css";
 // 7.1 MB sin gzip — solo si usas las utilities directamente en HTML.
 import "reactigoded/styles/state.css";
 
+// Tipografías Google Fonts oficiales del DS (Electrolize / Saira /
+// JetBrains Mono). Opt-in desde 1.0.0-beta.3 — antes el `tokens.css` las
+// metía implícitamente. Si no la importas, tipografía cae a system-ui.
+// import "reactigoded/styles/fonts.css";
+
 // Granular (avanzado): solo tokens, o tokens + base sin components.
 // import "reactigoded/styles/tokens.css";
 // import "reactigoded/styles/base.css";
@@ -86,7 +91,7 @@ export function ThemeToggle() {
 ## Convenciones
 
 - **Nombres de clase**: todas las clases del DS empiezan por `ig-` (`ig-btn`, `ig-card`, `ig-flex`…). Esto evita choques con Tailwind, Bootstrap o cualquier otra librería de utilidades.
-- **Variantes**: las 6 variantes semánticas (`brand`, `secondary`, `success`, `warning`, `danger`, `info`) están alineadas en todos los componentes.
+- **Variantes**: las 6 variantes semánticas (`brand`, `secondary`, `success`, `warning`, `danger`, `info`) están alineadas en todos los componentes. Cada una mapea a un color cardinal: `brand→vitreus`, `secondary→axis`, `success→laurus`, `warning→rutilus`, `danger→malum`, `info→cyaneus` (cian-azul propio desde `1.0.0-beta.3`; antes era alias de `axis` y se confundía visualmente con `secondary`).
 - **Tamaños**: `xs` · `sm` · `md` (default) · `lg` · `xl`. `md` no añade clase modificadora.
 - **`ref` como prop normal**: aprovechamos React 19; no hace falta `forwardRef`.
 - **Type-safe**: cada componente exporta su tipo `Props` y los unions de variantes/sizes para reutilizar en tu app.

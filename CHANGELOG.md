@@ -7,6 +7,115 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.4] — 2026-05-02
+
+Última pasada de pulido pre-`1.0.0`. Cierra los hallazgos de la auditoría
+externa sobre beta.3 + endurecimiento adicional (size budgets, dev-warnings,
+config split lib vs dev/storybook, registry de Tabs robusto frente a
+defaultValue inválido).
+
+### Fixed (a11y / regression / robustness)
+- **Rating**: `value` o `defaultValue` fuera de `[0, max]` se clampa
+  silenciosamente. `value=10 max=5` antes dejaba todos los radios con
+  `tabIndex=-1` (tablist sin tab stop accesible). Ahora va al tope. `max`
+  no entero se redondea hacia abajo, mínimo 1.
+- **Tabs `defaultValue` inválido**: si el value pasado no matchea ningún
+  `<Tab>` montado, fallback al primero registrado tras un useEffect
+  post-mount (no durante el registro tab-a-tab — eso producía un falso
+  positivo cuando los Tabs se montaban en orden alfabético). En modo
+  controlled NO se auto-corrige; solo console.warn dev-only.
+- **Tab.tsx pre-register con `useLayoutEffect`** (en cliente; SSR cae a
+  noop): el primer paint visible ya tiene tab activo, sin flicker.
+- **Slider**: `defaultValue` array (legalmente permitido por
+  `InputHTMLAttributes` aunque `<input type="range">` no lo soporta) ya no
+  se reenvía al DOM como `[object Array]`. Filtramos a number/string
+  válidos.
+- **Modal**: el effect de sincronización `open` ahora resetea
+  `closingFromSyncRef` en su cleanup. No hay leak real (state muere con
+  unmount), pero queda explícitamente correcto frente a re-mounts en
+  desmontaje rápido (navegación SPA durante animación de cierre).
+- **Reset.css `<button>` color**: usaba `--ig-fundus-lux` fijo que daba
+  contraste bajo en dark (texto casi blanco sobre teal claro). Ahora usa
+  `--ig-text-on-vitreus` adaptativo. Se aplicó en beta.3 pero faltaba
+  validación AA en dark — verificada ahora con axe.
+
+### Added
+- **`vite.lib.config.ts` separado** del `vite.config.ts` general. El
+  build de librería (`npm run build`) usa explícitamente esta config con
+  `dts` plugin + `copyDesignSystemStyles`. Más robusto que el guard env
+  `STORYBOOK !== "true"` de beta.3 (Storybook ya nunca puede contaminar
+  el build de librería, independientemente de qué env vars setee).
+- **`size-limit` en CI** con budgets por archivo:
+  - `dist/index.{js,cjs}` → ≤ 15 KB gzipped (real: ~10.7 KB ESM)
+  - `dist/styles/igoded-design.css` → ≤ 5 KB (real: 1 KB, es solo @import)
+  - `dist/styles/igoded-tokens.css` → ≤ 25 KB (real: 22 KB)
+  - `dist/styles/igoded-components.css` → ≤ 75 KB (real: 67 KB)
+  - `dist/styles/igoded-base.css` → ≤ 2 KB (real: 1.4 KB)
+  - `dist/styles/igoded-reset.css` → ≤ 2 KB (real: 1.6 KB)
+  - `dist/styles/igoded-fonts.css` → ≤ 1 KB (real: 0.9 KB)
+  Script `npm run verify:size`. Forma parte de `npm run verify`.
+- **Card**: dev-only `console.warn` si `interactive` + `onClick` está
+  presente pero sin `role="button"`. Avisa una vez por instancia. La
+  card sin role no activa por teclado, este caso suele ser un descuido.
+- **`Fundamentos/Variantes` (nueva MDX)**: visualización del mapeo
+  `variant` → cardinal con los 7 colores nuevos (incluye `cyaneus`).
+  Documentación de override por consumer + ratios WCAG AA.
+- **JSDoc `@example` en hooks públicos**: `useTheme`, `useToast`,
+  `useTabs`, `useAccordion`, `useAccordionItem`, `useDropdown`,
+  `useSidebar`. Mejora autocompletado en LSP del consumer.
+- **Test SSR-hydration ThemeSwitch**: `localStorage.theme="light"` gana
+  al default `dark` y NO se sobreescribe en el primer effect.
+- **`src/env.d.ts`**: declaración tipada de `import.meta.env.DEV/PROD`
+  para que los warnings dev-only de Card/Tabs typechequen sin pisar el
+  `vite-env.d.ts` (que está excluido del build para no exportar
+  declaraciones de módulos `*.css`/`*.svg` al consumer).
+
+### Changed (BREAKING — momento ideal pre-1.0)
+- **`ariaLabel` prop → `aria-label` HTML estándar** en 9 componentes:
+  `Pagination`, `Spinner`, `Stepper`, `Rating`, `Sidebar`, `SidebarNav`,
+  `NavbarNav`, `Tabs.TabList`, `Breadcrumb`, `Progress`, `Avatar`,
+  `Timeline`. Cada uno extrae `aria-label` del rest con fallback ES por
+  defecto. Coherente con el resto del DS (ThemeSwitch ya usaba esto
+  desde beta.3) y con la convención web.
+  - **Migration**: rename en tu JSX `ariaLabel={...}` → `aria-label={...}`.
+- **`docs.defaultName: "Documentación"` → `"Docs"`** (ya estaba en beta.3,
+  reconfirmado: URLs ASCII, sin %C3%B3n).
+- **README CSS imports actualizado**: 7 entradas → 8 entradas (incluye
+  `fonts.css`); la versión del estado pasa de beta.2 a beta.4.
+- **README script anti-flash de tema**: fallback `|| "light"` →
+  `prefers-color-scheme: dark` con fallback `dark` (alineado con el
+  branding dark-first del DS). Try/catch para entornos sin localStorage.
+- **`tokens.css` comentarios**: "FUNDUS + 6 CARDINALES" → "FUNDUS + 7
+  CARDINALES" + tabla de los 7 incluyendo `CYANEUS`. Mención obsoleta a
+  `@font-face` en tokens.css eliminada (vive en fonts.css desde beta.3).
+- **`package.json#keywords`**: quitado `"headless"` (engañoso, el DS es
+  CSS-first opinionated). Añadidos `"design-tokens"`, `"css-first"`,
+  `"themeable"`, `"dark-mode"`.
+- **`vite.config.ts` simplificado**: ya no contiene `build.lib` ni `dts`
+  (eso vive en `vite.lib.config.ts`). Se queda con plugins comunes
+  (react, optimizeDeps) compartidos por playground dev y Storybook.
+
+### Migration desde beta.3
+1. **Si tu JSX usa la prop `ariaLabel`** en alguno de estos componentes,
+   renombra a `aria-label`:
+   ```diff
+   - <Stepper ariaLabel="Checkout">
+   + <Stepper aria-label="Checkout">
+   - <Pagination ariaLabel="Paginación principal">
+   + <Pagination aria-label="Paginación principal">
+   - <TabList ariaLabel="Cuenta">
+   + <TabList aria-label="Cuenta">
+   ```
+   La búsqueda+reemplazo es trivial: tu IDE te marcará los errores TS
+   (la prop ya no existe en los tipos).
+2. **Si tu app inyecta el script anti-flash de tema** del README,
+   actualízalo al nuevo (system-aware + dark fallback) — el viejo
+   pisaba la preferencia del usuario en sistemas dark-first.
+
+### Coverage
+- Statements 92.29% · Branches 86.44% · Functions 95.17% · Lines 95.11%
+- 339 unit tests + 179 storybook (axe-a11y) = 518 tests verdes.
+
 ## [1.0.0-beta.3] — 2026-05-02
 
 Pasada agresiva pre-`1.0.0`: a11y real, SSR-safe, naming/types fix y un
@@ -103,6 +212,14 @@ nuevo color cardinal para diferenciar `info` de `secondary`.
   ```
   …o self-host con `next/font`/`@fontsource/*` y override de los
   `--ig-font-*`.
+- **Cambio visual: `info` ahora es CYAN, no violet.** Si tu app usa
+  `<Toast variant="info">`, `<Alert variant="info">`, `<Badge variant="info">`,
+  `<Card variant="info">`, `.ig-btn-info`, `.ig-bg-info`, etc., verás un
+  color cian-azul (`--ig-cyaneus`) en vez del violet (`--ig-axis`) de antes.
+  La razón: en beta.0–beta.2, `secondary` e `info` apuntaban ambos a `axis`
+  y eran visualmente idénticos. Ahora `info` tiene su propio cardinal
+  `cyaneus` (WCAG AA verificado en light + dark). Si necesitas el aspecto
+  anterior, sobreescribe `--ig-info: var(--ig-axis)` en tu `:root`.
 - Si usabas `<Toast variant="default">` en el primitivo (no lo deberías
   desde beta.1, ya estaba renombrado a `neutral`), nada cambia aquí.
 - Si `defaultValue` de Slider venía como string, antes el value visible no

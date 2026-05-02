@@ -1,7 +1,15 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useTabs } from "./TabsContext";
+
+// useLayoutEffect en cliente, useEffect en server (evita warning SSR de
+// React: "useLayoutEffect does nothing on the server"). En cliente
+// queremos que el register corra ANTES del primer paint para que el
+// auto-select del primer Tab no produzca un flicker visible donde
+// inicialmente ningún tab es activo.
+const useIsoLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : (() => {});
 
 export interface TabProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Identificador único del tab. Debe coincidir con el `value` del `TabPanel` correspondiente. */
@@ -32,8 +40,11 @@ export function Tab({
   const panelId = `${baseId}-panel-${value}`;
 
   // Registra este Tab al montar; el primer Tab montado es la selección
-  // inicial cuando el consumer omite `value` y `defaultValue`.
-  useEffect(() => register(value), [register, value]);
+  // inicial cuando el consumer omite `value` y `defaultValue`. Usamos
+  // useLayoutEffect (en cliente) para que el register corra ANTES del
+  // primer paint y se evite el flicker "ningún tab activo" en el primer
+  // frame visible. En SSR cae a noop (no hay paint que proteger).
+  useIsoLayoutEffect(() => register(value), [register, value]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     onKeyDown?.(e);

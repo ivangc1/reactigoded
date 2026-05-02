@@ -66,6 +66,22 @@ export function Slider({
   const current = isControlled ? Number(value) : internal;
   const display = formatValue ? formatValue(current) : String(current);
 
+  // Normaliza prop pasada al DOM: <input type="range"> NO acepta arrays
+  // (el tipo InputHTMLAttributes lo permite por la unión genérica). Antes
+  // de 1.0.0-beta.4, un defaultValue/value array se reenviaba al DOM y
+  // generaba "[object Array]" como string. Ahora filtramos: solo number o
+  // string, ignoramos array.
+  const isPlain = (v: unknown): v is number | string =>
+    typeof v === "number" || typeof v === "string";
+  const domValueProp =
+    isControlled && isPlain(value)
+      ? { value }
+      : !isControlled && isPlain(defaultValue)
+        ? { defaultValue }
+        : !isControlled
+          ? { defaultValue: String(initial) }
+          : { value: String(current) };
+
   const slider = (
     <input
       {...rest}
@@ -76,7 +92,7 @@ export function Slider({
       max={max}
       step={step}
       aria-valuetext={formatValue ? display : undefined}
-      {...(isControlled ? { value } : { defaultValue })}
+      {...domValueProp}
       onChange={(e) => {
         const next = Number(e.target.value);
         if (!isControlled) setInternal(next);

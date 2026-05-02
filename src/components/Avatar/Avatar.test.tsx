@@ -29,7 +29,7 @@ describe("Avatar", () => {
   });
 
   it("ariaLabel marca el contenedor como role=img", () => {
-    render(<Avatar initials="JD" ariaLabel="Avatar de Jane" data-testid="a" />);
+    render(<Avatar initials="JD" aria-label="Avatar de Jane" data-testid="a" />);
     const el = screen.getByTestId("a");
     expect(el).toHaveAttribute("role", "img");
     expect(el).toHaveAttribute("aria-label", "Avatar de Jane");

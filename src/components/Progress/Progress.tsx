@@ -22,8 +22,6 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   size?: ProgressSize;
   /** Modo indeterminado: barra animada sin valor concreto. */
   indeterminate?: boolean;
-  /** Texto a11y descriptivo (`aria-label`). Si no se pasa, usa el porcentaje. */
-  ariaLabel?: string;
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -36,7 +34,7 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
  *
  * @example
  * <Progress value={70} variant="success" />
- * <Progress indeterminate ariaLabel="Subiendo archivo" />
+ * <Progress indeterminate aria-label="Subiendo archivo" />
  * <Progress value={3} max={5} size="lg" />
  */
 export function Progress({
@@ -45,22 +43,24 @@ export function Progress({
   variant,
   size = "md",
   indeterminate = false,
-  ariaLabel,
   className,
   ref,
   ...rest
 }: ProgressProps) {
   const clamped = Math.min(Math.max(value, 0), max);
   const percent = max > 0 ? (clamped / max) * 100 : 0;
+  // 1.0.0-beta.4: aria-label del rest (HTML std). Si no llega, calcula uno
+  // descriptivo basado en porcentaje (o "Cargando" si indeterminate).
+  const { "aria-label": ariaLabelOverride, ...divRest } = rest;
   const resolvedAriaLabel =
-    ariaLabel ??
+    ariaLabelOverride ??
     (indeterminate
       ? "Cargando"
       : `${String(Math.round(percent))} por ciento completado`);
 
   return (
     <div
-      {...rest}
+      {...divRest}
       ref={ref}
       role="progressbar"
       aria-label={resolvedAriaLabel}

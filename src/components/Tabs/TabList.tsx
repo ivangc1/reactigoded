@@ -3,30 +3,28 @@ import { cn } from "@/utils/cn";
 import { useTabs } from "./TabsContext";
 
 export interface TabListProps extends HTMLAttributes<HTMLDivElement> {
-  /** Texto a11y para el tablist. */
-  ariaLabel?: string;
   ref?: Ref<HTMLDivElement>;
 }
 
 /**
  * TabList — contenedor `role="tablist"` para `Tab`s. Hereda la orientación
- * del `Tabs` padre.
+ * del `Tabs` padre. Pasa `aria-label` para etiquetar el tablist (i18n vía
+ * el atributo HTML estándar).
  */
 export function TabList({
-  ariaLabel,
   className,
   children,
   ref,
   ...rest
 }: TabListProps) {
   const { orientation } = useTabs();
+  // 1.0.0-beta.4: aria-label del rest (HTML std). Antes prop ariaLabel.
   return (
     <div
       {...rest}
       ref={ref}
       role="tablist"
       aria-orientation={orientation}
-      aria-label={ariaLabel}
       className={cn("ig-tabs-list", className)}
     >
       {children}

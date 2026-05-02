@@ -58,7 +58,7 @@ describe("Progress", () => {
   });
 
   it("aria-label custom override", () => {
-    render(<Progress value={30} ariaLabel="Subiendo archivo" />);
+    render(<Progress value={30} aria-label="Subiendo archivo" />);
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-label",
       "Subiendo archivo",

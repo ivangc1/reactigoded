@@ -80,7 +80,7 @@ export const Indeterminate: Story = {
 };
 
 export const ConLabelCustom: Story = {
-  args: { value: 70, ariaLabel: "Subiendo archivo (70%)" },
+  args: { value: 70, "aria-label": "Subiendo archivo (70%)" },
   decorators: [
     (Story) => (
       <div className="ig-story-stack ig-story-stack--md">
