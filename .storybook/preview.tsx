@@ -2,7 +2,8 @@ import type { Preview } from "@storybook/react-vite";
 import { withThemeByDataAttribute } from "@storybook/addon-themes";
 
 // Orden de imports CSS:
-//   1. design.css → tokens (--ig-*) + reset mínimo (box-sizing) + componentes (.ig-*)
+//   1. design.css → @import interno de tokens (--ig-*) + base (a11y/scrollbar/
+//                   selection/box-sizing) + components (clases .ig-*).
 //   2. reset.css  → estilos por defecto para HTML nativo (h1-h6, p, a, table…).
 //                   Lo importamos aquí para que las demos del catálogo se vean
 //                   "como un consumer con reset opt-in". Documentado en README.

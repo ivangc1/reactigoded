@@ -91,7 +91,7 @@ export const ConDisabled: Story = {
   ),
 };
 
-export const Controlled: Story = {
+export const Controlado: Story = {
   render: () => {
     const ControlledExample = () => {
       const [value, setValue] = useState<string | null>("b");

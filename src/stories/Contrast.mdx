@@ -9,19 +9,12 @@ normal, ≥3:1 para texto grande/elementos UI). El contraste lo verifica
 `axe-core` en cada story de Storybook (las violaciones rompen la build).
 
 > El comentario histórico de "WCAG AAA" en `igoded-design.css` se corrigió a
-> AA en `1.0.0-beta.1`. La keyword en `package.json` también es `wcag-aa`. Si
-> ves "AAA" en algún sitio, es legacy.
+> AA en `1.0.0-beta.1`. La keyword en `package.json` también es `wcag-aa`.
+> Si ves "AAA" en algún sitio, es legacy.
 
 ## Pares de texto + fondo
 
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))",
-    gap: "1rem",
-    margin: "1.5rem 0",
-  }}
->
+<div className="ig-foundation-grid ig-foundation-grid--lg">
   {[
     { fg: "--ig-text-heading", bg: "--ig-bg-base", ratio: "≥7:1", role: "heading" },
     { fg: "--ig-text-body", bg: "--ig-bg-base", ratio: "≥7:1", role: "body" },
@@ -33,38 +26,22 @@ normal, ≥3:1 para texto grande/elementos UI). El contraste lo verifica
     { fg: "--ig-text-on-rutilus", bg: "--ig-rutilus", ratio: "≥7:1", role: "sobre warning" },
     { fg: "--ig-text-on-malum", bg: "--ig-malum", ratio: "≥7:1", role: "sobre danger" },
   ].map((p) => (
-    <div
-      key={`${p.fg}-${p.bg}`}
-      style={{
-        border: "1px solid var(--ig-border-subtle)",
-        borderRadius: "var(--ig-rounded-md)",
-        overflow: "hidden",
-        fontFamily: "var(--ig-font-mono)",
-        fontSize: 12,
-      }}
-    >
+    <div key={`${p.fg}-${p.bg}`} className="ig-foundation-contrast">
       <div
-        style={{
-          background: `var(${p.bg})`,
-          color: `var(${p.fg})`,
-          padding: "1rem",
-          display: "grid",
-          gap: "0.25rem",
-        }}
+        className="ig-foundation-contrast__sample"
+        style={{ background: `var(${p.bg})`, color: `var(${p.fg})` }}
       >
-        <strong style={{ fontFamily: "var(--ig-font-heading)", fontSize: 16 }}>
-          Aa
-        </strong>
-        <span style={{ fontFamily: "var(--ig-font-base)", fontSize: 13 }}>
+        <strong className="ig-foundation-contrast__heading">Aa</strong>
+        <span className="ig-foundation-contrast__body">
           The quick brown fox
         </span>
       </div>
-      <div style={{ padding: "0.5rem 0.75rem", background: "var(--ig-bg-surface)" }}>
+      <div className="ig-foundation-contrast__meta">
         <code>{p.fg}</code>
         <br />
         <code>on {p.bg}</code>
         <br />
-        <span style={{ color: "var(--ig-text-muted)" }}>
+        <span className="ig-foundation-contrast__meta-note">
           {p.ratio} · {p.role}
         </span>
       </div>
@@ -82,9 +59,9 @@ normal, ≥3:1 para texto grande/elementos UI). El contraste lo verifica
   `.ig-card`), `currentColor` en bordes default/subtle.
 - **`forced-colors: active` (Windows High Contrast Mode)**: focus-visible usa
   `Highlight` system color; bordes usan `currentColor`.
-- **`axe-core` en cada story**: 175 stories pasan auditoría completa de a11y
-  (incluye violaciones de contraste — las atrapa el `addon-a11y` con `test:
-  "error"`).
+- **`axe-core` en cada story**: 175+ stories pasan auditoría completa de
+  a11y (incluye violaciones de contraste — las atrapa el `addon-a11y` con
+  `test: "error"`).
 
 ## Override por consumer
 

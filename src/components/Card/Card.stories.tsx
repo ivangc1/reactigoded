@@ -70,7 +70,7 @@ type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {
   render: (args) => (
-    <Card {...args} style={{ maxWidth: 320 }}>
+    <Card {...args} className="ig-story-card-md">
       <CardBody>Contenido simple de la card.</CardBody>
     </Card>
   ),
@@ -78,7 +78,7 @@ export const PorDefecto: Story = {
 
 export const Compuesta: Story = {
   render: () => (
-    <Card style={{ maxWidth: 360 }} elevated>
+    <Card className="ig-story-card-lg" elevated>
       <CardHeader>
         <strong>Título de la card</strong>
       </CardHeader>
@@ -114,7 +114,7 @@ export const Variantes: Story = {
 
 export const ConImagen: Story = {
   render: () => (
-    <Card style={{ maxWidth: 320 }} elevated>
+    <Card className="ig-story-card-md" elevated>
       <CardImage src={demoImage} alt="Decorativa" top />
       <CardBody>
         <strong>Card con imagen</strong>
@@ -137,7 +137,7 @@ export const Interactiva: Story = {
     <Card
       interactive
       elevated
-      style={{ maxWidth: 320, cursor: "pointer" }}
+      className="ig-story-card-md ig-story-clickable"
       role="button"
       tabIndex={0}
       aria-label="Ir al detalle"

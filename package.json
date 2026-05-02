@@ -1,6 +1,6 @@
 {
   "name": "reactigoded",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "Igoded Design System — componentes React + CSS utility-first state-driven",
   "license": "MIT",
   "author": "ivangc1",
@@ -46,6 +46,8 @@
       "require": "./dist/index.cjs"
     },
     "./styles/tokens.css": "./dist/styles/igoded-tokens.css",
+    "./styles/base.css": "./dist/styles/igoded-base.css",
+    "./styles/components.css": "./dist/styles/igoded-components.css",
     "./styles/design.css": "./dist/styles/igoded-design.css",
     "./styles/reset.css": "./dist/styles/igoded-reset.css",
     "./styles/state.css": "./dist/styles/igoded-state-css.css",

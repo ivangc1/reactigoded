@@ -7,6 +7,61 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.2] — 2026-05-02
+
+Refactor de la arquitectura CSS y pulido completo del catálogo Storybook.
+
+### Added
+- **`igoded-base.css` (nuevo, ~3 KB)** — globales mínimos del DS:
+  `box-sizing` universal, `html` (scroll-behavior, scrollbar-gutter,
+  accent-color, caret-color), scrollbar tematizada (`::-webkit-scrollbar*`),
+  `::selection`, `@media (prefers-reduced-motion: reduce)`,
+  `(prefers-contrast: more)`, `(forced-colors: active)`. Standalone, depende
+  solo de tokens. Expuesto como `reactigoded/styles/base.css`.
+- **`igoded-components.css` (nuevo, ~270 KB)** — utilities + componentes
+  (clases `.ig-*`). Sin selectores globales. Depende de tokens + base.
+  Expuesto como `reactigoded/styles/components.css`.
+- `.storybook/manager.ts` no era nuevo; sí lo es **`managerHead`** en
+  `main.ts`: meta description, og:title/description/url/type, theme-color,
+  canonical, twitter:card, y un MutationObserver que reescribe
+  `<title>` `"… ⋅ Storybook"` → `"… · Igoded Design System"` en cada
+  navegación. Sin polling.
+- `docs.defaultName: "Documentación"` (era `"Docs"`).
+- Helpers en `.storybook/storybook.css`: `.ig-story-card-{sm,md,lg}`,
+  `.ig-story-clickable`, `.ig-story-min-h-{sm,md,lg}`,
+  `.ig-foundation-{grid,swatch,token-row,contrast,typo}` para los MDX.
+- README: tabla detallada de globales que aplica `base.css`, escenarios
+  de import por caso de uso (5 filas).
+
+### Changed
+- **`igoded-design.css` ahora es solo un meta-importer** que hace
+  `@import` de `tokens.css` + `base.css` + `components.css`. Backward
+  compat: un consumer que importa `design.css` recibe lo mismo que antes.
+- **`igoded-tokens.css` es ahora 100% variables CSS**: el
+  `*, *::before, *::after { box-sizing: border-box }` se movió a
+  `base.css`. Tokens.css ya no tiene ningún selector global.
+- **Stories renombradas (ES uniforme)**:
+  - `Switch.Toggle` → `InteracciónToggle` (no era prop literal).
+  - `Accordion.Controlled` / `Sidebar.Controlled` /
+    `ThemeSwitch.Controlled` → `Controlado` (consistencia con
+    `Switch.Controlado` y `Rating.Controlado`).
+- **Card stories**: 4 inline `style={{ maxWidth, cursor }}` → clases
+  helper `.ig-story-card-md`, `.ig-story-card-lg`, `.ig-story-clickable`.
+- **MDX foundations** (`Spacing.mdx`, `Contrast.mdx`, `DesignTokens.mdx`)
+  migrados de inline styles a clases `.ig-foundation-*`. Markup más
+  limpio y consistente entre páginas.
+- **`igoded-design.css` cabecera reescrita**: las ~190 líneas de índice
+  legacy con números de línea desactualizados ("RESET BASE OPCIONAL...215"
+  apuntaban a líneas que ya no existen) sustituidas por bloque conciso
+  que documenta la arquitectura modular real.
+
+### Migración (sin breaking)
+- `import "reactigoded/styles/design.css"` sigue funcionando igual que en
+  beta.1. Internamente ahora `@import`a 3 archivos en vez de 2.
+- Si importabas `tokens.css` esperando el `box-sizing` global, ahora
+  importa `base.css` también (`tokens.css` + `base.css` reproduce el
+  comportamiento anterior).
+
 ## [1.0.0-beta.1] — 2026-05-02
 
 Pasada de pulido orientada a percepción del catálogo Storybook + saneamiento

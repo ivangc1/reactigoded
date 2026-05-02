@@ -136,7 +136,7 @@ export const Colapsada: Story = {
   ),
 };
 
-export const Controlled: Story = {
+export const Controlado: Story = {
   parameters: {
     docs: {
       description: {

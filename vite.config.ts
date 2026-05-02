@@ -8,13 +8,15 @@ import { mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Copia los CSS del design system a dist/styles/ y genera un index.css que
-// hace `@import` de los 4 (no concatenación, para no duplicar bytes).
+// hace `@import` de los principales (no concatenación, para no duplicar bytes).
 // Cubre los `exports` declarados en package.json:
-//   "./styles/tokens.css"  → solo variables --ig-* + keyframes (~80 KB)
-//   "./styles/design.css"  → tokens (vía @import interno) + componentes
-//   "./styles/reset.css"   → estilos por defecto para HTML nativo (opt-in)
-//   "./styles/state.css"   → utilities pseudo-class (opt-in, 7.1 MB)
-//   "./styles/all.css"     → atajo: design + reset + state vía @import
+//   "./styles/tokens.css"      → solo variables --ig-* + keyframes (~98 KB)
+//   "./styles/base.css"        → globales mínimos (a11y/scrollbar/selection)
+//   "./styles/components.css"  → utilities + componentes (.ig-*)
+//   "./styles/design.css"      → tokens + base + components vía @import
+//   "./styles/reset.css"       → estilos por defecto HTML nativo (opt-in)
+//   "./styles/state.css"       → utilities pseudo-class (opt-in, 7.1 MB)
+//   "./styles/all.css"         → design + reset + state vía @import
 function copyDesignSystemStyles(): PluginOption {
   return {
     name: "copy-design-system-styles",
@@ -23,25 +25,19 @@ function copyDesignSystemStyles(): PluginOption {
       const srcDir = resolve(__dirname, "src/styles");
       const outDir = resolve(__dirname, "dist/styles");
       mkdirSync(outDir, { recursive: true });
-      copyFileSync(
-        resolve(srcDir, "igoded-tokens.css"),
-        resolve(outDir, "igoded-tokens.css"),
-      );
-      copyFileSync(
-        resolve(srcDir, "igoded-design.css"),
-        resolve(outDir, "igoded-design.css"),
-      );
-      copyFileSync(
-        resolve(srcDir, "igoded-reset.css"),
-        resolve(outDir, "igoded-reset.css"),
-      );
-      copyFileSync(
-        resolve(srcDir, "igoded-state-css.css"),
-        resolve(outDir, "igoded-state-css.css"),
-      );
+      const files = [
+        "igoded-tokens.css",
+        "igoded-base.css",
+        "igoded-components.css",
+        "igoded-design.css",
+        "igoded-reset.css",
+        "igoded-state-css.css",
+      ];
+      for (const f of files) {
+        copyFileSync(resolve(srcDir, f), resolve(outDir, f));
+      }
       // `all.css` referencia los otros vía @import — no copiar bytes.
-      // El consumer puede usar este path como punto único de entrada CSS.
-      // Orden: design (tokens vía @import interno + componentes) → reset → state.
+      // Orden: design (= tokens + base + components vía @import) → reset → state.
       const allCss =
         `@import "./igoded-design.css";\n` +
         `@import "./igoded-reset.css";\n` +

@@ -43,7 +43,7 @@ export const SinPersistencia: Story = {
   render: (args) => <ThemeSwitch {...args} />,
 };
 
-export const Controlled: Story = {
+export const Controlado: Story = {
   parameters: {
     docs: {
       description: {

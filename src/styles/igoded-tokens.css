@@ -3,17 +3,33 @@
 IGODED TOKENS — variables CSS del design system
 ═══════════════════════════════════════════════════════════════════════════════
 
-QUÉ CONTIENE: Solo definiciones de tokens (--ig-*), keyframes y reglas
-@font-face. NO contiene clases de componentes ni utilities.
+QUÉ CONTIENE: 100% variables CSS y declaraciones a nivel de "metadata":
+- Tokens (`--ig-*`): colores, fondos, textos, espaciado, tipografía,
+  bordes, sombras, glows, glassmorphism, neumorphism, gradientes,
+  transiciones, z-index, breakpoints, etc.
+- Keyframes (`@keyframes ig-*`) usados por las clases de animación.
+- `@font-face` (importa Electrolize / Saira / JetBrains Mono).
 
-TAMAÑO: ~80 KB sin gzip. Útil si construyes tu propia capa de componentes
-sobre los tokens del DS sin querer cargar `igoded-design.css` completo
-(~470 KB).
+QUÉ NO CONTIENE — **cero selectores globales**:
+- `box-sizing: border-box` baseline → `igoded-base.css` (desde `1.0.0-beta.2`).
+- Globales `html` / scrollbars / `::selection` / prefers-* → `igoded-base.css`.
+- Clases de componentes (`.ig-btn`, `.ig-card`, ...) → `igoded-components.css`.
+- Reset de HTML nativo (`h1`, `p`, `button`, `input`, `table`...) → `igoded-reset.css`.
+- Utilities pseudo-class (`hover:ig-bg-brand`) → `igoded-state-css.css`.
+
+TAMAÑO: ~98 KB sin gzip. Útil si construyes tu propia capa de componentes
+sobre los tokens del DS sin querer cargar el resto del paquete.
 
 USO:
-  import "reactigoded/styles/tokens.css";   // solo tokens
-  // o:
-  import "reactigoded/styles/design.css";  // tokens + componentes (incluye este)
+  // Solo tokens (sin estilos aplicados a nada):
+  import "reactigoded/styles/tokens.css";
+
+  // Tokens + a11y baseline (componentes propios sobre Igoded):
+  import "reactigoded/styles/tokens.css";
+  import "reactigoded/styles/base.css";
+
+  // DS completo:
+  import "reactigoded/styles/design.css";   // tokens + base + components
 */
 
 /*
@@ -40,23 +56,7 @@ POR QUÉ ESTAS: Combinan bien juntas y tienen personalidad sin ser raras.
 
 /*
 ═══════════════════════════════════════════════════════════════════════════════
-2. BASE MÍNIMO
-═══════════════════════════════════════════════════════════════════════════════
-
-Solo `box-sizing: border-box` en todo. Es necesario para que los componentes
-con padding+border calculen su tamaño correctamente.
-
-EL RESET DE ELEMENTOS HTML (h1-h6, p, a, button, input, table, ::selection,
-etc.) está en `igoded-reset.css` como import opt-in. Ver README §"CSS imports".
-*/
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-/*
-═══════════════════════════════════════════════════════════════════════════════
-3. COLORES IGODED (FUNDUS + 6 CARDINALES)
+2. COLORES IGODED (FUNDUS + 6 CARDINALES)
 ═══════════════════════════════════════════════════════════════════════════════
 
 QUÉ ES: Sistema de 7 colores con nomenclatura latina. Cada color tiene dos

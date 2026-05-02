@@ -96,3 +96,140 @@ USO:
   text-transform: uppercase;
   color: var(--ig-text-muted);
 }
+
+/* Card / Avatar / Spinner — anchos típicos para previews en stories.
+   Se aplican al propio componente con `className="ig-story-card-md"`. */
+.ig-story-card-sm { max-width: 16rem; }
+.ig-story-card-md { max-width: 20rem; }
+.ig-story-card-lg { max-width: 24rem; }
+
+/* Indica visualmente "este elemento es interactivo" sin reescribir cursor
+   en cada Card.interactive demo. */
+.ig-story-clickable { cursor: pointer; }
+
+/* Wrapper para demos que necesitan altura mínima fija (Skeleton image,
+   Dropdown popover space, Modal trigger area). Sin tener que hardcodear
+   `style={{ minHeight: 240 }}` repartido. */
+.ig-story-min-h-sm { min-height: 12rem; }
+.ig-story-min-h-md { min-height: 16rem; }
+.ig-story-min-h-lg { min-height: 20rem; }
+
+/*
+═══════════════════════════════════════════════════════════════════════════════
+FOUNDATIONS (MDX docs)
+═══════════════════════════════════════════════════════════════════════════════
+*/
+
+/* Token swatch / sample card en docs. */
+.ig-foundation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--ig-space-4);
+  margin: var(--ig-space-6) 0;
+}
+
+.ig-foundation-grid--lg {
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+.ig-foundation-grid--xl {
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+.ig-foundation-swatch {
+  border: 1px solid var(--ig-border-subtle);
+  border-radius: var(--ig-rounded-md);
+  overflow: hidden;
+  font-family: var(--ig-font-mono);
+  font-size: var(--ig-text-xs);
+}
+
+.ig-foundation-swatch__color {
+  height: 5rem;
+}
+
+.ig-foundation-swatch__meta {
+  padding: var(--ig-space-2) var(--ig-space-3);
+}
+
+/* Filas para tokens monospace tipo `--ig-space-4 = 16px ███`. */
+.ig-foundation-token-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ig-space-3);
+  font-family: var(--ig-font-mono);
+  font-size: var(--ig-text-xs);
+}
+
+.ig-foundation-token-row code {
+  min-width: 10rem;
+}
+
+.ig-foundation-token-row__measure {
+  min-width: 3.5rem;
+  color: var(--ig-text-muted);
+}
+
+.ig-foundation-token-row__bar {
+  background: var(--ig-vitreus);
+  height: 0.75rem;
+  border-radius: 2px;
+}
+
+/* Bloque de prueba contraste texto+fondo. */
+.ig-foundation-contrast {
+  border: 1px solid var(--ig-border-subtle);
+  border-radius: var(--ig-rounded-md);
+  overflow: hidden;
+  font-family: var(--ig-font-mono);
+  font-size: var(--ig-text-xs);
+}
+
+.ig-foundation-contrast__sample {
+  padding: var(--ig-space-4);
+  display: grid;
+  gap: var(--ig-space-1);
+}
+
+.ig-foundation-contrast__heading {
+  font-family: var(--ig-font-heading);
+  font-size: var(--ig-text-base);
+}
+
+.ig-foundation-contrast__body {
+  font-family: var(--ig-font-base);
+  font-size: var(--ig-text-sm);
+}
+
+.ig-foundation-contrast__meta {
+  padding: var(--ig-space-2) var(--ig-space-3);
+  background: var(--ig-bg-surface);
+}
+
+.ig-foundation-contrast__meta-note {
+  color: var(--ig-text-muted);
+}
+
+/* Bloques de tipografía en DesignTokens.mdx. */
+.ig-foundation-typo {
+  margin: var(--ig-space-6) 0;
+  display: grid;
+  gap: var(--ig-space-4);
+}
+
+.ig-foundation-typo__heading {
+  font-family: var(--ig-font-heading);
+  margin: var(--ig-space-1) 0 0;
+}
+
+.ig-foundation-typo__body {
+  font-family: var(--ig-font-base);
+  margin: var(--ig-space-1) 0 0;
+  font-size: var(--ig-text-base);
+}
+
+.ig-foundation-typo__mono {
+  font-family: var(--ig-font-mono);
+  margin: var(--ig-space-1) 0 0;
+  font-size: var(--ig-text-sm);
+}

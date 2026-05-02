@@ -4,23 +4,17 @@ import { Meta } from "@storybook/addon-docs/blocks";
 
 # Design Tokens
 
-Toda la consistencia visual del DS sale de variables CSS `--ig-*`. Cambiar una
-variable en `:root` cambia la apariencia en todos los componentes que la usan
-— es el punto canónico para customización por aplicación consumidora.
+Toda la consistencia visual del DS sale de variables CSS `--ig-*`. Cambiar
+una variable en `:root` cambia la apariencia en todos los componentes que
+la usan — es el punto canónico para customización por aplicación
+consumidora.
 
 ## Colores semánticos
 
 Cada variante semántica está respaldada por un color base con nombre latino.
 Las variantes son las que aparecen en `Button`, `Badge`, `Spinner`, `Alert`…
 
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-    gap: "1rem",
-    margin: "1.5rem 0",
-  }}
->
+<div className="ig-foundation-grid">
   {[
     { name: "brand", token: "--ig-brand", source: "vitreus" },
     { name: "secondary", token: "--ig-secondary", source: "axis" },
@@ -29,18 +23,12 @@ Las variantes son las que aparecen en `Button`, `Badge`, `Spinner`, `Alert`…
     { name: "danger", token: "--ig-danger", source: "malum" },
     { name: "info", token: "--ig-info", source: "axis" },
   ].map((c) => (
-    <div
-      key={c.name}
-      style={{
-        border: "1px solid var(--ig-border-subtle, #444)",
-        borderRadius: 8,
-        overflow: "hidden",
-        fontFamily: "var(--ig-font-mono, monospace)",
-        fontSize: 12,
-      }}
-    >
-      <div style={{ background: `var(${c.token})`, height: 80 }} />
-      <div style={{ padding: "0.5rem 0.75rem" }}>
+    <div key={c.name} className="ig-foundation-swatch">
+      <div
+        className="ig-foundation-swatch__color"
+        style={{ background: `var(${c.token})` }}
+      />
+      <div className="ig-foundation-swatch__meta">
         <strong>{c.name}</strong>
         <br />
         <code>{c.token}</code>
@@ -53,14 +41,7 @@ Las variantes son las que aparecen en `Button`, `Badge`, `Spinner`, `Alert`…
 
 ## Superficies
 
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-    gap: "1rem",
-    margin: "1.5rem 0",
-  }}
->
+<div className="ig-foundation-grid ig-foundation-grid--xl">
   {[
     "--ig-bg-base",
     "--ig-bg-surface",
@@ -72,47 +53,30 @@ Las variantes son las que aparecen en `Button`, `Badge`, `Spinner`, `Alert`…
   ].map((token) => (
     <div
       key={token}
-      style={{
-        border: "1px solid var(--ig-border-subtle, #444)",
-        borderRadius: 8,
-        padding: "1rem",
-        background: `var(${token})`,
-        fontFamily: "var(--ig-font-mono, monospace)",
-        fontSize: 12,
-        minHeight: 60,
-      }}
+      className="ig-foundation-swatch"
+      style={{ background: `var(${token})`, minHeight: "5rem" }}
     >
-      <code>{token}</code>
+      <div className="ig-foundation-swatch__meta">
+        <code>{token}</code>
+      </div>
     </div>
   ))}
 </div>
 
 ## Espaciado
 
-Todos los espaciados son múltiplos de `--ig-space-unit` (por defecto `0.25rem`
-= 4px). Disponibles: `0, 0-5, 1, 1-5, 2, 2-5, 3, 3-5, 4, 5, 6, 7, 8, 9, 10, 11,
-12, 14, 16, 20, 24, 28, 32, 36, 40`.
+Todos los espaciados son múltiplos de `--ig-space-unit` (por defecto
+`0.25rem` = 4px). Disponibles: `0, 0-5, 1, 1-5, 2, 2-5, 3, 3-5, 4, 5, 6, 7,
+8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40`. Visualización completa
+en **Fundamentos/Espaciado**.
 
-<div style={{ margin: "1.5rem 0" }}>
+<div className="ig-story-stack ig-story-stack--lg">
   {[1, 2, 3, 4, 6, 8, 12, 16, 24, 40].map((n) => (
-    <div
-      key={n}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.75rem",
-        marginBottom: 4,
-        fontFamily: "var(--ig-font-mono, monospace)",
-        fontSize: 12,
-      }}
-    >
-      <code style={{ minWidth: 120 }}>--ig-space-{n}</code>
+    <div key={n} className="ig-foundation-token-row">
+      <code>--ig-space-{n}</code>
       <div
-        style={{
-          background: "var(--ig-brand)",
-          height: 16,
-          width: `var(--ig-space-${n})`,
-        }}
+        className="ig-foundation-token-row__bar"
+        style={{ width: `var(--ig-space-${n})` }}
       />
     </div>
   ))}
@@ -120,39 +84,20 @@ Todos los espaciados son múltiplos de `--ig-space-unit` (por defecto `0.25rem`
 
 ## Tipografía
 
-<div style={{ margin: "1.5rem 0" }}>
-  <div style={{ marginBottom: "1rem" }}>
+<div className="ig-foundation-typo">
+  <div>
     <code>--ig-font-heading</code>
-    <h1
-      style={{
-        fontFamily: "var(--ig-font-heading)",
-        margin: "0.25rem 0 0",
-      }}
-    >
-      Heading — Electrolize
-    </h1>
+    <h1 className="ig-foundation-typo__heading">Heading — Electrolize</h1>
   </div>
-  <div style={{ marginBottom: "1rem" }}>
+  <div>
     <code>--ig-font-base</code>
-    <p
-      style={{
-        fontFamily: "var(--ig-font-base)",
-        margin: "0.25rem 0 0",
-        fontSize: 16,
-      }}
-    >
+    <p className="ig-foundation-typo__body">
       Body — Saira. Tipografía cómoda para textos largos.
     </p>
   </div>
   <div>
     <code>--ig-font-mono</code>
-    <pre
-      style={{
-        fontFamily: "var(--ig-font-mono)",
-        margin: "0.25rem 0 0",
-        fontSize: 14,
-      }}
-    >
+    <pre className="ig-foundation-typo__mono">
       Monospace — JetBrains Mono. Para código y tokens.
     </pre>
   </div>

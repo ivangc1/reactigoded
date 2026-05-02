@@ -1,11 +1,15 @@
 # reactigoded
 
 Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
-sobre el CSS utility-first state-driven (`igoded-design.css` +
-`igoded-reset.css` opt-in + `igoded-state-css.css`).
+sobre un CSS modular utility-first state-driven (`tokens` / `base` /
+`components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.0` — reescritura completa, 0 deprecaciones, listo
-> para consumir como dependencia.
+> **Estado**: `1.0.0-beta.2` — arquitectura CSS de 4 ejes
+> (`tokens` / `base` / `components` / `design` meta-importer), Storybook
+> branded con `<title>` rebrandeado, foundations docs en MDX, naming
+> uniforme, API homogénea (`Button` y `Card` con eje `appearance`, `Toast`
+> renombra `default` → `neutral`). 0 deprecaciones, listo para consumir como
+> dependencia.
 
 ## Instalación
 
@@ -19,28 +23,48 @@ pnpm add reactigoded
 
 ## CSS imports
 
-Cinco entradas, eliges qué cargar:
+7 entradas en `1.0.0-beta.2`. Lo habitual: importa solo `design.css`.
 
 ```ts
-// Solo tokens (--ig-*) + keyframes (~80 KB). Útil si construyes tu propia
-// capa de componentes encima del DS sin querer cargar las clases `.ig-*`.
-import "reactigoded/styles/tokens.css";
+// 100% variables --ig-* + keyframes + @font-face. Cero selectores globales.
+// Útil si quieres construir tus propios componentes sobre los tokens del DS
+// sin cargar nada más.
+import "reactigoded/styles/tokens.css";   // ~98 KB
 
-// Tokens (vía @import interno) + componentes (~470 KB). Lo habitual.
-import "reactigoded/styles/design.css";
+// Globales mínimos: box-sizing + html scroll + scrollbars + ::selection +
+// prefers-reduced-motion / contrast / forced-colors. Garantías a11y +
+// scrollbar tematizada. Requiere tokens.css.
+import "reactigoded/styles/base.css";     // ~3 KB
 
-// Opcional: estilos por defecto para HTML nativo (h1-h6, p, a, button, input,
-// table, code, blockquote…). Útil si NO usas Tailwind/Bootstrap. **No** lo
-// importes si ya tienes otro reset, choca por especificidad.
-import "reactigoded/styles/reset.css";
+// Solo clases .ig-* (utilities + componentes). Cero globales. Requiere
+// tokens.css + base.css.
+import "reactigoded/styles/components.css"; // ~270 KB
 
-// Opcional: utilities pseudo-class (hover:ig-bg-brand, focus:..., etc.)
-// 7.1 MB sin gzip — solo si usas las utilities directamente en HTML.
-import "reactigoded/styles/state.css";
+// Atajo: tokens + base + components vía @import. Lo habitual.
+import "reactigoded/styles/design.css";   // ~370 KB total
 
-// Atajo: importa design + reset + state vía @import (sin duplicar bytes).
+// Estilos por defecto para HTML nativo (h1-h6, p, a, button, input, table,
+// code, blockquote…). NO lo importes si ya usas Tailwind preflight,
+// Bootstrap reboot u otro reset.
+import "reactigoded/styles/reset.css";    // ~5 KB
+
+// Utilities pseudo-class (hover:ig-bg-brand, focus:..., etc.) — solo si
+// usas las utilities directamente en HTML.
+import "reactigoded/styles/state.css";    // ~7.1 MB
+
+// Atajo final: design + reset + state vía @import (sin duplicar bytes).
 import "reactigoded/styles/all.css";
 ```
+
+### Escenarios típicos
+
+| Caso de uso                              | Imports                              |
+|------------------------------------------|--------------------------------------|
+| Uso normal del DS                        | `design.css`                         |
+| DS + estilos para HTML nativo            | `design.css` + `reset.css`           |
+| Solo tokens, construyo encima            | `tokens.css`                         |
+| Tokens + a11y baseline, mis componentes  | `tokens.css` + `base.css`            |
+| Tema custom, mismas clases del DS        | `design.css` + override `:root`      |
 
 > El `<dialog>` de `<Modal>` y los componentes con flex/transition usan
 > `var(--ig-*)` definidos en `design.css`. **Si solo importas `state.css` o
@@ -49,6 +73,28 @@ import "reactigoded/styles/all.css";
 > El `reset.css` se separó del `design.css` en `1.0.0-beta.1` (antes estaba
 > activo dentro de `design.css`). Si actualizas desde una beta anterior y
 > notas que tu HTML nativo perdió estilos, importa `reset.css`.
+
+### Globales aplicados por `base.css` (incluido en `design.css`)
+
+`design.css` **no estiliza** elementos HTML nativos como `h1`, `p`, `a`,
+`button`, `input` o `table` — eso vive en `reset.css` (opt-in).
+
+Sí aplica un baseline global mínimo (`base.css`), pensado como
+infraestructura del sistema (no como opinión visual sobre tu HTML):
+
+| Selector / @-rule | Qué hace |
+|---|---|
+| `*, *::before, *::after { box-sizing: border-box }` | Necesario para que padding+border de los componentes calcule el tamaño correcto. |
+| `html { scroll-behavior, scrollbar-gutter, accent-color, caret-color }` | Suaviza scroll, reserva gutter de scrollbar, fija color de focus en checkboxes/radios nativos y caret de inputs. |
+| `::-webkit-scrollbar*` | Scrollbar tematizada (solo Chrome/Edge/Safari). |
+| `::selection`, `::-moz-selection` | Color de selección de texto coherente con la marca. |
+| `@media (prefers-reduced-motion: reduce)` | Reduce animation/transition a `0.01ms` para usuarios con sensibilidad al movimiento. **Garantía a11y, no opcional.** |
+| `@media (prefers-contrast: more)` | Refuerza bordes en `.ig-btn`, `.ig-input`, `.ig-card`. |
+| `@media (forced-colors: active)` | Compatibilidad con Windows High Contrast Mode. |
+
+**Si quieres cero globales** en una sub-zona aislada, importa solo
+`tokens.css` + `components.css` (sin `base.css`). Pierdes el baseline a11y
+del sistema; asegúrate de que ya lo tienes en tu propia capa.
 
 ## Uso
 
@@ -196,7 +242,7 @@ src/
 ├── components/         # 32 carpetas (1 por componente raíz)
 ├── hooks/              # useTheme
 ├── utils/              # cn (wrapper de clsx)
-├── styles/             # igoded-design.css + igoded-reset.css + igoded-state-css.css
+├── styles/             # igoded-{tokens,base,components,design,reset,state-css}.css
 └── index.ts            # entry del paquete
 scripts/
 └── strip-orphan-css.mjs  # limpia utilities de state-css apuntando a tokens eliminados

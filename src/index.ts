@@ -1,19 +1,34 @@
 /**
  * Igoded Design System — entry point del paquete.
  *
- * Importa los estilos en tu app (5 entradas, eliges qué cargar):
+ * Arquitectura CSS modular (`1.0.0-beta.2`):
  *
- *   import "reactigoded/styles/tokens.css";  // solo tokens (--ig-*) — ~80 KB
- *                                            // útil si construyes tus propios
- *                                            // componentes sobre el DS.
- *   import "reactigoded/styles/design.css";  // tokens (vía @import) + componentes
- *   import "reactigoded/styles/reset.css";   // estilos por defecto para HTML
- *                                            // nativo (h1-h6, p, a, table…).
- *                                            // Opcional. NO importar si usas
- *                                            // Tailwind, Bootstrap u otro reset.
- *   import "reactigoded/styles/state.css";   // utilities pseudo-class (hover:,
- *                                            // focus:, etc.) — 7.1 MB. Opcional.
- *   import "reactigoded/styles/all.css";     // atajo: design + reset + state.
+ *   tokens.css       solo variables --ig-* + keyframes + @font-face
+ *                    (cero selectores globales, ~98 KB).
+ *   base.css         globales mínimos: box-sizing + html + scrollbars +
+ *                    ::selection + prefers-reduced-motion / contrast /
+ *                    forced-colors. Garantías a11y. Requiere tokens.
+ *   components.css   utilities + componentes (clases .ig-*). Requiere
+ *                    tokens + base.
+ *   design.css       meta: @import de tokens + base + components.
+ *
+ *   reset.css        estilos por defecto para HTML nativo (h1-h6, p, a,
+ *                    button, input, table…). Opt-in.
+ *   state.css        utilities pseudo-class (hover:, focus:). 7.1 MB. Opt-in.
+ *   all.css          atajo: design + reset + state.
+ *
+ * USO POR ESCENARIO:
+ *
+ *   import "reactigoded/styles/design.css";              // DS completo
+ *
+ *   import "reactigoded/styles/design.css";
+ *   import "reactigoded/styles/reset.css";               // DS + HTML nativo
+ *
+ *   import "reactigoded/styles/tokens.css";              // solo tokens
+ *
+ *   import "reactigoded/styles/tokens.css";
+ *   import "reactigoded/styles/base.css";                // tokens + a11y
+ *                                                        // baseline
  */
 
 // Componentes
