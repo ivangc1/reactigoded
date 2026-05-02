@@ -29,10 +29,6 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run Chromatic
-        uses: chromaui/action@v11
-        with:
-          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-          exitZeroOnChanges: true
-          exitOnceUploaded: true
-          onlyChanged: true
-          autoAcceptChanges: main
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: npx chromatic --exit-zero-on-changes --exit-once-uploaded --only-changed --auto-accept-changes=main
