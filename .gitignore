@@ -44,3 +44,9 @@ coverage/
 
 # OS
 Thumbs.db
+
+# Local snapshots de scripts/config de la VPS — viven en igoded@server, no en el paquete reactigoded
+deploy*.sh*
+deploy-worker*.sh*
+igoded.es.*nginx*
+webhook.php*
