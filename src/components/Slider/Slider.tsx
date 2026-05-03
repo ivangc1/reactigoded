@@ -1,7 +1,8 @@
 import type { InputHTMLAttributes, Ref } from "react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export interface SliderProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
@@ -48,7 +49,6 @@ export function Slider({
   ref,
   ...rest
 }: SliderProps) {
-  const isControlled = value !== undefined;
   // `defaultValue` puede llegar como string ("60") o readonly array (que el
   // <input> nativo no soporta para type="range"). Normalizamos a número
   // finito; si no se puede, caemos a `min`. Antes de 1.0.0-beta.3 un
@@ -62,7 +62,25 @@ export function Slider({
         ? Number(defaultValue)
         : NaN;
   const initial = Number.isFinite(parsedDefault) ? parsedDefault : safeMin;
-  const [internal, setInternal] = useState<number>(initial);
+  // `value` puede ser number|string|readonly number[] del tipo HTMLInput.
+  // Solo entra en controlled si es number/string finito; el array
+  // (no soportado por type="range") cae a uncontrolled y se warn-ea
+  // abajo.
+  const controlledNum =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.length > 0
+        ? Number(value)
+        : undefined;
+  const passControlled =
+    controlledNum !== undefined && Number.isFinite(controlledNum)
+      ? controlledNum
+      : undefined;
+  const { value: internal, setValue: setInternal, isControlled } =
+    useControllableState<number>({
+      value: passControlled,
+      defaultValue: initial,
+    });
 
   // Dev-only warnings: capturan errores típicos del consumer que la
   // plataforma ignora silenciosamente. Avisa una vez por instancia.
@@ -89,7 +107,7 @@ export function Slider({
     }
   }
 
-  const rawCurrent = isControlled ? Number(value) : internal;
+  const rawCurrent = internal;
   // Si `value="abc"` o `internal` quedó NaN por algún edge, no queremos
   // pintar 'NaN' ni propagar NaN al aria-valuetext. Caemos a safeMin
   // como hace el inicializador del defaultValue.
@@ -125,7 +143,7 @@ export function Slider({
       {...domValueProp}
       onChange={(e) => {
         const next = Number(e.target.value);
-        if (!isControlled) setInternal(next);
+        setInternal(next);
         onChange?.(e);
         onValueChange?.(next);
       }}
