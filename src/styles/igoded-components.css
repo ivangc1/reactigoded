@@ -117,7 +117,7 @@ CÓMO USAR:
   <p>El texto fluirá alrededor de la imagen...</p>
 </article>
 
-<!-- Para limpiar floats y que el siguiente elemento empiece debajo -->
+\3c !-- Para limpiar floats y que el siguiente elemento empiece debajo -->
 <div class="ig-clear-both"></div>
 */
 
@@ -556,7 +556,7 @@ SOPORTE: Chrome 117+, Firefox 71+, Safari 16+
 CÓMO USAR:
 <div class="ig-grid ig-grid-cols-3 ig-gap-4">
   <div class="ig-col-span-2 ig-grid ig-subgrid-cols ig-gap-4">
-    <!-- Estos hijos se alinean con las columnas del padre -->
+    \3c !-- Estos hijos se alinean con las columnas del padre -->
     <div>Alineado con col 1</div>
     <div>Alineado con col 2</div>
   </div>
@@ -769,14 +769,14 @@ CLASES:
 - ig-divide-*-color: color del borde
 
 CÓMO USAR:
-<!-- Lista vertical con líneas entre items -->
+\3c !-- Lista vertical con líneas entre items -->
 <ul class="ig-divide-y ig-divide-subtle">
   <li>Item 1</li>
   <li>Item 2 (tiene borde arriba)</li>
   <li>Item 3 (tiene borde arriba)</li>
 </ul>
 
-<!-- Flex horizontal con separadores -->
+\3c !-- Flex horizontal con separadores -->
 <div class="ig-flex ig-divide-x ig-divide-brand">
   <span>Uno</span>
   <span>Dos</span>
@@ -2033,7 +2033,7 @@ CÓMO USAR:
 <ul class="ig-columns-3 ig-gap-x-4">
   <li>Item 1</li>
   <li>Item 2</li>
-  <!-- Se distribuyen en 3 columnas -->
+  \3c !-- Se distribuyen en 3 columnas -->
 </ul>
 
 NOTA: Para evitar que un elemento se corte entre columnas,
@@ -2248,7 +2248,7 @@ CLASES:
 - ig-bg-scroll: el fondo hace scroll con la página (por defecto)
 
 CÓMO USAR:
-<!-- Hero con efecto parallax -->
+\3c !-- Hero con efecto parallax -->
 <section class="ig-bg-fixed ig-bg-cover ig-bg-center" style="background-image: url(...)">
   <div class="ig-py-24">Contenido que hace scroll sobre el fondo fijo</div>
 </section>
@@ -2311,17 +2311,17 @@ DIRECCIONES:
 - ig-bg-gradient-to-tl: hacia arriba-izquierda
 
 CÓMO USAR:
-<!-- Gradiente simple de dos colores -->
+\3c !-- Gradiente simple de dos colores -->
 <div class="ig-bg-gradient-to-r ig-from-brand ig-to-success">
   Teal a verde
 </div>
 
-<!-- Gradiente de tres colores -->
+\3c !-- Gradiente de tres colores -->
 <div class="ig-bg-gradient-to-br ig-from-brand ig-via-secondary ig-to-success">
   Teal → Indigo → Verde
 </div>
 
-<!-- Gradiente con transparencia -->
+\3c !-- Gradiente con transparencia -->
 <div class="ig-bg-gradient-to-t ig-from-black/50 ig-to-transparent">
   Overlay oscuro que se desvanece
 </div>
@@ -2767,7 +2767,7 @@ ESQUINAS INDIVIDUALES:
 
 CÓMO USAR:
 <button class="ig-rounded-md">Botón redondeado</button>
-<img class="ig-rounded-full" />  <!-- Avatar circular -->
+<img class="ig-rounded-full" />  \3c !-- Avatar circular -->
 <div class="ig-rounded-t-lg">Solo arriba redondeado</div>
 */
 
@@ -3496,13 +3496,13 @@ IMPORTANTE: Requiere esta meta tag en tu HTML:
 Sin viewport-fit=cover, env() devuelve 0 y no hace nada.
 
 CÓMO USAR:
-<!-- Header que respeta el notch -->
+\3c !-- Header que respeta el notch -->
 <header class="ig-fixed ig-top-0 ig-pt-safe">...</header>
 
-<!-- Footer que respeta la barra home -->
+\3c !-- Footer que respeta la barra home -->
 <nav class="ig-fixed ig-bottom-0 ig-pb-safe">...</nav>
 
-<!-- Contenedor full-screen -->
+\3c !-- Contenedor full-screen -->
 <main class="ig-p-safe">...</main>
 
 CUÁNDO USAR:
@@ -3742,7 +3742,7 @@ Permite al usuario redimensionar un elemento arrastrando una esquina.
 
 CÓMO USAR:
 <div class="ig-isolate">
-  <!-- z-index de hijos no afecta fuera de este contenedor -->
+  \3c !-- z-index de hijos no afecta fuera de este contenedor -->
 </div>
 
 <textarea class="ig-resize-y">Redimensionable verticalmente</textarea>
@@ -3805,7 +3805,7 @@ IMPORTANTE: Usa contain-intrinsic-size para evitar saltos de scroll.
 
 CÓMO USAR:
 <div class="ig-content-auto ig-contain-intrinsic-400">
-  <!-- Contenido pesado que puede no verse -->
+  \3c !-- Contenido pesado que puede no verse -->
 </div>
 */
 
@@ -4109,11 +4109,11 @@ CONCEPTOS CLAVE:
 CÓMO HACER UNA FLIP CARD:
 <div class="ig-perspective-1000 ig-group">
   <div class="ig-preserve-3d ig-transition-transform ig-duration-500 group-hover:ig-rotate-y-180 ig-relative">
-    <!-- Frente -->
+    \3c !-- Frente -->
     <div class="ig-backface-hidden ig-absolute ig-inset-0">
       Contenido frontal
     </div>
-    <!-- Reverso (ya rotado 180°) -->
+    \3c !-- Reverso (ya rotado 180°) -->
     <div class="ig-backface-hidden ig-rotate-y-180 ig-absolute ig-inset-0">
       Contenido trasero
     </div>
@@ -4368,7 +4368,7 @@ POSICIÓN:
 
 CÓMO USAR:
 <img class="ig-w-full ig-h-64 ig-object-cover" />
-<!-- La imagen llena el espacio de 256px de alto, cortando si es necesario -->
+\3c !-- La imagen llena el espacio de 256px de alto, cortando si es necesario -->
 
 CUÁNDO USAR:
 - cover: la mayoría de los casos (headers, cards, backgrounds)
@@ -4582,9 +4582,9 @@ CONTROL:
 - ig-animate-none: quita la animación
 
 CÓMO USAR:
-<div class="ig-animate-spin">🔄</div>  <!-- Spinner -->
-<div class="ig-animate-pulse">Cargando...</div>  <!-- Skeleton -->
-<span class="ig-animate-bounce">↓</span>  <!-- Llamar atención -->
+<div class="ig-animate-spin">🔄</div>  \3c !-- Spinner -->
+<div class="ig-animate-pulse">Cargando...</div>  \3c !-- Skeleton -->
+<span class="ig-animate-bounce">↓</span>  \3c !-- Llamar atención -->
 */
 
 .ig-animate-none { animation: none; }
@@ -4705,8 +4705,8 @@ FILTROS CARDINALES (nombres internos):
 - ig-filter-rutilus, ig-filter-malum
 
 CÓMO USAR:
-<img class="ig-filter-bw hover:ig-filter-none" />  <!-- B/N que revela color al hover -->
-<img class="ig-filter-brand" />  <!-- Tinte de marca -->
+<img class="ig-filter-bw hover:ig-filter-none" />  \3c !-- B/N que revela color al hover -->
+<img class="ig-filter-brand" />  \3c !-- Tinte de marca -->
 */
 
 .ig-filter-none { filter: none; }
@@ -4934,7 +4934,7 @@ FORMAS:
 - ig-clip-chevron-*: chevrons
 
 CÓMO USAR:
-<img class="ig-clip-circle" />  <!-- Avatar circular -->
+<img class="ig-clip-circle" />  \3c !-- Avatar circular -->
 <div class="ig-clip-hexagon">Badge hexagonal</div>
 */
 
@@ -4981,12 +4981,12 @@ PARTE 1: GRADIENTES DE DESVANECIMIENTO
 ═══════════════════════════════════════════════════════════════════════════════
 
 CÓMO USAR:
-<!-- Lista que se desvanece al final (indica que hay más contenido) -->
+\3c !-- Lista que se desvanece al final (indica que hay más contenido) -->
 <div class="ig-mask-fade-bottom ig-h-64 ig-overflow-hidden">
   <ul>...muchos items...</ul>
 </div>
 
-<!-- Carrusel horizontal que se desvanece en los bordes -->
+\3c !-- Carrusel horizontal que se desvanece en los bordes -->
 <div class="ig-mask-fade-x ig-overflow-x-auto">
   <div class="ig-flex ig-gap-4">...cards...</div>
 </div>
@@ -7345,7 +7345,7 @@ CÓMO USAR:
   Abrir diálogo
 </button>
 
-<!-- Con clases de tamaño -->
+\3c !-- Con clases de tamaño -->
 <dialog class="ig-dialog ig-dialog-lg">...</dialog>
 
 BACKDROP:
@@ -7509,12 +7509,12 @@ ESTRUCTURA:
   <img src="user.jpg" alt="Usuario" />
 </div>
 
-<!-- Con fallback de iniciales -->
+\3c !-- Con fallback de iniciales -->
 <div class="ig-avatar ig-avatar-lg">
   <span>JD</span>
 </div>
 
-<!-- Con indicador de estado -->
+\3c !-- Con indicador de estado -->
 <div class="ig-avatar ig-avatar-md">
   <img src="user.jpg" alt="Usuario" />
   <span class="ig-avatar-status ig-avatar-status-online"></span>
@@ -7856,7 +7856,7 @@ Para tooltips más complejos, considera usar una librería JS.
 
 /* Posición Top (default) */
 .ig-tooltip::before,
-.ig-tooltip-top::before {
+.ig-tooltip-place-top::before {
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
@@ -7864,7 +7864,7 @@ Para tooltips más complejos, considera usar una librería JS.
 }
 
 .ig-tooltip::after,
-.ig-tooltip-top::after {
+.ig-tooltip-place-top::after {
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
@@ -7873,14 +7873,14 @@ Para tooltips más complejos, considera usar una librería JS.
 }
 
 /* Posición Bottom */
-.ig-tooltip-bottom::before {
+.ig-tooltip-place-bottom::before {
   top: 100%;
   bottom: auto;
   margin-top: 8px;
   margin-bottom: 0;
 }
 
-.ig-tooltip-bottom::after {
+.ig-tooltip-place-bottom::after {
   top: 100%;
   bottom: auto;
   margin-top: -2px;
@@ -7890,7 +7890,7 @@ Para tooltips más complejos, considera usar una librería JS.
 }
 
 /* Posición Left */
-.ig-tooltip-left::before {
+.ig-tooltip-place-left::before {
   right: 100%;
   left: auto;
   top: 50%;
@@ -7900,7 +7900,7 @@ Para tooltips más complejos, considera usar una librería JS.
   margin-bottom: 0;
 }
 
-.ig-tooltip-left::after {
+.ig-tooltip-place-left::after {
   right: 100%;
   left: auto;
   top: 50%;
@@ -7913,7 +7913,7 @@ Para tooltips más complejos, considera usar una librería JS.
 }
 
 /* Posición Right */
-.ig-tooltip-right::before {
+.ig-tooltip-place-right::before {
   left: 100%;
   right: auto;
   top: 50%;
@@ -7923,7 +7923,7 @@ Para tooltips más complejos, considera usar una librería JS.
   margin-bottom: 0;
 }
 
-.ig-tooltip-right::after {
+.ig-tooltip-place-right::after {
   left: 100%;
   right: auto;
   top: 50%;
@@ -7943,41 +7943,41 @@ Para tooltips más complejos, considera usar una librería JS.
 }
 
 /* Variantes de color (6 colores) */
-.ig-tooltip-brand::before { background-color: var(--ig-vitreus); }
-.ig-tooltip-brand::after { border-top-color: var(--ig-vitreus); }
-.ig-tooltip-brand.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-vitreus); }
-.ig-tooltip-brand.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-vitreus); }
-.ig-tooltip-brand.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-vitreus); }
+.ig-tooltip-color-brand::before { background-color: var(--ig-vitreus); }
+.ig-tooltip-color-brand::after { border-top-color: var(--ig-vitreus); }
+.ig-tooltip-color-brand.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-vitreus); }
+.ig-tooltip-color-brand.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-vitreus); }
+.ig-tooltip-color-brand.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-vitreus); }
 
-.ig-tooltip-secondary::before { background-color: var(--ig-axis); }
-.ig-tooltip-secondary::after { border-top-color: var(--ig-axis); }
-.ig-tooltip-secondary.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-axis); }
-.ig-tooltip-secondary.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-axis); }
-.ig-tooltip-secondary.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-axis); }
+.ig-tooltip-color-secondary::before { background-color: var(--ig-axis); }
+.ig-tooltip-color-secondary::after { border-top-color: var(--ig-axis); }
+.ig-tooltip-color-secondary.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-axis); }
+.ig-tooltip-color-secondary.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-axis); }
+.ig-tooltip-color-secondary.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-axis); }
 
-.ig-tooltip-success::before { background-color: var(--ig-laurus); }
-.ig-tooltip-success::after { border-top-color: var(--ig-laurus); }
-.ig-tooltip-success.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-laurus); }
-.ig-tooltip-success.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-laurus); }
-.ig-tooltip-success.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-laurus); }
+.ig-tooltip-color-success::before { background-color: var(--ig-laurus); }
+.ig-tooltip-color-success::after { border-top-color: var(--ig-laurus); }
+.ig-tooltip-color-success.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-laurus); }
+.ig-tooltip-color-success.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-laurus); }
+.ig-tooltip-color-success.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-laurus); }
 
-.ig-tooltip-warning::before { background-color: var(--ig-rutilus); }
-.ig-tooltip-warning::after { border-top-color: var(--ig-rutilus); }
-.ig-tooltip-warning.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-rutilus); }
-.ig-tooltip-warning.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-rutilus); }
-.ig-tooltip-warning.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-rutilus); }
+.ig-tooltip-color-warning::before { background-color: var(--ig-rutilus); }
+.ig-tooltip-color-warning::after { border-top-color: var(--ig-rutilus); }
+.ig-tooltip-color-warning.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-rutilus); }
+.ig-tooltip-color-warning.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-rutilus); }
+.ig-tooltip-color-warning.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-rutilus); }
 
-.ig-tooltip-danger::before { background-color: var(--ig-malum); }
-.ig-tooltip-danger::after { border-top-color: var(--ig-malum); }
-.ig-tooltip-danger.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-malum); }
-.ig-tooltip-danger.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-malum); }
-.ig-tooltip-danger.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-malum); }
+.ig-tooltip-color-danger::before { background-color: var(--ig-malum); }
+.ig-tooltip-color-danger::after { border-top-color: var(--ig-malum); }
+.ig-tooltip-color-danger.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-malum); }
+.ig-tooltip-color-danger.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-malum); }
+.ig-tooltip-color-danger.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-malum); }
 
-.ig-tooltip-info::before { background-color: var(--ig-kobalium); }
-.ig-tooltip-info::after { border-top-color: var(--ig-kobalium); }
-.ig-tooltip-info.ig-tooltip-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-kobalium); }
-.ig-tooltip-info.ig-tooltip-left::after { border-top-color: transparent; border-left-color: var(--ig-kobalium); }
-.ig-tooltip-info.ig-tooltip-right::after { border-top-color: transparent; border-right-color: var(--ig-kobalium); }
+.ig-tooltip-color-info::before { background-color: var(--ig-kobalium); }
+.ig-tooltip-color-info::after { border-top-color: var(--ig-kobalium); }
+.ig-tooltip-color-info.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-kobalium); }
+.ig-tooltip-color-info.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-kobalium); }
+.ig-tooltip-color-info.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-kobalium); }
 
 
 /*
@@ -9072,7 +9072,7 @@ ESTRUCTURA:
   <span class="ig-star">★</span>
 </div>
 
-<!-- Solo lectura -->
+\3c !-- Solo lectura -->
 <div class="ig-rating ig-rating-readonly">
   <span class="ig-star ig-star-filled">★</span>
   ...
@@ -9149,7 +9149,7 @@ USOS COMUNES:
 ESTRUCTURA:
 <input type="range" class="ig-slider" min="0" max="100" value="50" />
 
-<!-- Con valor visible -->
+\3c !-- Con valor visible -->
 <div class="ig-slider-group">
   <input type="range" class="ig-slider" id="vol" min="0" max="100" value="50" />
   <span class="ig-slider-value">50</span>
@@ -9258,16 +9258,16 @@ DIFERENCIA CON BADGE:
 - Chip: elemento interactivo (filtro, tag, selección)
 
 ESTRUCTURA:
-<!-- Chip básico -->
+\3c !-- Chip básico -->
 <span class="ig-chip">React</span>
 
-<!-- Chip con botón de cerrar -->
+\3c !-- Chip con botón de cerrar -->
 <span class="ig-chip">
   JavaScript
   <button class="ig-chip-close">×</button>
 </span>
 
-<!-- Chip seleccionable -->
+\3c !-- Chip seleccionable -->
 <button class="ig-chip ig-chip-selectable ig-chip-selected">
   Frontend
 </button>
@@ -9958,8 +9958,7 @@ Controla cómo responde el elemento al modo de alto contraste de Windows.
   .ig-break-inside-avoid-column { break-inside: avoid-column; }
 
   /* Evitar cortes en elementos importantes */
-  h1, h2, h3, h4, h5, h6,
-  img, figure, table, pre, blockquote {
+  h1, h2, h3, h4, h5, h6, img, figure, table, pre, blockquote {
     break-inside: avoid;
   }
 

@@ -42,19 +42,22 @@ describe("Tooltip", () => {
         <button>x</button>
       </Tooltip>,
     );
-    expect(screen.getByTestId("w")).toHaveClass("ig-tooltip", "ig-tooltip-top");
+    expect(screen.getByTestId("w")).toHaveClass(
+      "ig-tooltip",
+      "ig-tooltip-place-top",
+    );
   });
 
   describe.each(["top", "right", "bottom", "left"] as const)(
     "placement=%s",
     (p) => {
-      it(`aplica clase ig-tooltip-${p}`, () => {
+      it(`aplica clase ig-tooltip-place-${p} (prefijo único pre-1.0.0)`, () => {
         render(
           <Tooltip text="x" placement={p} data-testid="w">
             <button>x</button>
           </Tooltip>,
         );
-        expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-${p}`);
+        expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-place-${p}`);
       });
     },
   );
@@ -67,13 +70,13 @@ describe("Tooltip", () => {
     ["danger"],
     ["info"],
   ] as const)("variant=%s", (v) => {
-    it(`aplica clase ig-tooltip-${v}`, () => {
+    it(`aplica clase ig-tooltip-color-${v} (prefijo único pre-1.0.0)`, () => {
       render(
         <Tooltip text="x" variant={v} data-testid="w">
           <button>x</button>
         </Tooltip>,
       );
-      expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-${v}`);
+      expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-color-${v}`);
     });
   });
 

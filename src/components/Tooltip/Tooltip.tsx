@@ -96,8 +96,8 @@ export function Tooltip({
       data-tooltip={text}
       className={cn(
         "ig-tooltip",
-        `ig-tooltip-${placement}`,
-        variant && `ig-tooltip-${variant}`,
+        `ig-tooltip-place-${placement}`,
+        variant && `ig-tooltip-color-${variant}`,
         className,
       )}
       {...rest}

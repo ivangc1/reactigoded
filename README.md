@@ -212,7 +212,7 @@ en Storybook → *Fundamentos / CSS API pública*.
 | `Tabs`                  | `.ig-tabs`                | variants color, `-content`, `-list`, `-tab`, `-panel`                                   |
 | `Timeline`              | `.ig-timeline`            | `-item`, `-content`, `-date`                                                            |
 | `Toast`                 | `.ig-toast`               | placement `-top-left`/`-top-right`/`-bottom-left`/`-bottom-right`/`-bottom-center` …    |
-| `Tooltip`               | `.ig-tooltip`             | placement `-top`/`-bottom`/…, variants color                                            |
+| `Tooltip`               | `.ig-tooltip`             | placement `-place-top`/`-place-bottom`/`-place-left`/`-place-right`, variants `-color-brand`/`-color-secondary`/… |
 
 > Los modifiers son aditivos: una variante completa de Button es, p.ej.,
 > `<button class="ig-btn ig-btn-brand ig-btn-lg ig-btn-block">…</button>`.
