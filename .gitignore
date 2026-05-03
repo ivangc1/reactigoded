@@ -50,3 +50,5 @@ deploy*.sh*
 deploy-worker*.sh*
 igoded.es.*nginx*
 webhook.php*
+*.tgz
+*.tgz
