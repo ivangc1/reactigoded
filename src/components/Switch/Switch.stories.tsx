@@ -48,18 +48,6 @@ export const Deshabilitado: Story = {
   args: { disabled: true, defaultChecked: true },
 };
 
-export const Indeterminate: Story = {
-  args: { children: "Notificaciones por categoría", indeterminate: true },
-  parameters: {
-    docs: {
-      description: {
-        story:
-          "Estado visual aislado. El click no cambia nada porque el componente mantiene `indeterminate=true` en cada render — el padre decide cuándo salir. Para ver el patrón típico de uso, mira `MasterSelectAll`.",
-      },
-    },
-  },
-};
-
 /**
  * Patrón canónico de indeterminate en switches: un toggle "maestro" controla
  * un grupo de toggles hijos. El maestro se calcula a partir del estado de
