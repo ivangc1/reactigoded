@@ -400,18 +400,23 @@ CUÁNDO USAR:
 @media (prefers-color-scheme: light) {
   :root {
     --ig-bg-base:     var(--ig-fundus-lux);
-    --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-lux), white 30%);
+    /* En light el fundus-lux ya es casi blanco (#faf9fc); mezclar con
+       white solo lo hacía más blanco y se solapaba con el body. La
+       elevación en light se consigue OSCURECIENDO ligeramente con un
+       tinte azulado coherente (cinis-lux). En dark se mantiene mezcla
+       con white porque el fundus-nox sí tiene margen para aclarar. */
+    --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-lux), var(--ig-cinis-lux) 4%);
     --ig-bg-sunken:   color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 5%);
-    --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-lux), white 10%);
+    --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-lux), var(--ig-cinis-lux) 8%);
     --ig-bg-muted:    color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 8%);
   }
 }
 
 [data-theme="light"] {
   --ig-bg-base:     var(--ig-fundus-lux);
-  --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-lux), white 30%);
+  --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-lux), var(--ig-cinis-lux) 4%);
   --ig-bg-sunken:   color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 5%);
-  --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-lux), white 10%);
+  --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-lux), var(--ig-cinis-lux) 8%);
   --ig-bg-muted:    color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 8%);
 }
 
