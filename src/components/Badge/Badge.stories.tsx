@@ -70,8 +70,32 @@ export const Tamaños: Story = {
   ),
 };
 
+/**
+ * `pill` y `variant` son ortogonales: `pill` controla la forma
+ * (cápsula vs esquinas suaves) y `variant` el color. Se combinan
+ * libremente. Para comparar la forma, mira `Variantes` (mismas
+ * variantes sin `pill`, con esquinas `rounded-md`).
+ */
 export const Pill: Story = {
-  args: { pill: true, children: "Píldora" },
+  args: { children: undefined },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Las 6 variantes con `pill` (cápsula `rounded-full`). `Variantes` muestra las mismas con la forma default (`rounded-md`).",
+      },
+    },
+  },
+  render: () => (
+    <div className="ig-flex ig-flex-wrap ig-gap-2">
+      <Badge pill variant="brand">Brand</Badge>
+      <Badge pill variant="secondary">Secondary</Badge>
+      <Badge pill variant="success">Success</Badge>
+      <Badge pill variant="warning">Warning</Badge>
+      <Badge pill variant="danger">Danger</Badge>
+      <Badge pill variant="info">Info</Badge>
+    </div>
+  ),
 };
 
 export const Outline: Story = {

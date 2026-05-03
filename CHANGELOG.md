@@ -7,6 +7,116 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.16] — 2026-05-03
+
+### Changed
+- **Vitreus reposicionado** de H≈194.83° (cyan puro sRGB, artefacto
+  histórico de la paleta) a H=207.50° (centro perceptual matemático
+  verde↔azul en OKLCH, punto medio entre verde Hering ~145° y azul
+  Hering ~270°). Hex: `#053a40` (lux) / `#3ae2f7` (nox). Decisión
+  fundacional — vitreus es el color brand del DS y su identidad
+  declarada es "el azul-verde matemáticamente medio en OKLCH"; el hex
+  anterior no cumplía esa intención. Contraste AAA preservado en los
+  5 fondos del tema en ambos modos (LIGHT 11.78, DARK 11.91 sobre
+  fundus opuesto). Las alphas (`--ig-vitreus-alpha-{10,20,30,50,70}`)
+  y `--ig-text-heading` heredan automáticamente porque están definidas
+  con `color-mix` sobre `--ig-vitreus`. Re-baseline de Chromatic
+  requerida para snapshots con brand, text-heading o sus alphas.
+
+### Fixed
+- **Badge default vs Badge pill**: ambos usaban `--ig-rounded-full` y
+  eran visualmente idénticos. Ahora el default es `--ig-rounded-md`
+  (chip estilo etiqueta, esquinas suavemente redondeadas) y `pill`
+  mantiene `--ig-rounded-full` (cápsula).
+
+## [1.0.0-beta.15] — 2026-05-03
+
+### Fixed
+- **Elevación en LIGHT** (`--ig-bg-surface`, `--ig-bg-elevated`): los
+  tokens mezclaban con `white` para "elevarse", pero como el body en
+  LIGHT es `--ig-fundus-lux` = `#faf9fc` (casi blanco) el resultado era
+  prácticamente igual al body. Cards, accordions, dropdowns, modals,
+  toasts, sidebars y tabs se solapaban con el fondo. Ahora la elevación
+  en LIGHT se consigue OSCURECIENDO ligeramente con tinte azulado
+  coherente (`--ig-cinis-lux` 4% para surface, 8% para elevated). DARK
+  intacto.
+
+## [1.0.0-beta.14] — 2026-05-03
+
+### Fixed
+- **Divider con texto + variante** pintaba el `<div>` padre entero
+  con el color de variante. La regla `.ig-divider-brand
+  { background-color: var(--ig-vitreus); }` (del divider básico
+  horizontal `<hr>`) matcheaba también al
+  `<div class="ig-divider-with-text ig-divider-brand">` por compartir
+  la clase modifier. Resultado: caja cyan brillante con el texto cyan
+  encima — invisible. Fix: scope a `.ig-divider.ig-divider-brand` para
+  que solo aplique al divider básico (que sí lleva la clase base
+  `.ig-divider`).
+
+## [1.0.0-beta.13] — 2026-05-03
+
+### Changed
+- **Divider con texto variante** invierte la jerarquía de color:
+  ahora el TEXTO recibe el accent (`vitreus`, `axis`, ...) y las
+  líneas se quedan en `--ig-border-subtle`. Antes (beta.10–12) las
+  líneas iban con accent y el texto en `cinis`; las dos líneas
+  alineadas creaban una banda continua perceptual y el texto quedaba
+  apagado. Patrón Material UI: las líneas son sutiles, el color
+  semántico vive en el label.
+
+## [1.0.0-beta.12] — 2026-05-03
+
+### Removed
+- Stories aisladas `Indeterminate` de `Checkbox` y `Switch`.
+  Confundían — el click no parecía hacer nada porque el sticky
+  behavior re-aplicaba `indeterminate=true` sin un parent que
+  gestione state. La nueva story `MasterSelectAll` (beta.11) ya
+  muestra el indeterminate en su estado inicial y demuestra el
+  patrón canónico.
+
+## [1.0.0-beta.11] — 2026-05-03
+
+### Added
+- Stories `Componentes/Checkbox/MasterSelectAll` y
+  `Componentes/Switch/MasterSelectAll` con el patrón canónico de
+  indeterminate (maestro + grupo de hijos). El `indeterminate` no es
+  un tercer estado del toggle, es una etiqueta visual derivada del
+  estado de los hijos — patrón usado por GitHub, Gmail, Material UI
+  checkbox group, Ant Design Tree, etc.
+
+### Reverted
+- Cambios en `Checkbox` y `Switch` glyph publicados en `beta.10`
+  (`var(--ig-fundus)` adaptativo): diagnóstico erróneo, el reporte
+  "indeterminate no hace nada" era de comportamiento (sticky
+  behavior), no de contraste visual. El glyph vuelve a
+  `var(--ig-fundus-lux)`. El cambio del Divider en `beta.10` se
+  mantiene.
+
+## [1.0.0-beta.10] — 2026-05-03
+
+### Changed
+- **Divider con texto variante**: el texto ya no toma el color del
+  accent (era idéntico a las líneas y se confundía visualmente). Va
+  en `--ig-cinis`. (Posteriormente revisado en `beta.13`: ahora el
+  texto SÍ va en accent y las líneas en subtle.)
+
+### Fixed (luego revertido en beta.11 — diagnóstico erróneo)
+- ~~Glyph del Checkbox/Switch (`tick`, línea de indeterminate, thumb)
+  cambiado a `var(--ig-fundus)` adaptativo. Pretendía resolver bajo
+  contraste blanco-sobre-cyan en DARK; resultó no ser el bug
+  reportado.~~
+
+## [1.0.0-beta.9] — 2026-05-03
+
+### Fixed
+- **Progress bar invisible**: el componente renderizaba el bar como
+  `<span class="ig-progress-bar">`. Como `<span>` es `display: inline`
+  por defecto y el CSS no le aplicaba `display: block`, el `width`
+  inline se ignoraba — todas las variantes se veían iguales (solo el
+  track gris del fondo). Cambiado a `<div>`, alineado con la doc del
+  CSS que ya prescribía `<div>`.
+
 ## [1.0.0-beta.8] — 2026-05-03
 
 Consolida el trabajo que estuvo bajo `rc.1` / `rc.2` / `rc.3` (tags

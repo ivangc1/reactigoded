@@ -16,15 +16,22 @@ con esta restricción matemática:
 
 Cardinales:
 
-| Cardinal  | H     | Rol               |
-|-----------|-------|-------------------|
-| vitreus   | 195°  | brand (teal)      |
-| axis      | 300°  | secondary (violeta) |
-| cinis     | 267°  | text-body (gris azulado) |
-| rutilus   | 55°   | warning (cobre)   |
-| laurus    | 140°  | success (verde)   |
-| malum     | 8°    | danger (rojo-granate) |
-| kobalium  | 260°  | info (cobalt blue) |
+| Cardinal  | H      | Rol               |
+|-----------|--------|-------------------|
+| vitreus   | 207.5° | brand (teal-cyan, centro perceptual verde↔azul OKLCH/Hering) |
+| axis      | 300°   | secondary (violeta) |
+| cinis     | 267°   | text-body (gris azulado) |
+| rutilus   | 55°    | warning (cobre)   |
+| laurus    | 140°   | success (verde)   |
+| malum     | 8°     | danger (rojo-granate) |
+| kobalium  | 260°   | info (cobalt blue) |
+
+**Nota sobre vitreus H=207.5°**: es el punto medio matemático entre verde
+Hering (~145°) y azul Hering (~270°), los hues *opponent-color* sobre los
+que se construye el espacio OKLCH. Hasta `1.0.0-beta.15` vitreus estaba
+en H≈194.83° (cyan puro sRGB, artefacto de la paleta de partida); en
+`beta.16` se recolocó al centro perceptual prometido por la identidad
+del DS. El hex pasó de `#033b3b`/`#30e6e6` a `#053a40`/`#3ae2f7`.
 
 Cualquier cambio que rompa esta geometría falla `npm run test:contrast`.
 **No es decorativo: la simetría OKLCH es lo que garantiza WCAG AA en
