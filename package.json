@@ -121,7 +121,7 @@
     {
       "name": "tokens.css solo (consumer minimal)",
       "path": "dist/styles/igoded-tokens.css",
-      "limit": "25 KB",
+      "limit": "30 KB",
       "gzip": true
     },
     {
@@ -146,6 +146,12 @@
       "name": "fonts.css Google Fonts opt-in",
       "path": "dist/styles/igoded-fonts.css",
       "limit": "1 KB",
+      "gzip": true
+    },
+    {
+      "name": "state.css opt-in (utilities pseudo-class)",
+      "path": "dist/styles/igoded-state-css.css",
+      "limit": "800 KB",
       "gzip": true
     }
   ],

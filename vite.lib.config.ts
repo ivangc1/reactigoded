@@ -15,19 +15,29 @@
 import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import dts from "vite-plugin-dts";
+import { transform as esbuildTransform } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { mkdirSync, copyFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Copia los CSS del design system a dist/styles/ y genera index.css que
-// hace `@import` (no concatenación, para no duplicar bytes).
+/**
+ * Copia los CSS del design system a dist/styles/, los minifica y genera
+ * index.css que hace `@import` (no concatenación, para no duplicar bytes).
+ *
+ * Minificación opt-in con esbuild (loader: "css") en `state.css` y los
+ * demás artefactos publicados. esbuild ya viene como dep transitiva de
+ * Vite, así que no añadimos nada al árbol. La minificación es importante
+ * sobre todo para `state.css` (~7 MB → ~700 KB gzipped) y reduce de
+ * forma sensible el size-limit de los demás bundles aunque ya estén en
+ * el rango bajo.
+ */
 function copyDesignSystemStyles(): PluginOption {
   return {
     name: "copy-design-system-styles",
     apply: "build",
-    closeBundle() {
+    async closeBundle() {
       const srcDir = resolve(__dirname, "src/styles");
       const outDir = resolve(__dirname, "dist/styles");
       mkdirSync(outDir, { recursive: true });
@@ -41,7 +51,12 @@ function copyDesignSystemStyles(): PluginOption {
         "igoded-state-css.css",
       ];
       for (const f of files) {
-        copyFileSync(resolve(srcDir, f), resolve(outDir, f));
+        const raw = readFileSync(resolve(srcDir, f), "utf8");
+        const result = await esbuildTransform(raw, {
+          loader: "css",
+          minify: true,
+        });
+        writeFileSync(resolve(outDir, f), result.code);
       }
       const allCss =
         `@import "./igoded-design.css";\n` +
