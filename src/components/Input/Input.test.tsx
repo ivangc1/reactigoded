@@ -43,6 +43,16 @@ describe("Input", () => {
     await userEvent.type(el, "hola@test.com");
     expect(el).toHaveValue("hola@test.com");
   });
+
+  it("className merge: la clase del consumer se añade sin pisar ig-input", () => {
+    render(<Input placeholder="x" size="lg" state="error" className="my-input extra" />);
+    const el = screen.getByPlaceholderText("x");
+    expect(el).toHaveClass("ig-input");
+    expect(el).toHaveClass("ig-input-lg");
+    expect(el).toHaveClass("ig-input-error");
+    expect(el).toHaveClass("my-input");
+    expect(el).toHaveClass("extra");
+  });
 });
 
 describe("Label", () => {

@@ -209,3 +209,25 @@ describe("useTabs fuera de provider", () => {
     spy.mockRestore();
   });
 });
+
+describe("Tabs — className merge", () => {
+  it("Tabs root, TabList, Tab y TabPanel conservan su clase base con className consumer", () => {
+    render(
+      <Tabs defaultValue="a" variant="brand" className="my-tabs extra" data-testid="root">
+        <TabList className="my-list">
+          <Tab value="a" className="my-tab">A</Tab>
+        </TabList>
+        <TabPanel value="a" className="my-panel">PA</TabPanel>
+      </Tabs>,
+    );
+    const root = screen.getByTestId("root");
+    expect(root).toHaveClass("ig-tabs");
+    expect(root).toHaveClass("ig-tabs-brand");
+    expect(root).toHaveClass("my-tabs");
+    expect(root).toHaveClass("extra");
+
+    const tab = screen.getByRole("tab", { name: "A" });
+    expect(tab).toHaveClass("ig-tab");
+    expect(tab).toHaveClass("my-tab");
+  });
+});

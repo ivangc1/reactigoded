@@ -255,3 +255,26 @@ describe("Card subcomponentes", () => {
     expect(screen.getByTestId("i")).toHaveClass("ig-card-image");
   });
 });
+
+describe("Card — className merge", () => {
+  it("mergea className del consumer sin pisar las clases del componente", () => {
+    render(
+      <Card
+        variant="brand"
+        bordered
+        elevated
+        className="my-card extra"
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el).toHaveClass("ig-card");
+    expect(el).toHaveClass("ig-card-brand");
+    expect(el).toHaveClass("ig-card-bordered");
+    expect(el).toHaveClass("ig-card-elevated");
+    expect(el).toHaveClass("my-card");
+    expect(el).toHaveClass("extra");
+  });
+});

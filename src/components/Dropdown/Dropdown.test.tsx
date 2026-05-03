@@ -361,3 +361,24 @@ describe("useDropdown fuera de provider", () => {
     spy.mockRestore();
   });
 });
+
+describe("Dropdown — className merge", () => {
+  it("Dropdown root, Trigger y Item conservan su clase base con className consumer", () => {
+    const { container } = render(
+      <Dropdown className="my-dd extra">
+        <DropdownTrigger className="my-trigger">Abrir</DropdownTrigger>
+        <DropdownMenu className="my-menu">
+          <DropdownItem className="my-item">Uno</DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const root = container.querySelector(".ig-dropdown");
+    expect(root).toHaveClass("ig-dropdown");
+    expect(root).toHaveClass("my-dd");
+    expect(root).toHaveClass("extra");
+
+    const trigger = screen.getByRole("button", { name: /abrir/i });
+    expect(trigger).toHaveClass("ig-dropdown-trigger");
+    expect(trigger).toHaveClass("my-trigger");
+  });
+});
