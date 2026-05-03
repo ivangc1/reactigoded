@@ -142,6 +142,7 @@ export const SinIcono: Story = {
 };
 
 export const Interaction: Story = {
+  args: { type: "single", collapsible: true },
   parameters: {
     docs: {
       description: {
@@ -150,8 +151,8 @@ export const Interaction: Story = {
       },
     },
   },
-  render: () => (
-    <Accordion type="single" collapsible>
+  render: (args) => (
+    <Accordion {...args}>
       <AccordionItem value="a">
         <AccordionHeader>Pregunta A</AccordionHeader>
         <AccordionContent>Respuesta A</AccordionContent>

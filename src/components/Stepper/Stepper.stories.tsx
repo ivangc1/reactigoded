@@ -61,6 +61,7 @@ export const Labeled: Story = {
 };
 
 export const Interactivo: Story = {
+  args: { labeled: true, "aria-label": "Demo" },
   parameters: {
     docs: {
       description: {
@@ -69,13 +70,13 @@ export const Interactivo: Story = {
       },
     },
   },
-  render: () => {
+  render: (args) => {
     function Demo() {
       const [active, setActive] = useState(0);
       const total = 4;
       return (
         <div className="ig-story-stack ig-story-stack--full">
-          <Stepper active={active} labeled aria-label="Demo">
+          <Stepper {...args} active={active}>
             <Step label="Inicio" />
             <Step label="Detalles" />
             <Step label="Revisión" />

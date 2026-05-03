@@ -26,8 +26,9 @@ en orden correcto (tokens → base → components).
 NOMENCLATURA: todas las clases empiezan por `.ig-*` para no chocar con
 Tailwind, Bootstrap u otras libs de utilities.
 
-VARIANTES SEMÁNTICAS (6 cardinales):
-  brand → vitreus (teal) · secondary → axis (violet) · info → kobalium (cyan) ·
+VARIANTES SEMÁNTICAS UI (6 roles; el sistema tiene 7 cardinales pero
+cinis se usa como texto-body, no como bg de componente):
+  brand → vitreus (teal) · secondary → axis (violet) · info → kobalium (cobalt blue) ·
   success → laurus (green) · warning → rutilus (orange) · danger → malum (red)
 */
 
@@ -6600,6 +6601,51 @@ CÓMO FUNCIONA:
   border-color: var(--ig-kobalium);
 }
 
+/* Checkbox — estado :indeterminate (tri-state).
+   Fondo lleno con color de variante (igual que :checked) pero glyph
+   distinto: línea horizontal centrada en vez de tick rotado. */
+.ig-checkbox input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-axis);
+  border-color: var(--ig-axis);
+}
+
+.ig-checkbox input[type="checkbox"]:indeterminate + .ig-checkbox-mark::after {
+  content: '';
+  display: block;
+  width: 0.625rem;
+  height: 2px;
+  background: var(--ig-fundus-lux);
+  border: 0;
+  border-radius: 1px;
+  transform: none;
+  margin-top: 0;
+}
+
+.ig-checkbox-brand input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-vitreus);
+  border-color: var(--ig-vitreus);
+}
+.ig-checkbox-secondary input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-axis);
+  border-color: var(--ig-axis);
+}
+.ig-checkbox-success input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-laurus);
+  border-color: var(--ig-laurus);
+}
+.ig-checkbox-warning input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-rutilus);
+  border-color: var(--ig-rutilus);
+}
+.ig-checkbox-danger input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-malum);
+  border-color: var(--ig-malum);
+}
+.ig-checkbox-info input[type="checkbox"]:indeterminate + .ig-checkbox-mark {
+  background-color: var(--ig-kobalium);
+  border-color: var(--ig-kobalium);
+}
+
 /* Radio */
 .ig-radio {
   display: inline-flex;
@@ -6790,6 +6836,37 @@ CÓMO FUNCIONA:
   background-color: var(--ig-malum);
 }
 .ig-switch-info input[type="checkbox"]:checked + .ig-switch-track {
+  background-color: var(--ig-kobalium);
+}
+
+/* Switch — estado :indeterminate (tri-state).
+   Thumb centrado en el track + background con color de variante.
+   Inspirado en Material Design: el thumb a media altura comunica
+   "ni on ni off" más claramente que cualquier glyph. */
+.ig-switch input[type="checkbox"]:indeterminate + .ig-switch-track {
+  background-color: var(--ig-axis);
+}
+
+.ig-switch input[type="checkbox"]:indeterminate + .ig-switch-track::after {
+  left: calc(50% - var(--ig-switch-thumb) / 2);
+}
+
+.ig-switch-brand input[type="checkbox"]:indeterminate + .ig-switch-track {
+  background-color: var(--ig-vitreus);
+}
+.ig-switch-secondary input[type="checkbox"]:indeterminate + .ig-switch-track {
+  background-color: var(--ig-axis);
+}
+.ig-switch-success input[type="checkbox"]:indeterminate + .ig-switch-track {
+  background-color: var(--ig-laurus);
+}
+.ig-switch-warning input[type="checkbox"]:indeterminate + .ig-switch-track {
+  background-color: var(--ig-rutilus);
+}
+.ig-switch-danger input[type="checkbox"]:indeterminate + .ig-switch-track {
+  background-color: var(--ig-malum);
+}
+.ig-switch-info input[type="checkbox"]:indeterminate + .ig-switch-track {
   background-color: var(--ig-kobalium);
 }
 
@@ -7585,12 +7662,18 @@ MODIFICADORES:
   transition: width var(--ig-duration-300) ease;
 }
 
-.ig-progress-brand .ig-progress-bar { background-color: var(--ig-vitreus); }
-.ig-progress-secondary .ig-progress-bar { background-color: var(--ig-axis); }
-.ig-progress-success .ig-progress-bar { background-color: var(--ig-laurus); }
-.ig-progress-warning .ig-progress-bar { background-color: var(--ig-rutilus); }
-.ig-progress-danger .ig-progress-bar { background-color: var(--ig-malum); }
-.ig-progress-info .ig-progress-bar { background-color: var(--ig-kobalium); }
+/* Progress bar variants: SIEMPRE usan los `-nox` (brillantes/saturados),
+   independiente del tema. Razón: el bar es un bloque de color sólido sin
+   texto encima — su único trabajo visual es distinguir hue. Los `-lux`
+   (oscuros) en light mode tienen luminosidad y chroma demasiado bajos
+   para distinguirse en una franja de 8-12 px (todos parecen "oscuro").
+   El track (`var(--ig-progress-track)`) sí es adaptativo. */
+.ig-progress-brand .ig-progress-bar { background-color: var(--ig-vitreus-nox); }
+.ig-progress-secondary .ig-progress-bar { background-color: var(--ig-axis-nox); }
+.ig-progress-success .ig-progress-bar { background-color: var(--ig-laurus-nox); }
+.ig-progress-warning .ig-progress-bar { background-color: var(--ig-rutilus-nox); }
+.ig-progress-danger .ig-progress-bar { background-color: var(--ig-malum-nox); }
+.ig-progress-info .ig-progress-bar { background-color: var(--ig-kobalium-nox); }
 
 .ig-progress-sm { height: 0.25rem; }
 .ig-progress-lg { height: 0.75rem; }

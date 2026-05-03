@@ -70,10 +70,10 @@ export const Deshabilitado: Story = {
 };
 
 export const SelectInteraction: Story = {
-  render: () => (
+  render: (args) => (
     <div role="radiogroup" aria-label="Plan" className="ig-story-stack ig-story-stack--sm">
-      <Radio name="plan-int" value="free" data-testid="r-free">Free</Radio>
-      <Radio name="plan-int" value="pro" data-testid="r-pro">Pro</Radio>
+      <Radio {...args} name="plan-int" value="free" data-testid="r-free">Free</Radio>
+      <Radio {...args} name="plan-int" value="pro" data-testid="r-pro">Pro</Radio>
     </div>
   ),
   play: async ({ canvasElement }) => {

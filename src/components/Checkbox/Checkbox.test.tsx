@@ -34,4 +34,21 @@ describe("Checkbox", () => {
     await userEvent.click(screen.getByText("Click"));
     expect(onChange).toHaveBeenCalledOnce();
   });
+
+  it("indeterminate=true aplica .indeterminate y aria-checked=mixed", () => {
+    render(<Checkbox indeterminate>Parcial</Checkbox>);
+    const input = screen.getByRole("checkbox");
+    expect(input).toBePartiallyChecked();
+  });
+
+  it("indeterminate sigue true tras click si la prop sigue true (sticky)", async () => {
+    // Click en un checkbox con .indeterminate=true hace que el browser limpie
+    // .indeterminate (toggle a checked). Si el consumer mantiene la prop
+    // indeterminate=true, el componente debe re-aplicarla en el change.
+    render(<Checkbox indeterminate>Parcial</Checkbox>);
+    const input = screen.getByRole("checkbox");
+    expect(input).toBePartiallyChecked();
+    await userEvent.click(input);
+    expect(input).toBePartiallyChecked();
+  });
 });

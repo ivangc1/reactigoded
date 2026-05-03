@@ -1,17 +1,33 @@
 <!--
-  Aplica el tema dark al <html> ANTES del primer paint del iframe del preview.
+  Dos cosas:
 
-  Por qué: el decorator `withThemeByDataAttribute` aplica `data-theme` vía
-  `useEffect`, que corre DESPUÉS del primer paint. El runner de a11y de
-  addon-vitest puede ejecutar axe-core antes de que el useEffect haga su
-  trabajo, y peor aún: en chromium headless `prefers-color-scheme` es
-  `light` por defecto, así que el `@media (prefers-color-scheme: light)`
-  del CSS pisa el `:root` (que era el dark default).
+  (1) Aplicar tema dark al <html> ANTES del primer paint del iframe del preview.
 
-  Resultado sin este script: los stories se ejecutan en LIGHT con tokens
-  *-lux* (oscuros sobre claros) que casi siempre cumplen contraste, así que
-  axe nunca caza violaciones reales del modo dark. El toolbar switch y el
-  decorator siguen funcionando — solo cambiamos el estado inicial.
+      Por qué: el decorator `withThemeByDataAttribute` aplica `data-theme` vía
+      `useEffect`, que corre DESPUÉS del primer paint. El runner de a11y de
+      addon-vitest puede ejecutar axe-core antes de que el useEffect haga su
+      trabajo, y peor aún: en chromium headless `prefers-color-scheme` es
+      `light` por defecto, así que el `@media (prefers-color-scheme: light)`
+      del CSS pisa el `:root` (que era el dark default).
+
+      Resultado sin este script: los stories se ejecutan en LIGHT con tokens
+      *-lux* (oscuros sobre claros) que casi siempre cumplen contraste, así que
+      axe nunca caza violaciones reales del modo dark. El toolbar switch y el
+      decorator siguen funcionando — solo cambiamos el estado inicial.
+
+  (2) Reaccionar al toolbar switch en páginas MDX puras (1.0.0-rc.2).
+
+      Por qué: `withThemeByDataAttribute` solo se ejecuta cuando se monta
+      una Story (CSF). Las MDX puras de Fundamentos (Contrast, DesignTokens,
+      Introduction, Spacing, Variants) son páginas estáticas sin
+      `<Story of=…>` ni `<Canvas>` que referencie un export — no hay Story
+      que envolver, así que el decorator nunca corre y el toggle del toolbar
+      no manipula `<html>`. En las stories CSF el decorator sí corre y el
+      toggle funciona normalmente.
+
+      Fix: suscribirse al canal de Storybook y escuchar `updateGlobals`.
+      Es seguro coexistir con el decorator: si hay Story, ambos terminan
+      poniendo el mismo valor (idempotente).
 -->
 <script>
   (function () {
@@ -19,6 +35,32 @@
       document.documentElement.setAttribute("data-theme", "dark");
     } catch (_) {
       /* SSR/edge cases */
+    }
+
+    function applyTheme(theme) {
+      if (theme === "light" || theme === "dark") {
+        document.documentElement.setAttribute("data-theme", theme);
+      }
+    }
+
+    function bind() {
+      var ch = window.__STORYBOOK_ADDONS_CHANNEL__;
+      if (!ch || typeof ch.on !== "function") return false;
+      ch.on("updateGlobals", function (payload) {
+        applyTheme(payload && payload.globals && payload.globals.theme);
+      });
+      return true;
+    }
+
+    if (!bind()) {
+      // El canal puede no existir aún en el primer paint del iframe.
+      // Reintentar hasta 5s y luego rendirse silenciosamente.
+      var iv = setInterval(function () {
+        if (bind()) clearInterval(iv);
+      }, 50);
+      setTimeout(function () {
+        clearInterval(iv);
+      }, 5000);
     }
   })();
 </script>

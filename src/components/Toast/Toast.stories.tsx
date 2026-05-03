@@ -89,33 +89,40 @@ export const Posiciones: Story = {
   ),
 };
 
-function FireToastButton() {
-  const { toast } = useToast();
-  return (
-    <Button
-      onClick={() => {
-        toast({ title: "Lanzado", variant: "success", duration: 0 });
-      }}
-    >
-      Lanzar toast
-    </Button>
-  );
-}
-
 export const FireInteraction: Story = {
+  args: { variant: "success", title: "Lanzado" },
   parameters: {
     docs: {
       description: {
         story:
-          "Click en el botón llama a `toast()` y aparece un Toast con `role=\"status\"` y la variant aplicada.",
+          "Click en el botón llama a `toast()` y aparece un Toast con `role=\"status\"` y la variant aplicada. El payload (variant/title/message) se lee de los Controls.",
       },
     },
   },
-  render: () => (
-    <ToastProvider container={null}>
-      <FireToastButton />
-    </ToastProvider>
-  ),
+  render: (args) => {
+    function Trigger() {
+      const { toast } = useToast();
+      return (
+        <Button
+          onClick={() => {
+            toast({
+              duration: 0,
+              ...(args.title !== undefined && { title: args.title }),
+              ...(args.message !== undefined && { message: args.message }),
+              ...(args.variant !== undefined && { variant: args.variant }),
+            });
+          }}
+        >
+          Lanzar toast
+        </Button>
+      );
+    }
+    return (
+      <ToastProvider container={null}>
+        <Trigger />
+      </ToastProvider>
+    );
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: /lanzar toast/i }));

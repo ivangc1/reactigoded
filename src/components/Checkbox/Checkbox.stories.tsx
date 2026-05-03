@@ -52,15 +52,7 @@ export const Deshabilitado: Story = {
 };
 
 export const Indeterminate: Story = {
-  args: { children: "Selección parcial" },
-  render: (args) => (
-    <Checkbox
-      {...args}
-      ref={(el) => {
-        if (el) el.indeterminate = true;
-      }}
-    />
-  ),
+  args: { children: "Selección parcial", indeterminate: true },
 };
 
 export const ToggleInteraction: Story = {

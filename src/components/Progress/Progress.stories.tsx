@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, within } from "storybook/test";
 import { Progress } from "./Progress";
 
 const meta = {
@@ -47,15 +48,44 @@ export const PorDefecto: Story = {
 };
 
 export const Variantes: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Las 6 variantes de color. Se renderizan en `size=\"lg\"` con label visible para distinguirlas — en `size=\"md\"` (8 px de alto) los matices oscuros del modo light pueden parecer iguales.",
+      },
+    },
+  },
   render: () => (
     <div className="ig-story-stack ig-story-stack--md">
-      <Progress value={20} variant="brand" />
-      <Progress value={40} variant="success" />
-      <Progress value={60} variant="warning" />
-      <Progress value={80} variant="danger" />
-      <Progress value={50} variant="info" />
+      {(
+        ["brand", "secondary", "success", "warning", "danger", "info"] as const
+      ).map((v, i) => (
+        <div key={v} className="ig-story-stack ig-story-stack--sm">
+          <span className="ig-story-label">{v}</span>
+          <Progress
+            value={20 + i * 12}
+            size="lg"
+            variant={v}
+            aria-label={`${v} ejemplo`}
+          />
+        </div>
+      ))}
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    // Regresión: cada variant debe resolver a un background-color computado
+    // distinto. Si alguien rompe la cascade (token huérfano, override pisando
+    // `.ig-progress-{v} .ig-progress-bar`, etc.) este test cae.
+    const canvas = within(canvasElement);
+    const bars = canvas
+      .getAllByRole("progressbar")
+      .map((el) => el.querySelector(".ig-progress-bar") as HTMLElement);
+    await expect(bars).toHaveLength(6);
+    const colors = bars.map((b) => getComputedStyle(b).backgroundColor);
+    const unique = new Set(colors);
+    await expect(unique.size).toBe(6);
+  },
 };
 
 export const Tamaños: Story = {

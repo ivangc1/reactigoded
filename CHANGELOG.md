@@ -7,6 +7,128 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.8] — 2026-05-03
+
+Consolida el trabajo que estuvo bajo `rc.1` / `rc.2` / `rc.3` (tags
+borrados, no llegaron a publicarse) más los fixes finales sobre
+`Progress` y `Checkbox`/`Switch` detectados al revisar el visual.
+
+### Added
+- **Prop `indeterminate?: boolean`** en `Checkbox` y `Switch`. Hasta
+  `beta.7` el tercer estado solo se podía aplicar via ref-callback
+  (`ref={el => { if (el) el.indeterminate = true }}`), patrón
+  documentado pero poco ergonómico. Ahora basta `<Checkbox indeterminate>`
+  / `<Switch indeterminate>`. Internamente un `useEffect` sincroniza la
+  prop con `el.indeterminate` nativo (la propiedad del DOM, ya que
+  `indeterminate` no es atributo HTML válido). El ref-callback sigue
+  funcionando — los componentes ahora usan un `internalRef` y forwardean
+  al ref del consumer si se pasa.
+- **El estado `indeterminate` es sticky tras click**. El navegador limpia
+  `el.indeterminate` automáticamente cuando el usuario clica un checkbox
+  con `.indeterminate=true` (toggle nativo a checked/unchecked). Si la
+  prop sigue `true`, `handleChange` re-aplica `el.indeterminate=true` —
+  solo el parent decide cuándo salir del estado mixto pasando
+  `indeterminate={false}`. Sin esto, tras el primer click el visual
+  pasaba a checked normal aunque la prop dijera "parcial".
+- **`aria-checked="mixed"`** automático en `Checkbox`/`Switch` cuando
+  `indeterminate=true`, para que NVDA/JAWS/VoiceOver anuncien el estado
+  parcial correctamente.
+- **Visual `:indeterminate`** en `Checkbox` y `Switch`. Hasta `beta.7`
+  el `<input>` nativo se ocultaba detrás de un overlay y las reglas CSS
+  solo cubrían `:checked` / `:focus-visible` / `:disabled`, así que
+  `el.indeterminate=true` no tenía diferencia visual.
+  - **Checkbox**: fondo lleno (color de variante, igual que `:checked`)
+    y glyph "−" (línea horizontal centrada).
+  - **Switch**: thumb centrado en el track con background de variante
+    (Material-like — comunica "ni on ni off" sin glyphs adicionales).
+  - Las 6 variantes (`brand`/`secondary`/`success`/`warning`/`danger`/`info`)
+    tienen su color correspondiente en ambos.
+- **Story `Switch.Indeterminate`** (no existía).
+- **Story `Checkbox.Indeterminate`** refactorizada: usa
+  `args: { indeterminate: true }` en vez del ref-callback (mejor ejemplo).
+
+### Changed
+- **Progress bars siempre usan los `-nox`** (cardinales brillantes) en
+  ambos temas, no los adaptativos `var(--ig-{role})`. Razón: en LIGHT
+  los `-lux` tienen luminosidad y chroma demasiado bajos para
+  distinguirse en una franja de 8-12 px (las 6 variantes se veían
+  "todas oscuras" y costaba diferenciar hue). El track sigue adaptativo
+  via `var(--ig-progress-track)`. Los demás componentes mantienen
+  tokens adaptativos porque tienen texto encima donde el contraste
+  WCAG sí importa; en `Progress` el bar es bloque sólido sin texto.
+- **`Progress.Variantes`** story rediseñada — antes 5 barras
+  `size="md"` (8 px) sin label. Ahora 6 barras `size="lg"` (12 px)
+  con `<span class="ig-story-label">` arriba de cada una. `play()`
+  afirma via `getComputedStyle` que las 6 barras tienen
+  `background-color` distinto — regresión si alguien rompe la cascade
+  `.ig-progress-{v} .ig-progress-bar`.
+- **8 stories de Interacción propagan `args`** — `Radio.SelectInteraction`,
+  `Modal.OpenInteraction`, `Accordion.Interaction`,
+  `Sidebar.ToggleInteraction`, `Stepper.Interactivo`,
+  `Tabs.KeyboardNavInteraction`, `Toast.FireInteraction`,
+  `Tooltip.A11yInteraction` tenían `render: () => (<Comp prop="…" />)`
+  con valores hardcoded, lo que dejaba el panel Controls desconectado
+  del render. Ahora `render: (args) => (<Comp {...args} … />)` con
+  overrides finales solo donde el `play()` necesita un valor concreto
+  (state controlado, `defaultValue` predecible, payload del toast).
+  Cuando hace falta un default distinto al del meta se añade
+  `args: {…}` a nivel de story. `FireToastButton` se inlinea para
+  leer `args.title/message/variant`.
+- **`laurus` recalibrado de H=149° a H≈140°** para subir la separación
+  perceptual ΔE OKLab `laurus ↔ vitreus` en LIGHT de ≈0.054 (rozaba el
+  umbral del Check 3 = 0.05) a ≈0.074. Hex nuevos:
+  `--ig-laurus-lux: #143d0a`, `--ig-laurus-nox: #6aed4a` (antes
+  `#113d1c` / `#5eeb82`). Geometría dual preservada (L_lux=0.319,
+  L_nox=0.841, ΔH=0.11°, suma 1.160). El alias `--ig-success` sigue
+  apuntando a `--ig-laurus`, ningún consumer que use rol `success` debe
+  tocar nada. Las alphas `--ig-laurus-alpha-{10,20,30,50,70}` siguen
+  siendo `color-mix` y arrastran el cambio automáticamente.
+  Visualmente: más vegetal puro, menos "menta caribeña". Re-baseline
+  de Chromatic obligatorio.
+
+### Fixed (Storybook only — no afecta al paquete publicado)
+- **Toggle light/dark del toolbar de Storybook funciona también en
+  páginas MDX puras** (`Contrast`, `DesignTokens`, `Introduction`,
+  `Spacing`, `Variants`). Antes el toggle solo afectaba a las Stories
+  CSF; las MDX se quedaban en el último `data-theme` aplicado por la
+  Story anterior. Causa raíz: el decorator `withThemeByDataAttribute`
+  solo se ejecuta cuando se monta una Story; las MDX sin `<Story of=…>`
+  ni `<Canvas>` que referencie un export son páginas estáticas que no
+  disparan decorators. Fix: `.storybook/preview-head.html` se suscribe
+  al canal `__STORYBOOK_ADDONS_CHANNEL__` y reacciona al evento
+  `updateGlobals` aplicando `data-theme` al `<html>` del iframe.
+  Idempotente con el decorator existente.
+
+### Documentation
+- **README** bloque "Estado": ahora documenta `1.0.0-beta.8` con la
+  paleta final + rename `cyaneus → kobalium` (de `beta.7`) +
+  recalibración de `laurus` + nueva prop `indeterminate` +
+  Progress bars `-nox`.
+- **README** ejemplo de `Pagination` corregido —
+  `ariaLabel="Pagination"` → `aria-label="Pagination"` (era
+  inconsistente con la migración a `aria-*` estándar de `beta.4`).
+- **`igoded-components.css`** cabecera: `info → kobalium (cyan)` →
+  `info → kobalium (cobalt blue)` (residuo del sed `cyaneus → kobalium`
+  de `beta.7` que dejó `(cyan)` colgando). Aclarado "6 roles UI (el
+  sistema tiene 7 cardinales)" para no confundir cardinales con roles.
+- **Migration note ampliada** sobre el rename `cyaneus → kobalium` de
+  `beta.7` distinguiendo:
+  - **API estable** (no tocar nada): `var(--ig-info)`, `.ig-bg-info`,
+    `.ig-text-info`, `.ig-alert-info`, `.ig-badge-info`, `.ig-btn-info`,
+    etc. (30+ clases con sufijo de **rol**, no de cardinal).
+  - **Primitivos internos** (renombrar si los usabas directo):
+    `--ig-cyaneus` / `--ig-cyaneus-{lux,nox}` /
+    `--ig-cyaneus-alpha-{10,20,30,50,70}` / `--ig-text-on-cyaneus` →
+    `--ig-kobalium*` / `--ig-text-on-kobalium`.
+
+### Self-correction
+- La entrada de `1.0.0-beta.6` decía que `.ig-story-canvas` se movía a
+  `.storybook/preview-head.html`. La ruta correcta es
+  `.storybook/storybook.css` (consumido como `className` desde
+  `.storybook/preview.tsx`). El `preview-head.html` no se tocó en
+  `beta.6` — sigue como en `beta.5` con la inyección de
+  `data-theme="dark"`.
+
 ## [1.0.0-beta.7] — 2026-05-03
 
 ### Renamed (BREAKING — token rename + hue reassignment)

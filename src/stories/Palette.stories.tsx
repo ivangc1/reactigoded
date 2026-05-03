@@ -22,7 +22,7 @@ const CARDINALS = [
   { name: "axis", role: "secondary", hue: 300, char: "violeta" },
   { name: "cinis", role: "text-body", hue: 267, char: "gris azulado" },
   { name: "rutilus", role: "warning", hue: 55, char: "cobre" },
-  { name: "laurus", role: "success", hue: 149, char: "verde laurel" },
+  { name: "laurus", role: "success", hue: 140, char: "verde laurel" },
   { name: "malum", role: "danger", hue: 8, char: "rojo-granate" },
   { name: "kobalium", role: "info", hue: 260, char: "azul cobalto" },
 ] as const;

@@ -4,14 +4,18 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.4` — última pasada pre-`1.0.0`: API HTML
-> estándar uniforme (`aria-label` directo en vez de prop `ariaLabel` en 12
-> componentes); Rating clamp robusto (`value > max`, max no entero);
-> Tabs registry post-mount (defaultValue inválido cae al primer Tab); Slider
-> filtra arrays al DOM; size-limit en CI con budgets por archivo (~10.7 KB
-> ESM gzip · ~67 KB components.css gzip); `vite.lib.config.ts` separado;
-> `Fundamentos/Variantes` MDX nuevo. 0 deprecaciones. **Listo para `1.0.0`
-> tras 1-2 semanas de soak time.**
+> **Estado**: `1.0.0-beta.8`.
+> Paleta cardinal final: 7 cardinales con geometría OKLCH dual
+> (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos del
+> tema. Desde `beta.7` el cardinal `info` se llama `kobalium` (azul
+> cobalto, H≈260°) en vez de `cyaneus` — la API semántica `info` /
+> `--ig-info` / `.ig-*-info` no cambia. En `beta.8` se recalibró
+> `laurus` de H=149° a H≈140° (subir ΔE laurus↔vitreus en LIGHT de
+> ≈0.054 a ≈0.074), Checkbox/Switch ganaron prop `indeterminate`, y
+> Progress bars usan ahora siempre los `-nox` (brillantes) para que las
+> 6 variantes se distingan en una franja fina. CI: `lint + typecheck +
+> unit + test:contrast (WCAG AA + geometría OKLCH dual + ΔE OKLab
+> warning) + build + storybook+axe + size-limit` todo en verde.
 
 ## Instalación
 
@@ -25,7 +29,7 @@ pnpm add reactigoded
 
 ## CSS imports
 
-8 entradas en `1.0.0-beta.4`. Lo habitual: importa solo `design.css` (+ opcionalmente `fonts.css` si quieres las tipografías Google del DS).
+8 entradas. Lo habitual: importa solo `design.css` (+ opcionalmente `fonts.css` si quieres las tipografías Google del DS).
 
 ```ts
 // 100% variables --ig-* + keyframes. Cero selectores globales, cero
@@ -227,7 +231,7 @@ script blocking en `<head>` que aplique `data-theme` antes del paint:
 <Pagination
   prevLabel="Previous"
   nextLabel="Next"
-  ariaLabel="Pagination"
+  aria-label="Pagination"
   …
 />
 ```

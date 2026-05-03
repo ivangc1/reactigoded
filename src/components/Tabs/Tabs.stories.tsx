@@ -141,6 +141,7 @@ export const KeepMounted: Story = {
 };
 
 export const KeyboardNavInteraction: Story = {
+  args: { defaultValue: "a" },
   parameters: {
     docs: {
       description: {
@@ -149,8 +150,8 @@ export const KeyboardNavInteraction: Story = {
       },
     },
   },
-  render: () => (
-    <Tabs defaultValue="a">
+  render: (args) => (
+    <Tabs {...args}>
       <TabList aria-label="Demo nav">
         <Tab value="a">A</Tab>
         <Tab value="b">B</Tab>

@@ -175,7 +175,12 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-axis-lux: #411271;
   --ig-axis-nox: #d2bff7;
 
-  /* ═══ CINIS (Texto body / Gris azulado, H=267°) ═══ */
+  /* ═══ CINIS (Texto body / Gris azulado, H≈267°) — cardinal especial:
+     no tiene alias de rol semántico (a diferencia de los otros 6).
+     Solo se usa como --ig-text-body, nunca como bg de componente.
+     Su tinte azulado (H≈267°, croma bajo) aporta personalidad al texto
+     del cuerpo del DS, diferenciándolo de los grises neutros de los
+     design systems genéricos. La asimetría es deliberada, no olvido. ═══ */
   --ig-cinis-lux: #243154;
   --ig-cinis-nox: #c4cada;
 
@@ -183,9 +188,12 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus-lux: #4d2809;
   --ig-rutilus-nox: #f7bc94;
 
-  /* ═══ LAURUS (Success / Verde laurel, H=149°) ═══ */
-  --ig-laurus-lux: #113d1c;
-  --ig-laurus-nox: #5eeb82;
+  /* ═══ LAURUS (Success / Verde laurel, H≈140°) — recalibrado desde
+     H=149° en 1.0.0-rc.1 para subir ΔE laurus↔vitreus en LIGHT
+     de 0.054 a 0.074 (umbral Check 3 = 0.05). Más vegetal puro,
+     menos "menta caribeña". ═══ */
+  --ig-laurus-lux: #143d0a;
+  --ig-laurus-nox: #6aed4a;
 
   /* ═══ MALUM (Danger / Rojo-granate, H=8°) ═══ */
   --ig-malum-lux: #620327;

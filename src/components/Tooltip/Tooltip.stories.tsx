@@ -104,6 +104,7 @@ export const Variantes: Story = {
 };
 
 export const A11yInteraction: Story = {
+  args: { text: "Eliminar elemento", placement: "top" },
   parameters: {
     docs: {
       description: {
@@ -112,8 +113,8 @@ export const A11yInteraction: Story = {
       },
     },
   },
-  render: () => (
-    <Tooltip text="Eliminar elemento" placement="top">
+  render: (args) => (
+    <Tooltip {...args}>
       <Button icon aria-label="Eliminar">
         ×
       </Button>

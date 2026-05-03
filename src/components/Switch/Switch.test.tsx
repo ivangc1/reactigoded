@@ -53,6 +53,14 @@ describe("Switch", () => {
     expect(onChange).toHaveBeenCalledOnce();
   });
 
+  it("indeterminate sigue true tras click si la prop sigue true (sticky)", async () => {
+    render(<Switch indeterminate>Mixto</Switch>);
+    const input = screen.getByRole("switch");
+    expect(input).toBePartiallyChecked();
+    await userEvent.click(input);
+    expect(input).toBePartiallyChecked();
+  });
+
   it("transición controlled→uncontrolled emite warning de React", () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { rerender } = render(<Switch checked onChange={() => {}}>x</Switch>);

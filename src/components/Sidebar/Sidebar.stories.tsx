@@ -206,9 +206,9 @@ export const ToggleInteraction: Story = {
       },
     },
   },
-  render: () => (
+  render: (args) => (
     <div className="ig-story-shell">
-      <Sidebar>
+      <Sidebar {...args}>
         <SidebarHeader>App</SidebarHeader>
         <SidebarNav>
           <SidebarItem href="#" icon={I.home}>

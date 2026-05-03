@@ -22,13 +22,57 @@ Cardinales:
 | axis      | 300°  | secondary (violeta) |
 | cinis     | 267°  | text-body (gris azulado) |
 | rutilus   | 55°   | warning (cobre)   |
-| laurus    | 149°  | success (verde)   |
+| laurus    | 140°  | success (verde)   |
 | malum     | 8°    | danger (rojo-granate) |
 | kobalium  | 260°  | info (cobalt blue) |
 
 Cualquier cambio que rompa esta geometría falla `npm run test:contrast`.
 **No es decorativo: la simetría OKLCH es lo que garantiza WCAG AA en
 todas las combinaciones bg/cardinal del tema.**
+
+## Watchlist — pares con ΔE OKLab marginal
+
+`Check 3` del script (`scripts/check-component-contrast.mjs`) avisa
+cuando dos cardinales de UI activa quedan separados por ΔE OKLab < 0.05
+(umbral conservador para detectar confusión visual). Hoy **no dispara**:
+todos los pares superan el umbral. Pero hay 3 pares que rozan el
+alambre y conviene tener vigilados al revisar capturas / Chromatic /
+diseño nuevo:
+
+| Par | Tema  | ΔE     | Notas |
+|-----|-------|--------|-------|
+| axis ↔ kobalium   | dark  | ≈0.052 | Secondary violeta vs info cobalt |
+| vitreus ↔ cinis   | light | ≈0.070 | Brand vs texto cuerpo (cinis es texto-body, fuera de UI_CARDINALS, no dispara) |
+| malum ↔ rutilus   | ambos | ≈0.094 | Danger granate vs warning cobre |
+
+Resuelto en `1.0.0-rc.1`: `vitreus ↔ laurus` en LIGHT estaba en ≈0.054.
+Se recalibró `laurus` de H=149° a H≈140° (hex `#143d0a`/`#6aed4a`),
+subiendo ΔE a 0.074. Sin cambio de geometría dual ni de aliases.
+
+Plan: en `1.1.0` (post-`1.0.0`) se promueve `Check 3` a **error** (no
+warning) tras una auditoría visual de los pares restantes. Si la
+auditoría encuentra confusión real, se ajusta el hue del cardinal
+afectado en ±5°-10° respetando geometría dual; si no, se sube el umbral
+a 0.05 estricto y se documenta la decisión.
+
+## Cinis es un cardinal especial
+
+- **No tiene alias de rol semántico** (a diferencia de los otros 6:
+  vitreus→brand, axis→secondary, laurus→success, rutilus→warning,
+  malum→danger, kobalium→info).
+- **Solo se usa como `--ig-text-body`**, nunca como background de
+  componente. No existe `--ig-bg-cinis` ni `.ig-bg-cinis` ni utility
+  alguna que lo aplique como fondo.
+- **Está incluido en Check 2** (geometría dual lux/nox) porque mantiene
+  la simetría OKLCH del sistema, pero **NO está en Check 3** (ΔE
+  perceptual entre cardinales UI), porque su separación con otros
+  cardinales no afecta a la UI: nunca aparece como fondo contiguo a
+  otro cardinal.
+- Se mantiene como **cardinal** y no se degrada a primitivo de texto
+  plano (`--ig-text-body: #c4cada`) porque su tinte azulado (H≈267°,
+  croma bajo) aporta personalidad al texto del cuerpo del DS,
+  diferenciándolo de los grises neutros de Tailwind/Material/etc. La
+  asimetría es **decisión deliberada documentada**, no olvido.
 
 ## Uso en componentes
 

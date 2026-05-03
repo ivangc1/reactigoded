@@ -48,6 +48,18 @@ export const Deshabilitado: Story = {
   args: { disabled: true, defaultChecked: true },
 };
 
+export const Indeterminate: Story = {
+  args: { children: "Notificaciones por categoría", indeterminate: true },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Tercer estado para toggles maestros que controlan un grupo donde unos hijos están on y otros off. Visualmente: thumb centrado en el track con color de variante de fondo. Accesibilidad: `aria-checked=\"mixed\"`.",
+      },
+    },
+  },
+};
+
 export const Controlado: Story = {
   render: () => {
     function Demo() {

@@ -222,13 +222,13 @@ export const OpenInteraction: Story = {
       },
     },
   },
-  render: () => {
+  render: (args) => {
     const Demo = () => {
       const [open, setOpen] = useState(false);
       return (
         <>
           <Button onClick={() => { setOpen(true); }}>Abrir</Button>
-          <Modal open={open} onClose={() => { setOpen(false); }}>
+          <Modal {...args} open={open} onClose={() => { setOpen(false); }}>
             <ModalHeader>
               <h2>Diálogo de prueba</h2>
             </ModalHeader>
