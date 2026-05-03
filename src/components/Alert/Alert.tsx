@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode, Ref } from "react";
-import { useState } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export type AlertVariant =
   | "success"
@@ -64,18 +64,19 @@ export function Alert({
   ref,
   ...rest
 }: AlertProps) {
-  const isControlled = open !== undefined;
-  const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const visible = isControlled ? open : internalOpen;
+  const { value: visible, setValue: setVisible } = useControllableState<boolean>({
+    value: open,
+    defaultValue: defaultOpen,
+    onChange: onOpenChange,
+  });
 
   if (!visible) return null;
 
   const isAlertRole = variant === "danger" || variant === "warning";
 
   const handleClose = () => {
-    if (!isControlled) setInternalOpen(false);
+    setVisible(false);
     onClose?.();
-    onOpenChange?.(false);
   };
 
   return (
