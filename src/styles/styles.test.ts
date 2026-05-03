@@ -94,7 +94,7 @@ describe("igoded-tokens.css — solo variables, sin selectores globales", () => 
     expect(tokensCss).not.toMatch(/--ig-text-muted:\s*#708888/);
   });
 
-  it("contiene los 7 colores cardinales (Fundus + 6)", () => {
+  it("contiene los 8 colores cardinales (Fundus + 7)", () => {
     expect(tokensCss).toMatch(/--ig-fundus:/);
     expect(tokensCss).toMatch(/--ig-vitreus:/);
     expect(tokensCss).toMatch(/--ig-axis:/);
@@ -102,6 +102,7 @@ describe("igoded-tokens.css — solo variables, sin selectores globales", () => 
     expect(tokensCss).toMatch(/--ig-laurus:/);
     expect(tokensCss).toMatch(/--ig-rutilus:/);
     expect(tokensCss).toMatch(/--ig-malum:/);
+    expect(tokensCss).toMatch(/--ig-kobalium:/);
   });
 
   it("NO contiene clases de componentes ni globales (solo :root y data-theme)", () => {
