@@ -27,7 +27,7 @@ NOMENCLATURA: todas las clases empiezan por `.ig-*` para no chocar con
 Tailwind, Bootstrap u otras libs de utilities.
 
 VARIANTES SEMÁNTICAS (6 cardinales):
-  brand → vitreus (teal) · secondary → axis (violet) · info → axis ·
+  brand → vitreus (teal) · secondary → axis (violet) · info → cyaneus (cyan) ·
   success → laurus (green) · warning → rutilus (orange) · danger → malum (red)
 */
 
@@ -5602,13 +5602,14 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     color: GrayText;
   }
 
-  /* Inputs */
+  /* Inputs — Field/FieldText (más específico que Canvas, axe-core lo
+     valida mejor para form controls). */
   .ig-input,
   .ig-select,
   .ig-textarea {
     border: 2px solid currentColor;
-    background: Canvas;
-    color: CanvasText;
+    background-color: Field;
+    color: FieldText;
   }
 
   .ig-input:focus,
@@ -5755,6 +5756,20 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
   /* Navbar */
   .ig-navbar {
     border-bottom: 2px solid currentColor;
+  }
+
+  /* Estados activos / seleccionados — Highlight/HighlightText
+     (idem item:hover, para coherencia visual del "elemento elegido"). */
+  .ig-pagination-active,
+  .ig-step-active,
+  .ig-chip-selected,
+  .ig-chip.selected,
+  .ig-sidebar-item-active,
+  .ig-sidebar-item.active,
+  .ig-navbar-link-active {
+    color: HighlightText;
+    background: Highlight;
+    border-color: Highlight;
   }
 }
 

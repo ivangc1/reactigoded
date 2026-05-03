@@ -17,6 +17,17 @@ USO:
   <div className="ig-story-frame">…</div>
 */
 
+/* Canvas wrapper — aplicado por el decorator de preview.tsx a toda story
+   que no use parameters.layout = "fullscreen". Da fondo --ig-bg-base y
+   padding para que la story se distinga del chrome de Storybook en LIGHT. */
+.ig-story-canvas {
+  background: var(--ig-bg-base);
+  color: var(--ig-text-body);
+  min-height: calc(100vh - 2rem);
+  padding: var(--ig-space-6);
+  border-radius: var(--ig-rounded-md);
+}
+
 /* Stack vertical (grid-rows) — para listas de variantes/tamaños/estados. */
 .ig-story-stack {
   display: grid;

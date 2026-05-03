@@ -85,6 +85,16 @@ import "reactigoded/styles/all.css";
 > activo dentro de `design.css`). Si actualizas desde una beta anterior y
 > notas que tu HTML nativo perdió estilos, importa `reset.css`.
 
+> ⚠️ **Breaking visual desde `1.0.0-beta.5`**: el `reset.css` ya no estiliza
+> `<button>` con la marca. Antes daba a todo `<button>` `background: vitreus`
+> + `color: text-on-vitreus`; ahora salen `background: transparent`,
+> `color: inherit`, `border: 0`, `padding: 0`, `cursor: pointer`. Si tu app
+> dependía de que cualquier `<button>` nativo apareciera con look brand
+> "gratis", ahora los verás transparentes. **Migración**: añade la clase
+> `.ig-button` (o `.ig-button-primary`, `.ig-button-secondary`…) a esos
+> elementos. **Razón**: combinaciones bg/color heredadas rompían contraste
+> cuando un wrapper aplicaba sus propios colores.
+
 ### Globales aplicados por `base.css` (incluido en `design.css`)
 
 `design.css` **no estiliza** elementos HTML nativos como `h1`, `p`, `a`,
@@ -255,9 +265,21 @@ npm run storybook        # docs/demos (http://localhost:6006)
 npm run build            # dist/ con index.js + index.cjs + .d.ts + styles/
 npm run test:unit        # vitest happy-dom (suite completa)
 npm run test:unit:ci     # como test:unit, con isolate=true + pool=forks (CI estricto)
-npm run test:storybook   # vitest browser Chromium + axe-a11y
-npm run verify           # lint + typecheck + test:unit + build + test:storybook
+npm run test:contrast    # CSS estático: pares bg/color + geometría OKLCH
+npm run test:storybook   # vitest browser Chromium + axe-a11y (DOM real)
+npm run verify           # lint + typecheck + test:unit + test:contrast + build + test:storybook + verify:size
 ```
+
+**`test:contrast` vs `test:storybook`** — son guardrails complementarios,
+no redundantes. `test:contrast` parsea `igoded-components.css` con postcss
+y valida cada regla que declara `color` + `background[-color]` en el mismo
+bloque, contra los 14 hex de los pares cardinales en ambos temas. Es rápido
+y atrapa la mayoría de regresiones, pero **no cubre**: alphas/tinted con
+`color-mix(... transparent)` o `rgba(... .5)` (no compone contra el padre),
+combinators padre-hijo en reglas separadas (solo ve pares dentro del mismo
+bloque), gradients ni `currentColor`. Para esos casos depende
+`test:storybook`, que ejecuta cada story en chromium headless con axe-core
+sobre el DOM final ya pintado.
 
 ## Estructura
 

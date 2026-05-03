@@ -7,6 +7,39 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.6] — 2026-05-03
+
+### Changed (BREAKING — visual)
+- **`reset.css` ya no estiliza `<button>` con la marca**. Hasta beta.4
+  el reset aplicaba `background: var(--ig-vitreus); color: var(--ig-text-on-vitreus)`
+  a todo `<button>` sin clase. Desde beta.5 los `<button>` que importas
+  con `reset.css` salen `background: transparent; color: inherit;
+  border: 0; padding: 0; cursor: pointer;`. Si tu app dependía de que
+  cualquier `<button>` nativo apareciese con look brand "gratis", ahora
+  los verás transparentes sobre el fondo de su contenedor. Migración:
+  añade la clase `.ig-button` (o variante `.ig-button-primary`,
+  `.ig-button-secondary`…) a esos `<button>`. Razón del cambio: evitar
+  combinaciones bg/color heredadas que rompían contraste cuando un
+  wrapper aplicaba sus propios colores (caso real: SidebarItem con
+  texto `cinis` sobre `<button>` con bg vitreus → ratio 1.06).
+
+### Documentation
+- `igoded-components.css` cabecera: `info → axis` corregido a
+  `info → cyaneus`.
+- `igoded-tokens.css` "CUÁNDO USAR": `info` quitado de la línea de Axis
+  y añadido a una línea propia para Cyaneus.
+- `SKILL.md` y `README.md`: documentado el scope real de
+  `npm run test:contrast` (qué cubre y qué no).
+
+### Added
+- Bloque `@media (forced-colors: active)` quirúrgico en
+  `igoded-components.css` para estados `*-active`/`*-selected` (Tabs,
+  Pagination, Stepper, Chip, Sidebar, Navbar) → `Highlight`/`HighlightText`,
+  e inputs (`.ig-input`, `.ig-select`, `.ig-textarea`) → `Field`/`FieldText`.
+  Complementa el mapeo semántico de `igoded-tokens.css` sin duplicarlo.
+- Wrapper canvas de Storybook movido de inline-style a clase
+  `.ig-story-canvas` en `.storybook/preview-head.html`.
+
 ## [1.0.0-beta.5] — 2026-05-03
 
 ### Changed (BREAKING)

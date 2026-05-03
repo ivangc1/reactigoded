@@ -91,3 +91,36 @@ colorido lo aplican las clases `ig-btn-*`, `ig-sidebar-item`, etc.
 7. `verify:size` (size-limit)
 
 Cada uno es un guardrail diferente. Romper cualquiera bloquea publish.
+
+### Scope real de `test:contrast`
+
+`scripts/check-component-contrast.mjs` parsea `igoded-components.css` con
+postcss y evalúa cada regla que declara `color` y `background[-color]` **en
+el mismo bloque**. **Cubre**:
+
+- Pares `color` + `background[-color]` con valores resolubles a sRGB
+  (token `var(--ig-*)` mapeado a su hex en ambos temas, o hex literal).
+- Variantes `:hover`/`:focus`/`:disabled`/`:active` cuando declaran el par
+  bg/color completo.
+- Geometría OKLCH dual de los 7 cardinales (`L_lux ≈ 0.32 ± 0.04`,
+  `L_nox ≈ 0.84 ± 0.04`, `ΔH ≤ 10°` lux/nox).
+
+**NO cubre** (puntos ciegos conocidos — para esto está el runner
+`test:storybook` que evalúa DOM real con axe-core):
+
+- **Alphas/tinted/transparent** sin contexto: `color-mix(... transparent)`,
+  `color-mix(... 30%)`, `rgba(... .5)` resuelven a un alpha que el script
+  no compone contra el fondo del padre. Ejemplo: `.ig-bg-vitreus-soft`
+  (alpha 20%) sobre `bg-base` se evalúa como vitreus puro, no como mezcla.
+- **Combinators padre-hijo en reglas separadas**: si `color` lo declara
+  `.ig-card-title` y el `background` lo declara `.ig-card`, el script no
+  cruza esas dos reglas. Solo ve pares dentro del mismo bloque.
+- **Gradients** (`linear-gradient`, `radial-gradient`): el script ignora
+  el background si no es un color sólido.
+- **`currentColor`**: cuando el background es `currentColor` se omite el
+  par (el `color` viene del consumer).
+- **CSS custom properties no definidas en `igoded-tokens.css`**: cualquier
+  `var(--algo-externo)` se omite.
+
+Cuando añadas un componente con alphas, gradients o color desde el padre,
+asume que `test:contrast` no te cubre y verifica con `test:storybook`.

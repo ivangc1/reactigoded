@@ -62,17 +62,9 @@ const preview: Preview = {
     // `parameters.layout = "fullscreen"` (Sidebar/Navbar) para no romper
     // sus layouts a 100vh.
     (Story, ctx) => {
-      if (ctx.parameters?.layout === "fullscreen") return <Story />;
+      if (ctx.parameters.layout === "fullscreen") return <Story />;
       return (
-        <div
-          style={{
-            background: "var(--ig-bg-base)",
-            color: "var(--ig-text-body)",
-            minHeight: "calc(100vh - 2rem)",
-            padding: "var(--ig-space-6)",
-            borderRadius: "var(--ig-rounded-md)",
-          }}
-        >
+        <div className="ig-story-canvas">
           <Story />
         </div>
       );
