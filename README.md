@@ -4,18 +4,17 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.8`.
-> Paleta cardinal final: 7 cardinales con geometría OKLCH dual
-> (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos del
-> tema. Desde `beta.7` el cardinal `info` se llama `kobalium` (azul
-> cobalto, H≈260°) en vez de `cyaneus` — la API semántica `info` /
-> `--ig-info` / `.ig-*-info` no cambia. En `beta.8` se recalibró
-> `laurus` de H=149° a H≈140° (subir ΔE laurus↔vitreus en LIGHT de
-> ≈0.054 a ≈0.074), Checkbox/Switch ganaron prop `indeterminate`, y
-> Progress bars usan ahora siempre los `-nox` (brillantes) para que las
-> 6 variantes se distingan en una franja fina. CI: `lint + typecheck +
-> unit + test:contrast (WCAG AA + geometría OKLCH dual + ΔE OKLab
-> warning) + build + storybook+axe + size-limit` todo en verde.
+> **Estado**: `pre-1.0.0-rc.1` (última publicación: `1.0.0-beta.18`).
+> Paleta cardinal estable: 7 cardinales con geometría OKLCH dual
+> (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos
+> del tema en ambos modos. El cardinal `info` se llama internamente
+> `kobalium` (azul cobalto, H≈260°); la API semántica pública —
+> `info` / `--ig-info` / `.ig-*-info` — no cambia. `vitreus` (brand)
+> está reposicionado en H=207.50° (centro perceptual verde↔azul en
+> OKLCH), hex `#053a40` lux / `#3ae2f7` nox. CI local en verde:
+> `lint + typecheck + test:unit + test:contrast (WCAG ≥ 4.5 ambos
+> temas + geometría OKLCH + ΔE OKLab) + build + storybook+axe +
+> verify:size`.
 
 ## Instalación
 
@@ -95,9 +94,13 @@ import "reactigoded/styles/all.css";
 > `color: inherit`, `border: 0`, `padding: 0`, `cursor: pointer`. Si tu app
 > dependía de que cualquier `<button>` nativo apareciera con look brand
 > "gratis", ahora los verás transparentes. **Migración**: añade la clase
-> `.ig-button` (o `.ig-button-primary`, `.ig-button-secondary`…) a esos
-> elementos. **Razón**: combinaciones bg/color heredadas rompían contraste
-> cuando un wrapper aplicaba sus propios colores.
+> base `.ig-btn` + la variante (`.ig-btn-brand`, `.ig-btn-secondary`,
+> `.ig-btn-success`, `.ig-btn-warning`, `.ig-btn-danger`, `.ig-btn-info`,
+> `.ig-btn-outline-*`, `.ig-btn-ghost-*`, `.ig-btn-link`) a esos
+> elementos — usa preferentemente el componente `<Button variant="…">`
+> de la librería, esas clases son la API CSS pública subyacente.
+> **Razón**: combinaciones bg/color heredadas rompían contraste cuando
+> un wrapper aplicaba sus propios colores.
 
 ### Globales aplicados por `base.css` (incluido en `design.css`)
 
@@ -159,13 +162,62 @@ function Page() {
 | Categoría | Componentes |
 |---|---|
 | **Acciones** | `Button`, `Chip`, `Pagination` |
-| **Display** | `Avatar`, `AvatarGroup`, `Badge`, `Card` (+`CardHeader`/`Body`/`Footer`/`Image`/`Divider`), `Divider`, `Skeleton`, `Spinner`, `Tag`/`Timeline`+`TimelineItem` |
+| **Display** | `Avatar`, `AvatarGroup`, `Badge`, `Card` (+`CardHeader`/`Body`/`Footer`/`Image`/`Divider`), `Divider`, `Skeleton`, `Spinner`, `Timeline`+`TimelineItem` |
 | **Feedback** | `Alert`, `Progress`, `Toast`+`ToastProvider`+`useToast`, `Tooltip` |
 | **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `Select`, `Slider`, `Switch`, `Textarea`, `ThemeSwitch` |
 | **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `Dropdown`+`DropdownTrigger`+`DropdownMenu`+`DropdownItem`+`DropdownDivider`+`DropdownHeader`, `Modal`+`ModalHeader`+`ModalBody`+`ModalFooter`+`ModalClose`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabList`+`Tab`+`TabPanel`+`TabsContent` |
 
 Hooks públicos: `useTheme`, `useToast`, `useAccordion`, `useAccordionItem`,
 `useDropdown`, `useSidebar`, `useTabs`.
+
+## API CSS pública
+
+Las clases `.ig-*` que usan los componentes son **API pública del paquete**
+y se pueden aplicar directamente sobre HTML estático sin montar React (útil
+para emails, PDFs, demos rápidas, fragmentos server-rendered). El convenio
+es uniforme: **clase base + modifiers de variant / size / shape / state**,
+todos kebab-case y todos compuestos por concatenación con guion.
+
+Tabla mínima (clase base por componente). Los modifiers siguen el patrón
+estándar `{base}-{variant}` / `{base}-{size}` y se documentan exhaustivamente
+en Storybook → *Fundamentos / CSS API pública*.
+
+| Componente              | Clase base                | Modifiers principales                                                                  |
+|-------------------------|---------------------------|----------------------------------------------------------------------------------------|
+| `Accordion`             | `.ig-accordion`           | `-item`, `-item-open`, `-header`, `-content`, `-icon`                                  |
+| `Alert`                 | `.ig-alert`               | variants `-brand`/`-secondary`/`-success`/`-warning`/`-danger`/`-info`/`-neutral`, `-title`, `-description`, `-icon`, `-close` |
+| `Avatar` / `AvatarGroup`| `.ig-avatar`              | sizes `-xs`…`-xl`, `-square`, `-group`, `-status-online`/`-busy`/`-away`/`-offline`     |
+| `Badge`                 | `.ig-badge`               | variants color, sizes, `-pill`, `-dot`                                                  |
+| `Breadcrumb`            | `.ig-breadcrumb`          | `-item`, `-current`, `-separator`                                                       |
+| `Button`                | `.ig-btn`                 | variants `-brand`/`-secondary`/`-success`/`-warning`/`-danger`/`-info`, `-outline-*`, `-ghost-*`, `-link`, sizes `-xs`…`-xl`, `-block`, `-icon`, `-loading` |
+| `Card`                  | `.ig-card`                | `-header`, `-body`, `-footer`, `-image`, `-divider`, `-bordered`                        |
+| `Checkbox`              | `.ig-checkbox`            | variants color, sizes                                                                   |
+| `Chip`                  | `.ig-chip`                | variants color, `-close`                                                                |
+| `Divider`               | `.ig-divider`             | variants color, `-vertical`, `-dashed`, `-with-text`                                    |
+| `Dropdown`              | `.ig-dropdown`            | `-trigger`, `-menu`, `-item`, `-divider`, `-header`, `-open`                            |
+| `Input` / `Textarea` / `Select` | `.ig-input` · `.ig-textarea` · `.ig-select` | `-error`, `-success`, `-addon`, `-group`, `-textarea-auto`, `-select-auto` |
+| `Modal`                 | `.ig-dialog` *(<dialog> nativo)* | `-header`, `-body`, `-footer`, `-close`, sizes `-sm`…`-xl`/`-full`, `-backdrop-blur`/`-dark`/`-light`/`-no-backdrop`, `-show`, `-loading` |
+| `Navbar`                | `.ig-navbar`              | `-brand`, `-nav`, `-actions`, `-link`, `-menu-button`, `-sticky`/`-fixed`               |
+| `Pagination`            | `.ig-pagination`          | variants color, `-active`                                                               |
+| `Progress`              | `.ig-progress`            | `-bar`, variants color, sizes                                                           |
+| `Radio`                 | `.ig-radio`               | variants color, sizes                                                                   |
+| `Rating`                | `.ig-rating`              | sizes `-sm`/`-md`/`-lg`, `-readonly`                                                    |
+| `Sidebar`               | `.ig-sidebar`             | `-header`, `-nav`, `-item`, `-section`, `-footer`, `-toggle`, `-divider`, `-collapsed`  |
+| `Skeleton`              | `.ig-skeleton`            | `-avatar`, `-avatar-lg`, `-text`, `-rect`, `-circle`                                    |
+| `Slider`                | `.ig-slider`              | `-group`, `-value`                                                                      |
+| `Spinner`               | `.ig-spinner`             | variants color, sizes                                                                   |
+| `Stepper`               | `.ig-stepper`             | `-labeled`                                                                              |
+| `Switch` / `ThemeSwitch`| `.ig-switch`              | variants color, sizes                                                                   |
+| `Table`                 | `.ig-table`               | `-bordered`, `-auto`, `-row`, `-header-cell`, `-cell`, `-caption`                       |
+| `Tabs`                  | `.ig-tabs`                | variants color, `-content`, `-list`, `-tab`, `-panel`                                   |
+| `Timeline`              | `.ig-timeline`            | `-item`, `-content`, `-date`                                                            |
+| `Toast`                 | `.ig-toast`               | placement `-top-left`/`-top-right`/`-bottom-left`/`-bottom-right`/`-bottom-center` …    |
+| `Tooltip`               | `.ig-tooltip`             | placement `-top`/`-bottom`/…, variants color                                            |
+
+> Los modifiers son aditivos: una variante completa de Button es, p.ej.,
+> `<button class="ig-btn ig-btn-brand ig-btn-lg ig-btn-block">…</button>`.
+> La librería React monta exactamente estas mismas clases — los componentes
+> son wrappers delgados sobre la capa CSS.
 
 ## Patrones recurrentes
 
