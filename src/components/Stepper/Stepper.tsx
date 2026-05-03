@@ -13,12 +13,15 @@ import type { StepProps } from "./Step";
 
 export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   /**
-   * Índice (0-based) del step activo (modo controlado). Steps anteriores se
-   * marcan completos. Si se omite, se usa `defaultActive`.
+   * Índice (0-based) del step activo. Steps anteriores se marcan
+   * completos; el de este índice lleva `aria-current="step"`.
+   *
+   * **Stepper es presentational**: la prop es requerida y refleja el
+   * estado actual que el consumer mantenga. No hay modo "uncontrolled"
+   * — si pasas un valor inicial sin actualizarlo, el stepper queda
+   * congelado para siempre.
    */
-  active?: number;
-  /** Índice inicial (modo no controlado). Por defecto 0. */
-  defaultActive?: number;
+  active: number;
   /** Si true, usa el layout con labels debajo (`ig-stepper-labeled`). */
   labeled?: boolean;
   /** Una lista de `Step`. */
@@ -38,18 +41,13 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
  * a cada uno automáticamente.
  */
 export function Stepper({
-  active: activeProp,
-  defaultActive = 0,
+  active,
   labeled = false,
   className,
   children,
   ref,
   ...rest
 }: StepperProps) {
-  // Stepper es presentational (no muta estado interno). En modo uncontrolled
-  // sólo respeta el `defaultActive` inicial; el consumer debe pasar `active`
-  // si quiere reflejar progreso dinámico.
-  const active = activeProp ?? defaultActive;
   const steps = Children.toArray(children).filter(isValidElement);
 
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
