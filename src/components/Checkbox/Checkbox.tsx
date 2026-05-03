@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useLayoutEffect,
   useRef,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -67,7 +67,11 @@ export function Checkbox({
     else if (ref) ref.current = el;
   };
 
-  useEffect(() => {
+  // useLayoutEffect (no useEffect): el atributo `indeterminate` es DOM-
+  // only, no se refleja en el HTML inicial. Si lo aplicamos en useEffect
+  // hay un primer paint con la marca normal y otro con la línea —
+  // visible como flicker. useLayoutEffect ejecuta antes del paint.
+  useLayoutEffect(() => {
     if (internalRef.current) {
       internalRef.current.indeterminate = !!indeterminate;
     }

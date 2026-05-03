@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -70,7 +70,11 @@ export function Switch({
     else if (ref) ref.current = el;
   };
 
-  useEffect(() => {
+  // useLayoutEffect (no useEffect): el atributo `indeterminate` es DOM-
+  // only y no se refleja en el HTML inicial. Aplicarlo en useEffect
+  // produce un primer paint con el thumb desplazado y otro con el
+  // thumb centrado — flicker visible.
+  useLayoutEffect(() => {
     if (internalRef.current) {
       internalRef.current.indeterminate = !!indeterminate;
     }
