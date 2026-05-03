@@ -195,9 +195,11 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus-nox: #f7bc94;
 
   /* ═══ LAURUS (Success / Verde laurel, H≈140°) — recalibrado desde
-     H=149° en 1.0.0-rc.1 para subir ΔE laurus↔vitreus en LIGHT
-     de 0.054 a 0.074 (umbral Check 3 = 0.05). Más vegetal puro,
-     menos "menta caribeña". ═══ */
+     H=149° en 1.0.0-beta.8 para subir ΔE laurus↔vitreus en LIGHT por
+     encima del umbral Check 3 = 0.05. Más vegetal puro, menos "menta
+     caribeña". (Tras la recolocación de vitreus en beta.16 a H=207.5°
+     el ΔE actual es ≈0.0847 — regenerar tabla con
+     `npm run test:contrast` si se recalibra alguno de los dos.) ═══ */
   --ig-laurus-lux: #143d0a;
   --ig-laurus-nox: #6aed4a;
 

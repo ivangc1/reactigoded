@@ -39,7 +39,7 @@ export interface CheckboxProps
  * Checkbox — `<input type="checkbox">` con marca visual personalizada.
  * Wrappeado en `<label>` para que click en el texto active el input.
  *
- * Soporta tri-state vía `indeterminate` prop (desde 1.0.0-rc.3) o via
+ * Soporta tri-state vía `indeterminate` prop (desde 1.0.0-beta.8) o via
  * `ref` manual (`ref.current.indeterminate = true`).
  *
  * @example

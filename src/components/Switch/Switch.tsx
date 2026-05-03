@@ -28,7 +28,7 @@ export interface SwitchProps
    * `el.indeterminate = true` en el `<input>` nativo y reemplaza
    * `aria-checked` por `"mixed"` para lectores de pantalla. Útil en
    * toggles maestros que controlan un grupo donde unos hijos están
-   * on y otros off (desde 1.0.0-rc.3).
+   * on y otros off (desde 1.0.0-beta.8).
    */
   indeterminate?: boolean;
   ref?: Ref<HTMLInputElement>;

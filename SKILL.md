@@ -42,25 +42,37 @@ todas las combinaciones bg/cardinal del tema.**
 `Check 3` del script (`scripts/check-component-contrast.mjs`) avisa
 cuando dos cardinales de UI activa quedan separados por ΔE OKLab < 0.05
 (umbral conservador para detectar confusión visual). Hoy **no dispara**:
-todos los pares superan el umbral. Pero hay 3 pares que rozan el
-alambre y conviene tener vigilados al revisar capturas / Chromatic /
-diseño nuevo:
+todos los pares de `UI_CARDINALS` superan el umbral. Tabla recalculada
+con los hex actuales de `igoded-tokens.css` (snapshot beta.18, regenerable
+con `npm run test:contrast` — ver script):
 
-| Par | Tema  | ΔE     | Notas |
-|-----|-------|--------|-------|
-| axis ↔ kobalium   | dark  | ≈0.052 | Secondary violeta vs info cobalt |
-| vitreus ↔ cinis   | light | ≈0.070 | Brand vs texto cuerpo (cinis es texto-body, fuera de UI_CARDINALS, no dispara) |
-| malum ↔ rutilus   | ambos | ≈0.094 | Danger granate vs warning cobre |
+| Par | LIGHT | DARK | Notas |
+|-----|-------|------|-------|
+| kobalium ↔ cinis  | 0.0451 | 0.0445 | Info vs texto (cinis fuera de UI_CARDINALS, no dispara) |
+| axis ↔ kobalium   | 0.0796 | **0.0522** | Secondary vs info — par UI más estrecho actualmente |
+| vitreus ↔ cinis   | **0.0601** | 0.1238 | Brand vs texto (cinis fuera de UI_CARDINALS) |
+| axis ↔ cinis      | 0.1002 | 0.0608 | Secondary vs texto |
+| malum ↔ rutilus   | 0.0866 | **0.0706** | Danger granate vs warning cobre |
+| vitreus ↔ laurus  | **0.0847** | 0.2184 | Brand vs success — eje fresco verde-cyan, ver nota |
+| vitreus ↔ kobalium| 0.0970 | 0.1058 | Brand vs info |
 
-Resuelto en `1.0.0-rc.1`: `vitreus ↔ laurus` en LIGHT estaba en ≈0.054.
-Se recalibró `laurus` de H=149° a H≈140° (hex `#143d0a`/`#6aed4a`),
-subiendo ΔE a 0.074. Sin cambio de geometría dual ni de aliases.
+**Notas históricas y de decisión:**
 
-Plan: en `1.1.0` (post-`1.0.0`) se promueve `Check 3` a **error** (no
-warning) tras una auditoría visual de los pares restantes. Si la
-auditoría encuentra confusión real, se ajusta el hue del cardinal
-afectado en ±5°-10° respetando geometría dual; si no, se sube el umbral
-a 0.05 estricto y se documenta la decisión.
+- `vitreus ↔ laurus` LIGHT (0.0847): par cromáticamente vecino en el eje
+  fresco verde-cyan. Decisión consciente desde `1.0.0-beta.8`
+  (recalibración de `laurus` H=149° → H≈140°), confirmada tras la
+  recolocación de `vitreus` a H=207.5° en `1.0.0-beta.16`. La confusión
+  perceptual se resuelve con iconografía en componentes (Badge con
+  icono, Alert con icono), no moviendo más hex.
+- `axis ↔ kobalium` DARK (0.0522): es el par UI activo más estrecho
+  hoy. Vigilar especialmente en Chromatic.
+- `malum ↔ rutilus` DARK (0.0706): es el segundo más estrecho.
+
+**Plan post-1.0.0**: promover `Check 3` a **error** con umbral 0.05
+estricto, documentando excepción para los pares con justificación
+(eje fresco brand↔success). Si la auditoría visual encuentra confusión
+real en los pares marginales, ajustar hue ±5°-10° respetando geometría
+dual.
 
 ## Cinis es un cardinal especial
 
