@@ -6,7 +6,7 @@ IGODED COMPONENTS — utilities + componentes del DS (clases .ig-*)
 QUÉ CONTIENE:
 - Utilities (display, flex, grid, gap, padding, margin, width, height,
   typography, colors, borders, shadows, transforms, animations, etc.).
-- Componentes (.ig-btn, .ig-card, .ig-modal, .ig-dialog, .ig-alert,
+- Componentes (.ig-btn, .ig-card, .ig-dialog, .ig-alert,
   .ig-toast, .ig-navbar, .ig-sidebar, .ig-tabs, .ig-accordion, etc.).
 - Responsive modifiers (sm:, md:, lg:, xl:, 2xl:) y container queries.
 
@@ -5557,8 +5557,8 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     border: 1px solid currentColor;
   }
 
-  /* Modal */
-  .ig-modal {
+  /* Modal (<dialog>) */
+  .ig-dialog {
     border: 2px solid currentColor;
   }
 
@@ -5707,12 +5707,12 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     background: Canvas;
   }
 
-  /* Modal */
-  .ig-modal-backdrop {
+  /* Modal (<dialog>): usa ::backdrop nativo, no clase wrapper */
+  .ig-dialog::backdrop {
     background: rgba(0, 0, 0, 0.8);
   }
 
-  .ig-modal {
+  .ig-dialog {
     border: 2px solid currentColor;
     background: Canvas;
   }
@@ -9920,7 +9920,7 @@ Controla cómo responde el elemento al modo de alto contraste de Windows.
   /* Ocultar elementos interactivos */
   nav,
   .ig-btn,
-  .ig-modal,
+  .ig-dialog,
   .ig-dropdown-menu,
   .ig-sidebar,
   .ig-navbar,
