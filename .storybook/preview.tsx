@@ -55,6 +55,28 @@ const preview: Preview = {
   },
   tags: ["autodocs"],
   decorators: [
+    // Wrapper visual: canvas con --ig-bg-base + padding para que la story
+    // se distinga del chrome de Storybook en LIGHT (donde bg-base #faf9fc
+    // es casi indistinguible del blanco #fff del manager). En DARK ya
+    // contrasta solo. Skipea el wrapper cuando la story usa
+    // `parameters.layout = "fullscreen"` (Sidebar/Navbar) para no romper
+    // sus layouts a 100vh.
+    (Story, ctx) => {
+      if (ctx.parameters?.layout === "fullscreen") return <Story />;
+      return (
+        <div
+          style={{
+            background: "var(--ig-bg-base)",
+            color: "var(--ig-text-body)",
+            minHeight: "calc(100vh - 2rem)",
+            padding: "var(--ig-space-6)",
+            borderRadius: "var(--ig-rounded-md)",
+          }}
+        >
+          <Story />
+        </div>
+      );
+    },
     withThemeByDataAttribute({
       themes: { light: "light", dark: "dark" },
       // dark-first: alineado con useTheme y ThemeSwitch desde 1.0.0-beta.3.
