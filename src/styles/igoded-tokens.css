@@ -167,9 +167,15 @@ ESPECIFICACIONES TÉCNICAS:
        ΔH OKLCH ≤ 10° entre lux y nox (mismo H por cardinal)
      Validado en CI por scripts/check-component-contrast.js. */
 
-  /* ═══ VITREUS (Marca / Teal-Cyan, H=195°) ═══ */
-  --ig-vitreus-lux: #033b3b;
-  --ig-vitreus-nox: #30e6e6;
+  /* ═══ VITREUS (Marca / Teal-Cyan, H=207.5°) ═══
+     H=207.5° es el centro perceptual matemático verde↔azul en OKLCH:
+     punto medio entre verde Hering (~145°) y azul Hering (~270°), los
+     hues opponent-color sobre los que se construye el espacio. La
+     versión anterior estaba en H≈194.83° (cyan puro sRGB, artefacto
+     histórico de la paleta), no en el centro perceptual prometido por
+     la identidad del DS. Marca, --ig-text-heading y alphas heredan. */
+  --ig-vitreus-lux: #053a40;
+  --ig-vitreus-nox: #3ae2f7;
 
   /* ═══ AXIS (Secondary / Violeta, H=300°) ═══ */
   --ig-axis-lux: #411271;

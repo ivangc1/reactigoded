@@ -7185,7 +7185,10 @@ MODIFICADORES:
   font-size: var(--ig-text-xs);
   font-weight: var(--ig-fw-medium);
   line-height: 1.5;
-  border-radius: var(--ig-rounded-full);
+  /* Default ligeramente redondeado (chip estilo etiqueta). El modifier
+     .ig-badge-pill aplica rounded-full para forma cápsula. Antes ambos
+     usaban rounded-full y eran indistinguibles. */
+  border-radius: var(--ig-rounded-md);
   background-color: var(--ig-neutral-600);
   color: var(--ig-neutral-100);
   white-space: nowrap;
