@@ -4,12 +4,14 @@ import { create } from "storybook/theming/create";
 // Tema del chrome (sidebar, toolbar, panel) para que el catálogo se sienta
 // igoded desde el primer pixel — no Storybook genérico.
 //
-// Tokens elegidos:
-//   --ig-vitreus (#5eded5)  → primary  (selección, links activos)
-//   --ig-axis    (#d4c2f9)  → secondary
-//   --ig-fundus  (#0c1515)  → app background dark
-//   --ig-bg-surface (#101b1b) → content background dark
-//   --ig-cinis   (#c3cbdb)  → text color
+// Tokens (snapshot de igoded-tokens.css en beta.18):
+//   --ig-vitreus-nox (#3ae2f7)  → primary  (selección, links activos)
+//   --ig-axis-nox    (#d2bff7)  → secondary
+//   --ig-fundus-nox  (#0c1515)  → app background dark
+//   --ig-cinis-nox   (#c4cada)  → text color
+//
+// IMPORTANT: estos hex son hardcoded por la API de Storybook (no acepta
+// CSS vars). Si la paleta cambia, sincronizar manualmente con tokens.css.
 //
 // Mantenemos `base: "dark"` porque la identidad de igoded es dark-first;
 // el preview del centro sí permite alternar light/dark con `addon-themes`.
@@ -20,27 +22,27 @@ const igodedTheme = create({
   brandUrl: "https://igoded.es",
   brandTarget: "_self",
 
-  colorPrimary: "#5eded5",
-  colorSecondary: "#d4c2f9",
+  colorPrimary: "#3ae2f7",
+  colorSecondary: "#d2bff7",
 
   appBg: "#0c1515",
   appContentBg: "#101b1b",
   appPreviewBg: "#0c1515",
-  appBorderColor: "rgba(195, 203, 219, 0.18)",
+  appBorderColor: "rgba(196, 202, 218, 0.18)",
   appBorderRadius: 14,
 
-  textColor: "#c3cbdb",
+  textColor: "#c4cada",
   textInverseColor: "#0c1515",
-  textMutedColor: "rgba(195, 203, 219, 0.7)",
+  textMutedColor: "rgba(196, 202, 218, 0.7)",
 
   barBg: "#101b1b",
-  barTextColor: "#c3cbdb",
-  barHoverColor: "#5eded5",
-  barSelectedColor: "#5eded5",
+  barTextColor: "#c4cada",
+  barHoverColor: "#3ae2f7",
+  barSelectedColor: "#3ae2f7",
 
   inputBg: "#101b1b",
-  inputBorder: "rgba(195, 203, 219, 0.2)",
-  inputTextColor: "#c3cbdb",
+  inputBorder: "rgba(196, 202, 218, 0.2)",
+  inputTextColor: "#c4cada",
   inputBorderRadius: 10,
 
   fontBase:

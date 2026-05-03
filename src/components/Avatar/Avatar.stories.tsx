@@ -11,8 +11,8 @@ const demoAvatar =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">` +
       `<defs>` +
         `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-          `<stop offset="0%" stop-color="#5eded5"/>` +
-          `<stop offset="100%" stop-color="#d4c2f9"/>` +
+          `<stop offset="0%" stop-color="#3ae2f7"/>` +
+          `<stop offset="100%" stop-color="#d2bff7"/>` +
         `</linearGradient>` +
       `</defs>` +
       `<rect width="120" height="120" fill="url(#g)"/>` +

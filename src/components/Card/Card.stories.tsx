@@ -17,8 +17,8 @@ const demoImage =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300">` +
       `<defs>` +
         `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-          `<stop offset="0%" stop-color="#5eded5"/>` +
-          `<stop offset="100%" stop-color="#d4c2f9"/>` +
+          `<stop offset="0%" stop-color="#3ae2f7"/>` +
+          `<stop offset="100%" stop-color="#d2bff7"/>` +
         `</linearGradient>` +
         `<pattern id="p" width="40" height="40" patternUnits="userSpaceOnUse">` +
           `<circle cx="20" cy="20" r="1.2" fill="#0c1515" opacity="0.18"/>` +
