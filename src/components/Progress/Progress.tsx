@@ -29,7 +29,7 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
  * Progress — barra de progreso lineal.
  *
  * Expone `role="progressbar"` con `aria-valuenow/min/max` (o sin `valuenow`
- * en modo `indeterminate`). El relleno es un `<span>` interno cuya `width`
+ * en modo `indeterminate`). El relleno es un `<div>` interno cuya `width`
  * se calcula a partir de `value/max`.
  *
  * @example
@@ -75,7 +75,7 @@ export function Progress({
         className,
       )}
     >
-      <span
+      <div
         className="ig-progress-bar"
         style={indeterminate ? undefined : { width: `${String(percent)}%` }}
       />
