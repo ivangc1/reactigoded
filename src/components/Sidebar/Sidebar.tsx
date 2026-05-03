@@ -1,11 +1,6 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type HTMLAttributes,
-  type Ref,
-} from "react";
+import { useMemo, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 import { SidebarContext } from "./SidebarContext";
 
 export interface SidebarProps extends HTMLAttributes<HTMLElement> {
@@ -46,17 +41,11 @@ export function Sidebar({
 }: SidebarProps) {
   // 1.0.0-beta.4: aria-label del rest (HTML std).
   const { "aria-label": ariaLabelOverride, ...asideRest } = rest;
-  const isControlled = collapsedProp !== undefined;
-  const [internal, setInternal] = useState(defaultCollapsed);
-  const collapsed = isControlled ? collapsedProp : internal;
-
-  const setCollapsed = useCallback(
-    (next: boolean) => {
-      if (!isControlled) setInternal(next);
-      onCollapsedChange?.(next);
-    },
-    [isControlled, onCollapsedChange],
-  );
+  const { value: collapsed, setValue: setCollapsed } = useControllableState<boolean>({
+    value: collapsedProp,
+    defaultValue: defaultCollapsed,
+    onChange: onCollapsedChange,
+  });
 
   const ctxValue = useMemo(
     () => ({ collapsed, setCollapsed }),
