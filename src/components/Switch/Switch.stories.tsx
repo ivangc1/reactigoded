@@ -54,9 +54,81 @@ export const Indeterminate: Story = {
     docs: {
       description: {
         story:
-          "Tercer estado para toggles maestros que controlan un grupo donde unos hijos están on y otros off. Visualmente: thumb centrado en el track con color de variante de fondo. Accesibilidad: `aria-checked=\"mixed\"`.",
+          "Estado visual aislado. El click no cambia nada porque el componente mantiene `indeterminate=true` en cada render — el padre decide cuándo salir. Para ver el patrón típico de uso, mira `MasterSelectAll`.",
       },
     },
+  },
+};
+
+/**
+ * Patrón canónico de indeterminate en switches: un toggle "maestro" controla
+ * un grupo de toggles hijos. El maestro se calcula a partir del estado de
+ * los hijos: ninguno → off, todos → on, algunos → indeterminate.
+ *
+ * Caso típico: "Notificaciones" como master, con sub-categorías
+ * (email, push, SMS) como hijos. Click en el master enciende/apaga todas;
+ * click en una sub-categoría recalcula el master automáticamente.
+ */
+export const MasterSelectAll: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Patrón típico: toggle maestro + toggles hijos. El estado `indeterminate` se deriva del estado de los hijos (algunos on, algunos off). Click en el maestro enciende/apaga todos.",
+      },
+    },
+  },
+  render: () => {
+    type Channels = { email: boolean; push: boolean; sms: boolean };
+    const Demo = () => {
+      const [channels, setChannels] = useState<Channels>({
+        email: true,
+        push: false,
+        sms: false,
+      });
+      const values = Object.values(channels);
+      const all = values.every(Boolean);
+      const some = values.some(Boolean);
+      const indeterminate = some && !all;
+
+      const toggleAll = () => {
+        const next = !all;
+        setChannels({ email: next, push: next, sms: next });
+      };
+
+      const toggleOne = (k: keyof Channels) => (
+        e: React.ChangeEvent<HTMLInputElement>,
+      ) => {
+        setChannels((prev) => ({ ...prev, [k]: e.target.checked }));
+      };
+
+      return (
+        <div className="ig-story-stack ig-story-stack--md">
+          <Switch
+            checked={all}
+            indeterminate={indeterminate}
+            onChange={toggleAll}
+          >
+            <strong>Notificaciones</strong>
+          </Switch>
+          <div
+            className="ig-story-stack ig-story-stack--sm"
+            style={{ paddingLeft: "1.5rem" }}
+          >
+            <Switch checked={channels.email} onChange={toggleOne("email")}>
+              Email
+            </Switch>
+            <Switch checked={channels.push} onChange={toggleOne("push")}>
+              Push
+            </Switch>
+            <Switch checked={channels.sms} onChange={toggleOne("sms")}>
+              SMS
+            </Switch>
+          </div>
+        </div>
+      );
+    };
+    return <Demo />;
   },
 };
 
