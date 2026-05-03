@@ -8874,36 +8874,18 @@ VARIANTES DE COLOR (6 colores):
   background-color: var(--ig-border-subtle);
 }
 
-/* With-text con color: SOLO las líneas reciben el accent. El texto se
-   queda en --ig-text-body (heredado del default no-variante de
-   .ig-divider-with-text vía cascada). Si el texto tomara también el
-   color de la variante, se confunde visualmente con las líneas y el
-   conjunto parece "una sola cosa coloreada" en vez de "texto separado
-   por líneas". */
-.ig-divider-with-text.ig-divider-brand::before,
-.ig-divider-with-text.ig-divider-brand::after { background-color: var(--ig-vitreus); }
-
-.ig-divider-with-text.ig-divider-secondary::before,
-.ig-divider-with-text.ig-divider-secondary::after { background-color: var(--ig-axis); }
-
-.ig-divider-with-text.ig-divider-success::before,
-.ig-divider-with-text.ig-divider-success::after { background-color: var(--ig-laurus); }
-
-.ig-divider-with-text.ig-divider-warning::before,
-.ig-divider-with-text.ig-divider-warning::after { background-color: var(--ig-rutilus); }
-
-.ig-divider-with-text.ig-divider-danger::before,
-.ig-divider-with-text.ig-divider-danger::after { background-color: var(--ig-malum); }
-
-.ig-divider-with-text.ig-divider-info::before,
-.ig-divider-with-text.ig-divider-info::after { background-color: var(--ig-kobalium); }
-
-.ig-divider-with-text.ig-divider-brand,
-.ig-divider-with-text.ig-divider-secondary,
-.ig-divider-with-text.ig-divider-success,
-.ig-divider-with-text.ig-divider-warning,
-.ig-divider-with-text.ig-divider-danger,
-.ig-divider-with-text.ig-divider-info { color: var(--ig-cinis); }
+/* With-text con color: el TEXTO recibe el accent de la variante,
+   las líneas se quedan en --ig-border-subtle (igual que el divider sin
+   variante). Patrón Material UI: las líneas son siempre sutiles, el
+   color semántico vive en el texto. Pintar las líneas brillantes y el
+   texto neutro hace que la atención vaya a las líneas, no al label, que
+   es lo opuesto de lo que se quiere comunicar. */
+.ig-divider-with-text.ig-divider-brand { color: var(--ig-vitreus); }
+.ig-divider-with-text.ig-divider-secondary { color: var(--ig-axis); }
+.ig-divider-with-text.ig-divider-success { color: var(--ig-laurus); }
+.ig-divider-with-text.ig-divider-warning { color: var(--ig-rutilus); }
+.ig-divider-with-text.ig-divider-danger { color: var(--ig-malum); }
+.ig-divider-with-text.ig-divider-info { color: var(--ig-kobalium); }
 
 
 /*
