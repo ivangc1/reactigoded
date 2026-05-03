@@ -1,5 +1,6 @@
-import type { HTMLAttributes, ReactNode, Ref } from "react";
+import { useEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 
 export type PaginationVariant =
   | "brand"
@@ -122,9 +123,34 @@ export function Pagination({
   // una prop `ariaLabel` separada — eliminada por consistencia con el
   // resto de componentes que ya usan rest. Migration: rename ariaLabel→aria-label.
   const { "aria-label": ariaLabelOverride, ...navRest } = rest;
-  const pages = buildPages(currentPage, totalPages, siblingCount);
-  const canPrev = currentPage > 1;
-  const canNext = currentPage < totalPages;
+
+  // Clamps: el componente jamás debe renderizar páginas fuera de rango
+  // ni dejar el `aria-current` huérfano si el consumer pasa basura.
+  // Cualquier non-finite o ≤ 0 cae a defaults seguros (totalPages=1,
+  // currentPage=1, siblingCount=0).
+  const safeTotal = Math.max(1, Math.floor(Number(totalPages) || 1));
+  const safeCurrent = Math.min(
+    Math.max(1, Math.floor(Number(currentPage) || 1)),
+    safeTotal,
+  );
+  const safeSiblings = Math.max(0, Math.floor(Number(siblingCount) || 0));
+
+  // Dev-only warning si tuvimos que clamp-ear (input fuera de rango).
+  // En useEffect (no durante render) por la regla react-hooks/refs.
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!isDev() || warnedRef.current) return;
+    if (currentPage !== safeCurrent || totalPages !== safeTotal) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Pagination currentPage=${String(currentPage)} totalPages=${String(totalPages)}> fuera de rango. Clamped a currentPage=${String(safeCurrent)}, totalPages=${String(safeTotal)}.`,
+      );
+    }
+  }, [currentPage, totalPages, safeCurrent, safeTotal]);
+
+  const pages = buildPages(safeCurrent, safeTotal, safeSiblings);
+  const canPrev = safeCurrent > 1;
+  const canNext = safeCurrent < safeTotal;
 
   return (
     <nav
@@ -143,7 +169,7 @@ export function Pagination({
         disabled={!canPrev}
         aria-label={prevAria}
         onClick={() => {
-          if (canPrev) onPageChange(currentPage - 1);
+          if (canPrev) onPageChange(safeCurrent - 1);
         }}
       >
         {prevLabel}
@@ -160,7 +186,7 @@ export function Pagination({
             </span>
           );
         }
-        const isActive = p === currentPage;
+        const isActive = p === safeCurrent;
         return (
           <button
             key={p}
@@ -185,7 +211,7 @@ export function Pagination({
         disabled={!canNext}
         aria-label={nextAria}
         onClick={() => {
-          if (canNext) onPageChange(currentPage + 1);
+          if (canNext) onPageChange(safeCurrent + 1);
         }}
       >
         {nextLabel}

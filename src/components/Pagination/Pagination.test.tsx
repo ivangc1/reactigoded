@@ -129,3 +129,81 @@ describe("Pagination", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("Pagination — clamp de inputs fuera de rango", () => {
+  it("clamp currentPage > totalPages al máximo", () => {
+    render(
+      <Pagination currentPage={99} totalPages={5} onPageChange={() => {}} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Página 5" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("clamp currentPage < 1 al mínimo", () => {
+    render(
+      <Pagination currentPage={-3} totalPages={5} onPageChange={() => {}} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Página 1" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("clamp totalPages < 1 no crashea y renderiza al menos una página", () => {
+    render(
+      <Pagination currentPage={1} totalPages={0} onPageChange={() => {}} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Página 1" }),
+    ).toBeInTheDocument();
+  });
+
+  it("clamp NaN cae a defaults (1, 1)", () => {
+    render(
+      <Pagination
+        currentPage={Number.NaN}
+        totalPages={Number.NaN}
+        onPageChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Página 1" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("siblingCount negativo se clampa a 0", () => {
+    render(
+      <Pagination
+        currentPage={5}
+        totalPages={10}
+        siblingCount={-3}
+        onPageChange={() => {}}
+      />,
+    );
+    // Sin siblings: 1, …, 5, …, 10 (al menos primera, current y última).
+    expect(
+      screen.getByRole("button", { name: "Página 1" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Página 5" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Página 10" }),
+    ).toBeInTheDocument();
+  });
+
+  it("anterior/siguiente usan safeCurrent (no el currentPage crudo)", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+    render(
+      <Pagination
+        currentPage={99}
+        totalPages={5}
+        onPageChange={onPageChange}
+      />,
+    );
+    // currentPage clamped a 5; anterior debe ir a 4, no a 98.
+    await user.click(screen.getByRole("button", { name: "Anterior" }));
+    expect(onPageChange).toHaveBeenCalledWith(4);
+  });
+});
