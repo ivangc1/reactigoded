@@ -17,6 +17,12 @@ interface AvatarBase extends HTMLAttributes<HTMLDivElement> {
   rounded?: boolean;
   /** Punto de estado en la esquina inferior derecha. */
   status?: AvatarStatus;
+  /**
+   * Override del `aria-label` del punto de estado, para i18n. Si no se
+   * pasa, se usa "Estado: {label en español}". Pasa la traducción
+   * completa, no solo la palabra de estado.
+   */
+  statusLabel?: string;
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -45,6 +51,7 @@ export function Avatar(props: AvatarProps) {
     size,
     rounded = false,
     status,
+    statusLabel,
     className,
     ref,
     src,
@@ -81,7 +88,7 @@ export function Avatar(props: AvatarProps) {
         <span
           role="img"
           className={`ig-avatar-status ig-avatar-status-${status}`}
-          aria-label={`Estado: ${STATUS_LABEL_ES[status]}`}
+          aria-label={statusLabel ?? `Estado: ${STATUS_LABEL_ES[status]}`}
         />
       )}
     </div>
