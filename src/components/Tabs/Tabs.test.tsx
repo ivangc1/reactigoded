@@ -52,15 +52,49 @@ describe("Tabs", () => {
   });
 
   it("sin value/defaultValue auto-selecciona el primer Tab montado", () => {
-    // Regresión: register tenía deps [] y leía `internal` por closure;
-    // si el closure congelaba '', cualquier llamada a register podía
-    // resetear la selección a un Tab posterior. El refactor con
-    // internalRef preserva la primera selección.
+    // Regresión documentada por la auditoría: cuando register tenía
+    // deps [] y leía `internal === ""` por closure, el último Tab en
+    // montar ganaba (Tab C activo en lugar de Tab A). El fix actual
+    // lee desde internalRef sincronizado y preserva la primera
+    // selección.
     render(basicTabs());
-    const alpha = screen.getByRole("tab", { name: "Alpha" });
-    expect(alpha).toHaveAttribute("aria-selected", "true");
-    expect(alpha).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: "Alpha" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Beta" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByRole("tab", { name: "Gamma" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
     expect(screen.getByText("Contenido A")).toBeInTheDocument();
+  });
+
+  it("controlled con value='' NO auto-selecciona (consumer manda)", () => {
+    // En modo controlled el internalRef sigue en "" pero NO debe
+    // auto-seleccionar el primero — el consumer manda y "" significa
+    // "ningún tab activo".
+    render(
+      <Tabs value="">
+        <TabList aria-label="Demo">
+          <Tab value="a">Alpha</Tab>
+          <Tab value="b">Beta</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+        <TabPanel value="b">PB</TabPanel>
+      </Tabs>,
+    );
+    expect(screen.getByRole("tab", { name: "Alpha" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByRole("tab", { name: "Beta" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
   });
 
   it("click cambia tab (uncontrolled)", async () => {
