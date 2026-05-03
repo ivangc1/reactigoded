@@ -1,6 +1,5 @@
 import {
   useRef,
-  useState,
   type ChangeEvent,
   type InputHTMLAttributes,
   type Ref,
@@ -8,6 +7,7 @@ import {
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export type SwitchVariant =
   | "brand"
@@ -60,9 +60,10 @@ export function Switch({
   onChange,
   ...rest
 }: SwitchProps) {
-  const isControlled = checked !== undefined;
-  const [internal, setInternal] = useState<boolean>(defaultChecked === true);
-  const isOn = isControlled ? checked : internal;
+  const { value: isOn, setValue: setIsOn, isControlled } = useControllableState<boolean>({
+    value: checked,
+    defaultValue: defaultChecked === true,
+  });
 
   // Dev-only warning: controlled sin handler. El consumer pasa `checked`
   // pero olvida `onChange` → el switch parece roto (no responde al click).
@@ -106,7 +107,7 @@ export function Switch({
     if (indeterminate && internalRef.current) {
       internalRef.current.indeterminate = true;
     }
-    if (!isControlled) setInternal(e.target.checked);
+    setIsOn(e.target.checked);
     onChange?.(e);
   };
 
