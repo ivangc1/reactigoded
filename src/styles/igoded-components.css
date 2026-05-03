@@ -8819,13 +8819,16 @@ VARIANTES DE COLOR (6 colores):
   margin: var(--ig-space-4) 0;
 }
 
-/* Variantes de color */
-.ig-divider-brand { background-color: var(--ig-vitreus); }
-.ig-divider-secondary { background-color: var(--ig-axis); }
-.ig-divider-success { background-color: var(--ig-laurus); }
-.ig-divider-warning { background-color: var(--ig-rutilus); }
-.ig-divider-danger { background-color: var(--ig-malum); }
-.ig-divider-info { background-color: var(--ig-kobalium); }
+/* Variantes de color: scope a .ig-divider para que NO aplique al
+   .ig-divider-with-text (que también lleva .ig-divider-brand etc. y
+   acababa pintando el div padre entero con el color de variante,
+   tapando el texto del divider con texto). */
+.ig-divider.ig-divider-brand { background-color: var(--ig-vitreus); }
+.ig-divider.ig-divider-secondary { background-color: var(--ig-axis); }
+.ig-divider.ig-divider-success { background-color: var(--ig-laurus); }
+.ig-divider.ig-divider-warning { background-color: var(--ig-rutilus); }
+.ig-divider.ig-divider-danger { background-color: var(--ig-malum); }
+.ig-divider.ig-divider-info { background-color: var(--ig-kobalium); }
 
 .ig-divider-vertical {
   display: inline-block;
