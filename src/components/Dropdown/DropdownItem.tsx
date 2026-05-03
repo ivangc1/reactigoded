@@ -7,6 +7,7 @@ import type {
 } from "react";
 import { cn } from "@/utils/cn";
 import { useDropdown } from "./DropdownContext";
+import { NAVIGABLE_ITEM_SELECTOR } from "./dropdownSelectors";
 
 interface CommonProps {
   /** Marca el item como acción destructiva (color malum). */
@@ -28,14 +29,6 @@ type AnchorItemProps = CommonProps &
   };
 
 export type DropdownItemProps = ButtonItemProps | AnchorItemProps;
-
-/**
- * Selector que excluye items NO-activables. Desde 1.0.0-beta.3 también
- * excluye `aria-disabled="true"` (los anchors no tienen `disabled` HTML
- * pero sí lo expresan vía aria, y antes seguían navegables).
- */
-const NAVIGABLE_ITEM_SELECTOR =
-  '[role="menuitem"]:not([disabled]):not([aria-disabled="true"])';
 
 function handleNavKeys(
   e: KeyboardEvent<HTMLElement>,

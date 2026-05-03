@@ -249,6 +249,32 @@ describe("Dropdown — keyboard", () => {
     fireEvent.keyDown(a, { key: "ArrowDown" });
     expect(c).toHaveFocus();
   });
+
+  it("ArrowDown desde trigger salta primer item con aria-disabled (anchor)", () => {
+    // Regresión: trigger usaba selector más laxo que items y enfocaba el
+    // primer <a aria-disabled="true">. Ahora ambos comparten
+    // NAVIGABLE_ITEM_SELECTOR y deben coincidir.
+    render(
+      <Dropdown>
+        <DropdownTrigger>Abrir</DropdownTrigger>
+        <DropdownMenu>
+          <DropdownItem href="#a" aria-disabled="true">
+            Bloqueado
+          </DropdownItem>
+          <DropdownItem href="#b">Activo</DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const trigger = screen.getByRole("button", { name: /abrir/i });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        expect(screen.getByRole("menuitem", { name: /activo/i })).toHaveFocus();
+        resolve();
+      });
+    });
+  });
 });
 
 describe("DropdownItem — variantes y href", () => {

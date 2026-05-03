@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useDropdown } from "./DropdownContext";
+import { NAVIGABLE_ITEM_SELECTOR } from "./dropdownSelectors";
 
 export interface DropdownTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -35,7 +36,7 @@ export function DropdownTrigger({
     // Usa requestAnimationFrame para esperar a que el menu esté visible.
     requestAnimationFrame(() => {
       const items = menuRef.current?.querySelectorAll<HTMLElement>(
-        '[role="menuitem"]:not([disabled])',
+        NAVIGABLE_ITEM_SELECTOR,
       );
       if (!items || items.length === 0) return;
       (which === "first" ? items[0] : items[items.length - 1])?.focus();
