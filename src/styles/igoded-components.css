@@ -6551,7 +6551,10 @@ CÓMO FUNCIONA:
   display: none;
   width: 0.375rem;
   height: 0.625rem;
-  border: solid var(--ig-fundus-lux);
+  /* Glyph adaptativo: en light el mark es color -lux (oscuro) → glyph
+     blanco contrasta; en dark el mark es color -nox (claro) → glyph
+     oscuro contrasta. Usar -fundus-lux fijo daba ratio ~1.4:1 en dark. */
+  border: solid var(--ig-fundus);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
   margin-top: -2px;
@@ -6614,7 +6617,7 @@ CÓMO FUNCIONA:
   display: block;
   width: 0.625rem;
   height: 2px;
-  background: var(--ig-fundus-lux);
+  background: var(--ig-fundus);
   border: 0;
   border-radius: 1px;
   transform: none;
@@ -6796,7 +6799,10 @@ CÓMO FUNCIONA:
   transform: translateY(-50%);
   width: var(--ig-switch-thumb);
   height: var(--ig-switch-thumb);
-  background-color: white;
+  /* Thumb adaptativo: en light el track activo es color -lux (oscuro)
+     → thumb claro contrasta; en dark el track es color -nox (claro)
+     → thumb oscuro contrasta. White hardcoded daba ratio bajo en dark. */
+  background-color: var(--ig-fundus);
   border-radius: var(--ig-rounded-full);
   transition: var(--ig-transition-fast);
   box-shadow: var(--ig-shadow-sm);
@@ -8874,30 +8880,36 @@ VARIANTES DE COLOR (6 colores):
   background-color: var(--ig-border-subtle);
 }
 
-/* With-text con color */
+/* With-text con color: SOLO las líneas reciben el accent. El texto se
+   queda en --ig-text-body (heredado del default no-variante de
+   .ig-divider-with-text vía cascada). Si el texto tomara también el
+   color de la variante, se confunde visualmente con las líneas y el
+   conjunto parece "una sola cosa coloreada" en vez de "texto separado
+   por líneas". */
 .ig-divider-with-text.ig-divider-brand::before,
 .ig-divider-with-text.ig-divider-brand::after { background-color: var(--ig-vitreus); }
-.ig-divider-with-text.ig-divider-brand { color: var(--ig-vitreus); }
 
 .ig-divider-with-text.ig-divider-secondary::before,
 .ig-divider-with-text.ig-divider-secondary::after { background-color: var(--ig-axis); }
-.ig-divider-with-text.ig-divider-secondary { color: var(--ig-axis); }
 
 .ig-divider-with-text.ig-divider-success::before,
 .ig-divider-with-text.ig-divider-success::after { background-color: var(--ig-laurus); }
-.ig-divider-with-text.ig-divider-success { color: var(--ig-laurus); }
 
 .ig-divider-with-text.ig-divider-warning::before,
 .ig-divider-with-text.ig-divider-warning::after { background-color: var(--ig-rutilus); }
-.ig-divider-with-text.ig-divider-warning { color: var(--ig-rutilus); }
 
 .ig-divider-with-text.ig-divider-danger::before,
 .ig-divider-with-text.ig-divider-danger::after { background-color: var(--ig-malum); }
-.ig-divider-with-text.ig-divider-danger { color: var(--ig-malum); }
 
 .ig-divider-with-text.ig-divider-info::before,
 .ig-divider-with-text.ig-divider-info::after { background-color: var(--ig-kobalium); }
-.ig-divider-with-text.ig-divider-info { color: var(--ig-kobalium); }
+
+.ig-divider-with-text.ig-divider-brand,
+.ig-divider-with-text.ig-divider-secondary,
+.ig-divider-with-text.ig-divider-success,
+.ig-divider-with-text.ig-divider-warning,
+.ig-divider-with-text.ig-divider-danger,
+.ig-divider-with-text.ig-divider-info { color: var(--ig-cinis); }
 
 
 /*
