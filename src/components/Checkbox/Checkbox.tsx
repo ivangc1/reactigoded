@@ -1,5 +1,4 @@
 import {
-  useLayoutEffect,
   useRef,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -7,6 +6,7 @@ import {
 } from "react";
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
 export type CheckboxVariant =
   | "brand"
@@ -85,11 +85,11 @@ export function Checkbox({
     );
   }
 
-  // useLayoutEffect (no useEffect): el atributo `indeterminate` es DOM-
-  // only, no se refleja en el HTML inicial. Si lo aplicamos en useEffect
-  // hay un primer paint con la marca normal y otro con la línea —
-  // visible como flicker. useLayoutEffect ejecuta antes del paint.
-  useLayoutEffect(() => {
+  // useIsoLayoutEffect (layout en cliente, effect en server): el
+  // atributo `indeterminate` es DOM-only y no se refleja en el HTML
+  // inicial. Aplicarlo en un useEffect post-paint produce flicker
+  // (primer paint con tick, segundo con la línea horizontal).
+  useIsoLayoutEffect(() => {
     if (internalRef.current) {
       internalRef.current.indeterminate = !!indeterminate;
     }

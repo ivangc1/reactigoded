@@ -1,18 +1,7 @@
-import { useEffect, useLayoutEffect } from "react";
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 import { useTabs } from "./TabsContext";
-
-// useLayoutEffect en cliente, useEffect en server (evita warning SSR de
-// React: "useLayoutEffect does nothing on the server"). En cliente
-// queremos que el register corra ANTES del primer paint para que el
-// auto-select del primer Tab no produzca un flicker visible donde
-// inicialmente ningún tab es activo. Convención del ecosistema React:
-// el fallback en SSR es `useEffect`, no un noop — preserva el
-// contrato de los hooks (deps válidos, cleanup) cuando el componente
-// se renderiza en server con un runtime que sí soporta efectos.
-const useIsoLayoutEffect =
-  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export interface TabProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Identificador único del tab. Debe coincidir con el `value` del `TabPanel` correspondiente. */

@@ -1,5 +1,4 @@
 import {
-  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -8,6 +7,7 @@ import {
 } from "react";
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
 export type SwitchVariant =
   | "brand"
@@ -88,11 +88,11 @@ export function Switch({
     else if (ref) ref.current = el;
   };
 
-  // useLayoutEffect (no useEffect): el atributo `indeterminate` es DOM-
-  // only y no se refleja en el HTML inicial. Aplicarlo en useEffect
-  // produce un primer paint con el thumb desplazado y otro con el
-  // thumb centrado — flicker visible.
-  useLayoutEffect(() => {
+  // useIsoLayoutEffect (layout en cliente, effect en server): el
+  // atributo `indeterminate` es DOM-only y no se refleja en el HTML
+  // inicial. Aplicarlo en un useEffect post-paint produce flicker
+  // (primer paint thumb desplazado, segundo thumb centrado).
+  useIsoLayoutEffect(() => {
     if (internalRef.current) {
       internalRef.current.indeterminate = !!indeterminate;
     }
