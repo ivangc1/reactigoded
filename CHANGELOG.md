@@ -38,13 +38,17 @@ versionado [SemVer](https://semver.org/lang/es/).
   Mejora a11y para SR.
 
 ### Test stats
-- Unit tests: 523 → 632 (más tests pero menos archivos, gracias a
-  `describe.each` que expande cada parametrización).
+- Suite unit final tras refactor: **453** (`vitest run --project unit`).
+  Con `describe.each` el conteo bruto sube por la expansión de cada
+  parametrización; lo relevante es que el contrato CSS/ARIA queda
+  cubierto con menos archivos y asserts más densos.
 - Asserts cosméticos sueltos eliminados: ~80.
-- Asserts cosméticos parametrizados añadidos: ~120 (mismo contrato
-  CSS, mejor estructura).
 - Tests transversales nuevos: 5 (`className` merge), 1 combo de
   estado peligroso (`loading + disabled`).
+- Nota: a partir de esta versión NO publicamos delta numérico
+  contra la versión anterior; el conteo puede oscilar libremente
+  con cada refactor de parametrización y no es una métrica
+  contractual del paquete.
 
 ## [1.0.0-beta.17] — 2026-05-03
 
