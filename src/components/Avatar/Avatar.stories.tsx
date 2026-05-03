@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Avatar } from "./Avatar";
 import { AvatarGroup } from "./AvatarGroup";
 
@@ -97,4 +98,57 @@ export const Grupo: Story = {
       <Avatar initials="+5" />
     </AvatarGroup>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      {(["xs", "sm", "md", "lg", "xl", "2xl"] as const).map((size) => (
+        <div
+          key={size}
+          style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}
+        >
+          <span style={{ minWidth: 60, fontFamily: "var(--ig-font-mono)" }}>
+            {size}
+          </span>
+          <Avatar src={demoAvatar} alt="user" size={size} />
+          <Avatar initials="IG" size={size} />
+          <Avatar src={demoAvatar} alt="user" size={size} status="online" />
+          <Avatar src={demoAvatar} alt="user" size={size} rounded />
+          <Avatar initials="AB" size={size} status="busy" />
+        </div>
+      ))}
+      <div>
+        <strong>AvatarGroup</strong>
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          <AvatarGroup>
+            <Avatar initials="A" />
+            <Avatar initials="B" />
+            <Avatar initials="C" />
+          </AvatarGroup>
+          <AvatarGroup>
+            <Avatar initials="A" />
+            <Avatar initials="B" />
+            <Avatar initials="C" />
+            <Avatar initials="D" />
+            <Avatar initials="E" />
+          </AvatarGroup>
+        </div>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const avatars = canvasElement.querySelectorAll(".ig-avatar");
+    await expect(avatars.length).toBeGreaterThan(15);
+  },
 };

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { Chip } from "./Chip";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Chip",
@@ -89,5 +90,43 @@ export const Seleccionable: Story = {
       );
     }
     return <Demo />;
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <MatrixGrid
+      renderRow={(v) => (
+        <>
+          <Chip variant={v as Variant} size="sm">
+            sm
+          </Chip>
+          <Chip variant={v as Variant}>md</Chip>
+          <Chip variant={v as Variant} size="lg">
+            lg
+          </Chip>
+          <Chip variant={v as Variant} onRemove={() => {}}>
+            removable
+          </Chip>
+          <Chip variant={v as Variant} disabled>
+            disabled
+          </Chip>
+        </>
+      )}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const chips = canvasElement.querySelectorAll(".ig-chip");
+    await expect(chips.length).toBeGreaterThan(20);
   },
 };

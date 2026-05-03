@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, within } from "storybook/test";
 import { Spinner } from "./Spinner";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Spinner",
@@ -68,4 +70,35 @@ export const Sizes: Story = {
 
 export const LabelPersonalizado: Story = {
   args: { "aria-label": "Procesando pago, espera un momento…" },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <MatrixGrid
+      renderRow={(v) => (
+        <>
+          <Spinner variant={v as Variant} size="xs" />
+          <Spinner variant={v as Variant} size="sm" />
+          <Spinner variant={v as Variant} size="md" />
+          <Spinner variant={v as Variant} size="lg" />
+          <Spinner variant={v as Variant} size="xl" />
+        </>
+      )}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const spinners = canvas.queryAllByRole("status");
+    await expect(spinners.length).toBe(30);
+  },
 };

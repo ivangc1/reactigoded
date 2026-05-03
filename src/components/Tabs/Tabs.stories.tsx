@@ -181,3 +181,59 @@ export const KeyboardNavInteraction: Story = {
     ).toHaveAttribute("aria-selected", "true");
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem" }}>
+      <div>
+        <strong>default</strong>
+        <Tabs defaultValue="b">
+          <TabList aria-label="default">
+            <Tab value="a">A</Tab>
+            <Tab value="b">B</Tab>
+            <Tab value="c" disabled>
+              C disabled
+            </Tab>
+          </TabList>
+          <TabPanel value="b">Panel B</TabPanel>
+        </Tabs>
+      </div>
+      <div>
+        <strong>pills</strong>
+        <Tabs defaultValue="a" pills>
+          <TabList aria-label="pills">
+            <Tab value="a">A</Tab>
+            <Tab value="b">B</Tab>
+            <Tab value="c">C</Tab>
+          </TabList>
+          <TabPanel value="a">Panel A</TabPanel>
+        </Tabs>
+      </div>
+      <div>
+        <strong>vertical</strong>
+        <Tabs defaultValue="a" orientation="vertical">
+          <TabList aria-label="vertical">
+            <Tab value="a">A</Tab>
+            <Tab value="b">B</Tab>
+          </TabList>
+          <TabPanel value="a">Panel A</TabPanel>
+        </Tabs>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const tablists = canvas.queryAllByRole("tablist");
+    await expect(tablists.length).toBe(3);
+  },
+};

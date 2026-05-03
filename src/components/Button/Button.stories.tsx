@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { Button } from "./Button";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Button",
@@ -209,5 +210,58 @@ export const ClickDispara: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Pulsa" }));
     await expect(args.onClick).toHaveBeenCalledOnce();
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem" }}>
+      <MatrixGrid
+        renderRow={(v) => (
+          <>
+            <Button variant={v as Variant}>solid</Button>
+            <Button variant={v as Variant} appearance="outline">
+              outline
+            </Button>
+            <Button variant={v as Variant} appearance="ghost">
+              ghost
+            </Button>
+            <Button variant={v as Variant} disabled>
+              disabled
+            </Button>
+            <Button variant={v as Variant} loading>
+              loading
+            </Button>
+          </>
+        )}
+      />
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <span style={{ minWidth: 80 }}>sizes</span>
+        <Button size="xs">xs</Button>
+        <Button size="sm">sm</Button>
+        <Button size="md">md</Button>
+        <Button size="lg">lg</Button>
+        <Button size="xl">xl</Button>
+      </div>
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <span style={{ minWidth: 80 }}>link</span>
+        <Button appearance="link">link variant</Button>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const buttons = canvas.queryAllByRole("button");
+    await expect(buttons.length).toBeGreaterThan(35);
   },
 };

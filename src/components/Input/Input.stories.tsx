@@ -165,3 +165,35 @@ export const ConGrupo: Story = {
     </div>
   ),
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 600 }}>
+      {(["sm", "md", "lg"] as const).map((size) => (
+        <div key={size} style={{ display: "grid", gap: "0.5rem" }}>
+          <strong>size: {size}</strong>
+          <Input size={size} placeholder="default" />
+          <Input size={size} state="error" placeholder="error state" />
+          <Input size={size} state="success" placeholder="success state" />
+          <Input size={size} disabled placeholder="disabled" />
+          <Input size={size} defaultValue="con valor" />
+        </div>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inputs = canvas.queryAllByRole("textbox");
+    await expect(inputs.length).toBeGreaterThan(10);
+  },
+};

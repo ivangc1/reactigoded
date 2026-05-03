@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { Switch } from "./Switch";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Switch",
@@ -147,5 +148,41 @@ export const ToggleInteraction: Story = {
     await expect(input).not.toBeChecked();
     await userEvent.click(input);
     await expect(args.onChange).toHaveBeenCalled();
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <MatrixGrid
+      renderRow={(v) => (
+        <>
+          <Switch variant={v as Variant}>off</Switch>
+          <Switch variant={v as Variant} defaultChecked>
+            on
+          </Switch>
+          <Switch variant={v as Variant} indeterminate>
+            indeterminate
+          </Switch>
+          <Switch variant={v as Variant} disabled>
+            disabled
+          </Switch>
+        </>
+      )}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const switches = canvas.queryAllByRole("switch");
+    await expect(switches.length).toBeGreaterThan(12);
   },
 };
