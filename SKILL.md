@@ -24,7 +24,7 @@ Cardinales:
 | rutilus   | 55°   | warning (cobre)   |
 | laurus    | 149°  | success (verde)   |
 | malum     | 8°    | danger (rojo-granate) |
-| cyaneus   | 214°  | info (cyan)       |
+| kobalium  | 260°  | info (cobalt blue) |
 
 Cualquier cambio que rompa esta geometría falla `npm run test:contrast`.
 **No es decorativo: la simetría OKLCH es lo que garantiza WCAG AA en
@@ -54,9 +54,12 @@ todas las combinaciones bg/cardinal del tema.**
 
 ## Separación info / secondary
 
-`info` apunta a `cyaneus` (cyan H=214°), **no a `axis` (violeta H=300°)**.
+`info` apunta a `kobalium` (cobalt blue H≈260°), **no a `axis` (violeta H=300°)**.
 Decisión deliberada desde 1.0.0-beta.3 para diferenciar visualmente
-"información" de "acción secundaria". No volver a unificar.
+"información" de "acción secundaria"; en `1.0.0-beta.7` se renombró desde
+`cyaneus` y se reasignó el hue (de H≈214° cyan a H≈260° cobalt blue)
+porque la separación perceptual ΔE OKLab vs `vitreus` era marginal
+(0.054). No volver a unificar.
 
 ## Escala neutral
 

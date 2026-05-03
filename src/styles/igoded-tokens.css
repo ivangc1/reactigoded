@@ -119,8 +119,9 @@ LOS 7 CARDINALES:
 │ RUTILUS   │ Resplandor  │ Warning. Luz cálida de aviso.                       │
 │ LAURUS    │ Laurel      │ Success. La planta de la victoria.                  │
 │ MALUM     │ Manzana/Mal │ Danger. El fruto del error.                         │
-│ CYANEUS   │ Cian        │ Info. Cian-azul propio (desde 1.0.0-beta.3, antes   │
-│           │             │ info era alias de axis y se confundía con secondary)│
+│ KOBALIUM  │ Cobalto     │ Info. Azul cobalto propio (desde beta.3 separado de │
+│           │             │ axis; renombrado de "cyaneus" + reasignado de cyan  │
+│           │             │ H≈214° a cobalt H≈260° en beta.7)                   │
 └───────────┴─────────────┴─────────────────────────────────────────────────────┘
 
 CÓMO FUNCIONAN EN LOS MODOS:
@@ -140,7 +141,7 @@ CUÁNDO USAR CADA UNO:
 - Rutilus: warnings, alertas de precaución, badges de atención
 - Laurus: éxito, confirmaciones, validaciones correctas
 - Malum: errores, peligro, acciones destructivas
-- Cyaneus: info, mensajes informativos, badges neutros con peso
+- Kobalium: info, mensajes informativos, badges neutros con peso
 
 ESPECIFICACIONES TÉCNICAS:
 - Ratios: ~12.2:1 (lux sobre fundus-lux), ~11.4:1 (nox sobre fundus-nox)
@@ -190,9 +191,9 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-malum-lux: #620327;
   --ig-malum-nox: #fdb3c0;
 
-  /* ═══ CYANEUS (Info / Cyan profundo, H=214°) ═══ */
-  --ig-cyaneus-lux: #143940;
-  --ig-cyaneus-nox: #77dbf2;
+  /* ═══ KOBALIUM (Info / Cobalt blue, H≈260°) — antes "cyaneus" (H≈214° cyan) hasta beta.6 ═══ */
+  --ig-kobalium-lux: #082e6d;
+  --ig-kobalium-nox: #b1ccf7;
 
   /* ═══ Variables adaptativas (modo oscuro por defecto) ═══ */
   --ig-fundus: var(--ig-fundus-nox);
@@ -202,7 +203,7 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus: var(--ig-rutilus-nox);
   --ig-laurus: var(--ig-laurus-nox);
   --ig-malum: var(--ig-malum-nox);
-  --ig-cyaneus: var(--ig-cyaneus-nox);
+  --ig-kobalium: var(--ig-kobalium-nox);
 }
 
 @media (prefers-color-scheme: light) {
@@ -214,7 +215,7 @@ ESPECIFICACIONES TÉCNICAS:
     --ig-rutilus: var(--ig-rutilus-lux);
     --ig-laurus: var(--ig-laurus-lux);
     --ig-malum: var(--ig-malum-lux);
-    --ig-cyaneus: var(--ig-cyaneus-lux);
+    --ig-kobalium: var(--ig-kobalium-lux);
   }
 }
 
@@ -227,7 +228,7 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus: var(--ig-rutilus-lux);
   --ig-laurus: var(--ig-laurus-lux);
   --ig-malum: var(--ig-malum-lux);
-  --ig-cyaneus: var(--ig-cyaneus-lux);
+  --ig-kobalium: var(--ig-kobalium-lux);
 }
 
 [data-theme="dark"] {
@@ -239,7 +240,7 @@ ESPECIFICACIONES TÉCNICAS:
   --ig-rutilus: var(--ig-rutilus-nox);
   --ig-laurus: var(--ig-laurus-nox);
   --ig-malum: var(--ig-malum-nox);
-  --ig-cyaneus: var(--ig-cyaneus-nox);
+  --ig-kobalium: var(--ig-kobalium-nox);
 }
 
 
@@ -317,12 +318,12 @@ Abajo tienes variables listas para usar con opacidades comunes (10%, 20%, 30%, 5
   --ig-malum-alpha-50: color-mix(in srgb, var(--ig-malum) 50%, transparent);
   --ig-malum-alpha-70: color-mix(in srgb, var(--ig-malum) 70%, transparent);
 
-  /* ═══ CYANEUS (Info) con transparencias ═══ */
-  --ig-cyaneus-alpha-10: color-mix(in srgb, var(--ig-cyaneus) 10%, transparent);
-  --ig-cyaneus-alpha-20: color-mix(in srgb, var(--ig-cyaneus) 20%, transparent);
-  --ig-cyaneus-alpha-30: color-mix(in srgb, var(--ig-cyaneus) 30%, transparent);
-  --ig-cyaneus-alpha-50: color-mix(in srgb, var(--ig-cyaneus) 50%, transparent);
-  --ig-cyaneus-alpha-70: color-mix(in srgb, var(--ig-cyaneus) 70%, transparent);
+  /* ═══ KOBALIUM (Info) con transparencias ═══ */
+  --ig-kobalium-alpha-10: color-mix(in srgb, var(--ig-kobalium) 10%, transparent);
+  --ig-kobalium-alpha-20: color-mix(in srgb, var(--ig-kobalium) 20%, transparent);
+  --ig-kobalium-alpha-30: color-mix(in srgb, var(--ig-kobalium) 30%, transparent);
+  --ig-kobalium-alpha-50: color-mix(in srgb, var(--ig-kobalium) 50%, transparent);
+  --ig-kobalium-alpha-70: color-mix(in srgb, var(--ig-kobalium) 70%, transparent);
 
   /* ═══ Negro y blanco con transparencias (overlays, sombras) ═══ */
   --ig-black-alpha-10: color-mix(in srgb, black 10%, transparent);
@@ -464,7 +465,7 @@ CUÁNDO USAR:
   --ig-text-on-rutilus: var(--ig-fundus-nox);
   --ig-text-on-laurus: var(--ig-fundus-nox);
   --ig-text-on-malum: var(--ig-fundus-nox);
-  --ig-text-on-cyaneus: var(--ig-fundus-nox);
+  --ig-text-on-kobalium: var(--ig-fundus-nox);
 }
 
 @media (prefers-color-scheme: light) {
@@ -482,7 +483,7 @@ CUÁNDO USAR:
     --ig-text-on-rutilus: var(--ig-fundus-lux);
     --ig-text-on-laurus: var(--ig-fundus-lux);
     --ig-text-on-malum: var(--ig-fundus-lux);
-    --ig-text-on-cyaneus: var(--ig-fundus-lux);
+    --ig-text-on-kobalium: var(--ig-fundus-lux);
   }
 }
 
@@ -498,7 +499,7 @@ CUÁNDO USAR:
   --ig-text-on-rutilus: var(--ig-fundus-lux);
   --ig-text-on-laurus: var(--ig-fundus-lux);
   --ig-text-on-malum: var(--ig-fundus-lux);
-  --ig-text-on-cyaneus: var(--ig-fundus-lux);
+  --ig-text-on-kobalium: var(--ig-fundus-lux);
 }
 
 [data-theme="dark"] {
@@ -512,7 +513,7 @@ CUÁNDO USAR:
   --ig-text-on-rutilus: var(--ig-fundus-nox);
   --ig-text-on-laurus: var(--ig-fundus-nox);
   --ig-text-on-malum: var(--ig-fundus-nox);
-  --ig-text-on-cyaneus: var(--ig-fundus-nox);
+  --ig-text-on-kobalium: var(--ig-fundus-nox);
 }
 
 
@@ -582,7 +583,7 @@ MAPEO:
 - success → laurus (el laurel de la victoria)
 - warning → rutilus (el resplandor de aviso)
 - danger → malum (el fruto del error)
-- info → cyaneus (cian-azul propio, distinto de axis/violet desde 1.0.0-beta.3)
+- info → kobalium (azul cobalto propio, distinto de axis/violet desde 1.0.0-beta.3; renombrado de cyaneus + reasignado a H≈260° en beta.7)
 
 CUÁNDO USAR:
 Puedes usar cualquiera de los dos sistemas:
@@ -600,7 +601,7 @@ Estas variables son solo aliases para familiaridad.
   --ig-success: var(--ig-laurus);
   --ig-warning: var(--ig-rutilus);
   --ig-danger: var(--ig-malum);
-  --ig-info: var(--ig-cyaneus);
+  --ig-info: var(--ig-kobalium);
 
   /* Texto sobre colores semánticos. Cada uno hereda el `text-on-<cardinal>`
      que cambia automáticamente entre claro y oscuro según el tema:
@@ -608,7 +609,7 @@ Estas variables son solo aliases para familiaridad.
      es oscuro (fundus-nox); en light, los cardinales son oscuros (-lux) y
      el texto es claro (fundus-lux). Garantiza WCAG AA en cualquier tema.
 
-     Nota: --ig-text-on-info hereda de --ig-text-on-cyaneus (info → cyaneus
+     Nota: --ig-text-on-info hereda de --ig-text-on-kobalium (info → kobalium
      desde 1.0.0-beta.3, NO de --ig-text-on-axis). No hay --ig-text-on-cinis
      porque cinis se usa solo como color de texto-body, nunca como background. */
   --ig-text-on-brand: var(--ig-text-on-vitreus);
@@ -616,7 +617,7 @@ Estas variables son solo aliases para familiaridad.
   --ig-text-on-success: var(--ig-text-on-laurus);
   --ig-text-on-warning: var(--ig-text-on-rutilus);
   --ig-text-on-danger: var(--ig-text-on-malum);
-  --ig-text-on-info: var(--ig-text-on-cyaneus);
+  --ig-text-on-info: var(--ig-text-on-kobalium);
 }
 
 
@@ -2189,11 +2190,11 @@ Ejemplo: --ig-alert-padding o --ig-tooltip-bg.
   --ig-alert-danger-border: var(--ig-malum);
   --ig-alert-danger-text: var(--ig-malum);
 
-  /* Alert Info — desde 1.0.0-beta.3 usa cyaneus (cian-azul propio) en
-     vez de axis para no colisionar visualmente con secondary. */
-  --ig-alert-info-bg: var(--ig-cyaneus-alpha-20);
-  --ig-alert-info-border: var(--ig-cyaneus);
-  --ig-alert-info-text: var(--ig-cyaneus);
+  /* Alert Info — desde beta.3 usa kobalium (azul cobalto propio, antes
+     "cyaneus") en vez de axis para no colisionar visualmente con secondary. */
+  --ig-alert-info-bg: var(--ig-kobalium-alpha-20);
+  --ig-alert-info-border: var(--ig-kobalium);
+  --ig-alert-info-text: var(--ig-kobalium);
 
   /* MODAL — los tokens `--ig-modal-*` se eliminaron junto con las clases
      legacy `.ig-modal-*`. El componente actual usa `<dialog>` (sección 78b)
@@ -2631,10 +2632,10 @@ REFERENCIA: WCAG 2.2 + CSS Color Adjustment Module Level 1.
        El texto encima usa HighlightText para diferenciar de la prosa. */
     --ig-vitreus: LinkText;
     --ig-axis: LinkText;
-    --ig-cyaneus: LinkText;
+    --ig-kobalium: LinkText;
     --ig-text-on-vitreus: HighlightText;
     --ig-text-on-axis: HighlightText;
-    --ig-text-on-cyaneus: HighlightText;
+    --ig-text-on-kobalium: HighlightText;
     --ig-text-on-brand: HighlightText;
     --ig-text-on-secondary: HighlightText;
     --ig-text-on-info: HighlightText;

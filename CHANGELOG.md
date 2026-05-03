@@ -7,6 +7,45 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.7] — 2026-05-03
+
+### Renamed (BREAKING — token rename + hue reassignment)
+- **`cyaneus` → `kobalium`** y **reasignación de hue de cyan H≈214° a
+  cobalt blue H≈260°**. Razón: la separación perceptual ΔE OKLab entre
+  `cyaneus` y `vitreus` (brand teal) era marginal (≈0.054 en dark), lo
+  que producía confusión visual cuando ambos cardinales aparecían
+  contiguos. Con kobalium en H≈260° la separación pasa a ≈0.123 (cómoda).
+  El nombre cambia porque "cyaneus" describía un cyan que ya no existe
+  como color real; "kobalium" (latinización de cobalto) refleja el nuevo
+  hue. Hex nuevos: `--ig-kobalium-lux: #082e6d`, `--ig-kobalium-nox: #b1ccf7`
+  (ambos cumplen geometría dual L_lux≈0.32, L_nox≈0.84, ΔH≤10°, AAA contra
+  los 5 fondos del tema).
+
+  **Migración**:
+  - Si tu código usa solo el alias `var(--ig-info)`, **no tocar nada** —
+    el alias sigue funcionando y ahora apunta internamente a `--ig-kobalium`.
+  - Si tu código referencia literalmente `--ig-cyaneus`, `--ig-cyaneus-lux`,
+    `--ig-cyaneus-nox`, `--ig-cyaneus-alpha-{10,20,30,50,70}` o
+    `--ig-text-on-cyaneus`, **renombrar a `--ig-kobalium*`** /
+    `--ig-text-on-kobalium`.
+  - Re-baseline de Chromatic obligatorio: el cambio de hex altera todas
+    las stories que usan info/cyaneus en cualquier forma.
+
+### Added
+- **Check 3 (warning) en `scripts/check-component-contrast.mjs`**:
+  separación perceptual ΔE OKLab ≥ 0.05 entre pares de cardinales de UI
+  activa (los 6 cardinales menos `cinis`, que es texto del cuerpo). Útil
+  para detectar cuándo un cardinal nuevo entra en zona de confusión con
+  uno existente. **No falla CI** — solo imprime aviso. Razón de no
+  promocionar a error en esta beta: hay pares preexistentes (p.ej.
+  `vitreus↔laurus` en light, ΔE≈0.054) que rozan el umbral; auditarlos
+  con cabeza fría requiere su propio commit.
+
+### Changed
+- Doc cabecera de `igoded-tokens.css`, `SKILL.md`, `Introduction.mdx`,
+  `Variants.mdx`, `Palette.stories.tsx`: actualizada la descripción de
+  kobalium (cobalto, H≈260°) y la migration note desde cyaneus.
+
 ## [1.0.0-beta.6] — 2026-05-03
 
 ### Changed (BREAKING — visual)

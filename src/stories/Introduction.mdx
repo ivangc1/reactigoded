@@ -91,7 +91,7 @@ export function ThemeToggle() {
 ## Convenciones
 
 - **Nombres de clase**: todas las clases del DS empiezan por `ig-` (`ig-btn`, `ig-card`, `ig-flex`…). Esto evita choques con Tailwind, Bootstrap o cualquier otra librería de utilidades.
-- **Variantes**: las 6 variantes semánticas (`brand`, `secondary`, `success`, `warning`, `danger`, `info`) están alineadas en todos los componentes. Cada una mapea a un color cardinal: `brand→vitreus`, `secondary→axis`, `success→laurus`, `warning→rutilus`, `danger→malum`, `info→cyaneus` (cian-azul propio desde `1.0.0-beta.3`; antes era alias de `axis` y se confundía visualmente con `secondary`).
+- **Variantes**: las 6 variantes semánticas (`brand`, `secondary`, `success`, `warning`, `danger`, `info`) están alineadas en todos los componentes. Cada una mapea a un color cardinal: `brand→vitreus`, `secondary→axis`, `success→laurus`, `warning→rutilus`, `danger→malum`, `info→kobalium` (azul cobalto propio; antes alias de `axis`, separado en `1.0.0-beta.3` y reasignado de cyan H≈214° a cobalt H≈260° en `1.0.0-beta.7` para separarlo perceptualmente de `vitreus`).
 - **Tamaños**: `xs` · `sm` · `md` (default) · `lg` · `xl`. `md` no añade clase modificadora.
 - **`ref` como prop normal**: aprovechamos React 19; no hace falta `forwardRef`.
 - **Type-safe**: cada componente exporta su tipo `Props` y los unions de variantes/sizes para reutilizar en tu app.

@@ -12,7 +12,9 @@ las exponen (`Button`, `Alert`, `Badge`, `Card`, `Toast`, `Spinner`,
 Desde `1.0.0-beta.3` cada variante mapea a un color cardinal **distinto y
 no solapado**. Antes `secondary` e `info` apuntaban ambos a `axis` (violet)
 y eran visualmente idénticos; ahora `info` tiene su propio cardinal
-`cyaneus` (cian-azul).
+`kobalium` (azul cobalto, H≈260°). Renombrado desde `cyaneus` y
+reasignado de cyan H≈214° a cobalt H≈260° en `1.0.0-beta.7` para
+ampliar la separación perceptual frente a `vitreus`.
 
 ## Mapeo `variant` → cardinal
 
@@ -23,7 +25,7 @@ y eran visualmente idénticos; ahora `info` tiene su propio cardinal
     { variant: "success", cardinal: "laurus", description: "Éxito, confirmación" },
     { variant: "warning", cardinal: "rutilus", description: "Aviso, atención" },
     { variant: "danger", cardinal: "malum", description: "Error, destructivo" },
-    { variant: "info", cardinal: "cyaneus", description: "Información, neutral cian (NUEVO en beta.3)" },
+    { variant: "info", cardinal: "kobalium", description: "Información, azul cobalto (separado en beta.3, renombrado y reasignado en beta.7)" },
   ].map((v) => (
     <div key={v.variant} className="ig-foundation-swatch">
       <div
@@ -60,7 +62,7 @@ El sistema completo:
 | LAURUS   | Laurel    | Verde éxito               | `success`             |
 | RUTILUS  | Resplandor| Naranja aviso             | `warning`             |
 | MALUM    | Manzana   | Rojo error                | `danger`              |
-| CYANEUS  | Cian      | Azul información          | `info` (desde beta.3) |
+| KOBALIUM | Cobalto   | Azul cobalto información  | `info` (separado en beta.3, renombrado/reasignado en beta.7) |
 
 Cada cardinal tiene `lux` (modo light) y `nox` (modo dark). El alias
 adaptativo `var(--ig-<cardinal>)` cambia automáticamente según

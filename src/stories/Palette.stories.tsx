@@ -24,7 +24,7 @@ const CARDINALS = [
   { name: "rutilus", role: "warning", hue: 55, char: "cobre" },
   { name: "laurus", role: "success", hue: 149, char: "verde laurel" },
   { name: "malum", role: "danger", hue: 8, char: "rojo-granate" },
-  { name: "cyaneus", role: "info", hue: 214, char: "cyan profundo" },
+  { name: "kobalium", role: "info", hue: 260, char: "azul cobalto" },
 ] as const;
 
 // sRGB → linear → relative luminance (WCAG)

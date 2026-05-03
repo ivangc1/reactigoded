@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /**
- * Guardrail CI: valida dos invariantes del DS sin levantar navegador.
+ * Guardrail CI: valida invariantes del DS sin levantar navegador.
  *
- *   (1) WCAG ≥ 4.5 en cada par bg/color resuelto en ambos temas para
- *       cada regla de igoded-components.css que declare ambos.
- *   (2) Geometría OKLCH dual: ΔH ≤ 10° entre {cardinal}-lux y
+ *   (1) ERROR: WCAG ≥ 4.5 en cada par bg/color resuelto en ambos temas
+ *       para cada regla de igoded-components.css que declare ambos.
+ *   (2) ERROR: Geometría OKLCH dual: ΔH ≤ 10° entre {cardinal}-lux y
  *       {cardinal}-nox; L_lux ≈ 0.32 ± 0.04; L_nox ≈ 0.84 ± 0.04;
  *       L_lux + L_nox ≈ 1.16 ± 0.08.
+ *   (3) WARNING (no falla CI): Separación perceptual ΔE OKLab ≥ 0.05
+ *       entre cardinales de UI activa (excluye cinis, que es texto del
+ *       cuerpo). Avisa cuando dos cardinales pueden confundirse al
+ *       verlos juntos. Introducido en beta.7.
  *
  * Diseñado para correr en CI (rápido, sin browser). Complementa el
  * runner storybook+axe que valida contraste en el DOM real.
@@ -15,7 +19,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import postcss from "postcss";
-import { parse, formatHex, oklch, wcagContrast } from "culori";
+import { parse, formatHex, oklch, oklab, wcagContrast } from "culori";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -30,8 +34,14 @@ const CARDINALS = [
   "rutilus",
   "laurus",
   "malum",
-  "cyaneus",
+  "kobalium",
 ];
+
+// Cardinales que se usan como bg de componente. Cinis se excluye porque
+// es texto del cuerpo: la confusión perceptual real ocurre entre
+// cardinales que aparecen como fondos contiguos, no contra texto.
+const UI_CARDINALS = CARDINALS.filter((c) => c !== "cinis");
+const MIN_DELTA_E = 0.05;
 
 // ─── Lectura de tokens ──────────────────────────────────────────────
 //
@@ -279,6 +289,36 @@ function checkPaletteGeometry(lightMap, darkMap) {
   return errors;
 }
 
+// ─── Check 3: separación perceptual ΔE OKLab (warning, no falla CI) ─
+
+function checkPerceptualSeparation(lightMap, darkMap) {
+  const warnings = [];
+  for (const [theme, map] of [
+    ["light", lightMap],
+    ["dark", darkMap],
+  ]) {
+    for (let i = 0; i < UI_CARDINALS.length; i++) {
+      for (let j = i + 1; j < UI_CARDINALS.length; j++) {
+        const a = map.get(`ig-${UI_CARDINALS[i]}`);
+        const b = map.get(`ig-${UI_CARDINALS[j]}`);
+        if (!a || !b) continue;
+        const oa = oklab(parse(a));
+        const ob = oklab(parse(b));
+        if (!oa || !ob) continue;
+        const dE = Math.sqrt(
+          (oa.l - ob.l) ** 2 + (oa.a - ob.a) ** 2 + (oa.b - ob.b) ** 2,
+        );
+        if (dE < MIN_DELTA_E) {
+          warnings.push(
+            `[${theme}] ${UI_CARDINALS[i]}(${a}) ↔ ${UI_CARDINALS[j]}(${b}): ΔE=${dE.toFixed(3)} < ${MIN_DELTA_E}`,
+          );
+        }
+      }
+    }
+  }
+  return warnings;
+}
+
 // ─── Main ──────────────────────────────────────────────────────────
 
 const lightMap = buildThemeMap("light");
@@ -290,11 +330,20 @@ const errors = [
   ...checkPaletteGeometry(lightMap, darkMap),
 ];
 
+const warnings = checkPerceptualSeparation(lightMap, darkMap);
+if (warnings.length) {
+  console.warn("⚠ Separación perceptual baja entre cardinales UI:\n");
+  for (const w of warnings) console.warn("  - " + w);
+  console.warn(
+    "\n  Pueden confundirse al verlos juntos. No falla CI; revisar al planificar nuevos cardinales.\n",
+  );
+}
+
 if (errors.length) {
   console.error("✗ Contrast/palette guardrails failed:\n");
   for (const e of errors) console.error("  - " + e);
   process.exit(1);
 }
 console.log(
-  `✓ WCAG ≥ 4.5 en ambos temas y geometría OKLCH OK (${CARDINALS.length} cardinales validados).`,
+  `✓ WCAG ≥ 4.5 en ambos temas, geometría OKLCH OK (${CARDINALS.length} cardinales) y ΔE OKLab evaluado en ${UI_CARDINALS.length} cardinales UI.`,
 );
