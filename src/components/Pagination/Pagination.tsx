@@ -1,4 +1,4 @@
-import type { HTMLAttributes, Ref } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export type PaginationVariant =
@@ -21,10 +21,27 @@ export interface PaginationProps
   onPageChange: (page: number) => void;
   /** Color de la página activa. */
   variant?: PaginationVariant;
-  /** Texto del botón anterior. */
-  prevLabel?: string;
-  /** Texto del botón siguiente. */
-  nextLabel?: string;
+  /**
+   * Contenido del botón anterior. Si es string también se usa como
+   * `aria-label` (a menos que se pase `prevAriaLabel` explícito).
+   * Si es ReactNode (p.ej. un icono), pasa `prevAriaLabel` con el texto
+   * legible para SR.
+   */
+  prevLabel?: ReactNode;
+  /**
+   * Contenido del botón siguiente. Mismas reglas que `prevLabel`.
+   */
+  nextLabel?: ReactNode;
+  /**
+   * `aria-label` del botón anterior. Override explícito; si se omite y
+   * `prevLabel` es string se usa éste, en otro caso "Página anterior".
+   */
+  prevAriaLabel?: string;
+  /**
+   * `aria-label` del botón siguiente. Override explícito; si se omite y
+   * `nextLabel` es string se usa éste, en otro caso "Página siguiente".
+   */
+  nextAriaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -89,10 +106,18 @@ export function Pagination({
   variant,
   prevLabel = "Anterior",
   nextLabel = "Siguiente",
+  prevAriaLabel,
+  nextAriaLabel,
   className,
   ref,
   ...rest
 }: PaginationProps) {
+  const prevAria =
+    prevAriaLabel ??
+    (typeof prevLabel === "string" ? prevLabel : "Página anterior");
+  const nextAria =
+    nextAriaLabel ??
+    (typeof nextLabel === "string" ? nextLabel : "Página siguiente");
   // 1.0.0-beta.4: aria-label se extrae del rest (HTML std). Antes existía
   // una prop `ariaLabel` separada — eliminada por consistencia con el
   // resto de componentes que ya usan rest. Migration: rename ariaLabel→aria-label.
@@ -116,7 +141,7 @@ export function Pagination({
         type="button"
         className="ig-pagination-item ig-pagination-prev"
         disabled={!canPrev}
-        aria-label={prevLabel}
+        aria-label={prevAria}
         onClick={() => {
           if (canPrev) onPageChange(currentPage - 1);
         }}
@@ -158,7 +183,7 @@ export function Pagination({
         type="button"
         className="ig-pagination-item ig-pagination-next"
         disabled={!canNext}
-        aria-label={nextLabel}
+        aria-label={nextAria}
         onClick={() => {
           if (canNext) onPageChange(currentPage + 1);
         }}

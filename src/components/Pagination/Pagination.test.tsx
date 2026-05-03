@@ -88,4 +88,44 @@ describe("Pagination", () => {
     );
     expect(ref.current?.tagName).toBe("NAV");
   });
+
+  it("prevAriaLabel/nextAriaLabel sobreescriben el aria-label cuando label es ReactNode", () => {
+    render(
+      <Pagination
+        currentPage={2}
+        totalPages={3}
+        onPageChange={() => undefined}
+        prevLabel={<span data-testid="prev-icon">‹</span>}
+        nextLabel={<span data-testid="next-icon">›</span>}
+        prevAriaLabel="Previous page"
+        nextAriaLabel="Next page"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Previous page" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Next page" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("prev-icon")).toBeInTheDocument();
+    expect(screen.getByTestId("next-icon")).toBeInTheDocument();
+  });
+
+  it("cae a 'Página anterior'/'Página siguiente' si label es ReactNode sin aria override", () => {
+    render(
+      <Pagination
+        currentPage={2}
+        totalPages={3}
+        onPageChange={() => undefined}
+        prevLabel={<span>‹</span>}
+        nextLabel={<span>›</span>}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Página anterior" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Página siguiente" }),
+    ).toBeInTheDocument();
+  });
 });
