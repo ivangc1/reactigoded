@@ -138,7 +138,7 @@ export function Dropdown({
           "ig-dropdown",
           placement === "right" && "ig-dropdown-right",
           direction === "up" && "ig-dropdown-up",
-          open && "open",
+          open && "ig-dropdown-open",
           className,
         )}
         {...rest}

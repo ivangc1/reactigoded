@@ -115,7 +115,7 @@
     {
       "name": "design.css meta-importer",
       "path": "dist/styles/igoded-design.css",
-      "limit": "5 KB",
+      "limit": "2 KB",
       "gzip": true
     },
     {

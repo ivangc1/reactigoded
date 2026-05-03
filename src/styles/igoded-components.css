@@ -8400,7 +8400,7 @@ CUÁNDO USAR:
 }
 
 /* Mostrar con clase o focus-within */
-.ig-dropdown.open .ig-dropdown-menu,
+.ig-dropdown.ig-dropdown-open .ig-dropdown-menu,
 .ig-dropdown:focus-within .ig-dropdown-menu {
   opacity: 1;
   visibility: visible;

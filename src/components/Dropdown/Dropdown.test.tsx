@@ -43,15 +43,15 @@ describe("Dropdown — uncontrolled", () => {
     const trigger = screen.getByRole("button", { name: /abrir/i });
     const root = container.querySelector(".ig-dropdown");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(root).not.toHaveClass("open");
+    expect(root).not.toHaveClass("ig-dropdown-open");
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(root).toHaveClass("open");
+    expect(root).toHaveClass("ig-dropdown-open");
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(root).not.toHaveClass("open");
+    expect(root).not.toHaveClass("ig-dropdown-open");
   });
 
   it("click fuera cierra el menu", () => {
@@ -67,9 +67,9 @@ describe("Dropdown — uncontrolled", () => {
       </div>,
     );
     const root = container.querySelector(".ig-dropdown");
-    expect(root).toHaveClass("open");
+    expect(root).toHaveClass("ig-dropdown-open");
     fireEvent.mouseDown(screen.getByRole("button", { name: /fuera/i }));
-    expect(root).not.toHaveClass("open");
+    expect(root).not.toHaveClass("ig-dropdown-open");
   });
 
   it("ESC cierra el menu y devuelve foco al trigger", () => {

@@ -159,11 +159,21 @@ function mixColors(space, hexA, pA, hexB, pB) {
     const la = oklch(a);
     const lb = oklch(b);
     if (!la || !lb) return null;
+    // Hue es circular [0, 360). Una mezcla lineal entre 350° y 10°
+    // pasa por 180° (camino largo) en vez de por 0° (camino corto).
+    // Tomamos el path angular más corto: si |dh| > 180, ajustamos
+    // sumando/restando 360 antes de promediar.
+    const ha = la.h ?? 0;
+    const hb = lb.h ?? 0;
+    let dh = hb - ha;
+    if (dh > 180) dh -= 360;
+    else if (dh < -180) dh += 360;
+    const hMixed = (ha + dh * weightB + 360) % 360;
     const out = {
       mode: "oklch",
       l: la.l * weightA + lb.l * weightB,
       c: (la.c ?? 0) * weightA + (lb.c ?? 0) * weightB,
-      h: ((la.h ?? 0) * weightA + (lb.h ?? 0) * weightB),
+      h: hMixed,
     };
     return formatHex(out);
   }
