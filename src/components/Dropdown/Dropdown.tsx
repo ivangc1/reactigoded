@@ -4,11 +4,11 @@ import {
   useId,
   useMemo,
   useRef,
-  useState,
   type HTMLAttributes,
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 import { DropdownContext } from "./DropdownContext";
 
 export type DropdownPlacement = "left" | "right";
@@ -66,21 +66,15 @@ export function Dropdown({
   const triggerId = `${reactId}-trigger`;
   const menuId = `${reactId}-menu`;
 
-  const isControlled = openProp !== undefined;
-  const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const open = isControlled ? openProp : internalOpen;
+  const { value: open, setValue: setOpen } = useControllableState<boolean>({
+    value: openProp,
+    defaultValue: defaultOpen,
+    onChange: onOpenChange,
+  });
 
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const setOpen = useCallback(
-    (next: boolean) => {
-      if (!isControlled) setInternalOpen(next);
-      onOpenChange?.(next);
-    },
-    [isControlled, onOpenChange],
-  );
 
   // Click fuera cierra.
   useEffect(() => {
