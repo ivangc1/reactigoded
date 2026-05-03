@@ -36,6 +36,11 @@ export * from "./components";
 
 // Hooks públicos
 export { useTheme, type Theme, type UseThemeReturn } from "./hooks/useTheme";
+export {
+  useControllableState,
+  type UseControllableStateOptions,
+  type UseControllableStateReturn,
+} from "./hooks/useControllableState";
 
 // Utilidades públicas
 export { cn } from "./utils/cn";
