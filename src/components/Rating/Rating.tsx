@@ -142,6 +142,7 @@ export function Rating({
       ref={ref}
       role="radiogroup"
       aria-label={ariaLabelOverride ?? "Puntuación"}
+      aria-readonly={readOnly || undefined}
       className={cn(
         "ig-rating",
         readOnly && "ig-rating-readonly",
@@ -163,8 +164,13 @@ export function Rating({
             role="radio"
             aria-checked={v === value}
             aria-label={`${String(v)} ${v === 1 ? "estrella" : "estrellas"}`}
-            disabled={readOnly}
-            tabIndex={readOnly ? -1 : isFocusable ? 0 : -1}
+            // En modo readOnly NO usamos `disabled` (rompe el patrón APG
+            // del radiogroup: SR no anuncia el valor seleccionado de un
+            // radio disabled; aria-readonly del contenedor es la forma
+            // estándar). Los handlers internos guard-ean con readOnly,
+            // así que tabIndex sigue el roving normal y la estrella
+            // queda focuseable para inspección por teclado.
+            tabIndex={isFocusable ? 0 : -1}
             className={cn("ig-star", filled && "ig-star-filled")}
             onClick={() => {
               if (readOnly) return;
