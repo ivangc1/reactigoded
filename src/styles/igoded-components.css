@@ -6368,6 +6368,37 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
   box-shadow: var(--ig-input-ring);
 }
 
+/* Estados de validación para textarea/select: las reglas .ig-input-error
+   y .ig-input-success están definidas ANTES de .ig-textarea, .ig-textarea-auto
+   y .ig-select, así que el border de cada uno (mismo specificity 0,1,0)
+   las sobrescribía por orden. Reglas con doble clase (0,2,0) para que
+   ganen sin depender del orden de declaración. */
+.ig-textarea.ig-input-error,
+.ig-textarea-auto.ig-input-error,
+.ig-select.ig-input-error {
+  border-color: var(--ig-input-border-invalid);
+}
+
+.ig-textarea.ig-input-error:focus,
+.ig-textarea-auto.ig-input-error:focus,
+.ig-select.ig-input-error:focus {
+  border-color: var(--ig-input-border-invalid);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-malum) 30%, transparent);
+}
+
+.ig-textarea.ig-input-success,
+.ig-textarea-auto.ig-input-success,
+.ig-select.ig-input-success {
+  border-color: var(--ig-input-border-valid);
+}
+
+.ig-textarea.ig-input-success:focus,
+.ig-textarea-auto.ig-input-success:focus,
+.ig-select.ig-input-success:focus {
+  border-color: var(--ig-input-border-valid);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-laurus) 30%, transparent);
+}
+
 /* Utilidades de field-sizing */
 .ig-field-sizing-content { field-sizing: content; }
 .ig-field-sizing-fixed { field-sizing: fixed; }

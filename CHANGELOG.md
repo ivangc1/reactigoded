@@ -7,6 +7,20 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.17] — 2026-05-03
+
+### Fixed
+- **Textarea / Select estados `error` y `success` invisibles**: las
+  reglas `.ig-input-error` / `.ig-input-success` (línea 6227) estaban
+  declaradas ANTES de `.ig-textarea`, `.ig-textarea-auto` y `.ig-select`
+  (líneas 6306, 6343, 6376), todas con la misma especificidad 0,1,0.
+  Las reglas posteriores definían `border-color` y pisaban al estado de
+  validación. Resultado: pasar `state="error"` o `state="success"` no
+  cambiaba el borde del componente. Fix: reglas con doble clase (0,2,0)
+  para `.ig-textarea.ig-input-error`, `.ig-select.ig-input-error`, etc.
+  Input no estaba afectado porque `.ig-input` se declara antes de las
+  reglas de estado.
+
 ## [1.0.0-beta.16] — 2026-05-03
 
 ### Changed
