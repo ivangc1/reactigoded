@@ -97,6 +97,15 @@ export function Tabs({
   const warnedRef = useRef(false);
   const [registryVersion, setRegistryVersion] = useState(0);
 
+  // `register` se referencia con identidad estable desde el efecto de Tab
+  // (deps `[register]`), así que NO debe cambiar entre renders ni capturar
+  // `internal` por closure. En su lugar lee la selección actual desde un
+  // ref que se sincroniza en cada render.
+  const internalRef = useRef(internal);
+  internalRef.current = internal;
+  const isControlledRef = useRef(isControlled);
+  isControlledRef.current = isControlled;
+
   const register = useCallback((tabValue: string) => {
     if (!registeredRef.current.includes(tabValue)) {
       registeredRef.current.push(tabValue);
@@ -104,7 +113,10 @@ export function Tabs({
       setRegistryVersion((v) => v + 1);
     }
     // Caso (a): auto-select inmediato si todavía no hay selección.
-    if (!isControlled && internal === "") {
+    // Lectura por ref para evitar stale closure si el primer Tab tarda
+    // en montarse o cambian las deps.
+    if (!isControlledRef.current && internalRef.current === "") {
+      internalRef.current = tabValue;
       setInternal(tabValue);
     }
     return () => {
@@ -113,9 +125,6 @@ export function Tabs({
       );
       setRegistryVersion((v) => v + 1);
     };
-    // `internal`/`isControlled` se leen DENTRO del efecto del Tab, no en
-    // cada render del Tabs — no incluir como deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Validación post-mount para defaultValue/value inválido (caso b).

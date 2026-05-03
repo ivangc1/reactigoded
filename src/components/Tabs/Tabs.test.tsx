@@ -51,6 +51,18 @@ describe("Tabs", () => {
     expect(screen.queryByText("Contenido C")).not.toBeInTheDocument();
   });
 
+  it("sin value/defaultValue auto-selecciona el primer Tab montado", () => {
+    // Regresión: register tenía deps [] y leía `internal` por closure;
+    // si el closure congelaba '', cualquier llamada a register podía
+    // resetear la selección a un Tab posterior. El refactor con
+    // internalRef preserva la primera selección.
+    render(basicTabs());
+    const alpha = screen.getByRole("tab", { name: "Alpha" });
+    expect(alpha).toHaveAttribute("aria-selected", "true");
+    expect(alpha).toHaveAttribute("tabindex", "0");
+    expect(screen.getByText("Contenido A")).toBeInTheDocument();
+  });
+
   it("click cambia tab (uncontrolled)", async () => {
     const user = userEvent.setup();
     render(basicTabs({ defaultValue: "a" }));
