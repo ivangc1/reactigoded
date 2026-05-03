@@ -9,6 +9,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 import { TabsContext } from "./TabsContext";
 
 export type TabsVariant =
@@ -137,7 +138,7 @@ export function Tabs({
     if (registeredRef.current.includes(effective)) return;
     const firstRegistered = registeredRef.current[0];
     if (firstRegistered === undefined) return;
-    if (!warnedRef.current && import.meta.env.DEV) {
+    if (!warnedRef.current && isDev()) {
       warnedRef.current = true;
       const propName = isControlled ? "value" : "defaultValue";
       const action = isControlled

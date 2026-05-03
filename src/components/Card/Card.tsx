@@ -1,6 +1,7 @@
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 
 export type CardVariant =
   | "brand"
@@ -77,11 +78,9 @@ export function Card({
   // Dev-only warning: si un consumer pone `interactive` + `onClick` pero
   // omite `role="button"`, la card NO activa por teclado (Enter/Space).
   // Esto es probablemente un descuido. Avisamos UNA vez por instancia.
-  // Usamos `import.meta.env.DEV` (Vite-aware) en vez de `process.env.NODE_ENV`
-  // porque process no existe en navegadores reales (Storybook + Chromium).
   const warnedRef = useRef(false);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!isDev()) return;
     if (warnedRef.current) return;
     if (interactive && Boolean(onClick) && role !== "button") {
       warnedRef.current = true;

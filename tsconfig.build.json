@@ -21,5 +21,5 @@
     "src/App.css",
     "src/vite-env.d.ts"
   ],
-  "_doc": "src/env.d.ts SÍ se incluye (declara import.meta.env mínimo). vite-env.d.ts se excluye porque contiene module declarations *.css/*.svg que no queremos exportar al consumer."
+  "_doc": "vite-env.d.ts se excluye porque contiene module declarations *.css/*.svg que no queremos exportar al consumer. import.meta.env se accede via src/utils/env.ts con cast inline para no contaminar el typing del consumer."
 }
