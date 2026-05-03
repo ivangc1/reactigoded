@@ -77,6 +77,41 @@ describe("Card", () => {
   });
 });
 
+describe("Card — tabIndex auto cuando actúa como botón", () => {
+  it("interactive + role=button + onClick aplica tabIndex=0 sin prop explícita", () => {
+    render(
+      <Card interactive role="button" onClick={() => {}} data-testid="c">
+        x
+      </Card>,
+    );
+    expect(screen.getByTestId("c")).toHaveAttribute("tabindex", "0");
+  });
+
+  it("tabIndex explícito del consumer pisa el default (incluido -1)", () => {
+    render(
+      <Card
+        interactive
+        role="button"
+        onClick={() => {}}
+        tabIndex={-1}
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    expect(screen.getByTestId("c")).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("sin las 3 condiciones, NO aplica tabIndex", () => {
+    render(
+      <Card interactive data-testid="c">
+        x
+      </Card>,
+    );
+    expect(screen.getByTestId("c")).not.toHaveAttribute("tabindex");
+  });
+});
+
 describe("Card — keyboard activation cuando interactive + role=button", () => {
   it("Enter dispara onClick si interactive + role=button", async () => {
     const onClick = vi.fn();

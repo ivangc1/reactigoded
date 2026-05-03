@@ -42,16 +42,18 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
  * Combina con `CardHeader`, `CardBody`, `CardFooter`, `CardImage`,
  * `CardDivider` para layouts compuestos.
  *
- * **Card como botón**: pasa `interactive` + `role="button"` + `tabIndex={0}` +
- * `onClick`. Cuando se cumplen las 3 condiciones, la card activa Enter/Space
+ * **Card como botón**: pasa `interactive` + `role="button"` + `onClick`.
+ * Cuando se cumplen las 3 condiciones, la card activa Enter/Space
  * automáticamente como un `<button>` nativo (la keyboard activation es
  * obligatoria por WAI-ARIA APG si añades `role="button"` a un elemento no
- * interactivo). Si pasas tu propio `onKeyDown`, el handler interno se
+ * interactivo) y aplica `tabIndex={0}` por defecto para que sea
+ * focuseable. Si pasas un `tabIndex` explícito (incluido `-1`) tu valor
+ * se respeta. Si pasas tu propio `onKeyDown`, el handler interno se
  * encadena después — tu lógica corre primero y puedes llamar
  * `event.preventDefault()` para evitar la activación por defecto.
  *
  * @example
- * <Card interactive role="button" tabIndex={0} onClick={() => navigate("/x")}>
+ * <Card interactive role="button" onClick={() => navigate("/x")}>
  *   <CardBody>Click o Enter/Space para navegar</CardBody>
  * </Card>
  */
@@ -110,6 +112,11 @@ export function Card({
     <div
       ref={ref}
       role={role}
+      // Cuando la card actúa como botón forzamos tabIndex=0 antes del
+      // spread, para que sea focuseable por teclado aunque el consumer
+      // olvide la prop. Si pasa su propio tabIndex, el spread de `rest`
+      // (más abajo) lo respeta.
+      tabIndex={actsAsButton ? 0 : undefined}
       onClick={onClick}
       onKeyDown={actsAsButton || onKeyDown ? handleKeyDown : undefined}
       className={cn(
