@@ -45,7 +45,7 @@ describe("Rating", () => {
     // Las estrellas NO llevan disabled (rompía la a11y de SR sobre el
     // radio checked); el guard vive en el handler.
     screen.getAllByRole("radio").forEach((s) => {
-      expect(s).not.toBeDisabled();
+      expect(s).toBeEnabled();
     });
     await userEvent.click(screen.getByRole("radio", { name: "5 estrellas" }));
     expect(onValueChange).not.toHaveBeenCalled();

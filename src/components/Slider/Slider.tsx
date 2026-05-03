@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes, Ref } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
 import { useControllableState } from "@/hooks/useControllableState";
@@ -83,9 +83,11 @@ export function Slider({
     });
 
   // Dev-only warnings: capturan errores típicos del consumer que la
-  // plataforma ignora silenciosamente. Avisa una vez por instancia.
+  // plataforma ignora silenciosamente. En useEffect (no durante render)
+  // por el lint react-hooks/refs.
   const warnedRef = useRef(false);
-  if (isDev() && !warnedRef.current) {
+  useEffect(() => {
+    if (!isDev() || warnedRef.current) return;
     if (Array.isArray(defaultValue)) {
       warnedRef.current = true;
       const allFinite = defaultValue.every((v) =>
@@ -105,7 +107,7 @@ export function Slider({
         `[reactigoded] <Slider defaultValue=${JSON.stringify(defaultValue)}> no es un número finito; arrancando en min=${String(safeMin)}.`,
       );
     }
-  }
+  }, [defaultValue, parsedDefault, safeMin]);
 
   const rawCurrent = internal;
   // Si `value="abc"` o `internal` quedó NaN por algún edge, no queremos

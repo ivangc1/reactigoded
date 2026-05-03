@@ -101,6 +101,9 @@ export const Grupo: Story = {
 };
 
 export const AllStates: Story = {
+  // Args dummy: el meta exige src+alt por la unión AvatarImage|AvatarInitials,
+  // pero el render no usa args (renderiza una matriz propia).
+  args: { src: demoAvatar, alt: "" },
   parameters: {
     layout: "padded",
     docs: { disable: true },

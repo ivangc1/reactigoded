@@ -8,10 +8,20 @@ function ThemeProbe() {
   return (
     <div>
       <span data-testid="value">{theme}</span>
-      <button type="button" onClick={() => setTheme("light")}>
+      <button
+        type="button"
+        onClick={() => {
+          setTheme("light");
+        }}
+      >
         set-light
       </button>
-      <button type="button" onClick={() => setTheme("dark")}>
+      <button
+        type="button"
+        onClick={() => {
+          setTheme("dark");
+        }}
+      >
         set-dark
       </button>
       <button type="button" onClick={toggleTheme}>
@@ -79,7 +89,12 @@ describe("useTheme", () => {
         <div>
           <span data-testid="a">{a.theme}</span>
           <span data-testid="b">{b.theme}</span>
-          <button type="button" onClick={() => a.setTheme("light")}>
+          <button
+            type="button"
+            onClick={() => {
+              a.setTheme("light");
+            }}
+          >
             a-light
           </button>
         </div>

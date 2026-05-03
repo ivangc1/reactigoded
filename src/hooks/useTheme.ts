@@ -19,7 +19,9 @@ const readDomTheme = (): Theme => {
 
 const subscribeDomTheme = (notify: () => void): (() => void) => {
   if (typeof document === "undefined") return () => {};
-  const observer = new MutationObserver(() => notify());
+  const observer = new MutationObserver(() => {
+    notify();
+  });
   observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["data-theme"],

@@ -101,10 +101,15 @@ export function Tabs({
   // `register` se referencia con identidad estable desde el efecto de Tab
   // (deps `[register]`), así que NO debe cambiar entre renders ni capturar
   // `internal` por closure. En su lugar lee la selección actual desde un
-  // ref que se sincroniza en cada render.
+  // ref always-fresh sincronizado cada render. La regla
+  // react-hooks/refs marca esto como sospechoso pero es idempotente
+  // (mismo valor cada render) y necesario para mantener register
+  // estable.
   const internalRef = useRef(internal);
+  // eslint-disable-next-line react-hooks/refs
   internalRef.current = internal;
   const isControlledRef = useRef(isControlled);
+  // eslint-disable-next-line react-hooks/refs
   isControlledRef.current = isControlled;
 
   const register = useCallback((tabValue: string) => {

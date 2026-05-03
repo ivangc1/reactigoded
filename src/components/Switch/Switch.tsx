@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -66,21 +67,23 @@ export function Switch({
   });
 
   // Dev-only warning: controlled sin handler. El consumer pasa `checked`
-  // pero olvida `onChange` → el switch parece roto (no responde al click).
-  // Avisa una vez por instancia.
+  // pero olvida `onChange` → el switch parece roto. En useEffect (no
+  // durante render) por el lint react-hooks/refs.
   const warnedControlledRef = useRef(false);
-  if (
-    isDev() &&
-    !warnedControlledRef.current &&
-    isControlled &&
-    !onChange &&
-    !disabled
-  ) {
-    warnedControlledRef.current = true;
-    console.warn(
-      "[reactigoded] <Switch checked={...}> sin onChange — el switch no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
-    );
-  }
+  useEffect(() => {
+    if (
+      isDev() &&
+      !warnedControlledRef.current &&
+      isControlled &&
+      !onChange &&
+      !disabled
+    ) {
+      warnedControlledRef.current = true;
+      console.warn(
+        "[reactigoded] <Switch checked={...}> sin onChange — el switch no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
+      );
+    }
+  }, [isControlled, onChange, disabled]);
 
   const internalRef = useRef<HTMLInputElement>(null);
   const setRefs = (el: HTMLInputElement | null) => {

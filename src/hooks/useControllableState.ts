@@ -1,12 +1,19 @@
 import { useCallback, useRef, useState } from "react";
 
 export interface UseControllableStateOptions<T> {
-  /** Valor controlado. Si está definido, el componente es controlled. */
-  value?: T;
+  /**
+   * Valor controlado. Si está definido (≠ undefined), el componente es
+   * controlled.
+   *
+   * Tipo `T | undefined` explícito para permitir que el consumer pase
+   * `value: prop` directamente cuando `prop?: T` (con
+   * `exactOptionalPropertyTypes: true`).
+   */
+  value?: T | undefined;
   /** Valor inicial uncontrolled. Ignorado si `value` está definido. */
-  defaultValue?: T;
+  defaultValue?: T | undefined;
   /** Callback al cambiar el valor. Disparado en ambos modos. */
-  onChange?: (value: T) => void;
+  onChange?: ((value: T) => void) | undefined;
 }
 
 export interface UseControllableStateReturn<T> {
@@ -49,10 +56,17 @@ export function useControllableState<T>(
 
   const [internalValue, setInternalValue] = useState<T>(defaultValue as T);
 
+  // Refs always-fresh: el patrón canónico para mantener `setValue`
+  // estable entre renders sin capturar `onChange`/`isControlled` por
+  // closure. La regla react-hooks/refs marca el assign durante render
+  // como sospechoso, pero aquí es idempotente (mismo valor en cada
+  // render) y necesario para que el setter pueda leer la última prop
+  // sin recrearse.
   const isControlledRef = useRef(isControlled);
   const onChangeRef = useRef(onChange);
-
+  // eslint-disable-next-line react-hooks/refs
   isControlledRef.current = isControlled;
+  // eslint-disable-next-line react-hooks/refs
   onChangeRef.current = onChange;
 
   const value = isControlled ? (controlledValue as T) : internalValue;

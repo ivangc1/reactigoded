@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -69,21 +70,24 @@ export function Checkbox({
   };
 
   // Dev-only warning: controlled sin handler. Consumer pasa `checked`
-  // pero olvida `onChange` → el checkbox parece roto.
+  // pero olvida `onChange` → el checkbox parece roto. En useEffect (no
+  // durante render) por el lint react-hooks/refs.
   const warnedControlledRef = useRef(false);
   const isControlled = (rest as { checked?: boolean }).checked !== undefined;
-  if (
-    isDev() &&
-    !warnedControlledRef.current &&
-    isControlled &&
-    !onChange &&
-    !disabled
-  ) {
-    warnedControlledRef.current = true;
-    console.warn(
-      "[reactigoded] <Checkbox checked={...}> sin onChange — el checkbox no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
-    );
-  }
+  useEffect(() => {
+    if (
+      isDev() &&
+      !warnedControlledRef.current &&
+      isControlled &&
+      !onChange &&
+      !disabled
+    ) {
+      warnedControlledRef.current = true;
+      console.warn(
+        "[reactigoded] <Checkbox checked={...}> sin onChange — el checkbox no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
+      );
+    }
+  }, [isControlled, onChange, disabled]);
 
   // useIsoLayoutEffect (layout en cliente, effect en server): el
   // atributo `indeterminate` es DOM-only y no se refleja en el HTML
