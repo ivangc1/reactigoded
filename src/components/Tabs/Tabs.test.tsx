@@ -73,6 +73,45 @@ describe("Tabs", () => {
     expect(screen.getByText("Contenido A")).toBeInTheDocument();
   });
 
+  it("auto-select inicial NO dispara onValueChange (silent)", () => {
+    // Regresión F.3: el auto-select del primer Tab no es acción del
+    // usuario y no debe filtrarse a onValueChange. El consumer puede
+    // tener side-effects (analytics, fetch) que no deben dispararse al
+    // mount.
+    const onValueChange = vi.fn();
+    render(
+      <Tabs onValueChange={onValueChange}>
+        <TabList aria-label="silent">
+          <Tab value="a">A</Tab>
+          <Tab value="b">B</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+      </Tabs>,
+    );
+    expect(screen.getByRole("tab", { name: "A" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("click en Tab SÍ dispara onValueChange (acción del usuario)", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <Tabs defaultValue="a" onValueChange={onValueChange}>
+        <TabList aria-label="user-action">
+          <Tab value="a">A</Tab>
+          <Tab value="b">B</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+        <TabPanel value="b">PB</TabPanel>
+      </Tabs>,
+    );
+    await user.click(screen.getByRole("tab", { name: "B" }));
+    expect(onValueChange).toHaveBeenCalledWith("b");
+  });
+
   it("controlled con value='' NO auto-selecciona (consumer manda)", () => {
     // En modo controlled el internalRef sigue en "" pero NO debe
     // auto-seleccionar el primero — el consumer manda y "" significa

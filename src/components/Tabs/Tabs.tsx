@@ -10,6 +10,7 @@ import {
 } from "react";
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
+import { useControllableState } from "@/hooks/useControllableState";
 import { TabsContext } from "./TabsContext";
 
 export type TabsVariant =
@@ -72,16 +73,25 @@ export function Tabs({
   ...rest
 }: TabsProps) {
   const baseId = useId();
-  const isControlled = value !== undefined;
-  const [internal, setInternal] = useState<string>(defaultValue ?? "");
-  const selected = isControlled ? value : internal;
+  const {
+    value: selected,
+    setValue: setSelectedRaw,
+    isControlled,
+  } = useControllableState<string>({
+    value,
+    defaultValue: defaultValue ?? "",
+    onChange: onValueChange,
+  });
 
+  // Setter expuesto a `Tab` (vía context). Es acción del usuario, dispara
+  // onValueChange. El auto-select interno y el fallback de defaultValue
+  // inválido usan el mismo `setSelectedRaw` con `{ silent: true }` para
+  // NO filtrar al consumer.
   const setSelected = useCallback(
     (next: string) => {
-      if (!isControlled) setInternal(next);
-      onValueChange?.(next);
+      setSelectedRaw(next);
     },
-    [isControlled, onValueChange],
+    [setSelectedRaw],
   );
 
   // Registro de Tabs montados. Resuelve dos casos edge sin pisar la
@@ -98,32 +108,14 @@ export function Tabs({
   const warnedRef = useRef(false);
   const [registryVersion, setRegistryVersion] = useState(0);
 
-  // `register` se referencia con identidad estable desde el efecto de Tab
-  // (deps `[register]`), así que NO debe cambiar entre renders ni capturar
-  // `internal` por closure. En su lugar lee la selección actual desde un
-  // ref always-fresh sincronizado cada render. La regla
-  // react-hooks/refs marca esto como sospechoso pero es idempotente
-  // (mismo valor cada render) y necesario para mantener register
-  // estable.
-  const internalRef = useRef(internal);
-  // eslint-disable-next-line react-hooks/refs
-  internalRef.current = internal;
-  const isControlledRef = useRef(isControlled);
-  // eslint-disable-next-line react-hooks/refs
-  isControlledRef.current = isControlled;
-
+  // `register` se referencia con identidad estable desde el efecto de
+  // Tab. Sin closure stale: el setter del hook ya es estable y
+  // setSelectedRaw siempre escribe el state correcto.
   const register = useCallback((tabValue: string) => {
     if (!registeredRef.current.includes(tabValue)) {
       registeredRef.current.push(tabValue);
       // Notifica al efecto de validación post-mount.
       setRegistryVersion((v) => v + 1);
-    }
-    // Caso (a): auto-select inmediato si todavía no hay selección.
-    // Lectura por ref para evitar stale closure si el primer Tab tarda
-    // en montarse o cambian las deps.
-    if (!isControlledRef.current && internalRef.current === "") {
-      internalRef.current = tabValue;
-      setInternal(tabValue);
     }
     return () => {
       registeredRef.current = registeredRef.current.filter(
@@ -133,14 +125,27 @@ export function Tabs({
     };
   }, []);
 
-  // Validación post-mount para defaultValue/value inválido (caso b).
-  // Se ejecuta después de que los Tabs hayan registrado sus values,
-  // evitando falsos positivos durante el registro intermedio.
+  // Caso (a): auto-select inmediato del primer Tab montado cuando el
+  // consumer no pasa value/defaultValue. Silent: NO dispara
+  // onValueChange — el auto-select no es acción del usuario.
+  const didAutoSelectRef = useRef(false);
+  useEffect(() => {
+    if (didAutoSelectRef.current) return;
+    if (isControlled) return;
+    if (selected !== "") return;
+    const first = registeredRef.current[0];
+    if (first === undefined) return;
+    didAutoSelectRef.current = true;
+    setSelectedRaw(first, { silent: true });
+  }, [registryVersion, isControlled, selected, setSelectedRaw]);
+
+  // Caso (b): validación post-mount para defaultValue/value inválido.
+  // Si el effective no matchea ningún Tab montado, fallback al primero
+  // (silent — no es acción del usuario) y warn dev-only.
   useEffect(() => {
     if (registeredRef.current.length === 0) return;
-    const effective = isControlled ? value : internal;
-    if (effective === "") return; // caso (a) ya cubierto en register
-    if (registeredRef.current.includes(effective)) return;
+    if (selected === "") return; // caso (a) ya cubierto arriba
+    if (registeredRef.current.includes(selected)) return;
     const firstRegistered = registeredRef.current[0];
     if (firstRegistered === undefined) return;
     if (!warnedRef.current && isDev()) {
@@ -150,13 +155,13 @@ export function Tabs({
         ? "El tablist queda sin tab stop accesible. Pasa un value que coincida con un Tab montado."
         : `Cayendo a "${firstRegistered}". Pasa un defaultValue que coincida con el value de un Tab.`;
       console.warn(
-        `[reactigoded] <Tabs ${propName}="${effective}"> no matchea ningún <Tab>. ${action}`,
+        `[reactigoded] <Tabs ${propName}="${selected}"> no matchea ningún <Tab>. ${action}`,
       );
     }
     if (!isControlled) {
-      setInternal(firstRegistered);
+      setSelectedRaw(firstRegistered, { silent: true });
     }
-  }, [registryVersion, internal, value, isControlled]);
+  }, [registryVersion, selected, isControlled, setSelectedRaw]);
 
   const ctxValue = useMemo(
     () => ({ selected, setSelected, baseId, orientation, register }),
