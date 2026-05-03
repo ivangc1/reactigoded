@@ -57,7 +57,7 @@ export const ConIniciales: Story = {
   args: { initials: "JD", size: "md" },
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   args: { initials: "X" },
   render: () => (
     <div className="ig-story-row">

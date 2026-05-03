@@ -84,7 +84,7 @@ export const Variantes: Story = {
   ),
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   args: { children: undefined },
   render: () => (
     <div className="ig-flex ig-flex-wrap ig-items-center ig-gap-3">

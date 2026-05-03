@@ -54,7 +54,7 @@ export const Variantes: Story = {
   ),
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="ig-flex ig-items-center ig-gap-4">
       <Spinner size="xs" />

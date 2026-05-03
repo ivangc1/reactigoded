@@ -18,12 +18,11 @@ describe("Navbar", () => {
   });
 
   describe.each([
-    ["sticky", "ig-navbar-sticky"],
-    ["fixed", "ig-navbar-fixed"],
-    ["glass", "ig-navbar-glass"],
-  ] as const)("modifier %s", (prop, klass) => {
+    [{ position: "sticky" as const }, "ig-navbar-sticky"],
+    [{ position: "fixed" as const }, "ig-navbar-fixed"],
+    [{ glass: true }, "ig-navbar-glass"],
+  ] as const)("modifier %o", (props, klass) => {
     it(`aplica clase ${klass}`, () => {
-      const props = { [prop]: true } as Record<string, boolean>;
       render(<Navbar data-testid="nb" {...props} />);
       expect(screen.getByTestId("nb")).toHaveClass(klass);
     });

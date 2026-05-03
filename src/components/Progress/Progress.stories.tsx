@@ -88,7 +88,7 @@ export const Variantes: Story = {
   },
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--md">
       <Progress value={50} size="sm" variant="brand" />

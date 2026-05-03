@@ -71,7 +71,7 @@ export const PorDefecto: Story = {
   },
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => {
     const [size, setSize] = useState<
       "sm" | "md" | "lg" | "xl" | "full" | null

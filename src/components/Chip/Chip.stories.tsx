@@ -45,7 +45,7 @@ export const Variantes: Story = {
   ),
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   args: { children: undefined },
   render: () => (
     <div className="ig-story-row ig-story-row--gap-sm">

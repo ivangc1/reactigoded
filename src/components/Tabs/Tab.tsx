@@ -1,4 +1,4 @@
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useTabs } from "./TabsContext";
@@ -7,9 +7,12 @@ import { useTabs } from "./TabsContext";
 // React: "useLayoutEffect does nothing on the server"). En cliente
 // queremos que el register corra ANTES del primer paint para que el
 // auto-select del primer Tab no produzca un flicker visible donde
-// inicialmente ningún tab es activo.
+// inicialmente ningún tab es activo. Convención del ecosistema React:
+// el fallback en SSR es `useEffect`, no un noop — preserva el
+// contrato de los hooks (deps válidos, cleanup) cuando el componente
+// se renderiza en server con un runtime que sí soporta efectos.
 const useIsoLayoutEffect =
-  typeof window !== "undefined" ? useLayoutEffect : (() => {});
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export interface TabProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Identificador único del tab. Debe coincidir con el `value` del `TabPanel` correspondiente. */
@@ -53,7 +56,10 @@ export function Tab({
     const next = orientation === "horizontal" ? "ArrowRight" : "ArrowDown";
     const prev = orientation === "horizontal" ? "ArrowLeft" : "ArrowUp";
 
-    const tablist = e.currentTarget.parentElement;
+    // Buscamos el tablist por role en lugar de parentElement para que
+    // el componente sobreviva a wrappers intermedios (ej. un <span>
+    // decorativo entre TabList y Tab que un consumer pueda introducir).
+    const tablist = e.currentTarget.closest('[role="tablist"]');
     if (!tablist) return;
     const tabs = Array.from(
       tablist.querySelectorAll<HTMLButtonElement>(

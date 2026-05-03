@@ -1,11 +1,19 @@
 import { type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 
+export type NavbarPosition = "sticky" | "fixed";
+
 export interface NavbarProps extends HTMLAttributes<HTMLElement> {
-  /** Posición sticky en la parte superior. */
-  sticky?: boolean;
-  /** Posición fija en la parte superior. */
-  fixed?: boolean;
+  /**
+   * Posición del navbar.
+   * - `"sticky"`: pegado en top mientras scrolleas dentro de su contenedor.
+   * - `"fixed"`: anclado en top fuera del flujo (overlay).
+   *
+   * Antes existían dos booleans `sticky` y `fixed`; eran mutuamente
+   * excluyentes solo en docs. Ahora la elección es una sola prop con
+   * unión discriminada — el typing impide pasar ambas a la vez.
+   */
+  position?: NavbarPosition;
   /** Estilo glassmorphism (fondo translúcido + blur). */
   glass?: boolean;
   ref?: Ref<HTMLElement>;
@@ -15,11 +23,11 @@ export interface NavbarProps extends HTMLAttributes<HTMLElement> {
  * Navbar — barra de navegación horizontal superior (`<header>`).
  *
  * Compón con `NavbarBrand`, `NavbarNav`, `NavbarLink` y `NavbarActions`.
- * Variantes mutuamente excluyentes: `sticky` ó `fixed`. `glass` se puede
- * combinar con cualquiera.
+ * `position` controla el comportamiento sticky/fixed; `glass` se puede
+ * combinar con cualquier `position`.
  *
  * @example
- * <Navbar sticky>
+ * <Navbar position="sticky">
  *   <NavbarBrand href="/">Mi App</NavbarBrand>
  *   <NavbarNav>
  *     <NavbarLink href="/" active>Inicio</NavbarLink>
@@ -33,8 +41,7 @@ export interface NavbarProps extends HTMLAttributes<HTMLElement> {
  */
 export function Navbar({
   className,
-  sticky,
-  fixed,
+  position,
   glass,
   ref,
   ...rest
@@ -44,8 +51,7 @@ export function Navbar({
       ref={ref}
       className={cn(
         "ig-navbar",
-        sticky && "ig-navbar-sticky",
-        fixed && "ig-navbar-fixed",
+        position && `ig-navbar-${position}`,
         glass && "ig-navbar-glass",
         className,
       )}

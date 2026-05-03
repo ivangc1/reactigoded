@@ -139,7 +139,7 @@ export const Controlado: Story = {
   },
 };
 
-export const InteracciónToggle: Story = {
+export const ToggleInteraction: Story = {
   args: { children: "Habilitar" },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);

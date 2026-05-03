@@ -36,7 +36,7 @@ type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {};
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--md">
       <Input size="sm" placeholder="Small" />

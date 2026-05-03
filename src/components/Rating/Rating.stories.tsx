@@ -29,7 +29,7 @@ type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {};
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--full">
       <Rating size="sm" value={4} readOnly aria-label="Pequeño" />

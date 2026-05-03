@@ -8,6 +8,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 
 export type TooltipPlacement = "top" | "bottom" | "left" | "right";
 
@@ -65,6 +66,15 @@ export function Tooltip({
       ? `${existing} ${tooltipId}`
       : tooltipId;
     child = cloneElement(typed, { "aria-describedby": combined });
+  } else if (isDev() && children !== null && children !== undefined) {
+    // Sin un elemento React válido NO podemos inyectar
+    // aria-describedby; el SR no asociará el tooltip al control.
+    // Avisamos en dev — si el consumer pasa texto plano o un Fragment,
+    // el patrón correcto es envolverlo en un <span> o el control
+    // interactivo correspondiente.
+    console.warn(
+      "[reactigoded] <Tooltip> requiere un único elemento React como child para inyectar aria-describedby. Recibió un node no-elemento; el tooltip se renderizará pero el control no quedará asociado para SR.",
+    );
   }
 
   return (

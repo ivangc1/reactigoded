@@ -63,7 +63,11 @@ export function Slider({
   const initial = Number.isFinite(parsedDefault) ? parsedDefault : safeMin;
   const [internal, setInternal] = useState<number>(initial);
 
-  const current = isControlled ? Number(value) : internal;
+  const rawCurrent = isControlled ? Number(value) : internal;
+  // Si `value="abc"` o `internal` quedó NaN por algún edge, no queremos
+  // pintar 'NaN' ni propagar NaN al aria-valuetext. Caemos a safeMin
+  // como hace el inicializador del defaultValue.
+  const current = Number.isFinite(rawCurrent) ? rawCurrent : safeMin;
   const display = formatValue ? formatValue(current) : String(current);
 
   // Normaliza prop pasada al DOM: <input type="range"> NO acepta arrays
