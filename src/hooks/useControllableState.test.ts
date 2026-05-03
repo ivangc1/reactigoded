@@ -65,6 +65,33 @@ describe("useControllableState", () => {
     expect(result.current.setValue).toBe(first);
   });
 
+  it("setValue silent actualiza state interno sin disparar onChange", () => {
+    const onChange = vi.fn();
+    const { result } = renderHook(() =>
+      useControllableState({ defaultValue: "a", onChange }),
+    );
+    act(() => {
+      result.current.setValue("b", { silent: true });
+    });
+    expect(result.current.value).toBe("b");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("setValue silent en controlled tampoco dispara onChange", () => {
+    const onChange = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ value }: { value: string }) =>
+        useControllableState({ value, onChange }),
+      { initialProps: { value: "ext" } },
+    );
+    act(() => {
+      result.current.setValue("b", { silent: true });
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    rerender({ value: "b" });
+    expect(result.current.value).toBe("b");
+  });
+
   it("onChange actualizado se respeta sin recrear setValue", () => {
     const onChange1 = vi.fn();
     const onChange2 = vi.fn();

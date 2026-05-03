@@ -16,11 +16,24 @@ export interface UseControllableStateOptions<T> {
   onChange?: ((value: T) => void) | undefined;
 }
 
+export interface SetValueOptions {
+  /**
+   * Si `true`, NO se invoca `onChange`. Útil para auto-selects internos
+   * y rehidrataciones desde storage que NO son acción del usuario y
+   * por tanto no deben filtrarse al callback del consumer.
+   */
+  silent?: boolean;
+}
+
 export interface UseControllableStateReturn<T> {
   /** Valor actual (controlled o internal). */
   value: T;
-  /** Setter que respeta el modo. En controlled solo dispara onChange. */
-  setValue: (next: T) => void;
+  /**
+   * Setter que respeta el modo. En controlled solo dispara `onChange`.
+   * Pasa `{ silent: true }` para escribir el state interno sin notificar
+   * al consumer (ver `SetValueOptions`).
+   */
+  setValue: (next: T, options?: SetValueOptions) => void;
   /** True si el componente está en modo controlled. */
   isControlled: boolean;
 }
@@ -71,11 +84,13 @@ export function useControllableState<T>(
 
   const value = isControlled ? (controlledValue as T) : internalValue;
 
-  const setValue = useCallback((next: T) => {
+  const setValue = useCallback((next: T, options?: SetValueOptions) => {
     if (!isControlledRef.current) {
       setInternalValue(next);
     }
-    onChangeRef.current?.(next);
+    if (!options?.silent) {
+      onChangeRef.current?.(next);
+    }
   }, []);
 
   return { value, setValue, isControlled };

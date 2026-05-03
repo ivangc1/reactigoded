@@ -38,6 +38,7 @@ export * from "./components";
 export { useTheme, type Theme, type UseThemeReturn } from "./hooks/useTheme";
 export {
   useControllableState,
+  type SetValueOptions,
   type UseControllableStateOptions,
   type UseControllableStateReturn,
 } from "./hooks/useControllableState";
