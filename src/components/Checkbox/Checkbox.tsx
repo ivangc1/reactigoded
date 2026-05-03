@@ -6,6 +6,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 
 export type CheckboxVariant =
   | "brand"
@@ -66,6 +67,23 @@ export function Checkbox({
     if (typeof ref === "function") ref(el);
     else if (ref) ref.current = el;
   };
+
+  // Dev-only warning: controlled sin handler. Consumer pasa `checked`
+  // pero olvida `onChange` → el checkbox parece roto.
+  const warnedControlledRef = useRef(false);
+  const isControlled = (rest as { checked?: boolean }).checked !== undefined;
+  if (
+    isDev() &&
+    !warnedControlledRef.current &&
+    isControlled &&
+    !onChange &&
+    !disabled
+  ) {
+    warnedControlledRef.current = true;
+    console.warn(
+      "[reactigoded] <Checkbox checked={...}> sin onChange — el checkbox no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
+    );
+  }
 
   // useLayoutEffect (no useEffect): el atributo `indeterminate` es DOM-
   // only, no se refleja en el HTML inicial. Si lo aplicamos en useEffect

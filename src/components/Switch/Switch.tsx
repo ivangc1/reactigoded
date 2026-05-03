@@ -7,6 +7,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 
 export type SwitchVariant =
   | "brand"
@@ -62,6 +63,23 @@ export function Switch({
   const isControlled = checked !== undefined;
   const [internal, setInternal] = useState<boolean>(defaultChecked === true);
   const isOn = isControlled ? checked : internal;
+
+  // Dev-only warning: controlled sin handler. El consumer pasa `checked`
+  // pero olvida `onChange` → el switch parece roto (no responde al click).
+  // Avisa una vez por instancia.
+  const warnedControlledRef = useRef(false);
+  if (
+    isDev() &&
+    !warnedControlledRef.current &&
+    isControlled &&
+    !onChange &&
+    !disabled
+  ) {
+    warnedControlledRef.current = true;
+    console.warn(
+      "[reactigoded] <Switch checked={...}> sin onChange — el switch no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
+    );
+  }
 
   const internalRef = useRef<HTMLInputElement>(null);
   const setRefs = (el: HTMLInputElement | null) => {
