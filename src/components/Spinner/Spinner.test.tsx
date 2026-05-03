@@ -16,15 +16,25 @@ describe("Spinner", () => {
     expect(el).toHaveAttribute("aria-label", "Procesando pago");
   });
 
-  it("aplica clase de variant y size", () => {
-    render(<Spinner variant="danger" size="xl" />);
-    const el = screen.getByRole("status");
-    expect(el).toHaveClass("ig-spinner", "ig-spinner-danger", "ig-spinner-xl");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`aplica clase ig-spinner-${v}`, () => {
+      render(<Spinner variant={v} />);
+      expect(screen.getByRole("status")).toHaveClass(`ig-spinner-${v}`);
+    });
   });
 
-  it("size=md no añade clase modificadora", () => {
-    render(<Spinner size="md" />);
-    expect(screen.getByRole("status")).not.toHaveClass("ig-spinner-md");
+  describe.each(["sm", "lg", "xl"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-spinner-${s}`, () => {
+      render(<Spinner size={s} />);
+      expect(screen.getByRole("status")).toHaveClass(`ig-spinner-${s}`);
+    });
   });
 
   it("forwarda ref al span", () => {

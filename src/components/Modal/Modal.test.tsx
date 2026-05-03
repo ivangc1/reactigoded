@@ -14,34 +14,32 @@ describe("Modal", () => {
         <ModalBody>x</ModalBody>
       </Modal>,
     );
-    const dialog = screen.getByTestId("m");
-    expect(dialog).toHaveClass("ig-dialog");
-    expect(dialog).not.toHaveClass("ig-dialog-md");
+    expect(screen.getByTestId("m")).toHaveClass("ig-dialog");
   });
 
-  it("aplica clase de tamaño cuando size != md", () => {
-    render(
-      <Modal open={false} size="lg" data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
-    );
-    expect(screen.getByTestId("m")).toHaveClass("ig-dialog-lg");
+  describe.each(["sm", "lg", "xl", "full"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-dialog-${s}`, () => {
+      render(
+        <Modal open={false} size={s} data-testid="m">
+          <ModalBody>x</ModalBody>
+        </Modal>,
+      );
+      expect(screen.getByTestId("m")).toHaveClass(`ig-dialog-${s}`);
+    });
   });
 
-  it("aplica variantes de backdrop", () => {
-    const { rerender } = render(
-      <Modal open={false} backdrop="blur" data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
-    );
-    expect(screen.getByTestId("m")).toHaveClass("ig-dialog-backdrop-blur");
-
-    rerender(
-      <Modal open={false} backdrop="none" data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
-    );
-    expect(screen.getByTestId("m")).toHaveClass("ig-dialog-no-backdrop");
+  describe.each([
+    ["blur", "ig-dialog-backdrop-blur"],
+    ["none", "ig-dialog-no-backdrop"],
+  ] as const)("backdrop=%s", (b, klass) => {
+    it(`aplica clase ${klass}`, () => {
+      render(
+        <Modal open={false} backdrop={b} data-testid="m">
+          <ModalBody>x</ModalBody>
+        </Modal>,
+      );
+      expect(screen.getByTestId("m")).toHaveClass(klass);
+    });
   });
 
   it("llama showModal cuando open pasa a true", () => {

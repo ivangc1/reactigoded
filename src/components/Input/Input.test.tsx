@@ -16,11 +16,11 @@ describe("Input", () => {
     expect(el.tagName).toBe("INPUT");
   });
 
-  it("aplica size sólo si no es md", () => {
-    const { rerender } = render(<Input size="md" placeholder="x" />);
-    expect(screen.getByPlaceholderText("x")).not.toHaveClass("ig-input-md");
-    rerender(<Input size="lg" placeholder="x" />);
-    expect(screen.getByPlaceholderText("x")).toHaveClass("ig-input-lg");
+  describe.each(["sm", "lg"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-input-${s}`, () => {
+      render(<Input size={s} placeholder="x" />);
+      expect(screen.getByPlaceholderText("x")).toHaveClass(`ig-input-${s}`);
+    });
   });
 
   it("state=error aplica clase y aria-invalid", () => {

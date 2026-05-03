@@ -10,7 +10,7 @@ describe("Checkbox", () => {
     expect(input).toHaveAttribute("type", "checkbox");
   });
 
-  it("aplica variant brand por defecto", () => {
+  it("renderiza con clase wrapper y default variant=brand", () => {
     const { container } = render(<Checkbox>x</Checkbox>);
     expect(container.querySelector("label")).toHaveClass(
       "ig-checkbox",
@@ -18,9 +18,32 @@ describe("Checkbox", () => {
     );
   });
 
-  it("variant=danger aplica la clase", () => {
-    const { container } = render(<Checkbox variant="danger">x</Checkbox>);
-    expect(container.querySelector("label")).toHaveClass("ig-checkbox-danger");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`label recibe ig-checkbox-${v}`, () => {
+      const { container } = render(<Checkbox variant={v}>x</Checkbox>);
+      expect(container.querySelector("label")).toHaveClass(`ig-checkbox-${v}`);
+    });
+  });
+
+  it("className del consumer se mergea sin pisar las del componente", () => {
+    const { container } = render(
+      <Checkbox variant="brand" className="extra otra">
+        x
+      </Checkbox>,
+    );
+    expect(container.querySelector("label")).toHaveClass(
+      "ig-checkbox",
+      "ig-checkbox-brand",
+      "extra",
+      "otra",
+    );
   });
 
   it("disabled propaga al input", () => {

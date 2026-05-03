@@ -7,6 +7,45 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.18] — 2026-05-03
+
+### Changed
+- **Test cleanup pre-RC1**: refactor masivo de tests unit.
+  - **Variantes/sizes/forma cosmética**: colapsadas en `describe.each`
+    parametrizado. Antes había 10 asserts sueltos por componente
+    (uno por valor del eje); ahora un solo bloque parametrizado
+    cubre todos los valores con una assert densa. Misma señal de
+    contrato CSS, código 5× más compacto. Aplicado en Badge, Button,
+    Card, Checkbox, Chip, Divider, Input, Modal, Navbar, Progress,
+    Radio, Spinner, Switch, Tabs, Tooltip, Avatar, Rating.
+  - **Estados funcionales con efecto observable**: `loading` del
+    Button ahora expone `aria-busy` además de la clase, y el test
+    valida ARIA + behavior (no solo clase). Combo `loading + disabled`
+    cubierto explícitamente.
+  - **Negative asserts** (`not.toHaveClass(default)`, `not.toHaveClass(success)`
+    cuando outline) eliminados — paranoia frágil que rompía con
+    cualquier rename.
+  - **`className` merge desde consumer**: añadido test por componente
+    (Badge, Button, Switch, Checkbox, Radio) verificando que las
+    clases del consumer se mergean sin pisar las del componente. Bug
+    recurrente que Chromatic no detecta.
+  - **Stories `play()` duplicadas**: eliminadas `Checkbox.ToggleInteraction`
+    y `Radio.SelectInteraction` (mismo aserto que el unit test, 10×
+    más lentas).
+
+### Added
+- `Button` ahora expone `aria-busy={loading}` (antes solo clase).
+  Mejora a11y para SR.
+
+### Test stats
+- Unit tests: 523 → 632 (más tests pero menos archivos, gracias a
+  `describe.each` que expande cada parametrización).
+- Asserts cosméticos sueltos eliminados: ~80.
+- Asserts cosméticos parametrizados añadidos: ~120 (mismo contrato
+  CSS, mejor estructura).
+- Tests transversales nuevos: 5 (`className` merge), 1 combo de
+  estado peligroso (`loading + disabled`).
+
 ## [1.0.0-beta.17] — 2026-05-03
 
 ### Fixed

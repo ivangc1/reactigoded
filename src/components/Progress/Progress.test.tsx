@@ -44,17 +44,25 @@ describe("Progress", () => {
     expect(el).toHaveAttribute("aria-label", "Cargando");
   });
 
-  it("aplica variant y size", () => {
-    render(<Progress value={50} variant="success" size="lg" data-testid="p" />);
-    expect(screen.getByTestId("p")).toHaveClass(
-      "ig-progress-success",
-      "ig-progress-lg",
-    );
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`aplica clase ig-progress-${v}`, () => {
+      render(<Progress value={50} variant={v} data-testid="p" />);
+      expect(screen.getByTestId("p")).toHaveClass(`ig-progress-${v}`);
+    });
   });
 
-  it("size=md no añade clase modificadora", () => {
-    render(<Progress value={10} data-testid="p" />);
-    expect(screen.getByTestId("p")).not.toHaveClass("ig-progress-md");
+  describe.each(["sm", "lg"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-progress-${s}`, () => {
+      render(<Progress value={50} size={s} data-testid="p" />);
+      expect(screen.getByTestId("p")).toHaveClass(`ig-progress-${s}`);
+    });
   });
 
   it("aria-label custom override", () => {

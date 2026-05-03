@@ -17,13 +17,16 @@ describe("Navbar", () => {
     expect(el).toHaveClass("ig-navbar");
   });
 
-  it("aplica las variantes sticky/fixed/glass", () => {
-    const { rerender } = render(<Navbar data-testid="nb" sticky />);
-    expect(screen.getByTestId("nb")).toHaveClass("ig-navbar-sticky");
-    rerender(<Navbar data-testid="nb" fixed />);
-    expect(screen.getByTestId("nb")).toHaveClass("ig-navbar-fixed");
-    rerender(<Navbar data-testid="nb" glass />);
-    expect(screen.getByTestId("nb")).toHaveClass("ig-navbar-glass");
+  describe.each([
+    ["sticky", "ig-navbar-sticky"],
+    ["fixed", "ig-navbar-fixed"],
+    ["glass", "ig-navbar-glass"],
+  ] as const)("modifier %s", (prop, klass) => {
+    it(`aplica clase ${klass}`, () => {
+      const props = { [prop]: true } as Record<string, boolean>;
+      render(<Navbar data-testid="nb" {...props} />);
+      expect(screen.getByTestId("nb")).toHaveClass(klass);
+    });
   });
 
   it("NavbarBrand sin href renderiza <div>; con href renderiza <a>", () => {

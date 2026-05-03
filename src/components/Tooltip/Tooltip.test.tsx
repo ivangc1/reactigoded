@@ -45,22 +45,36 @@ describe("Tooltip", () => {
     expect(screen.getByTestId("w")).toHaveClass("ig-tooltip", "ig-tooltip-top");
   });
 
-  it("aplica clase de placement custom", () => {
-    render(
-      <Tooltip text="x" placement="right" data-testid="w">
-        <button>x</button>
-      </Tooltip>,
-    );
-    expect(screen.getByTestId("w")).toHaveClass("ig-tooltip-right");
-  });
+  describe.each(["top", "right", "bottom", "left"] as const)(
+    "placement=%s",
+    (p) => {
+      it(`aplica clase ig-tooltip-${p}`, () => {
+        render(
+          <Tooltip text="x" placement={p} data-testid="w">
+            <button>x</button>
+          </Tooltip>,
+        );
+        expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-${p}`);
+      });
+    },
+  );
 
-  it("aplica variant cuando se pasa", () => {
-    render(
-      <Tooltip text="x" variant="danger" data-testid="w">
-        <button>x</button>
-      </Tooltip>,
-    );
-    expect(screen.getByTestId("w")).toHaveClass("ig-tooltip-danger");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`aplica clase ig-tooltip-${v}`, () => {
+      render(
+        <Tooltip text="x" variant={v} data-testid="w">
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-${v}`);
+    });
   });
 
   it("forwarda ref al wrapper span", () => {

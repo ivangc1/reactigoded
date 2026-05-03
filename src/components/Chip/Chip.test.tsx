@@ -11,26 +11,43 @@ describe("Chip", () => {
     expect(el).toHaveClass("ig-chip");
   });
 
-  it("aplica variant y size cuando no es md", () => {
-    render(
-      <Chip variant="success" size="lg">
-        OK
-      </Chip>,
-    );
-    const el = screen.getByText("OK");
-    expect(el).toHaveClass("ig-chip-success", "ig-chip-lg");
-    expect(el).not.toHaveClass("ig-chip-md");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`aplica clase ig-chip-${v}`, () => {
+      render(<Chip variant={v}>x</Chip>);
+      expect(screen.getByText("x")).toHaveClass(`ig-chip-${v}`);
+    });
   });
 
-  it("selectable=true renderiza un button con aria-pressed", () => {
+  describe.each(["sm", "lg"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-chip-${s}`, () => {
+      render(<Chip size={s}>x</Chip>);
+      expect(screen.getByText("x")).toHaveClass(`ig-chip-${s}`);
+    });
+  });
+
+  it("selectable + selected: renderiza button con aria-pressed=true", () => {
     render(
       <Chip selectable selected>
         Tag
       </Chip>,
     );
     const btn = screen.getByRole("button", { name: "Tag" });
-    expect(btn).toHaveClass("ig-chip-selectable", "ig-chip-selected");
     expect(btn).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("selectable sin selected: aria-pressed=false", () => {
+    render(<Chip selectable>Tag</Chip>);
+    expect(screen.getByRole("button", { name: "Tag" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("onRemove dispara al click en la X y detiene propagación", async () => {

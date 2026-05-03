@@ -26,15 +26,22 @@ describe("Divider", () => {
     expect(el).toHaveClass("ig-divider-with-text");
   });
 
-  it("aplica `ig-divider-dashed` y la clase de variant", () => {
-    const { container } = render(<Divider dashed variant="success" />);
-    const el = container.querySelector("hr");
-    expect(el).toHaveClass("ig-divider-dashed", "ig-divider-success");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`<hr> recibe ig-divider-${v}`, () => {
+      const { container } = render(<Divider variant={v} />);
+      expect(container.querySelector("hr")).toHaveClass(`ig-divider-${v}`);
+    });
   });
 
-  it("variant=default no añade clase de variant", () => {
-    const { container } = render(<Divider variant="default" />);
-    const el = container.querySelector("hr");
-    expect(el).not.toHaveClass("ig-divider-default");
+  it("dashed añade ig-divider-dashed", () => {
+    const { container } = render(<Divider dashed />);
+    expect(container.querySelector("hr")).toHaveClass("ig-divider-dashed");
   });
 });

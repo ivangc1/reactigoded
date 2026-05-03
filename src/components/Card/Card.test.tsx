@@ -17,27 +17,34 @@ describe("Card", () => {
     expect(screen.getByTestId("c")).toHaveClass("ig-card");
   });
 
-  it("aplica variant outline por defecto", () => {
-    render(
-      <Card variant="brand" data-testid="c">
-        x
-      </Card>,
-    );
-    expect(screen.getByTestId("c")).toHaveClass("ig-card-brand");
-    expect(screen.getByTestId("c")).not.toHaveClass("ig-card-brand-filled");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`appearance default (outline) → ig-card-${v}`, () => {
+      render(
+        <Card variant={v} data-testid="c">
+          x
+        </Card>,
+      );
+      expect(screen.getByTestId("c")).toHaveClass(`ig-card-${v}`);
+    });
+
+    it(`appearance=filled → ig-card-${v}-filled`, () => {
+      render(
+        <Card variant={v} appearance="filled" data-testid="c">
+          x
+        </Card>,
+      );
+      expect(screen.getByTestId("c")).toHaveClass(`ig-card-${v}-filled`);
+    });
   });
 
-  it("aplica appearance=filled con la clase correcta", () => {
-    render(
-      <Card variant="success" appearance="filled" data-testid="c">
-        x
-      </Card>,
-    );
-    expect(screen.getByTestId("c")).toHaveClass("ig-card-success-filled");
-    expect(screen.getByTestId("c")).not.toHaveClass("ig-card-success");
-  });
-
-  it("appearance se ignora si no hay variant (card plana)", () => {
+  it("appearance se ignora si no hay variant (card plana queda con solo ig-card)", () => {
     render(
       <Card appearance="filled" data-testid="c">
         x

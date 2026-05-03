@@ -136,21 +136,49 @@ describe("Tabs", () => {
     expect(pb).not.toBeVisible();
   });
 
-  it("aplica variant y pills y vertical orientation", () => {
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`aplica clase ig-tabs-${v}`, () => {
+      render(
+        <Tabs defaultValue="a" variant={v} data-testid="t">
+          <TabList>
+            <Tab value="a">A</Tab>
+          </TabList>
+          <TabPanel value="a">PA</TabPanel>
+        </Tabs>,
+      );
+      expect(screen.getByTestId("t")).toHaveClass(`ig-tabs-${v}`);
+    });
+  });
+
+  it("pills añade ig-tabs-pills", () => {
     render(
-      <Tabs defaultValue="a" variant="brand" pills orientation="vertical" data-testid="t">
+      <Tabs defaultValue="a" pills data-testid="t">
         <TabList>
           <Tab value="a">A</Tab>
         </TabList>
         <TabPanel value="a">PA</TabPanel>
       </Tabs>,
     );
-    expect(screen.getByTestId("t")).toHaveClass(
-      "ig-tabs",
-      "ig-tabs-brand",
-      "ig-tabs-pills",
-      "ig-tabs-vertical",
+    expect(screen.getByTestId("t")).toHaveClass("ig-tabs-pills");
+  });
+
+  it("orientation=vertical añade clase y aria-orientation", () => {
+    render(
+      <Tabs defaultValue="a" orientation="vertical" data-testid="t">
+        <TabList>
+          <Tab value="a">A</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+      </Tabs>,
     );
+    expect(screen.getByTestId("t")).toHaveClass("ig-tabs-vertical");
     expect(screen.getByRole("tablist")).toHaveAttribute(
       "aria-orientation",
       "vertical",

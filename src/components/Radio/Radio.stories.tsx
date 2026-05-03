@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { fn } from "storybook/test";
 import { Radio } from "./Radio";
 
 const meta = {
@@ -69,20 +69,3 @@ export const Deshabilitado: Story = {
   args: { disabled: true, defaultChecked: true },
 };
 
-export const SelectInteraction: Story = {
-  render: (args) => (
-    <div role="radiogroup" aria-label="Plan" className="ig-story-stack ig-story-stack--sm">
-      <Radio {...args} name="plan-int" value="free" data-testid="r-free">Free</Radio>
-      <Radio {...args} name="plan-int" value="pro" data-testid="r-pro">Pro</Radio>
-    </div>
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const free = canvas.getByTestId("r-free");
-    const pro = canvas.getByTestId("r-pro");
-    await expect(free).not.toBeChecked();
-    await userEvent.click(pro);
-    await expect(pro).toBeChecked();
-    await expect(free).not.toBeChecked();
-  },
-};

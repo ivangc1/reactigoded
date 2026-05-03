@@ -26,15 +26,38 @@ describe("Switch", () => {
     expect(screen.getByRole("switch")).toBeChecked();
   });
 
-  it("aplica variant brand por defecto", () => {
+  it("renderiza con clase wrapper y default variant=brand", () => {
     const { container } = render(<Switch>x</Switch>);
     const label = container.querySelector("label");
     expect(label).toHaveClass("ig-switch", "ig-switch-brand");
   });
 
-  it("variant=success aplica la clase correspondiente", () => {
-    const { container } = render(<Switch variant="success">x</Switch>);
-    expect(container.querySelector("label")).toHaveClass("ig-switch-success");
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`label recibe ig-switch-${v}`, () => {
+      const { container } = render(<Switch variant={v}>x</Switch>);
+      expect(container.querySelector("label")).toHaveClass(`ig-switch-${v}`);
+    });
+  });
+
+  it("className del consumer se mergea sin pisar las del componente", () => {
+    const { container } = render(
+      <Switch variant="brand" className="extra otra">
+        x
+      </Switch>,
+    );
+    expect(container.querySelector("label")).toHaveClass(
+      "ig-switch",
+      "ig-switch-brand",
+      "extra",
+      "otra",
+    );
   });
 
   it("disabled propaga al input y marca data-disabled en label", () => {

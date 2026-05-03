@@ -11,14 +11,40 @@ describe("Radio", () => {
     expect(input).toHaveAttribute("name", "x");
   });
 
-  it("aplica variant brand por defecto y la solicitada", () => {
-    const { container, rerender } = render(<Radio>x</Radio>);
+  it("renderiza con clase wrapper y default variant=brand", () => {
+    const { container } = render(<Radio>x</Radio>);
     expect(container.querySelector("label")).toHaveClass(
       "ig-radio",
       "ig-radio-brand",
     );
-    rerender(<Radio variant="warning">x</Radio>);
-    expect(container.querySelector("label")).toHaveClass("ig-radio-warning");
+  });
+
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`label recibe ig-radio-${v}`, () => {
+      const { container } = render(<Radio variant={v}>x</Radio>);
+      expect(container.querySelector("label")).toHaveClass(`ig-radio-${v}`);
+    });
+  });
+
+  it("className del consumer se mergea sin pisar las del componente", () => {
+    const { container } = render(
+      <Radio variant="brand" className="extra otra">
+        x
+      </Radio>,
+    );
+    expect(container.querySelector("label")).toHaveClass(
+      "ig-radio",
+      "ig-radio-brand",
+      "extra",
+      "otra",
+    );
   });
 
   it("disabled propaga al input", () => {

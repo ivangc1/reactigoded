@@ -92,6 +92,7 @@ export function Button({
       ref={ref}
       type={rest.type ?? "button"}
       disabled={disabled === true || loading}
+      aria-busy={loading || undefined}
       className={cn(
         "ig-btn",
         variantClass,

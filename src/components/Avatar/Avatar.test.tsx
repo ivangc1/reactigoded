@@ -16,16 +16,21 @@ describe("Avatar", () => {
     expect(screen.getByText("JD")).toBeInTheDocument();
   });
 
-  it("añade clase de size y rounded", () => {
-    render(<Avatar initials="X" size="xl" rounded data-testid="a" />);
-    const el = screen.getByTestId("a");
-    expect(el).toHaveClass("ig-avatar", "ig-avatar-xl", "ig-avatar-rounded");
+  describe.each(["xs", "sm", "lg", "xl"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-avatar-${s}`, () => {
+      render(<Avatar initials="X" size={s} data-testid="a" />);
+      expect(screen.getByTestId("a")).toHaveClass(`ig-avatar-${s}`);
+    });
   });
 
-  it("muestra el indicator de status con aria-label traducido", () => {
-    render(<Avatar initials="X" status="online" data-testid="a" />);
-    const status = screen.getByLabelText("Estado: en línea");
-    expect(status).toHaveClass("ig-avatar-status-online");
+  it("rounded añade ig-avatar-rounded", () => {
+    render(<Avatar initials="X" rounded data-testid="a" />);
+    expect(screen.getByTestId("a")).toHaveClass("ig-avatar-rounded");
+  });
+
+  it("status muestra indicator con aria-label traducido", () => {
+    render(<Avatar initials="X" status="online" />);
+    expect(screen.getByLabelText("Estado: en línea")).toBeInTheDocument();
   });
 
   it("ariaLabel marca el contenedor como role=img", () => {

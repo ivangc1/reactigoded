@@ -42,9 +42,11 @@ describe("Rating", () => {
     });
   });
 
-  it("aplica size cuando no es md", () => {
-    render(<Rating size="xl" data-testid="r" />);
-    expect(screen.getByTestId("r")).toHaveClass("ig-rating-xl");
+  describe.each(["sm", "lg", "xl"] as const)("size=%s", (s) => {
+    it(`aplica clase ig-rating-${s}`, () => {
+      render(<Rating size={s} data-testid="r" />);
+      expect(screen.getByTestId("r")).toHaveClass(`ig-rating-${s}`);
+    });
   });
 
   it("transición controlled→uncontrolled deja stale el último valor controlado", () => {
