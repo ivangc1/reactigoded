@@ -7,13 +7,70 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.5] — 2026-05-03
+
 ### Changed (BREAKING)
+- **Rediseño total de la paleta cardinal — geometría OKLCH uniforme**.
+  Los 14 hex de los pares `{cardinal}-{lux,nox}` (vitreus, axis, cinis,
+  rutilus, laurus, malum, cyaneus) cambian para cumplir
+  `L_lux ≈ 0.32 ± 0.04`, `L_nox ≈ 0.84 ± 0.04`, `ΔH OKLCH ≤ 10°` entre
+  lux/nox del mismo cardinal y AAA frente a los 5 fondos del tema.
+  Diferencia visible más fuerte: `vitreus-nox` pasa de teal pastel
+  `#5eded5` a cyan eléctrico `#30e6e6`; `laurus-nox` a verde brillante
+  `#5eeb82`; `axis-lux` a violeta `#411271`. Resto: cambios sutiles.
+  `--ig-fundus-{lux,nox}` se mantienen.
+- **`--ig-bg-{surface,sunken,elevated,muted}` derivados de `fundus`**.
+  Ahora se generan vía `color-mix(in oklch, var(--ig-fundus-{lux,nox}), …)`.
+  Si cambias `fundus`, todo el tema acompaña automáticamente. Output
+  visual ±1 punto del previo.
 - **`engines.node`**: `>=20` → `>=22`. Node 20 (Iron) llegó a EOL el
   2026-04-30 y ya no recibe parches de seguridad. El VPS de despliegue
   (Debian 13) corre Node 22.22 LTS (Jod), que pasa a ser el floor
-  soportado oficialmente. Consumers en Node 20 verán un `EBADENGINE`
-  warning de npm pero el paquete sigue funcionando — el bump es
-  declarativo, no rompe runtime.
+  soportado oficialmente.
+
+### Fixed (a11y / contraste)
+- 32 violaciones WCAG AA por texto `--ig-fundus-lux` hardcoded sobre
+  fondos cardinales adaptativos en Badge (×6), Button outline:hover (×6),
+  Tabs Pills (×6), Pagination active (×1), Stepper dot active+complete
+  (×2) y Chip selected (×2). Ahora todos usan `--ig-text-on-{role}`,
+  que invierte automáticamente entre claro/oscuro según el tema.
+- **Reset CSS de `<button>`**: ya no fuerza `background: vitreus +
+  color: text-on-vitreus`. Pasa a `transparent + inherit` para que
+  cualquier wrapper (SidebarItem, otros) pueda aplicar sus colores sin
+  riesgo de mezcla incoherente (texto cinis sobre fondo vitreus =
+  ratio 1.06 que el runner cazó tras el fix de Bloque 1).
+- **Runner storybook+axe local**: deja de ser ciego al modo dark.
+  Antes, `useEffect` del theme decorator aplicaba `data-theme="dark"`
+  POST-paint y chromium headless evaluaba en light (vía
+  `prefers-color-scheme: light`), donde no había violaciones. Fix
+  con `.storybook/preview-head.html` que inyecta `data-theme="dark"`
+  antes del primer paint del iframe.
+- **Token huérfano**: eliminado `--ig-text-on-cinis` (cinis nunca se
+  usa como background, solo como color de texto-body).
+- **`--ig-text-muted` en light**: ajustado a `#5e5667` (ratio 5.06 sobre
+  el nuevo `bg-muted`). Antes daba 4.45 (< 4.5 AA).
+
+### Added
+- **`scripts/check-component-contrast.mjs`** como guardrail CI: parsea
+  `igoded-components.css` con postcss y valida (a) WCAG ≥ 4.5 en cada
+  par bg/color resuelto en ambos temas y (b) geometría OKLCH dual
+  (ΔH ≤ 10°, L_lux/nox y suma dentro de banda). Conectado a
+  `npm run test:contrast` y `npm run verify`.
+- Story `Fundamentos/Paleta` (visualización viva de los 7 cardinales
+  con hex, OKLCH (L,C,H) y ratios contra `fundus`).
+- `:root { color-scheme: dark light }` + por tema, para que los
+  scrollbars y form-controls del UA sigan el tema activo.
+- Bloque `@media (forced-colors: active)` que mapea los semánticos
+  críticos a system-color keywords (CanvasText, Canvas, LinkText,
+  GrayText) para Windows High Contrast Mode.
+- Token `--ig-theme-transition` con override en
+  `@media (prefers-reduced-motion: reduce)`.
+- Cabecera explícita en `igoded-tokens.css` documentando los 3 tiers
+  de tokens (primitivos / semánticos / escalas universales) y los
+  guardrails de CI.
+- `SKILL.md` con las reglas inviolables del DS (geometría dual, uso de
+  `text-on-*`, prohibición de `fundus-*` directo, separación
+  info/secondary, escala neutral universal).
 
 ## [1.0.0-beta.4] — 2026-05-02
 

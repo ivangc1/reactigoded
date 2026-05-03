@@ -5931,7 +5931,7 @@ CÓMO USAR:
 }
 .ig-btn-outline-brand:hover {
   background-color: var(--ig-vitreus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-brand);
 }
 
 .ig-btn-outline-secondary {
@@ -5941,7 +5941,7 @@ CÓMO USAR:
 }
 .ig-btn-outline-secondary:hover {
   background-color: var(--ig-axis);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
 }
 
 .ig-btn-outline-success {
@@ -5951,7 +5951,7 @@ CÓMO USAR:
 }
 .ig-btn-outline-success:hover {
   background-color: var(--ig-laurus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-success);
 }
 
 .ig-btn-outline-warning {
@@ -5961,7 +5961,7 @@ CÓMO USAR:
 }
 .ig-btn-outline-warning:hover {
   background-color: var(--ig-rutilus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-warning);
 }
 
 .ig-btn-outline-danger {
@@ -5971,7 +5971,7 @@ CÓMO USAR:
 }
 .ig-btn-outline-danger:hover {
   background-color: var(--ig-malum);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-danger);
 }
 
 .ig-btn-outline-info {
@@ -5981,7 +5981,7 @@ CÓMO USAR:
 }
 .ig-btn-outline-info:hover {
   background-color: var(--ig-cyaneus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-info);
 }
 
 /* Ghost - Sin borde ni fondo */
@@ -7101,32 +7101,32 @@ MODIFICADORES:
 
 .ig-badge-brand {
   background-color: var(--ig-vitreus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-brand);
 }
 
 .ig-badge-secondary {
   background-color: var(--ig-axis);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
 }
 
 .ig-badge-success {
   background-color: var(--ig-laurus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-success);
 }
 
 .ig-badge-warning {
   background-color: var(--ig-rutilus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-warning);
 }
 
 .ig-badge-danger {
   background-color: var(--ig-malum);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-danger);
 }
 
 .ig-badge-info {
   background-color: var(--ig-cyaneus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-info);
 }
 
 .ig-badge-outline {
@@ -7997,32 +7997,32 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
 .ig-tabs-pills.ig-tabs-brand .ig-tab-active,
 .ig-tabs-pills.ig-tabs-brand .ig-tab.active {
   background-color: var(--ig-vitreus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-brand);
 }
 .ig-tabs-pills.ig-tabs-secondary .ig-tab-active,
 .ig-tabs-pills.ig-tabs-secondary .ig-tab.active {
   background-color: var(--ig-axis);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
 }
 .ig-tabs-pills.ig-tabs-success .ig-tab-active,
 .ig-tabs-pills.ig-tabs-success .ig-tab.active {
   background-color: var(--ig-laurus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-success);
 }
 .ig-tabs-pills.ig-tabs-warning .ig-tab-active,
 .ig-tabs-pills.ig-tabs-warning .ig-tab.active {
   background-color: var(--ig-rutilus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-warning);
 }
 .ig-tabs-pills.ig-tabs-danger .ig-tab-active,
 .ig-tabs-pills.ig-tabs-danger .ig-tab.active {
   background-color: var(--ig-malum);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-danger);
 }
 .ig-tabs-pills.ig-tabs-info .ig-tab-active,
 .ig-tabs-pills.ig-tabs-info .ig-tab.active {
   background-color: var(--ig-cyaneus);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-info);
 }
 
 /* Variante Vertical */
@@ -8428,7 +8428,7 @@ VARIANTES DE COLOR (6 colores):
 .ig-pagination-active {
   background-color: var(--ig-axis);
   border-color: var(--ig-axis);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
 }
 
 .ig-pagination-active:hover {
@@ -8864,13 +8864,13 @@ CUÁNDO USAR:
 
 .ig-step-active {
   background-color: var(--ig-stepper-dot-bg-active);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--ig-axis) 20%, transparent);
 }
 
 .ig-step-complete {
   background-color: var(--ig-stepper-dot-bg-complete);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-success);
 }
 
 .ig-step-line {
@@ -9215,12 +9215,12 @@ CUÁNDO USAR:
 .ig-chip.selected {
   background-color: var(--ig-axis);
   border-color: var(--ig-axis);
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
 }
 
 .ig-chip-selected .ig-chip-close,
 .ig-chip.selected .ig-chip-close {
-  color: var(--ig-fundus-lux);
+  color: var(--ig-text-on-secondary);
   opacity: 0.8;
 }
 

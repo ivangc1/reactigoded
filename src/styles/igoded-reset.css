@@ -85,11 +85,13 @@ button {
   font-family: var(--ig-font-base);
   font-weight: var(--ig-fw-semibold);
   font-size: var(--ig-text-sm);
-  background-color: var(--ig-vitreus);
-  /* Adaptativo al tema desde 1.0.0-beta.3: antes era --ig-fundus-lux fijo,
-     que en tema dark daba contraste bajo (texto casi blanco sobre teal
-     claro). --ig-text-on-vitreus se invierte automáticamente en dark/light. */
-  color: var(--ig-text-on-vitreus);
+  /* Reset neutro: bg transparent + color heredado del padre. Cualquier
+     `<button>` con clase ig-btn-* (o cualquier otro componente que envuelva
+     un button como SidebarItem) aplica encima sus propios bg/color sin
+     riesgo de mezcla incoherente. Antes el reset forzaba bg=vitreus, que
+     se quedaba si un componente sobre-escribía solo el color. */
+  background-color: transparent;
+  color: inherit;
   border: none;
   border-radius: var(--ig-rounded-md);
   padding: var(--ig-space-2) var(--ig-space-4);

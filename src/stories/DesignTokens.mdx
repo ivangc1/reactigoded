@@ -21,7 +21,7 @@ Las variantes son las que aparecen en `Button`, `Badge`, `Spinner`, `Alert`…
     { name: "success", token: "--ig-success", source: "laurus" },
     { name: "warning", token: "--ig-warning", source: "rutilus" },
     { name: "danger", token: "--ig-danger", source: "malum" },
-    { name: "info", token: "--ig-info", source: "axis" },
+    { name: "info", token: "--ig-info", source: "cyaneus" },
   ].map((c) => (
     <div key={c.name} className="ig-foundation-swatch">
       <div
@@ -81,6 +81,27 @@ en **Fundamentos/Espaciado**.
     </div>
   ))}
 </div>
+
+## Tres tiers de tokens
+
+Los tokens del DS se organizan en tres tiers explícitos:
+
+- **Tier 1 — Primitivos**: `--ig-{cardinal}-{lux|nox}`, `--ig-fundus-{lux|nox}`.
+  Son hex literales con geometría OKLCH validada. **No usar directamente
+  en componentes** — son detalle de implementación de la paleta dual.
+- **Tier 2 — Semánticos**: `--ig-{cardinal}` (alias adaptativo según tema),
+  `--ig-{role}` (`brand`, `secondary`, `success`, `warning`, `danger`, `info`),
+  `--ig-text-on-{cardinal}`, `--ig-bg-{base|surface|sunken|elevated|muted}`,
+  `--ig-text-{heading|body|muted|disabled}`, `--ig-border-{subtle|default|strong}`.
+  Esto es lo que usan los componentes y lo que se debe usar en aplicaciones.
+- **Tier 3 — Escalas**: `--ig-neutral-{50..950}` (universal, **no adaptativa**
+  al tema), `--ig-{cardinal}-alpha-{10|20|30|50|70}`, `--ig-{cardinal}-glow`,
+  `--ig-glass-*`. Para uso ad-hoc por consumers que necesiten opacidades o
+  niveles concretos.
+
+`--ig-neutral-*` es escala universal: los mismos hex en dark y light. Si
+necesitas un gris adaptativo al tema, usa `--ig-text-body`, `--ig-bg-muted`
+o `--ig-border-subtle` en su lugar.
 
 ## Tipografía
 

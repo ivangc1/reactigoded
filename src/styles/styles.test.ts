@@ -85,7 +85,7 @@ describe("igoded-components.css — Modal y selectores específicos del DS", () 
 
 describe("igoded-tokens.css — solo variables, sin selectores globales", () => {
   it("--ig-text-muted en light cumple ratio AA sobre bg-muted", () => {
-    expect(tokensCss).toMatch(/--ig-text-muted:\s*#6e6679/);
+    expect(tokensCss).toMatch(/--ig-text-muted:\s*#5e5667/);
     expect(tokensCss).not.toMatch(/--ig-text-muted:\s*#7a7288/);
   });
 

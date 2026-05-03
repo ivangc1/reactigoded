@@ -1,0 +1,24 @@
+<!--
+  Aplica el tema dark al <html> ANTES del primer paint del iframe del preview.
+
+  Por qué: el decorator `withThemeByDataAttribute` aplica `data-theme` vía
+  `useEffect`, que corre DESPUÉS del primer paint. El runner de a11y de
+  addon-vitest puede ejecutar axe-core antes de que el useEffect haga su
+  trabajo, y peor aún: en chromium headless `prefers-color-scheme` es
+  `light` por defecto, así que el `@media (prefers-color-scheme: light)`
+  del CSS pisa el `:root` (que era el dark default).
+
+  Resultado sin este script: los stories se ejecutan en LIGHT con tokens
+  *-lux* (oscuros sobre claros) que casi siempre cumplen contraste, así que
+  axe nunca caza violaciones reales del modo dark. El toolbar switch y el
+  decorator siguen funcionando — solo cambiamos el estado inicial.
+-->
+<script>
+  (function () {
+    try {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } catch (_) {
+      /* SSR/edge cases */
+    }
+  })();
+</script>

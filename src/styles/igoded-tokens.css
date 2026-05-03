@@ -3,6 +3,38 @@
 IGODED TOKENS — variables CSS del design system
 ═══════════════════════════════════════════════════════════════════════════════
 
+SISTEMA DE TOKENS EN TRES TIERS
+
+  Tier 1 — Primitivos:    --ig-{cardinal}-{lux|nox}, --ig-fundus-{lux|nox}
+                          Hex literales con geometría OKLCH validada.
+                          NO usar directamente en componentes — son
+                          detalles de implementación de la paleta dual.
+
+  Tier 2 — Semánticos:    --ig-{cardinal} (alias adaptativo según tema)
+                          --ig-{role}: brand, secondary, success, warning,
+                              danger, info
+                          --ig-text-on-{cardinal} (texto legible sobre el
+                              cardinal en cualquier tema)
+                          --ig-bg-{base|surface|sunken|elevated|muted}
+                          --ig-text-{heading|body|muted|disabled}
+                          --ig-border-{subtle|default|strong}
+                          ESTO es lo que usan los componentes.
+
+  Tier 3 — Escalas:       --ig-neutral-{50..950} (universal, NO adaptativa)
+                          --ig-{cardinal}-alpha-{10|20|30|50|70}
+                          --ig-{cardinal}-glow, --ig-glass-*, etc.
+                          Para uso ad-hoc por consumers que necesiten
+                          opacidades o niveles concretos.
+
+GUARDRAILS DE CI
+
+  scripts/check-component-contrast.mjs valida en CI:
+    1. WCAG ≥ 4.5 en cada par bg/color resuelto en ambos temas.
+    2. Geometría OKLCH dual: ΔH ≤ 10° entre lux/nox; L_lux ≈ 0.32; L_nox
+       ≈ 0.84; L_lux + L_nox ≈ 1.16.
+
+═══════════════════════════════════════════════════════════════════════════════
+
 QUÉ CONTIENE: 100% variables CSS y keyframes:
 - Tokens (`--ig-*`): colores, fondos, textos, espaciado, tipografía,
   bordes, sombras, glows, glassmorphism, neumorphism, gradientes,
@@ -116,47 +148,50 @@ ESPECIFICACIONES TÉCNICAS:
 */
 
 :root {
-  /* Esquema de color para el navegador (scrollbars, inputs nativos, etc.) */
+  /* color-scheme: indica al navegador el tema preferido para que ajuste
+     scrollbars, controles nativos, cursores y form-controls del UA al
+     tema activo. `dark light` significa "preferimos dark, fallback light". */
   color-scheme: dark light;
 
   /* ═══ FUNDUS (Fondos base) ═══ */
   --ig-fundus-lux: #faf9fc;  /* oklch(98.4% 0.004 301) */
   --ig-fundus-nox: #0c1515;  /* oklch(18.7% 0.013 196) */
 
-  /* ═══ VITREUS (Marca / Teal) ═══ */
-  --ig-vitreus-lux: #0c383b;  /* oklch(31.3% 0.047 202) */
-  --ig-vitreus-nox: #5eded5;  /* oklch(82.7% 0.114 189) */
+  /* ═══ Paleta cardinal — geometría OKLCH uniforme (1.0.0)
+     Todos los pares lux/nox cumplen:
+       L_lux ≈ 0.32 ± 0.02
+       L_nox ≈ 0.84 ± 0.02
+       L_lux + L_nox ≈ 1.16 ± 0.04
+       ΔH OKLCH ≤ 10° entre lux y nox (mismo H por cardinal)
+     Validado en CI por scripts/check-component-contrast.js. */
 
-  /* ═══ AXIS (Interacción / Indigo) ═══ */
-  --ig-axis-lux: #2f0f98;     /* oklch(34.1% 0.194 279) */
-  --ig-axis-nox: #d4c2f9;     /* oklch(84.7% 0.078 300) */
+  /* ═══ VITREUS (Marca / Teal-Cyan, H=195°) ═══ */
+  --ig-vitreus-lux: #033b3b;
+  --ig-vitreus-nox: #30e6e6;
 
-  /* ═══ CINIS (Texto / Graphite) ═══ */
-  --ig-cinis-lux: #2a3246;    /* oklch(31.9% 0.038 267) */
-  --ig-cinis-nox: #c3cbdb;    /* oklch(84.1% 0.024 264) */
+  /* ═══ AXIS (Secondary / Violeta, H=300°) ═══ */
+  --ig-axis-lux: #411271;
+  --ig-axis-nox: #d2bff7;
 
-  /* ═══ RUTILUS (Warning / Copper) ═══ */
-  --ig-rutilus-lux: #542502;  /* oklch(32.5% 0.083 51) */
-  --ig-rutilus-nox: #fcbe8c;  /* oklch(84.7% 0.097 60) */
+  /* ═══ CINIS (Texto body / Gris azulado, H=267°) ═══ */
+  --ig-cinis-lux: #243154;
+  --ig-cinis-nox: #c4cada;
 
-  /* ═══ LAURUS (Success / Verde) ═══ */
-  --ig-laurus-lux: #13391c;   /* oklch(30.9% 0.067 149) */
-  --ig-laurus-nox: #93dba2;   /* oklch(82.9% 0.108 150) */
+  /* ═══ RUTILUS (Warning / Cobre, H=55°) ═══ */
+  --ig-rutilus-lux: #4d2809;
+  --ig-rutilus-nox: #f7bc94;
 
-  /* ═══ MALUM (Danger / Rojo) ═══ */
-  --ig-malum-lux: #6b001e;    /* oklch(33.5% 0.134 16) */
-  --ig-malum-nox: #feb7cf;    /* oklch(85.2% 0.087 357) */
+  /* ═══ LAURUS (Success / Verde laurel, H=149°) ═══ */
+  --ig-laurus-lux: #113d1c;
+  --ig-laurus-nox: #5eeb82;
 
-  /* ═══ CYANEUS (Info / Cian-Azul) ═══
-     Color cardinal añadido en 1.0.0-beta.3 para diferenciar `info` de
-     `secondary` (que apunta a axis/violet). Antes ambos colores eran
-     idénticos visualmente; ahora info usa un cian-azul propio.
-     - lux: cian oscuro. Oscurecido a #0a4452 (era #0c5d6e) para que el
-       texto del alert-info (texto cyaneus-lux sobre fondo
-       cyaneus-alpha-20 mezclado con bg-base #faf9fc) cumpla AA ≥4.5:1.
-     - nox: cian claro, ratio ≥7:1 sobre #0c1515 (fundus-nox). */
-  --ig-cyaneus-lux: #0a4452;  /* oklch(34% 0.060 213) */
-  --ig-cyaneus-nox: #7adcec;  /* oklch(85% 0.080 207) */
+  /* ═══ MALUM (Danger / Rojo-granate, H=8°) ═══ */
+  --ig-malum-lux: #620327;
+  --ig-malum-nox: #fdb3c0;
+
+  /* ═══ CYANEUS (Info / Cyan profundo, H=214°) ═══ */
+  --ig-cyaneus-lux: #143940;
+  --ig-cyaneus-nox: #77dbf2;
 
   /* ═══ Variables adaptativas (modo oscuro por defecto) ═══ */
   --ig-fundus: var(--ig-fundus-nox);
@@ -183,6 +218,7 @@ ESPECIFICACIONES TÉCNICAS:
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --ig-fundus: var(--ig-fundus-lux);
   --ig-vitreus: var(--ig-vitreus-lux);
   --ig-axis: var(--ig-axis-lux);
@@ -194,6 +230,7 @@ ESPECIFICACIONES TÉCNICAS:
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --ig-fundus: var(--ig-fundus-nox);
   --ig-vitreus: var(--ig-vitreus-nox);
   --ig-axis: var(--ig-axis-nox);
@@ -338,40 +375,42 @@ CUÁNDO USAR:
 - muted: sidebars, bloques de código, áreas secundarias
 */
 
+/* Todos los bg-* derivan de --ig-fundus-{lux,nox} vía color-mix. Si cambias
+   fundus, todo el tema acompaña automáticamente. */
+
 :root {
-  /* Modo oscuro por defecto - tintados con Vitreus (teal) */
-  --ig-bg-sunken: #080f0f;
-  --ig-bg-base: var(--ig-fundus);
-  --ig-bg-surface: #101b1b;
-  --ig-bg-elevated: #1a2828;
-  --ig-bg-muted: #152020;
+  /* Modo oscuro por defecto */
+  --ig-bg-base:     var(--ig-fundus-nox);
+  --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-nox), white 5%);
+  --ig-bg-sunken:   color-mix(in oklch, var(--ig-fundus-nox), black 20%);
+  --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-nox), white 8%);
+  --ig-bg-muted:    color-mix(in oklch, var(--ig-fundus-nox), var(--ig-axis-nox) 4%);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    /* Modo claro - tintados con toque violeta sutil */
-    --ig-bg-sunken: #f0edf5;
-    --ig-bg-base: var(--ig-fundus);
-    --ig-bg-surface: #ffffff;
-    --ig-bg-elevated: #fafafa;
-    --ig-bg-muted: #f3f0f7;
+    --ig-bg-base:     var(--ig-fundus-lux);
+    --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-lux), white 30%);
+    --ig-bg-sunken:   color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 5%);
+    --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-lux), white 10%);
+    --ig-bg-muted:    color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 8%);
   }
 }
 
 [data-theme="light"] {
-  --ig-bg-sunken: #f0edf5;
-  --ig-bg-base: var(--ig-fundus);
-  --ig-bg-surface: #ffffff;
-  --ig-bg-elevated: #fafafa;
-  --ig-bg-muted: #f3f0f7;
+  --ig-bg-base:     var(--ig-fundus-lux);
+  --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-lux), white 30%);
+  --ig-bg-sunken:   color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 5%);
+  --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-lux), white 10%);
+  --ig-bg-muted:    color-mix(in oklch, var(--ig-fundus-lux), var(--ig-axis-lux) 8%);
 }
 
 [data-theme="dark"] {
-  --ig-bg-sunken: #080f0f;
-  --ig-bg-base: var(--ig-fundus);
-  --ig-bg-surface: #101b1b;
-  --ig-bg-elevated: #1a2828;
-  --ig-bg-muted: #152020;
+  --ig-bg-base:     var(--ig-fundus-nox);
+  --ig-bg-surface:  color-mix(in oklch, var(--ig-fundus-nox), white 5%);
+  --ig-bg-sunken:   color-mix(in oklch, var(--ig-fundus-nox), black 20%);
+  --ig-bg-elevated: color-mix(in oklch, var(--ig-fundus-nox), white 8%);
+  --ig-bg-muted:    color-mix(in oklch, var(--ig-fundus-nox), var(--ig-axis-nox) 4%);
 }
 
 
@@ -421,7 +460,6 @@ CUÁNDO USAR:
               → necesitan texto CLARO (fundus-lux) para contraste */
   --ig-text-on-vitreus: var(--ig-fundus-nox);
   --ig-text-on-axis: var(--ig-fundus-nox);
-  --ig-text-on-cinis: var(--ig-fundus-nox);
   --ig-text-on-rutilus: var(--ig-fundus-nox);
   --ig-text-on-laurus: var(--ig-fundus-nox);
   --ig-text-on-malum: var(--ig-fundus-nox);
@@ -432,14 +470,14 @@ CUÁNDO USAR:
   :root {
     --ig-text-heading: var(--ig-vitreus);
     --ig-text-body: var(--ig-cinis);
-    /* WCAG AA: 4.85 sobre bg-muted #f3f0f7 (era 4.06 con #7a7288) */
-    --ig-text-muted: #6e6679;
+    /* WCAG AA ≥ 4.5 sobre bg-muted (color-mix de fundus+axis al 8% =
+       #eae6f1 en light tras la nueva paleta dual). #5e5667 da 5.06. */
+    --ig-text-muted: #5e5667;
     --ig-text-disabled: #a8a0b8;
 
     /* En light, los fondos de color son oscuros, texto claro */
     --ig-text-on-vitreus: var(--ig-fundus-lux);
     --ig-text-on-axis: var(--ig-fundus-lux);
-    --ig-text-on-cinis: var(--ig-fundus-lux);
     --ig-text-on-rutilus: var(--ig-fundus-lux);
     --ig-text-on-laurus: var(--ig-fundus-lux);
     --ig-text-on-malum: var(--ig-fundus-lux);
@@ -450,12 +488,12 @@ CUÁNDO USAR:
 [data-theme="light"] {
   --ig-text-heading: var(--ig-vitreus);
   --ig-text-body: var(--ig-cinis);
-  /* WCAG AA: 4.85 sobre bg-muted #f3f0f7 (era 4.06 con #7a7288) */
-  --ig-text-muted: #6e6679;
+  /* WCAG AA ≥ 4.5 sobre bg-muted (color-mix de fundus+axis al 8% =
+     #eae6f1 en light tras la nueva paleta dual). #5e5667 da 5.06. */
+  --ig-text-muted: #5e5667;
   --ig-text-disabled: #a8a0b8;
   --ig-text-on-vitreus: var(--ig-fundus-lux);
   --ig-text-on-axis: var(--ig-fundus-lux);
-  --ig-text-on-cinis: var(--ig-fundus-lux);
   --ig-text-on-rutilus: var(--ig-fundus-lux);
   --ig-text-on-laurus: var(--ig-fundus-lux);
   --ig-text-on-malum: var(--ig-fundus-lux);
@@ -470,7 +508,6 @@ CUÁNDO USAR:
   --ig-text-disabled: #405050;
   --ig-text-on-vitreus: var(--ig-fundus-nox);
   --ig-text-on-axis: var(--ig-fundus-nox);
-  --ig-text-on-cinis: var(--ig-fundus-nox);
   --ig-text-on-rutilus: var(--ig-fundus-nox);
   --ig-text-on-laurus: var(--ig-fundus-nox);
   --ig-text-on-malum: var(--ig-fundus-nox);
@@ -564,11 +601,19 @@ Estas variables son solo aliases para familiaridad.
   --ig-danger: var(--ig-malum);
   --ig-info: var(--ig-cyaneus);
 
-  /* Texto sobre colores semánticos (apuntan a los cardinales para heredar modo) */
+  /* Texto sobre colores semánticos. Cada uno hereda el `text-on-<cardinal>`
+     que cambia automáticamente entre claro y oscuro según el tema:
+     en dark, los cardinales son claros (variantes -nox) y el texto encima
+     es oscuro (fundus-nox); en light, los cardinales son oscuros (-lux) y
+     el texto es claro (fundus-lux). Garantiza WCAG AA en cualquier tema.
+
+     Nota: --ig-text-on-info hereda de --ig-text-on-cyaneus (info → cyaneus
+     desde 1.0.0-beta.3, NO de --ig-text-on-axis). No hay --ig-text-on-cinis
+     porque cinis se usa solo como color de texto-body, nunca como background. */
   --ig-text-on-brand: var(--ig-text-on-vitreus);
   --ig-text-on-secondary: var(--ig-text-on-axis);
   --ig-text-on-success: var(--ig-text-on-laurus);
-  --ig-text-on-warning: var(--ig-text-on-rutilus);  /* hereda el cambio dark/light */
+  --ig-text-on-warning: var(--ig-text-on-rutilus);
   --ig-text-on-danger: var(--ig-text-on-malum);
   --ig-text-on-info: var(--ig-text-on-cyaneus);
 }
@@ -2518,4 +2563,90 @@ CÓMO USAR:
   --ig-anim-heartbeat: ig-heartbeat 1.5s ease-in-out infinite;
   --ig-anim-shimmer: ig-shimmer 2s infinite linear;
   --ig-anim-glow-pulse: ig-glow-pulse 2s ease-in-out infinite;
+}
+
+
+/*
+═══════════════════════════════════════════════════════════════════════════════
+N. TRANSICIÓN DE TEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+QUÉ ES: token compartido para suavizar el cambio entre dark/light cuando un
+consumer alterna `data-theme`. Los componentes pueden engancharlo:
+
+  .ig-card { transition: var(--ig-theme-transition), <otras transiciones>; }
+
+Si el usuario tiene `prefers-reduced-motion: reduce` activado, el token cae a
+`none` para respetar la preferencia y el cambio es instantáneo.
+*/
+:root {
+  --ig-theme-transition: background-color 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ig-theme-transition: none;
+  }
+}
+
+
+/*
+═══════════════════════════════════════════════════════════════════════════════
+O. FORCED COLORS (Windows High Contrast Mode)
+═══════════════════════════════════════════════════════════════════════════════
+
+QUÉ ES: cuando el SO fuerza una paleta del sistema (Windows High Contrast,
+algunas extensiones de a11y), los navegadores reportan
+`@media (forced-colors: active)`. Mapeamos los semánticos críticos a las
+keywords system-color() para que el DS siga siendo legible y respete la
+elección del usuario en lugar de imponer nuestros tokens.
+
+REFERENCIA: WCAG 2.2 + CSS Color Adjustment Module Level 1.
+*/
+@media (forced-colors: active) {
+  :root,
+  [data-theme="light"],
+  [data-theme="dark"] {
+    /* Fondos y texto del cuerpo */
+    --ig-bg-base: Canvas;
+    --ig-bg-surface: Canvas;
+    --ig-bg-sunken: Canvas;
+    --ig-bg-elevated: Canvas;
+    --ig-bg-muted: Canvas;
+
+    --ig-text-heading: CanvasText;
+    --ig-text-body: CanvasText;
+    --ig-text-muted: GrayText;
+    --ig-text-disabled: GrayText;
+
+    --ig-border-subtle: CanvasText;
+    --ig-border-default: CanvasText;
+    --ig-border-strong: CanvasText;
+
+    /* Roles interactivos (links, botones primarios, info) → LinkText.
+       El texto encima usa HighlightText para diferenciar de la prosa. */
+    --ig-vitreus: LinkText;
+    --ig-axis: LinkText;
+    --ig-cyaneus: LinkText;
+    --ig-text-on-vitreus: HighlightText;
+    --ig-text-on-axis: HighlightText;
+    --ig-text-on-cyaneus: HighlightText;
+    --ig-text-on-brand: HighlightText;
+    --ig-text-on-secondary: HighlightText;
+    --ig-text-on-info: HighlightText;
+
+    /* Estados (success/warning/danger) → CanvasText con texto en Canvas. */
+    --ig-laurus: CanvasText;
+    --ig-rutilus: CanvasText;
+    --ig-malum: CanvasText;
+    --ig-text-on-laurus: Canvas;
+    --ig-text-on-rutilus: Canvas;
+    --ig-text-on-malum: Canvas;
+
+    /* Sin transiciones — el SO renderiza la paleta forzada. */
+    --ig-theme-transition: none;
+  }
 }
