@@ -39,40 +39,72 @@ todas las combinaciones bg/cardinal del tema.**
 
 ## Watchlist — pares con ΔE OKLab marginal
 
-`Check 3` del script (`scripts/check-component-contrast.mjs`) avisa
-cuando dos cardinales de UI activa quedan separados por ΔE OKLab < 0.05
-(umbral conservador para detectar confusión visual). Hoy **no dispara**:
-todos los pares de `UI_CARDINALS` superan el umbral. Tabla recalculada
-con los hex actuales de `igoded-tokens.css` (snapshot beta.18, regenerable
-con `npm run test:contrast` — ver script):
+`Check 3` de `scripts/check-component-contrast.mjs` valida la separación
+perceptual ΔE OKLab entre los cardinales de UI activa (excluye `cinis`,
+que es texto). Política desde `1.0.0-beta.19`:
 
-| Par | LIGHT | DARK | Notas |
-|-----|-------|------|-------|
-| kobalium ↔ cinis  | 0.0451 | 0.0445 | Info vs texto (cinis fuera de UI_CARDINALS, no dispara) |
-| axis ↔ kobalium   | 0.0796 | **0.0522** | Secondary vs info — par UI más estrecho actualmente |
-| vitreus ↔ cinis   | **0.0601** | 0.1238 | Brand vs texto (cinis fuera de UI_CARDINALS) |
-| axis ↔ cinis      | 0.1002 | 0.0608 | Secondary vs texto |
-| malum ↔ rutilus   | 0.0866 | **0.0706** | Danger granate vs warning cobre |
-| vitreus ↔ laurus  | **0.0847** | 0.2184 | Brand vs success — eje fresco verde-cyan, ver nota |
-| vitreus ↔ kobalium| 0.0970 | 0.1058 | Brand vs info |
+- **ERROR** si `ΔE < 0.05` y el par no está en `scripts/perceptual-allowlist.json`.
+- **ERROR** si un par allowlisted ha derivado más del 5% por debajo de
+  su `deltaE_at_decision` registrado (drift detection).
+- **WARN** si `ΔE < 0.10` (par cercano pero aceptable; revisar al
+  planificar futuras paletas).
+- Pares allowlisted con su valor de decisión vigente: `WARN` informativo.
 
-**Notas históricas y de decisión:**
+Para regenerar la tabla: `node scripts/check-component-contrast.mjs --print-perceptual-table`.
 
-- `vitreus ↔ laurus` LIGHT (0.0847): par cromáticamente vecino en el eje
+### LIGHT (suffix -lux)
+
+| Par | ΔE | Estado |
+|-----|-------|--------|
+| laurus-vitreus    | 0.0847 | allowlisted (ref=0.0847, eje fresco) |
+| malum-rutilus     | 0.0943 | bajo warn=0.10 |
+| axis-kobalium     | 0.0951 | bajo warn=0.10 |
+| kobalium-vitreus  | 0.0962 | bajo warn=0.10 |
+| laurus-rutilus    | 0.1085 | ok |
+| rutilus-vitreus   | 0.1176 | ok |
+| axis-malum        | 0.1531 | ok |
+| axis-vitreus      | 0.1602 | ok |
+| malum-vitreus     | 0.1751 | ok |
+| kobalium-laurus   | 0.1809 | ok |
+| kobalium-rutilus  | 0.1829 | ok |
+| axis-rutilus      | 0.1892 | ok |
+| kobalium-malum    | 0.1953 | ok |
+| laurus-malum      | 0.1979 | ok |
+| axis-laurus       | 0.2356 | ok |
+
+### DARK (suffix -nox)
+
+| Par | ΔE | Estado |
+|-----|-------|--------|
+| axis-kobalium     | 0.0522 | bajo warn=0.10 (par UI más estrecho del sistema) |
+| malum-rutilus     | 0.0706 | allowlisted (ref=0.0706, danger vs warning cálidos) |
+| axis-malum        | 0.0929 | bajo warn=0.10 |
+| kobalium-vitreus  | 0.1058 | ok |
+| kobalium-malum    | 0.1257 | ok |
+| axis-rutilus      | 0.1402 | ok |
+| kobalium-rutilus  | 0.1504 | ok |
+| axis-vitreus      | 0.1580 | ok |
+| rutilus-vitreus   | 0.2136 | ok |
+| malum-vitreus     | 0.2174 | ok |
+| laurus-vitreus    | 0.2184 | ok |
+| laurus-rutilus    | 0.2391 | ok |
+| kobalium-laurus   | 0.2705 | ok |
+| laurus-malum      | 0.2973 | ok |
+| axis-laurus       | 0.3070 | ok |
+
+### Notas y decisiones
+
+- `laurus ↔ vitreus` LIGHT (0.0847): par cromáticamente vecino en el eje
   fresco verde-cyan. Decisión consciente desde `1.0.0-beta.8`
   (recalibración de `laurus` H=149° → H≈140°), confirmada tras la
   recolocación de `vitreus` a H=207.5° en `1.0.0-beta.16`. La confusión
   perceptual se resuelve con iconografía en componentes (Badge con
-  icono, Alert con icono), no moviendo más hex.
-- `axis ↔ kobalium` DARK (0.0522): es el par UI activo más estrecho
-  hoy. Vigilar especialmente en Chromatic.
-- `malum ↔ rutilus` DARK (0.0706): es el segundo más estrecho.
-
-**Plan post-1.0.0**: promover `Check 3` a **error** con umbral 0.05
-estricto, documentando excepción para los pares con justificación
-(eje fresco brand↔success). Si la auditoría visual encuentra confusión
-real en los pares marginales, ajustar hue ±5°-10° respetando geometría
-dual.
+  icono, Alert con icono), no moviendo más hex. **Allowlisted**.
+- `malum ↔ rutilus` DARK (0.0706): par cálido danger vs warning. Allowlisted
+  como decisión consciente; recalibrar bajaría WCAG sobre `fundus`.
+- `axis ↔ kobalium` DARK (0.0522): no allowlisted intencionadamente.
+  Par UI más estrecho del sistema; un drift ligero a la baja debe
+  hacer fallar CI.
 
 ## Cinis es un cardinal especial
 
