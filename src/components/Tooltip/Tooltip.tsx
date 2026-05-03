@@ -42,6 +42,19 @@ interface DescribableProps {
  * `attr(data-tooltip)`); para screen readers expone un `<span role="tooltip">`
  * sr-only enlazado al child con `aria-describedby`.
  *
+ * **Limitación CSS-only**: la posición del tooltip se calcula en CSS
+ * (relative al wrapper), sin libs de positioning como Floating UI. Esto
+ * mantiene el bundle pequeño y evita JS, pero implica:
+ *  - Si el child queda cerca del borde del viewport el tooltip se
+ *    puede recortar; el consumer debe elegir un `placement` que dé
+ *    espacio o reservarlo en el layout.
+ *  - El tooltip queda dentro del flujo de overflow del padre. Para
+ *    evitar clipping en contenedores con `overflow: hidden`, el
+ *    consumer debería usar el patrón nativo `popover` o un componente
+ *    de overlay propio. La librería no inyecta portales.
+ * Se evalúa migrar a Floating UI post-1.0 si los casos de uso lo
+ * justifican; hoy es decisión consciente.
+ *
  * @example
  * <Tooltip text="Eliminar" placement="top">
  *   <Button icon aria-label="Eliminar">×</Button>
