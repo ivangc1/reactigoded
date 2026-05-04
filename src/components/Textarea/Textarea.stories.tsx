@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Textarea } from "./Textarea";
 
 const meta = {
@@ -52,4 +53,66 @@ export const Estados: Story = {
       />
     </div>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  // Cada Textarea con aria-label único (axe rule label).
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 500 }}>
+      <Textarea
+        aria-label="Textarea default"
+        placeholder="default"
+        rows={3}
+      />
+      <Textarea
+        aria-label="Textarea auto-grow"
+        placeholder="auto-grow con field-sizing"
+        auto
+      />
+      <Textarea
+        aria-label="Textarea error"
+        placeholder="error state"
+        state="error"
+      />
+      <Textarea
+        aria-label="Textarea success"
+        placeholder="success state"
+        state="success"
+      />
+      <Textarea
+        aria-label="Textarea disabled"
+        placeholder="disabled"
+        disabled
+      />
+      <Textarea
+        aria-label="Textarea con valor"
+        defaultValue={"Línea 1\nLínea 2\nLínea 3"}
+        rows={4}
+      />
+      <Textarea
+        aria-label="Textarea rows 2"
+        placeholder="rows=2"
+        rows={2}
+      />
+      <Textarea
+        aria-label="Textarea rows 8"
+        placeholder="rows=8"
+        rows={8}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const textareas = canvasElement.querySelectorAll("textarea");
+    await expect(textareas.length).toBe(8);
+  },
 };

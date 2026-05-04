@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import {
   Table,
   TableHead,
@@ -149,4 +150,68 @@ export const Scrollable: Story = {
       </Table>
     </div>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <Table bordered striped hover>
+      <TableCaption side="top">Pedidos recientes</TableCaption>
+      <TableHead>
+        <TableRow>
+          <TableHeaderCell>ID</TableHeaderCell>
+          <TableHeaderCell>Cliente</TableHeaderCell>
+          <TableHeaderCell>Estado</TableHeaderCell>
+          <TableHeaderCell>Total</TableHeaderCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        <TableRow>
+          <TableCell>#001</TableCell>
+          <TableCell>Acme</TableCell>
+          <TableCell>
+            <Badge variant="success">OK</Badge>
+          </TableCell>
+          <TableCell>1.250 €</TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell>#002</TableCell>
+          <TableCell>Globex</TableCell>
+          <TableCell>
+            <Badge variant="warning">Pendiente</Badge>
+          </TableCell>
+          <TableCell>320 €</TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell>#003</TableCell>
+          <TableCell>Initech</TableCell>
+          <TableCell>
+            <Badge variant="danger">Cancelado</Badge>
+          </TableCell>
+          <TableCell>0 €</TableCell>
+        </TableRow>
+      </TableBody>
+      <TableFoot>
+        <TableRow>
+          <TableHeaderCell colSpan={3}>Total</TableHeaderCell>
+          <TableHeaderCell>1.570 €</TableHeaderCell>
+        </TableRow>
+      </TableFoot>
+    </Table>
+  ),
+  play: async ({ canvasElement }) => {
+    const rows = canvasElement.querySelectorAll("tr");
+    await expect(rows.length).toBeGreaterThanOrEqual(5);
+    const badges = canvasElement.querySelectorAll(".ig-badge");
+    await expect(badges.length).toBe(3);
+  },
 };
