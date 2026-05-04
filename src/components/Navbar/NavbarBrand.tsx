@@ -30,24 +30,17 @@ export type NavbarBrandProps = AsAnchor | AsDiv;
  */
 export function NavbarBrand(props: NavbarBrandProps) {
   if (props.href !== undefined) {
-    const { className, ref, ...rest } = props;
+    const { className, ref, children, ...rest } = props;
     return (
-      // `children` viaja vía `...rest`. jsx-a11y no detecta JSX self-closing
-      // con spread; el consumer SIEMPRE pasa contenido en este compound.
-      // eslint-disable-next-line jsx-a11y/anchor-has-content
-      <a
-        ref={ref}
-        className={cn("ig-navbar-brand", className)}
-        {...rest}
-      />
+      <a ref={ref} className={cn("ig-navbar-brand", className)} {...rest}>
+        {children}
+      </a>
     );
   }
-  const { className, ref, ...rest } = props;
+  const { className, ref, children, ...rest } = props;
   return (
-    <div
-      ref={ref}
-      className={cn("ig-navbar-brand", className)}
-      {...rest}
-    />
+    <div ref={ref} className={cn("ig-navbar-brand", className)} {...rest}>
+      {children}
+    </div>
   );
 }

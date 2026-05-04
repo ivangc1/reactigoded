@@ -45,3 +45,18 @@ describe("Divider", () => {
     expect(container.querySelector("hr")).toHaveClass("ig-divider-dashed");
   });
 });
+
+describe("Divider — AllStates regression", () => {
+  it("AllStates renderiza variants y dashed", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Divider.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    expect(container.querySelector(".ig-divider-brand")).not.toBeNull();
+    expect(container.querySelector(".ig-divider-success")).not.toBeNull();
+    expect(container.querySelector(".ig-divider-danger")).not.toBeNull();
+    expect(container.querySelector(".ig-divider-dashed")).not.toBeNull();
+    expect(container.querySelector(".ig-divider-vertical")).not.toBeNull();
+    expect(container.querySelector(".ig-divider-with-text")).not.toBeNull();
+  });
+});

@@ -7,10 +7,14 @@
  *   (2) ERROR: Geometría OKLCH dual: ΔH ≤ 10° entre {cardinal}-lux y
  *       {cardinal}-nox; L_lux ≈ 0.32 ± 0.04; L_nox ≈ 0.84 ± 0.04;
  *       L_lux + L_nox ≈ 1.16 ± 0.08.
- *   (3) WARNING (no falla CI): Separación perceptual ΔE OKLab ≥ 0.05
- *       entre cardinales de UI activa (excluye cinis, que es texto del
- *       cuerpo). Avisa cuando dos cardinales pueden confundirse al
- *       verlos juntos. Introducido en beta.7.
+ *   (3) ERROR/WARN: Separación perceptual ΔE OKLab entre cardinales de
+ *       UI activa (excluye cinis, que es texto del cuerpo). ERROR si el
+ *       par cae bajo `error_threshold` (0.05) salvo allowlist explícita;
+ *       WARN si está bajo `warn_threshold` (0.10) o si un par
+ *       allowlisted ha derivado más de (1 - drift_tolerance) por debajo
+ *       de su valor de decisión. Allowlist en
+ *       `scripts/perceptual-allowlist.json`. Modo `--print-perceptual-table`
+ *       imprime los 42 valores y sale.
  *
  * Diseñado para correr en CI (rápido, sin browser). Complementa el
  * runner storybook+axe que valida contraste en el DOM real.
@@ -26,6 +30,7 @@ const repoRoot = resolve(__dirname, "..");
 
 const TOKENS_FILE = resolve(repoRoot, "src/styles/igoded-tokens.css");
 const COMPONENTS_FILE = resolve(repoRoot, "src/styles/igoded-components.css");
+const ALLOWLIST_FILE = resolve(__dirname, "perceptual-allowlist.json");
 
 const CARDINALS = [
   "vitreus",
@@ -41,7 +46,14 @@ const CARDINALS = [
 // es texto del cuerpo: la confusión perceptual real ocurre entre
 // cardinales que aparecen como fondos contiguos, no contra texto.
 const UI_CARDINALS = CARDINALS.filter((c) => c !== "cinis");
-const MIN_DELTA_E = 0.05;
+
+const allowlistData = JSON.parse(readFileSync(ALLOWLIST_FILE, "utf8"));
+
+const printTable = process.argv.includes("--print-perceptual-table");
+
+function pairKey(a, b) {
+  return [a, b].sort().join("-");
+}
 
 // ─── Lectura de tokens ──────────────────────────────────────────────
 //
@@ -159,11 +171,21 @@ function mixColors(space, hexA, pA, hexB, pB) {
     const la = oklch(a);
     const lb = oklch(b);
     if (!la || !lb) return null;
+    // Hue es circular [0, 360). Una mezcla lineal entre 350° y 10°
+    // pasa por 180° (camino largo) en vez de por 0° (camino corto).
+    // Tomamos el path angular más corto: si |dh| > 180, ajustamos
+    // sumando/restando 360 antes de promediar.
+    const ha = la.h ?? 0;
+    const hb = lb.h ?? 0;
+    let dh = hb - ha;
+    if (dh > 180) dh -= 360;
+    else if (dh < -180) dh += 360;
+    const hMixed = (ha + dh * weightB + 360) % 360;
     const out = {
       mode: "oklch",
       l: la.l * weightA + lb.l * weightB,
       c: (la.c ?? 0) * weightA + (lb.c ?? 0) * weightB,
-      h: ((la.h ?? 0) * weightA + (lb.h ?? 0) * weightB),
+      h: hMixed,
     };
     return formatHex(out);
   }
@@ -289,34 +311,86 @@ function checkPaletteGeometry(lightMap, darkMap) {
   return errors;
 }
 
-// ─── Check 3: separación perceptual ΔE OKLab (warning, no falla CI) ─
+// ─── Check 3: separación perceptual ΔE OKLab + allowlist + drift ──
+
+function computeDeltaE(hexA, hexB) {
+  const oa = oklab(parse(hexA));
+  const ob = oklab(parse(hexB));
+  if (!oa || !ob) return null;
+  return Math.sqrt(
+    (oa.l - ob.l) ** 2 + (oa.a - ob.a) ** 2 + (oa.b - ob.b) ** 2,
+  );
+}
 
 function checkPerceptualSeparation(lightMap, darkMap) {
+  const errors = [];
   const warnings = [];
+  const tableRows = [];
   for (const [theme, map] of [
     ["light", lightMap],
     ["dark", darkMap],
   ]) {
     for (let i = 0; i < UI_CARDINALS.length; i++) {
       for (let j = i + 1; j < UI_CARDINALS.length; j++) {
-        const a = map.get(`ig-${UI_CARDINALS[i]}`);
-        const b = map.get(`ig-${UI_CARDINALS[j]}`);
-        if (!a || !b) continue;
-        const oa = oklab(parse(a));
-        const ob = oklab(parse(b));
-        if (!oa || !ob) continue;
-        const dE = Math.sqrt(
-          (oa.l - ob.l) ** 2 + (oa.a - ob.a) ** 2 + (oa.b - ob.b) ** 2,
+        const a = UI_CARDINALS[i];
+        const b = UI_CARDINALS[j];
+        const hexA = map.get(`ig-${a}`);
+        const hexB = map.get(`ig-${b}`);
+        if (!hexA || !hexB) continue;
+        const dE = computeDeltaE(hexA, hexB);
+        if (dE == null) continue;
+        const key = pairKey(a, b);
+        const allowed = allowlistData.allowlist.find(
+          (e) => e.pair === key && e.theme === theme,
         );
-        if (dE < MIN_DELTA_E) {
-          warnings.push(
-            `[${theme}] ${UI_CARDINALS[i]}(${a}) ↔ ${UI_CARDINALS[j]}(${b}): ΔE=${dE.toFixed(3)} < ${MIN_DELTA_E}`,
-          );
+
+        if (printTable) {
+          tableRows.push({
+            theme,
+            pair: key,
+            dE,
+            allowed: !!allowed,
+            ref: allowed ? allowed.deltaE_at_decision : null,
+          });
+          continue;
+        }
+
+        if (dE < allowlistData.error_threshold) {
+          if (!allowed) {
+            errors.push(
+              `${theme} ${key}: ΔE=${dE.toFixed(4)} < ${allowlistData.error_threshold} (no allowlisted)`,
+            );
+          } else if (
+            dE < allowed.deltaE_at_decision * allowlistData.drift_tolerance
+          ) {
+            const driftPct = (1 - allowlistData.drift_tolerance) * 100;
+            errors.push(
+              `${theme} ${key}: ΔE=${dE.toFixed(4)} (drift > ${driftPct.toFixed(0)}% desde ${allowed.deltaE_at_decision} en ${allowed.decision_date})`,
+            );
+          } else {
+            warnings.push(
+              `${theme} ${key}: ΔE=${dE.toFixed(4)} (allowlisted, ref=${allowed.deltaE_at_decision})`,
+            );
+          }
+        } else if (dE < allowlistData.warn_threshold) {
+          if (
+            allowed &&
+            dE < allowed.deltaE_at_decision * allowlistData.drift_tolerance
+          ) {
+            const driftPct = (1 - allowlistData.drift_tolerance) * 100;
+            errors.push(
+              `${theme} ${key}: ΔE=${dE.toFixed(4)} (drift > ${driftPct.toFixed(0)}% desde ${allowed.deltaE_at_decision} en ${allowed.decision_date})`,
+            );
+          } else {
+            warnings.push(
+              `${theme} ${key}: ΔE=${dE.toFixed(4)} (bajo warn=${allowlistData.warn_threshold})`,
+            );
+          }
         }
       }
     }
   }
-  return warnings;
+  return { errors, warnings, tableRows };
 }
 
 // ─── Main ──────────────────────────────────────────────────────────
@@ -324,18 +398,45 @@ function checkPerceptualSeparation(lightMap, darkMap) {
 const lightMap = buildThemeMap("light");
 const darkMap = buildThemeMap("dark");
 
+if (printTable) {
+  const { tableRows } = checkPerceptualSeparation(lightMap, darkMap);
+  console.log(
+    `# Separación perceptual ΔE OKLab — ${tableRows.length} pares (${UI_CARDINALS.length} cardinales UI × 2 temas)\n`,
+  );
+  for (const theme of ["light", "dark"]) {
+    console.log(`## ${theme.toUpperCase()}`);
+    console.log("| Par | ΔE | Estado |");
+    console.log("|-----|-------|--------|");
+    const rows = tableRows.filter((r) => r.theme === theme).sort(
+      (a, b) => a.dE - b.dE,
+    );
+    for (const r of rows) {
+      const tag = r.allowed
+        ? `allowlisted (ref=${r.ref})`
+        : r.dE < allowlistData.warn_threshold
+          ? `bajo warn=${allowlistData.warn_threshold}`
+          : "ok";
+      console.log(`| ${r.pair} | ${r.dE.toFixed(4)} | ${tag} |`);
+    }
+    console.log("");
+  }
+  process.exit(0);
+}
+
+const perceptual = checkPerceptualSeparation(lightMap, darkMap);
+
 const errors = [
   ...findContrastViolations(lightMap, "light"),
   ...findContrastViolations(darkMap, "dark"),
   ...checkPaletteGeometry(lightMap, darkMap),
+  ...perceptual.errors,
 ];
 
-const warnings = checkPerceptualSeparation(lightMap, darkMap);
-if (warnings.length) {
+if (perceptual.warnings.length) {
   console.warn("⚠ Separación perceptual baja entre cardinales UI:\n");
-  for (const w of warnings) console.warn("  - " + w);
+  for (const w of perceptual.warnings) console.warn("  - " + w);
   console.warn(
-    "\n  Pueden confundirse al verlos juntos. No falla CI; revisar al planificar nuevos cardinales.\n",
+    `\n  Pares allowlisted o bajo warn (${allowlistData.warn_threshold}). No bloquean CI; revisar al planificar nuevos cardinales.\n`,
   );
 }
 
@@ -345,5 +446,5 @@ if (errors.length) {
   process.exit(1);
 }
 console.log(
-  `✓ WCAG ≥ 4.5 en ambos temas, geometría OKLCH OK (${CARDINALS.length} cardinales) y ΔE OKLab evaluado en ${UI_CARDINALS.length} cardinales UI.`,
+  `✓ WCAG ≥ 4.5 en ambos temas, geometría OKLCH OK (${CARDINALS.length} cardinales) y ΔE OKLab evaluado en ${UI_CARDINALS.length} cardinales UI con allowlist (${allowlistData.allowlist.length} excepciones documentadas).`,
 );

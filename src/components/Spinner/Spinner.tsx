@@ -16,6 +16,12 @@ export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: SpinnerVariant;
   /** Tamaño. `"md"` por defecto. */
   size?: SpinnerSize;
+  /**
+   * Etiqueta accesible para SR. Por defecto `"Cargando…"` (ES). Sustituye
+   * el `aria-label` del componente para i18n. Si pasas también
+   * `aria-label` directo (vía rest), `aria-label` gana sobre `label`.
+   */
+  label?: string;
   ref?: Ref<HTMLSpanElement>;
 }
 
@@ -34,19 +40,22 @@ export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
 export function Spinner({
   variant = "brand",
   size = "md",
+  label,
   className,
   ref,
   ...rest
 }: SpinnerProps) {
   // 1.0.0-beta.4: aria-label se extrae del rest (HTML std). Antes existía
   // una prop `ariaLabel` separada. Migration: rename ariaLabel→aria-label.
+  // Desde beta.19: prop `label` explícita para i18n. Precedencia:
+  // aria-label (rest) > label > default ES "Cargando…".
   const { "aria-label": ariaLabelOverride, ...spanRest } = rest;
   return (
     <span
       {...spanRest}
       ref={ref}
       role="status"
-      aria-label={ariaLabelOverride ?? "Cargando…"}
+      aria-label={ariaLabelOverride ?? label ?? "Cargando…"}
       className={cn(
         "ig-spinner",
         `ig-spinner-${variant}`,

@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Badge } from "./Badge";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Badge",
@@ -59,7 +61,7 @@ export const Variantes: Story = {
   ),
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   args: { children: undefined },
   render: () => (
     <div className="ig-flex ig-items-center ig-gap-2">
@@ -168,4 +170,47 @@ export const ConContador: Story = {
       </span>
     </div>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <MatrixGrid
+        renderRow={(v) => (
+          <>
+            <Badge variant={v as Variant}>filled</Badge>
+            <Badge variant={v as Variant} outline>
+              outline
+            </Badge>
+            <Badge variant={v as Variant} pill>
+              pill
+            </Badge>
+            <Badge variant={v as Variant} dot>
+              {v}
+            </Badge>
+            <Badge variant={v as Variant} size="sm">
+              sm
+            </Badge>
+            <Badge variant={v as Variant} size="lg">
+              lg
+            </Badge>
+          </>
+        )}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const badges = canvasElement.querySelectorAll(".ig-badge");
+    await expect(badges.length).toBeGreaterThan(30);
+  },
 };

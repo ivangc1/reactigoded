@@ -44,7 +44,7 @@ type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {};
 
-export const Pequeña: Story = {
+export const Small: Story = {
   args: { currentPage: 2, totalPages: 5 },
 };
 

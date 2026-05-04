@@ -1,6 +1,8 @@
 import type { InputHTMLAttributes, Ref } from "react";
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export interface SliderProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
@@ -47,7 +49,6 @@ export function Slider({
   ref,
   ...rest
 }: SliderProps) {
-  const isControlled = value !== undefined;
   // `defaultValue` puede llegar como string ("60") o readonly array (que el
   // <input> nativo no soporta para type="range"). Normalizamos a número
   // finito; si no se puede, caemos a `min`. Antes de 1.0.0-beta.3 un
@@ -61,9 +62,58 @@ export function Slider({
         ? Number(defaultValue)
         : NaN;
   const initial = Number.isFinite(parsedDefault) ? parsedDefault : safeMin;
-  const [internal, setInternal] = useState<number>(initial);
+  // `value` puede ser number|string|readonly number[] del tipo HTMLInput.
+  // Solo entra en controlled si es number/string finito; el array
+  // (no soportado por type="range") cae a uncontrolled y se warn-ea
+  // abajo.
+  const controlledNum =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.length > 0
+        ? Number(value)
+        : undefined;
+  const passControlled =
+    controlledNum !== undefined && Number.isFinite(controlledNum)
+      ? controlledNum
+      : undefined;
+  const { value: internal, setValue: setInternal, isControlled } =
+    useControllableState<number>({
+      value: passControlled,
+      defaultValue: initial,
+    });
 
-  const current = isControlled ? Number(value) : internal;
+  // Dev-only warnings: capturan errores típicos del consumer que la
+  // plataforma ignora silenciosamente. En useEffect (no durante render)
+  // por el lint react-hooks/refs.
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!isDev() || warnedRef.current) return;
+    if (Array.isArray(defaultValue)) {
+      warnedRef.current = true;
+      const allFinite = defaultValue.every((v) =>
+        Number.isFinite(typeof v === "number" ? v : Number(v)),
+      );
+      console.warn(
+        allFinite
+          ? "[reactigoded] <Slider> recibe defaultValue como array; <input type=\"range\"> es single-value y solo se usará el primero. Pasa un number o string."
+          : "[reactigoded] <Slider> defaultValue array contiene valores no-finitos; el slider arrancará en min.",
+      );
+    } else if (
+      defaultValue !== undefined &&
+      !Number.isFinite(parsedDefault)
+    ) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Slider defaultValue=${JSON.stringify(defaultValue)}> no es un número finito; arrancando en min=${String(safeMin)}.`,
+      );
+    }
+  }, [defaultValue, parsedDefault, safeMin]);
+
+  const rawCurrent = internal;
+  // Si `value="abc"` o `internal` quedó NaN por algún edge, no queremos
+  // pintar 'NaN' ni propagar NaN al aria-valuetext. Caemos a safeMin
+  // como hace el inicializador del defaultValue.
+  const current = Number.isFinite(rawCurrent) ? rawCurrent : safeMin;
   const display = formatValue ? formatValue(current) : String(current);
 
   // Normaliza prop pasada al DOM: <input type="range"> NO acepta arrays
@@ -95,7 +145,7 @@ export function Slider({
       {...domValueProp}
       onChange={(e) => {
         const next = Number(e.target.value);
-        if (!isControlled) setInternal(next);
+        setInternal(next);
         onChange?.(e);
         onValueChange?.(next);
       }}

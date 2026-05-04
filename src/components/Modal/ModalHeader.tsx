@@ -1,5 +1,6 @@
 import { useEffect, useId, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 import { useModalContextOptional } from "./ModalContext";
 
 export interface ModalHeaderProps extends HTMLAttributes<HTMLDivElement> {
@@ -25,13 +26,28 @@ export function ModalHeader({
   const id = idProp ?? fallbackId;
   const ctx = useModalContextOptional();
   const setHeaderId = ctx?.setHeaderId;
+  const currentHeaderId = ctx?.headerId;
 
   useEffect(() => {
     if (!setHeaderId) return;
+    if (
+      isDev() &&
+      currentHeaderId &&
+      currentHeaderId !== id
+    ) {
+      console.warn(
+        "[reactigoded] <Modal> tiene más de un <ModalHeader>. Solo uno puede registrar aria-labelledby a la vez; el último monta gana y los anteriores quedan huérfanos. Asegúrate de tener un único header por Modal.",
+      );
+    }
     setHeaderId(id);
     return () => {
       setHeaderId(null);
     };
+    // currentHeaderId se lee solo en mount para detectar duplicados;
+    // re-correr el effect en cada cambio de headerId provocaría
+    // bucles cuando hay un único header (el setHeaderId de este
+    // mismo header lo cambia).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, setHeaderId]);
 
   return (

@@ -1,6 +1,7 @@
 import type { HTMLAttributes, Ref, KeyboardEvent } from "react";
 import { useState } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export type RatingSize = "sm" | "md" | "lg" | "xl";
 
@@ -61,13 +62,14 @@ export function Rating({
 }: RatingProps) {
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
   const { "aria-label": ariaLabelOverride, ...divRest } = rest;
-  const isControlled = valueProp !== undefined;
   // `defaultValue` viene del consumer y puede ser cualquier número. Lo
   // clampamos a [0, max] al inicializar (0 = "ninguna estrella seleccionada").
   const safeMax = Math.max(1, Math.floor(max));
   const clampedDefault = Math.min(Math.max(defaultValue, 0), safeMax);
-  const [internal, setInternal] = useState<number>(clampedDefault);
-  const rawValue = isControlled ? valueProp : internal;
+  const { value: rawValue, setValue: setInternal } = useControllableState<number>({
+    value: valueProp,
+    defaultValue: clampedDefault,
+  });
   // Si el consumer pasa value=10 con max=5, en vez de romper la a11y
   // (focusableValue=10 → ningún radio matchea → tablist sin tab stop) lo
   // clampamos al rango válido. Lo mismo si value < 0.
@@ -82,7 +84,7 @@ export function Rating({
   const setValueAndFocus = (v: number, target: HTMLElement | null) => {
     if (readOnly) return;
     const clamped = Math.min(Math.max(v, 1), safeMax);
-    if (!isControlled) setInternal(clamped);
+    setInternal(clamped);
     onValueChange?.(clamped);
     // Mover foco al nuevo radio
     target?.focus();
@@ -124,7 +126,7 @@ export function Rating({
       case " ":
       case "Enter": {
         event.preventDefault();
-        if (!isControlled) setInternal(v);
+        setInternal(v);
         onValueChange?.(v);
         break;
       }
@@ -142,6 +144,7 @@ export function Rating({
       ref={ref}
       role="radiogroup"
       aria-label={ariaLabelOverride ?? "Puntuación"}
+      aria-readonly={readOnly || undefined}
       className={cn(
         "ig-rating",
         readOnly && "ig-rating-readonly",
@@ -163,12 +166,17 @@ export function Rating({
             role="radio"
             aria-checked={v === value}
             aria-label={`${String(v)} ${v === 1 ? "estrella" : "estrellas"}`}
-            disabled={readOnly}
-            tabIndex={readOnly ? -1 : isFocusable ? 0 : -1}
+            // En modo readOnly NO usamos `disabled` (rompe el patrón APG
+            // del radiogroup: SR no anuncia el valor seleccionado de un
+            // radio disabled; aria-readonly del contenedor es la forma
+            // estándar). Los handlers internos guard-ean con readOnly,
+            // así que tabIndex sigue el roving normal y la estrella
+            // queda focuseable para inspección por teclado.
+            tabIndex={isFocusable ? 0 : -1}
             className={cn("ig-star", filled && "ig-star-filled")}
             onClick={() => {
               if (readOnly) return;
-              if (!isControlled) setInternal(v);
+              setInternal(v);
               onValueChange?.(v);
             }}
             onKeyDown={(e) => {

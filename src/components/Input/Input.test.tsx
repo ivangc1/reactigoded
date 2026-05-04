@@ -43,6 +43,16 @@ describe("Input", () => {
     await userEvent.type(el, "hola@test.com");
     expect(el).toHaveValue("hola@test.com");
   });
+
+  it("className merge: la clase del consumer se añade sin pisar ig-input", () => {
+    render(<Input placeholder="x" size="lg" state="error" className="my-input extra" />);
+    const el = screen.getByPlaceholderText("x");
+    expect(el).toHaveClass("ig-input");
+    expect(el).toHaveClass("ig-input-lg");
+    expect(el).toHaveClass("ig-input-error");
+    expect(el).toHaveClass("my-input");
+    expect(el).toHaveClass("extra");
+  });
 });
 
 describe("Label", () => {
@@ -145,5 +155,19 @@ describe("InputGroup / InputAddon", () => {
       "aria-describedby",
       "native-id prop-id-1 prop-id-2",
     );
+  });
+});
+
+describe("Input — AllStates regression", () => {
+  it("AllStates renderiza states error/success y sizes", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Input.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    expect(container.querySelector(".ig-input-error")).not.toBeNull();
+    expect(container.querySelector(".ig-input-success")).not.toBeNull();
+    expect(container.querySelector(".ig-input-sm")).not.toBeNull();
+    expect(container.querySelector(".ig-input-lg")).not.toBeNull();
+    expect(container.querySelectorAll(".ig-input").length).toBeGreaterThan(10);
   });
 });

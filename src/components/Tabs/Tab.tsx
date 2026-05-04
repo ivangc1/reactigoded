@@ -1,15 +1,7 @@
-import { useLayoutEffect } from "react";
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 import { useTabs } from "./TabsContext";
-
-// useLayoutEffect en cliente, useEffect en server (evita warning SSR de
-// React: "useLayoutEffect does nothing on the server"). En cliente
-// queremos que el register corra ANTES del primer paint para que el
-// auto-select del primer Tab no produzca un flicker visible donde
-// inicialmente ningún tab es activo.
-const useIsoLayoutEffect =
-  typeof window !== "undefined" ? useLayoutEffect : (() => {});
 
 export interface TabProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Identificador único del tab. Debe coincidir con el `value` del `TabPanel` correspondiente. */
@@ -53,7 +45,10 @@ export function Tab({
     const next = orientation === "horizontal" ? "ArrowRight" : "ArrowDown";
     const prev = orientation === "horizontal" ? "ArrowLeft" : "ArrowUp";
 
-    const tablist = e.currentTarget.parentElement;
+    // Buscamos el tablist por role en lugar de parentElement para que
+    // el componente sobreviva a wrappers intermedios (ej. un <span>
+    // decorativo entre TabList y Tab que un consumer pueda introducir).
+    const tablist = e.currentTarget.closest('[role="tablist"]');
     if (!tablist) return;
     const tabs = Array.from(
       tablist.querySelectorAll<HTMLButtonElement>(

@@ -7,6 +7,196 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.19] — 2026-05-04
+
+### Breaking
+- **Tooltip**: clases CSS migradas a prefijos únicos para evitar
+  colisión semántica.
+  - `ig-tooltip-{top,right,bottom,left}` → `ig-tooltip-place-{...}`
+  - `ig-tooltip-{brand,secondary,success,warning,danger,info}` →
+    `ig-tooltip-color-{...}`
+  Solo afecta a consumers vanilla con clases hardcoded; React API
+  intacta. Migración automática vía `scripts/migrate-tooltip-prefixes.mjs`.
+- **Dropdown**: clase de estado abierto migrada de `.open` a
+  `.ig-dropdown-open` para respetar la convención de namespace `ig-*`.
+- **Stepper**: prop `defaultActive` eliminada (era engañosa — el
+  componente nunca fue uncontrolled). Migración:
+  `<Stepper defaultActive={X}>` → `<Stepper active={X}>`. Si necesitas
+  uncontrolled, mantén `[step, setStep]` en el consumer.
+- **Navbar**: dos booleans `sticky`/`fixed` mutuamente excluyentes
+  reemplazados por un único `position?: 'sticky' | 'fixed'`.
+  Migración:
+
+  | Antes | Después |
+  |---|---|
+  | `<Navbar sticky>` | `<Navbar position="sticky">` |
+  | `<Navbar fixed>` | `<Navbar position="fixed">` |
+  | `<Navbar sticky fixed>` | (TS error, antes silencioso) |
+
+### Fixed
+- **Dropdown**: keyboard open salta items con `aria-disabled="true"`
+  desde el trigger (fix incompleto del bug original que solo cubría
+  `DropdownItem`). Selector compartido en `dropdownSelectors.ts`.
+- **Tabs**: sin `value`/`defaultValue` selecciona el PRIMER tab
+  registrado, no el último. El auto-select usa `setSelectedRaw` con
+  `{ silent: true }` — ya no dispara `onValueChange`.
+- **Pagination**: clamp completo de `currentPage`, `totalPages` y
+  `siblingCount` fuera de rango (NaN, Infinity, negativos). Separación
+  `prevLabel`/`nextLabel` (children visible) de
+  `prevAriaLabel`/`nextAriaLabel` (a11y).
+- **Progress**: guards para `max ≤ 0` o no-finite.
+- **Slider**: guard NaN.
+- **Card**: `tabIndex={0}` automático cuando actsAsButton (con override
+  explícito respetado).
+- **Rating**: `readOnly` aplica `aria-readonly` al radiogroup, no
+  `disabled` a los radios (mejora a11y para SR).
+- **Checkbox**/**Switch**/**Tab**: `useLayoutEffect` con fallback
+  `useEffect` en SSR (no `() => {}`). Util compartida
+  `src/utils/useIsoLayoutEffect.ts`.
+- **Tab**: keyboard nav usa `closest('[role="tablist"]')` en lugar de
+  `parentElement` (robustez ante wrappers).
+- **Tooltip**: warn dev-only si `children` no es elemento React válido.
+- **README**: clases para migración de `<button>` corregidas
+  (`.ig-btn*`, no `.ig-button*`).
+- **igoded-design.css**: cabecera `info → axis` corregida a
+  `info → kobalium`.
+- **manager.ts** y stories Card/Avatar: hex de paleta actualizados a
+  la vigente desde beta.16 (`#5eded5` → `#3ae2f7`,
+  `#d4c2f9` → `#d2bff7`).
+- **SKILL.md**: tabla ΔE OKLab regenerada con cifras reales (eran de
+  paleta pre-beta.16).
+- **styles.test.ts**: test "7 cardinales" verificaba 6, faltaba
+  kobalium.
+- **mixColors** en `check-component-contrast.mjs`: shortest-arc para
+  hue circular (bug latente que no se disparaba con tokens actuales
+  pero podía con futuros).
+
+### Added
+- **`useControllableState<T>`** hook centralizado para patrón
+  controlled/uncontrolled, con setter `silent` opt-in. **9
+  componentes migrados**: Switch, Sidebar, Slider, Rating, Accordion
+  (single + multiple), Alert, Dropdown, Tabs. 9 tests del hook
+  (incluyendo `setValue` con `{ silent: true }` para auto-selects y
+  rehidratación de fuentes externas no-de-usuario).
+- **AllStates Ola 1** — 14 stories matrix con `chromatic.modes`
+  light + dark: Button, Input, Checkbox, Switch, Tabs, Progress,
+  Card, Badge, Spinner, Skeleton, Divider, Breadcrumb, Avatar, Chip.
+  Util compartida `src/stories/_matrix.tsx` con `MatrixGrid`. 28
+  snapshots Chromatic. Ola 2 (16 componentes interactivos +
+  compounds) en beta.20.
+- **Tests regresión visual AllStates** — 14 tests vía `composeStory`,
+  uno por componente Ola 1, anti-regresión de "alguien borra una
+  variant".
+- **`Fundamentos/CSS API pública`** — MDX exhaustiva con tabla
+  detallada y ejemplo HTML por los 32 componentes para consumers
+  vanilla. Linkada desde el README.
+- **`Fundamentos/Catálogo AllStates`** — índice MDX que lista los
+  matrices visuales por ola.
+- **`scripts/perceptual-allowlist.json`** con 2 excepciones
+  documentadas (`laurus-vitreus` LIGHT 0.0847,
+  `malum-rutilus` DARK 0.0706).
+- **`check-component-contrast.mjs --print-perceptual-table`** modo
+  debug para regenerar tabla del SKILL.
+- **Tests añadidos** (no exhaustivo): Dropdown aria-disabled (×2),
+  Tabs auto-select silent (×4), Pagination clamps (×6),
+  Pagination prev/nextAriaLabel (×2), Progress guards (×6),
+  Card tabIndex (×3), Rating aria-readonly (×2),
+  useControllableState (×9), Tab keyboard wrapped, Spinner.label i18n
+  (×3), Sidebar.ariaLabel i18n (×3).
+- **`.github/workflows/verify.yml`** — gate CI completo (lint,
+  typecheck, test:unit, test:contrast, build, verify:size) + job
+  separado `storybook` con playwright.
+- **`size-limit`** budget para `igoded-state-css.css` (techo 800 KB
+  gzip).
+- **`src/utils/env.ts`** — `isDev()` helper sin global augmentation.
+- **`src/utils/useIsoLayoutEffect.ts`** — patrón canónico SSR-safe.
+- **i18n explícitas**: `Spinner.label`, `Sidebar.ariaLabel`,
+  `Avatar.statusLabel`, `Pagination.prevAriaLabel`/`nextAriaLabel`.
+- **`scripts/migrate-tooltip-prefixes.mjs`** — pase con PostCSS AST
+  para la migración de Tooltip.
+
+### Changed
+- **`scripts/check-component-contrast.mjs`**: Check 3 ΔE OKLab
+  promovido a ERROR con umbral 0.05 + WARN umbral 0.10. Allowlist
+  explícita con drift detection (95% del valor de decisión). Cómputo
+  automático de los pares de cardinales por tema (30 totales).
+- **`dist/env.d.ts`** ya no se publica al consumer
+  (`tsconfig.build.json` lo excluye explícitamente). Componentes
+  ahora usan `isDev()` util en lugar de `import.meta.env.DEV` directo.
+- **`Modal`**: `ModalContextValue` removido del barrel export (era
+  huérfano sin `ModalContext` ni `useModal()` exportados).
+- **CSS publicados minificados con esbuild** (state.css 6.3 MB →
+  713 KB gzipped, components.css 28 KB gzipped).
+- **`design.css`** size-limit budget bajado de 5 KB a 2 KB (real
+  ~70 B gzipped).
+- **`tokens.css`** size-limit budget subido de 25 KB a 30 KB para
+  margen.
+
+### Removed
+- CSS huérfano: `.ig-modal`, `.ig-modal-backdrop` en
+  `igoded-components.css` (3 ocurrencias residuales del cleanup
+  beta.0; el componente Modal usa `<dialog>`/`.ig-dialog`).
+- Referencias prematuras a `1.0.0-rc.{1,2,3}` en código y docs
+  (sustituidas por `1.0.0-beta.8` o `pre-1.0.0-rc.1` según contexto).
+- `Stepper.defaultActive` (era prop muerta).
+- `src/env.d.ts` (sustituido por `src/utils/env.ts` con `isDev()`).
+
+### Notes
+- **2 componentes saltados en migración a `useControllableState`**
+  por razones técnicas documentadas:
+  - **`ThemeSwitch`**: triple fuente de truth (controlled prop +
+    override interno + storage cross-tab vía `useSyncExternalStore`).
+    El componente original deriva el valor en render directamente
+    de las fuentes; el hook genérico introduciría un `useState`
+    interno que en happy-dom provoca loop infinito por la cadena
+    `setItem → StorageEvent → snapshot revaluation → setState →
+    setItem`. El patrón actual es idiomático para este caso, no es
+    deuda técnica. Para post-RC1: extender el hook con modo
+    `derive: () => T` opt-in o crear
+    `useControllableStateWithStorage` dedicado.
+  - **`Modal`**: controlled-only puro (`open: boolean` requerido,
+    sin `defaultOpen`). El hook no aporta valor; siempre sería
+    `isControlled=true`.
+  - **`Checkbox`**: NO tiene `useState` interno — delega checked
+    al `<input type="checkbox">` nativo. La migración añadiría
+    complejidad sin valor.
+- **Migration guide útil — `useControllableState` API**:
+
+  ```ts
+  const { value, setValue } = useControllableState({ value, defaultValue, onChange });
+
+  // Acción del usuario (dispara onChange):
+  setValue(newValue);
+
+  // Auto-select interno o rehidratación post-mount (NO dispara onChange):
+  setValue(newValue, { silent: true });
+  ```
+
+- **Tag retroactivo `v1.0.0-beta.0`** apuntado al commit
+  `8a1c7ef5f030ba7bf227b53a0b8469fa442149e3` (`feat: rewrite as
+  TypeScript + React 19 design system`, 2026-05-01) para
+  trazabilidad histórica completa de la rama 1.0.x.
+
+### Bundle stats (gzip)
+
+| Archivo                                    | Real     | Budget  | Margen |
+|--------------------------------------------|----------|---------|--------|
+| `dist/index.js` (ESM)                      | 14.37 KB | 15 KB   | 4%     |
+| `dist/index.cjs`                           | 12.36 KB | 15 KB   | 18%    |
+| `dist/styles/igoded-design.css`            | 70 B     | 2 KB    | 97%    |
+| `dist/styles/igoded-tokens.css`            | 6.53 KB  | 30 KB   | 78%    |
+| `dist/styles/igoded-components.css`        | 28.05 KB | 75 KB   | 63%    |
+| `dist/styles/igoded-base.css`              | 453 B    | 2 KB    | 78%    |
+| `dist/styles/igoded-reset.css`             | 924 B    | 2 KB    | 55%    |
+| `dist/styles/igoded-fonts.css`             | 142 B    | 1 KB    | 86%    |
+| `dist/styles/igoded-state-css.css`         | 713.5 KB | 800 KB  | 11%    |
+
+### Test stats
+- Suite unit final: **515** tests (`vitest run --project unit`).
+- 36 archivos de test, 100% verde.
+- 14 nuevos AllStates regression tests (composeStory + selectores
+  CSS).
+
 ## [1.0.0-beta.18] — 2026-05-03
 
 ### Changed
@@ -38,13 +228,17 @@ versionado [SemVer](https://semver.org/lang/es/).
   Mejora a11y para SR.
 
 ### Test stats
-- Unit tests: 523 → 632 (más tests pero menos archivos, gracias a
-  `describe.each` que expande cada parametrización).
+- Suite unit final tras refactor: **453** (`vitest run --project unit`).
+  Con `describe.each` el conteo bruto sube por la expansión de cada
+  parametrización; lo relevante es que el contrato CSS/ARIA queda
+  cubierto con menos archivos y asserts más densos.
 - Asserts cosméticos sueltos eliminados: ~80.
-- Asserts cosméticos parametrizados añadidos: ~120 (mismo contrato
-  CSS, mejor estructura).
 - Tests transversales nuevos: 5 (`className` merge), 1 combo de
   estado peligroso (`loading + disabled`).
+- Nota: a partir de esta versión NO publicamos delta numérico
+  contra la versión anterior; el conteo puede oscilar libremente
+  con cada refactor de parametrización y no es una métrica
+  contractual del paquete.
 
 ## [1.0.0-beta.17] — 2026-05-03
 

@@ -1,12 +1,14 @@
 import {
   useEffect,
   useRef,
-  useState,
   type ChangeEvent,
   type InputHTMLAttributes,
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export type SwitchVariant =
   | "brand"
@@ -28,7 +30,7 @@ export interface SwitchProps
    * `el.indeterminate = true` en el `<input>` nativo y reemplaza
    * `aria-checked` por `"mixed"` para lectores de pantalla. Útil en
    * toggles maestros que controlan un grupo donde unos hijos están
-   * on y otros off (desde 1.0.0-rc.3).
+   * on y otros off (desde 1.0.0-beta.8).
    */
   indeterminate?: boolean;
   ref?: Ref<HTMLInputElement>;
@@ -59,9 +61,29 @@ export function Switch({
   onChange,
   ...rest
 }: SwitchProps) {
-  const isControlled = checked !== undefined;
-  const [internal, setInternal] = useState<boolean>(defaultChecked === true);
-  const isOn = isControlled ? checked : internal;
+  const { value: isOn, setValue: setIsOn, isControlled } = useControllableState<boolean>({
+    value: checked,
+    defaultValue: defaultChecked === true,
+  });
+
+  // Dev-only warning: controlled sin handler. El consumer pasa `checked`
+  // pero olvida `onChange` → el switch parece roto. En useEffect (no
+  // durante render) por el lint react-hooks/refs.
+  const warnedControlledRef = useRef(false);
+  useEffect(() => {
+    if (
+      isDev() &&
+      !warnedControlledRef.current &&
+      isControlled &&
+      !onChange &&
+      !disabled
+    ) {
+      warnedControlledRef.current = true;
+      console.warn(
+        "[reactigoded] <Switch checked={...}> sin onChange — el switch no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
+      );
+    }
+  }, [isControlled, onChange, disabled]);
 
   const internalRef = useRef<HTMLInputElement>(null);
   const setRefs = (el: HTMLInputElement | null) => {
@@ -70,7 +92,11 @@ export function Switch({
     else if (ref) ref.current = el;
   };
 
-  useEffect(() => {
+  // useIsoLayoutEffect (layout en cliente, effect en server): el
+  // atributo `indeterminate` es DOM-only y no se refleja en el HTML
+  // inicial. Aplicarlo en un useEffect post-paint produce flicker
+  // (primer paint thumb desplazado, segundo thumb centrado).
+  useIsoLayoutEffect(() => {
     if (internalRef.current) {
       internalRef.current.indeterminate = !!indeterminate;
     }
@@ -84,7 +110,7 @@ export function Switch({
     if (indeterminate && internalRef.current) {
       internalRef.current.indeterminate = true;
     }
-    if (!isControlled) setInternal(e.target.checked);
+    setIsOn(e.target.checked);
     onChange?.(e);
   };
 

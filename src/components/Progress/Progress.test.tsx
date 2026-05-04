@@ -78,4 +78,42 @@ describe("Progress", () => {
     render(<Progress ref={ref} value={0} />);
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
   });
+
+  describe.each([
+    ["max negativo", -5, 50, 100, 50],
+    ["max=0", 0, 50, 100, 50],
+    ["max=NaN", Number.NaN, 50, 100, 50],
+    ["max=Infinity", Number.POSITIVE_INFINITY, 50, 100, 50],
+    ["value=NaN", 100, Number.NaN, 100, 0],
+    ["value=Infinity", 100, Number.POSITIVE_INFINITY, 100, 100],
+  ] as const)("guard %s", (_label, max, value, expectedMax, expectedNow) => {
+    it("cae a defaults seguros sin romper aria", () => {
+      render(<Progress value={value} max={max} data-testid="p" />);
+      const el = screen.getByRole("progressbar");
+      expect(el).toHaveAttribute("aria-valuemax", String(expectedMax));
+      expect(el).toHaveAttribute("aria-valuenow", String(expectedNow));
+    });
+  });
+});
+
+describe("Progress — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants × valores", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Progress.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-progress-${v}`)).not.toBeNull();
+    }
+    expect(container.querySelector(".ig-progress-indeterminate")).not.toBeNull();
+  });
 });

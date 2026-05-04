@@ -8,7 +8,7 @@ export interface DropdownMenuProps extends HTMLAttributes<HTMLDivElement> {
 
 /**
  * DropdownMenu — contenedor con `role="menu"` para los items.
- * Su visibilidad la controla el CSS de `.ig-dropdown.open`.
+ * Su visibilidad la controla el CSS de `.ig-dropdown.ig-dropdown-open`.
  */
 export function DropdownMenu({
   className,

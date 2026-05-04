@@ -5,9 +5,10 @@ IGODED DESIGN CSS — punto de entrada único para tokens + base + components
 
 Autor:    Iván Goded
 Licencia: MIT
-Browsers: Chrome 117+ · Firefox 121+ · Safari 17.5+ · Edge 117+. Sin IE.
+Browsers: ver `browserslist` en package.json (last 2 versions de
+Chrome / Firefox / Safari / Edge, sin IE).
 
-ARQUITECTURA (`1.0.0-beta.3`):
+ARQUITECTURA (estable desde `1.0.0-beta.3`):
 
 ```
 tokens.css       → variables --ig-* + keyframes + @font-face
@@ -43,9 +44,10 @@ CONSUMER POR ESCENARIO:
 TEMA: `data-theme="light|dark"` en `<html>` (también respeta
 `prefers-color-scheme` automáticamente si no se fuerza).
 
-VARIANTES SEMÁNTICAS:
-  brand → vitreus · secondary → axis · info → axis ·
+VARIANTES SEMÁNTICAS (7 cardinales OKLCH):
+  brand → vitreus · secondary → axis · info → kobalium ·
   success → laurus · warning → rutilus · danger → malum
+  (cinis es el cardinal especial para text-body, sin alias semántico)
 */
 
 @import "./igoded-tokens.css";

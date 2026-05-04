@@ -106,7 +106,7 @@ const cellStyle: React.CSSProperties = {
   fontFamily: "var(--ig-font-mono)",
 };
 
-export const Cardinales: Story = {
+export const Cardinals: Story = {
   render: () => {
     const t = useResolvedTokens();
     return (

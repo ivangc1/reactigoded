@@ -1,11 +1,6 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type HTMLAttributes,
-  type Ref,
-} from "react";
+import { useMemo, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 import { SidebarContext } from "./SidebarContext";
 
 export interface SidebarProps extends HTMLAttributes<HTMLElement> {
@@ -15,6 +10,12 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
   defaultCollapsed?: boolean;
   /** Callback al cambiar collapsed. */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /**
+   * Etiqueta accesible del `<aside>`. Por defecto `"Navegación lateral"`
+   * (ES). Sustituye el `aria-label` para i18n. Si pasas también
+   * `aria-label` directo (vía rest), `aria-label` gana sobre `ariaLabel`.
+   */
+  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -39,24 +40,19 @@ export function Sidebar({
   collapsed: collapsedProp,
   defaultCollapsed = false,
   onCollapsedChange,
+  ariaLabel,
   className,
   children,
   ref,
   ...rest
 }: SidebarProps) {
-  // 1.0.0-beta.4: aria-label del rest (HTML std).
+  // Precedencia desde beta.19: aria-label (rest) > ariaLabel prop > default ES.
   const { "aria-label": ariaLabelOverride, ...asideRest } = rest;
-  const isControlled = collapsedProp !== undefined;
-  const [internal, setInternal] = useState(defaultCollapsed);
-  const collapsed = isControlled ? collapsedProp : internal;
-
-  const setCollapsed = useCallback(
-    (next: boolean) => {
-      if (!isControlled) setInternal(next);
-      onCollapsedChange?.(next);
-    },
-    [isControlled, onCollapsedChange],
-  );
+  const { value: collapsed, setValue: setCollapsed } = useControllableState<boolean>({
+    value: collapsedProp,
+    defaultValue: defaultCollapsed,
+    onChange: onCollapsedChange,
+  });
 
   const ctxValue = useMemo(
     () => ({ collapsed, setCollapsed }),
@@ -68,7 +64,7 @@ export function Sidebar({
       <aside
         {...asideRest}
         ref={ref}
-        aria-label={ariaLabelOverride ?? "Navegación lateral"}
+        aria-label={ariaLabelOverride ?? ariaLabel ?? "Navegación lateral"}
         className={cn(
           "ig-sidebar",
           collapsed && "ig-sidebar-collapsed",

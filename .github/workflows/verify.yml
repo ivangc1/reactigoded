@@ -1,0 +1,73 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Lint + typecheck + unit + contrast + build + size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        # `--legacy-peer-deps` mientras tengamos peer-deps en conflicto;
+        # el README documenta el porqué.
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (CI mode — pool=forks, isolate=true)
+        # Usamos test:unit:ci en CI: aislamiento estricto + forks
+        # detecta side-effects entre tests que test:unit deja pasar
+        # por el workaround WSL.
+        run: npm run test:unit:ci
+
+      - name: Contrast guard (WCAG + OKLCH + ΔE)
+        run: npm run test:contrast
+
+      - name: Build (lib + dts + styles)
+        run: npm run build
+
+      - name: Size budgets
+        run: npm run verify:size
+
+  storybook:
+    name: Storybook + axe (browser tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright Chromium
+        # vitest-browser usa playwright internamente; sin esto los
+        # browser tests de Storybook no arrancan.
+        run: npx playwright install --with-deps chromium
+
+      - name: Storybook tests (vitest browser + axe-core)
+        run: npm run test:storybook

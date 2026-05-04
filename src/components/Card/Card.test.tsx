@@ -77,6 +77,41 @@ describe("Card", () => {
   });
 });
 
+describe("Card — tabIndex auto cuando actúa como botón", () => {
+  it("interactive + role=button + onClick aplica tabIndex=0 sin prop explícita", () => {
+    render(
+      <Card interactive role="button" onClick={() => {}} data-testid="c">
+        x
+      </Card>,
+    );
+    expect(screen.getByTestId("c")).toHaveAttribute("tabindex", "0");
+  });
+
+  it("tabIndex explícito del consumer pisa el default (incluido -1)", () => {
+    render(
+      <Card
+        interactive
+        role="button"
+        onClick={() => {}}
+        tabIndex={-1}
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    expect(screen.getByTestId("c")).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("sin las 3 condiciones, NO aplica tabIndex", () => {
+    render(
+      <Card interactive data-testid="c">
+        x
+      </Card>,
+    );
+    expect(screen.getByTestId("c")).not.toHaveAttribute("tabindex");
+  });
+});
+
 describe("Card — keyboard activation cuando interactive + role=button", () => {
   it("Enter dispara onClick si interactive + role=button", async () => {
     const onClick = vi.fn();
@@ -218,5 +253,52 @@ describe("Card subcomponentes", () => {
   it("CardImage usa ig-card-image por defecto", () => {
     render(<CardImage src="/y.png" alt="Y" data-testid="i" />);
     expect(screen.getByTestId("i")).toHaveClass("ig-card-image");
+  });
+});
+
+describe("Card — className merge", () => {
+  it("mergea className del consumer sin pisar las clases del componente", () => {
+    render(
+      <Card
+        variant="brand"
+        bordered
+        elevated
+        className="my-card extra"
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el).toHaveClass("ig-card");
+    expect(el).toHaveClass("ig-card-brand");
+    expect(el).toHaveClass("ig-card-bordered");
+    expect(el).toHaveClass("ig-card-elevated");
+    expect(el).toHaveClass("my-card");
+    expect(el).toHaveClass("extra");
+  });
+});
+
+describe("Card — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants outline + filled", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Card.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-card-${v}`)).not.toBeNull();
+      expect(container.querySelector(`.ig-card-${v}-filled`)).not.toBeNull();
+    }
+    expect(container.querySelector(".ig-card-glass")).not.toBeNull();
+    expect(container.querySelector(".ig-card-interactive")).not.toBeNull();
   });
 });

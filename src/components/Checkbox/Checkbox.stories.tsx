@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { fn } from "storybook/test";
+import { expect, fn } from "storybook/test";
 import { Checkbox } from "./Checkbox";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Checkbox",
@@ -122,6 +123,44 @@ export const MasterSelectAll: Story = {
       );
     };
     return <Demo />;
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <MatrixGrid
+      renderRow={(v) => (
+        <>
+          <Checkbox variant={v as Variant}>unchecked</Checkbox>
+          <Checkbox variant={v as Variant} defaultChecked>
+            checked
+          </Checkbox>
+          <Checkbox variant={v as Variant} indeterminate>
+            indeterminate
+          </Checkbox>
+          <Checkbox variant={v as Variant} disabled>
+            disabled
+          </Checkbox>
+          <Checkbox variant={v as Variant} indeterminate disabled>
+            ind+dis
+          </Checkbox>
+        </>
+      )}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const checkboxes = canvasElement.querySelectorAll('input[type="checkbox"]');
+    await expect(checkboxes.length).toBeGreaterThan(15);
   },
 };
 

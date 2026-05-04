@@ -2,11 +2,11 @@ import {
   useCallback,
   useId,
   useMemo,
-  useState,
   type HTMLAttributes,
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 import { AccordionContext } from "./AccordionContext";
 
 type SingleProps = {
@@ -86,17 +86,11 @@ function AccordionSingle({
   ref,
   ...rest
 }: Omit<SingleProps, "type"> & BaseProps & { baseId: string }) {
-  const isControlled = valueProp !== undefined;
-  const [internal, setInternal] = useState<string | null>(defaultValue);
-  const open = isControlled ? valueProp : internal;
-
-  const setOpen = useCallback(
-    (next: string | null) => {
-      if (!isControlled) setInternal(next);
-      onValueChange?.(next);
-    },
-    [isControlled, onValueChange],
-  );
+  const { value: open, setValue: setOpen } = useControllableState<string | null>({
+    value: valueProp,
+    defaultValue,
+    onChange: onValueChange,
+  });
 
   const isOpen = useCallback((v: string) => open === v, [open]);
   const toggle = useCallback(
@@ -131,17 +125,11 @@ function AccordionMultiple({
   ref,
   ...rest
 }: Omit<MultipleProps, "type"> & BaseProps & { baseId: string }) {
-  const isControlled = valueProp !== undefined;
-  const [internal, setInternal] = useState<string[]>(defaultValue);
-  const open = isControlled ? valueProp : internal;
-
-  const setOpen = useCallback(
-    (next: string[]) => {
-      if (!isControlled) setInternal(next);
-      onValueChange?.(next);
-    },
-    [isControlled, onValueChange],
-  );
+  const { value: open, setValue: setOpen } = useControllableState<string[]>({
+    value: valueProp,
+    defaultValue,
+    onChange: onValueChange,
+  });
 
   const isOpen = useCallback((v: string) => open.includes(v), [open]);
   const toggle = useCallback(

@@ -58,3 +58,31 @@ describe("Badge", () => {
     expect(ref.current).toBeInstanceOf(HTMLSpanElement);
   });
 });
+
+describe("Badge — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants × outline × pill × dot", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Badge.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-badge-${v}`)).not.toBeNull();
+      // Badge emite `ig-badge-outline-{variant}` directamente, no
+      // `ig-badge-outline` suelta — la clase combina variant + estilo.
+      expect(
+        container.querySelector(`.ig-badge-outline-${v}`),
+      ).not.toBeNull();
+    }
+    expect(container.querySelector(".ig-badge-pill")).not.toBeNull();
+    expect(container.querySelector(".ig-badge-dot")).not.toBeNull();
+  });
+});

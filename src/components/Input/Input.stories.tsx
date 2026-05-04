@@ -36,7 +36,7 @@ type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {};
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--md">
       <Input size="sm" placeholder="Small" />
@@ -164,4 +164,62 @@ export const ConGrupo: Story = {
       </InputGroup>
     </div>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  // Cada Input necesita label vinculado, aria-label o placeholder para
+  // cumplir axe rule `label`. La fila de "con valor" no tenía
+  // placeholder, así que usamos aria-label explícito.
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 600 }}>
+      {(["sm", "md", "lg"] as const).map((size) => (
+        <div key={size} style={{ display: "grid", gap: "0.5rem" }}>
+          <strong>size: {size}</strong>
+          <Input
+            size={size}
+            placeholder="default"
+            aria-label={`Input ${size} default`}
+          />
+          <Input
+            size={size}
+            state="error"
+            placeholder="error state"
+            aria-label={`Input ${size} error`}
+          />
+          <Input
+            size={size}
+            state="success"
+            placeholder="success state"
+            aria-label={`Input ${size} success`}
+          />
+          <Input
+            size={size}
+            disabled
+            placeholder="disabled"
+            aria-label={`Input ${size} disabled`}
+          />
+          <Input
+            size={size}
+            defaultValue="con valor"
+            aria-label={`Input ${size} con valor`}
+          />
+        </div>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inputs = canvas.queryAllByRole("textbox");
+    await expect(inputs.length).toBeGreaterThan(10);
+  },
 };

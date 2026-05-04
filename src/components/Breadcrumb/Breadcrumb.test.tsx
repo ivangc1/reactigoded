@@ -66,3 +66,14 @@ describe("Breadcrumb", () => {
     expect(ref.current?.tagName).toBe("NAV");
   });
 });
+
+describe("Breadcrumb — AllStates regression", () => {
+  it("AllStates renderiza 3 navs con jerarquías distintas", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Breadcrumb.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    expect(container.querySelectorAll("nav").length).toBe(3);
+    expect(container.querySelectorAll(".ig-breadcrumb").length).toBe(3);
+  });
+});

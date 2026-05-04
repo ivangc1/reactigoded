@@ -34,12 +34,21 @@ describe("Rating", () => {
     expect(screen.getByRole("radio", { name: "5 estrellas" })).toBeChecked();
   });
 
-  it("readOnly desactiva click y aplica clase", () => {
-    render(<Rating value={3} readOnly data-testid="r" />);
-    expect(screen.getByTestId("r")).toHaveClass("ig-rating-readonly");
+  it("readOnly aplica aria-readonly al radiogroup y guarda click", async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Rating value={3} readOnly onValueChange={onValueChange} data-testid="r" />,
+    );
+    const group = screen.getByTestId("r");
+    expect(group).toHaveClass("ig-rating-readonly");
+    expect(group).toHaveAttribute("aria-readonly", "true");
+    // Las estrellas NO llevan disabled (rompía la a11y de SR sobre el
+    // radio checked); el guard vive en el handler.
     screen.getAllByRole("radio").forEach((s) => {
-      expect(s).toBeDisabled();
+      expect(s).toBeEnabled();
     });
+    await userEvent.click(screen.getByRole("radio", { name: "5 estrellas" }));
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 
   describe.each(["sm", "lg", "xl"] as const)("size=%s", (s) => {
@@ -80,10 +89,16 @@ describe("Rating — roving tabindex + keyboard nav (WAI-ARIA APG)", () => {
     });
   });
 
-  it("readOnly: todas las estrellas tabIndex=-1", () => {
-    render(<Rating value={3} readOnly />);
-    screen.getAllByRole("radio").forEach((s) => {
-      expect(s).toHaveAttribute("tabindex", "-1");
+  it("readOnly: la estrella checked sigue siendo tab stop (roving)", () => {
+    // Cambio APG: en readOnly el radiogroup expone aria-readonly; los
+    // radios siguen siendo focuseables para inspección pero los
+    // handlers no responden. Sin esto un SR no podía anunciar la
+    // estrella seleccionada porque el botón estaba `disabled`.
+    render(<Rating value={3} max={5} readOnly />);
+    const stars = screen.getAllByRole("radio");
+    expect(stars[2]).toHaveAttribute("tabindex", "0"); // value=3
+    [0, 1, 3, 4].forEach((i) => {
+      expect(stars[i]).toHaveAttribute("tabindex", "-1");
     });
   });
 

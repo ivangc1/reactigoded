@@ -17,13 +17,15 @@ const meta = {
     docs: {
       description: {
         component:
-          "`<header class=\"ig-navbar\">` con subcomponentes: `NavbarBrand`, `NavbarNav` (`<nav aria-label>`), `NavbarLink` (con prop `active` que aplica `aria-current=\"page\"`), `NavbarActions` y `NavbarMenuButton` (botón hamburguesa visible vía CSS sólo en mobile). Variantes: `sticky`, `fixed`, `glass`.",
+          "`<header class=\"ig-navbar\">` con subcomponentes: `NavbarBrand`, `NavbarNav` (`<nav aria-label>`), `NavbarLink` (con prop `active` que aplica `aria-current=\"page\"`), `NavbarActions` y `NavbarMenuButton` (botón hamburguesa visible vía CSS sólo en mobile). Variantes: `position=\"sticky\"`/`\"fixed\"`, `glass`.",
       },
     },
   },
   argTypes: {
-    sticky: { control: "boolean" },
-    fixed: { control: "boolean" },
+    position: {
+      control: { type: "inline-radio" },
+      options: [undefined, "sticky", "fixed"],
+    },
     glass: { control: "boolean" },
   },
 } satisfies Meta<typeof Navbar>;
@@ -53,7 +55,7 @@ export const PorDefecto: Story = {
 };
 
 export const Sticky: Story = {
-  args: { sticky: true },
+  args: { position: "sticky" },
   render: (args) => (
     <div style={{ minHeight: "200vh" }}>
       <Navbar {...args}>
@@ -76,7 +78,7 @@ export const Sticky: Story = {
 };
 
 export const Glass: Story = {
-  args: { glass: true, sticky: true },
+  args: { glass: true, position: "sticky" },
   render: (args) => (
     <div
       // Fondo con tokens del DS (Vitreus + Axis sobre fundus). Antes usaba un

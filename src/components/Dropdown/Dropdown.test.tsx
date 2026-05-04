@@ -43,15 +43,15 @@ describe("Dropdown — uncontrolled", () => {
     const trigger = screen.getByRole("button", { name: /abrir/i });
     const root = container.querySelector(".ig-dropdown");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(root).not.toHaveClass("open");
+    expect(root).not.toHaveClass("ig-dropdown-open");
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(root).toHaveClass("open");
+    expect(root).toHaveClass("ig-dropdown-open");
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(root).not.toHaveClass("open");
+    expect(root).not.toHaveClass("ig-dropdown-open");
   });
 
   it("click fuera cierra el menu", () => {
@@ -67,9 +67,9 @@ describe("Dropdown — uncontrolled", () => {
       </div>,
     );
     const root = container.querySelector(".ig-dropdown");
-    expect(root).toHaveClass("open");
+    expect(root).toHaveClass("ig-dropdown-open");
     fireEvent.mouseDown(screen.getByRole("button", { name: /fuera/i }));
-    expect(root).not.toHaveClass("open");
+    expect(root).not.toHaveClass("ig-dropdown-open");
   });
 
   it("ESC cierra el menu y devuelve foco al trigger", () => {
@@ -249,6 +249,32 @@ describe("Dropdown — keyboard", () => {
     fireEvent.keyDown(a, { key: "ArrowDown" });
     expect(c).toHaveFocus();
   });
+
+  it("ArrowDown desde trigger salta primer item con aria-disabled (anchor)", () => {
+    // Regresión: trigger usaba selector más laxo que items y enfocaba el
+    // primer <a aria-disabled="true">. Ahora ambos comparten
+    // NAVIGABLE_ITEM_SELECTOR y deben coincidir.
+    render(
+      <Dropdown>
+        <DropdownTrigger>Abrir</DropdownTrigger>
+        <DropdownMenu>
+          <DropdownItem href="#a" aria-disabled="true">
+            Bloqueado
+          </DropdownItem>
+          <DropdownItem href="#b">Activo</DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const trigger = screen.getByRole("button", { name: /abrir/i });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        expect(screen.getByRole("menuitem", { name: /activo/i })).toHaveFocus();
+        resolve();
+      });
+    });
+  });
 });
 
 describe("DropdownItem — variantes y href", () => {
@@ -333,5 +359,26 @@ describe("useDropdown fuera de provider", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => render(<Boom />)).toThrow(/Dropdown/);
     spy.mockRestore();
+  });
+});
+
+describe("Dropdown — className merge", () => {
+  it("Dropdown root, Trigger y Item conservan su clase base con className consumer", () => {
+    const { container } = render(
+      <Dropdown className="my-dd extra">
+        <DropdownTrigger className="my-trigger">Abrir</DropdownTrigger>
+        <DropdownMenu className="my-menu">
+          <DropdownItem className="my-item">Uno</DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const root = container.querySelector(".ig-dropdown");
+    expect(root).toHaveClass("ig-dropdown");
+    expect(root).toHaveClass("my-dd");
+    expect(root).toHaveClass("extra");
+
+    const trigger = screen.getByRole("button", { name: /abrir/i });
+    expect(trigger).toHaveClass("ig-dropdown-trigger");
+    expect(trigger).toHaveClass("my-trigger");
   });
 });

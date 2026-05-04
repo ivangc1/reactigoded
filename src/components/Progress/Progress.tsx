@@ -47,8 +47,14 @@ export function Progress({
   ref,
   ...rest
 }: ProgressProps) {
-  const clamped = Math.min(Math.max(value, 0), max);
-  const percent = max > 0 ? (clamped / max) * 100 : 0;
+  // Defensa contra max ≤ 0, NaN, Infinity en `max`. Cae al default 100
+  // sin contaminar la API ARIA con valores que rompen el ratio.
+  // Para `value`: NaN colapsa a 0 (no podemos clampear NaN); ±Infinity
+  // pasa por el clamp normal y se queda en [0, safeMax].
+  const safeMax = Number.isFinite(max) && max > 0 ? max : 100;
+  const safeValue = Number.isNaN(value) ? 0 : value;
+  const clamped = Math.min(Math.max(safeValue, 0), safeMax);
+  const percent = (clamped / safeMax) * 100;
   // 1.0.0-beta.4: aria-label del rest (HTML std). Si no llega, calcula uno
   // descriptivo basado en porcentaje (o "Cargando" si indeterminate).
   const { "aria-label": ariaLabelOverride, ...divRest } = rest;
@@ -65,7 +71,7 @@ export function Progress({
       role="progressbar"
       aria-label={resolvedAriaLabel}
       aria-valuemin={0}
-      aria-valuemax={max}
+      aria-valuemax={safeMax}
       aria-valuenow={indeterminate ? undefined : clamped}
       className={cn(
         "ig-progress",

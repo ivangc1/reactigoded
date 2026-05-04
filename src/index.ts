@@ -1,7 +1,7 @@
 /**
  * Igoded Design System — entry point del paquete.
  *
- * Arquitectura CSS modular (`1.0.0-beta.2`):
+ * Arquitectura CSS modular (estable desde `1.0.0-beta.3`):
  *
  *   tokens.css       solo variables --ig-* + keyframes + @font-face
  *                    (cero selectores globales, ~98 KB).
@@ -36,6 +36,12 @@ export * from "./components";
 
 // Hooks públicos
 export { useTheme, type Theme, type UseThemeReturn } from "./hooks/useTheme";
+export {
+  useControllableState,
+  type SetValueOptions,
+  type UseControllableStateOptions,
+  type UseControllableStateReturn,
+} from "./hooks/useControllableState";
 
 // Utilidades públicas
 export { cn } from "./utils/cn";

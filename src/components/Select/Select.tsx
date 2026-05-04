@@ -19,6 +19,15 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 /**
  * Select — `<select>` nativo estilizado. Pasa `<option>` como children.
  *
+ * **Limitación de plataforma**: la apariencia depende de
+ * `appearance: none` + un caret SVG inyectado en CSS. Cubre Chrome,
+ * Firefox, Safari y Edge modernos (los del browserslist). En motores
+ * antiguos sin soporte de `appearance: none` el `<select>` cae al chrome
+ * nativo del navegador (caret nativo, sin el icono igoded). El menú de
+ * opciones siempre lo pinta el sistema operativo — la librería no
+ * intenta reemplazarlo (un combobox custom requeriría un componente
+ * separado, fuera del alcance del DS).
+ *
  * @example
  * <Select value={country} onChange={(e) => setCountry(e.target.value)}>
  *   <option value="es">España</option>

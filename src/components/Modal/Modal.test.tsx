@@ -143,6 +143,18 @@ describe("Modal", () => {
     );
     expect(ref.current).toBeInstanceOf(HTMLDialogElement);
   });
+
+  it("className merge: la clase del consumer se añade al <dialog>", () => {
+    render(
+      <Modal open={false} className="my-modal extra" data-testid="m">
+        <ModalBody>x</ModalBody>
+      </Modal>,
+    );
+    const dialog = screen.getByTestId("m");
+    expect(dialog).toHaveClass("ig-dialog");
+    expect(dialog).toHaveClass("my-modal");
+    expect(dialog).toHaveClass("extra");
+  });
 });
 
 describe("Modal subcomponents", () => {

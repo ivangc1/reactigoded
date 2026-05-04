@@ -51,6 +51,91 @@ describe("Tabs", () => {
     expect(screen.queryByText("Contenido C")).not.toBeInTheDocument();
   });
 
+  it("sin value/defaultValue auto-selecciona el primer Tab montado", () => {
+    // Regresión documentada por la auditoría: cuando register tenía
+    // deps [] y leía `internal === ""` por closure, el último Tab en
+    // montar ganaba (Tab C activo en lugar de Tab A). El fix actual
+    // lee desde internalRef sincronizado y preserva la primera
+    // selección.
+    render(basicTabs());
+    expect(screen.getByRole("tab", { name: "Alpha" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Beta" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByRole("tab", { name: "Gamma" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByText("Contenido A")).toBeInTheDocument();
+  });
+
+  it("auto-select inicial NO dispara onValueChange (silent)", () => {
+    // Regresión F.3: el auto-select del primer Tab no es acción del
+    // usuario y no debe filtrarse a onValueChange. El consumer puede
+    // tener side-effects (analytics, fetch) que no deben dispararse al
+    // mount.
+    const onValueChange = vi.fn();
+    render(
+      <Tabs onValueChange={onValueChange}>
+        <TabList aria-label="silent">
+          <Tab value="a">A</Tab>
+          <Tab value="b">B</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+      </Tabs>,
+    );
+    expect(screen.getByRole("tab", { name: "A" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("click en Tab SÍ dispara onValueChange (acción del usuario)", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <Tabs defaultValue="a" onValueChange={onValueChange}>
+        <TabList aria-label="user-action">
+          <Tab value="a">A</Tab>
+          <Tab value="b">B</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+        <TabPanel value="b">PB</TabPanel>
+      </Tabs>,
+    );
+    await user.click(screen.getByRole("tab", { name: "B" }));
+    expect(onValueChange).toHaveBeenCalledWith("b");
+  });
+
+  it("controlled con value='' NO auto-selecciona (consumer manda)", () => {
+    // En modo controlled el internalRef sigue en "" pero NO debe
+    // auto-seleccionar el primero — el consumer manda y "" significa
+    // "ningún tab activo".
+    render(
+      <Tabs value="">
+        <TabList aria-label="Demo">
+          <Tab value="a">Alpha</Tab>
+          <Tab value="b">Beta</Tab>
+        </TabList>
+        <TabPanel value="a">PA</TabPanel>
+        <TabPanel value="b">PB</TabPanel>
+      </Tabs>,
+    );
+    expect(screen.getByRole("tab", { name: "Alpha" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByRole("tab", { name: "Beta" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
   it("click cambia tab (uncontrolled)", async () => {
     const user = userEvent.setup();
     render(basicTabs({ defaultValue: "a" }));
@@ -195,5 +280,40 @@ describe("useTabs fuera de provider", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => render(<Boom />)).toThrow(/Tabs/);
     spy.mockRestore();
+  });
+});
+
+describe("Tabs — className merge", () => {
+  it("Tabs root, TabList, Tab y TabPanel conservan su clase base con className consumer", () => {
+    render(
+      <Tabs defaultValue="a" variant="brand" className="my-tabs extra" data-testid="root">
+        <TabList className="my-list">
+          <Tab value="a" className="my-tab">A</Tab>
+        </TabList>
+        <TabPanel value="a" className="my-panel">PA</TabPanel>
+      </Tabs>,
+    );
+    const root = screen.getByTestId("root");
+    expect(root).toHaveClass("ig-tabs");
+    expect(root).toHaveClass("ig-tabs-brand");
+    expect(root).toHaveClass("my-tabs");
+    expect(root).toHaveClass("extra");
+
+    const tab = screen.getByRole("tab", { name: "A" });
+    expect(tab).toHaveClass("ig-tab");
+    expect(tab).toHaveClass("my-tab");
+  });
+});
+
+describe("Tabs — AllStates regression", () => {
+  it("AllStates renderiza tablists default/pills/vertical", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Tabs.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    const tablists = container.querySelectorAll('[role="tablist"]');
+    expect(tablists.length).toBe(3);
+    expect(container.querySelector(".ig-tabs-pills")).not.toBeNull();
+    expect(container.querySelector(".ig-tabs-vertical")).not.toBeNull();
   });
 });

@@ -6,6 +6,8 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
 export type CheckboxVariant =
   | "brand"
@@ -39,7 +41,7 @@ export interface CheckboxProps
  * Checkbox — `<input type="checkbox">` con marca visual personalizada.
  * Wrappeado en `<label>` para que click en el texto active el input.
  *
- * Soporta tri-state vía `indeterminate` prop (desde 1.0.0-rc.3) o via
+ * Soporta tri-state vía `indeterminate` prop (desde 1.0.0-beta.8) o via
  * `ref` manual (`ref.current.indeterminate = true`).
  *
  * @example
@@ -67,7 +69,31 @@ export function Checkbox({
     else if (ref) ref.current = el;
   };
 
+  // Dev-only warning: controlled sin handler. Consumer pasa `checked`
+  // pero olvida `onChange` → el checkbox parece roto. En useEffect (no
+  // durante render) por el lint react-hooks/refs.
+  const warnedControlledRef = useRef(false);
+  const isControlled = (rest as { checked?: boolean }).checked !== undefined;
   useEffect(() => {
+    if (
+      isDev() &&
+      !warnedControlledRef.current &&
+      isControlled &&
+      !onChange &&
+      !disabled
+    ) {
+      warnedControlledRef.current = true;
+      console.warn(
+        "[reactigoded] <Checkbox checked={...}> sin onChange — el checkbox no responderá al click. Pasa onChange o usa defaultChecked para uncontrolled.",
+      );
+    }
+  }, [isControlled, onChange, disabled]);
+
+  // useIsoLayoutEffect (layout en cliente, effect en server): el
+  // atributo `indeterminate` es DOM-only y no se refleja en el HTML
+  // inicial. Aplicarlo en un useEffect post-paint produce flicker
+  // (primer paint con tick, segundo con la línea horizontal).
+  useIsoLayoutEffect(() => {
     if (internalRef.current) {
       internalRef.current.indeterminate = !!indeterminate;
     }

@@ -194,3 +194,31 @@ describe("useSidebar fuera de provider", () => {
     spy.mockRestore();
   });
 });
+
+describe("Sidebar — i18n ariaLabel prop", () => {
+  it("ariaLabel custom override aria-label default", () => {
+    render(<Sidebar ariaLabel="Side navigation" />);
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "aria-label",
+      "Side navigation",
+    );
+  });
+
+  it("aria-label directo vía rest gana sobre ariaLabel prop", () => {
+    render(
+      <Sidebar ariaLabel="Side navigation" aria-label="Custom override" />,
+    );
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "aria-label",
+      "Custom override",
+    );
+  });
+
+  it("sin overrides cae a 'Navegación lateral' ES", () => {
+    render(<Sidebar />);
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "aria-label",
+      "Navegación lateral",
+    );
+  });
+});

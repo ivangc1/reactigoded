@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { Progress } from "./Progress";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Progress",
@@ -88,7 +89,7 @@ export const Variantes: Story = {
   },
 };
 
-export const Tamaños: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--md">
       <Progress value={50} size="sm" variant="brand" />
@@ -118,4 +119,42 @@ export const ConLabelCustom: Story = {
       </div>
     ),
   ],
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem" }}>
+      <MatrixGrid
+        renderRow={(v) => (
+          <div style={{ display: "grid", gap: "0.25rem", flex: 1 }}>
+            <Progress variant={v as Variant} value={0} />
+            <Progress variant={v as Variant} value={50} />
+            <Progress variant={v as Variant} value={100} />
+            <Progress variant={v as Variant} indeterminate />
+          </div>
+        )}
+      />
+      <div style={{ display: "grid", gap: "0.25rem" }}>
+        <strong>sizes</strong>
+        <Progress size="sm" value={50} />
+        <Progress size="md" value={50} />
+        <Progress size="lg" value={50} />
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const bars = canvas.queryAllByRole("progressbar");
+    await expect(bars.length).toBeGreaterThan(20);
+  },
 };

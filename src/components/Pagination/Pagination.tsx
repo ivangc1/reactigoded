@@ -1,5 +1,6 @@
-import type { HTMLAttributes, Ref } from "react";
+import { useEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/utils/cn";
+import { isDev } from "@/utils/env";
 
 export type PaginationVariant =
   | "brand"
@@ -21,10 +22,27 @@ export interface PaginationProps
   onPageChange: (page: number) => void;
   /** Color de la página activa. */
   variant?: PaginationVariant;
-  /** Texto del botón anterior. */
-  prevLabel?: string;
-  /** Texto del botón siguiente. */
-  nextLabel?: string;
+  /**
+   * Contenido del botón anterior. Si es string también se usa como
+   * `aria-label` (a menos que se pase `prevAriaLabel` explícito).
+   * Si es ReactNode (p.ej. un icono), pasa `prevAriaLabel` con el texto
+   * legible para SR.
+   */
+  prevLabel?: ReactNode;
+  /**
+   * Contenido del botón siguiente. Mismas reglas que `prevLabel`.
+   */
+  nextLabel?: ReactNode;
+  /**
+   * `aria-label` del botón anterior. Override explícito; si se omite y
+   * `prevLabel` es string se usa éste, en otro caso "Página anterior".
+   */
+  prevAriaLabel?: string;
+  /**
+   * `aria-label` del botón siguiente. Override explícito; si se omite y
+   * `nextLabel` es string se usa éste, en otro caso "Página siguiente".
+   */
+  nextAriaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -89,17 +107,52 @@ export function Pagination({
   variant,
   prevLabel = "Anterior",
   nextLabel = "Siguiente",
+  prevAriaLabel,
+  nextAriaLabel,
   className,
   ref,
   ...rest
 }: PaginationProps) {
+  const prevAria =
+    prevAriaLabel ??
+    (typeof prevLabel === "string" ? prevLabel : "Página anterior");
+  const nextAria =
+    nextAriaLabel ??
+    (typeof nextLabel === "string" ? nextLabel : "Página siguiente");
   // 1.0.0-beta.4: aria-label se extrae del rest (HTML std). Antes existía
   // una prop `ariaLabel` separada — eliminada por consistencia con el
   // resto de componentes que ya usan rest. Migration: rename ariaLabel→aria-label.
   const { "aria-label": ariaLabelOverride, ...navRest } = rest;
-  const pages = buildPages(currentPage, totalPages, siblingCount);
-  const canPrev = currentPage > 1;
-  const canNext = currentPage < totalPages;
+
+  // Clamps: el componente jamás debe renderizar páginas fuera de rango
+  // ni dejar el `aria-current` huérfano si el consumer pasa basura.
+  // Cualquier non-finite o ≤ 0 cae a defaults seguros (totalPages=1,
+  // currentPage=1, siblingCount=0).
+  // `|| 1` cubre 0, NaN e -Infinity por la coerción de OR a falsy/finite.
+  // Math.floor + max/min normaliza Infinity y negativos.
+  const safeTotal = Math.max(1, Math.floor(totalPages || 1));
+  const safeCurrent = Math.min(
+    Math.max(1, Math.floor(currentPage || 1)),
+    safeTotal,
+  );
+  const safeSiblings = Math.max(0, Math.floor(siblingCount || 0));
+
+  // Dev-only warning si tuvimos que clamp-ear (input fuera de rango).
+  // En useEffect (no durante render) por la regla react-hooks/refs.
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!isDev() || warnedRef.current) return;
+    if (currentPage !== safeCurrent || totalPages !== safeTotal) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Pagination currentPage=${String(currentPage)} totalPages=${String(totalPages)}> fuera de rango. Clamped a currentPage=${String(safeCurrent)}, totalPages=${String(safeTotal)}.`,
+      );
+    }
+  }, [currentPage, totalPages, safeCurrent, safeTotal]);
+
+  const pages = buildPages(safeCurrent, safeTotal, safeSiblings);
+  const canPrev = safeCurrent > 1;
+  const canNext = safeCurrent < safeTotal;
 
   return (
     <nav
@@ -116,9 +169,9 @@ export function Pagination({
         type="button"
         className="ig-pagination-item ig-pagination-prev"
         disabled={!canPrev}
-        aria-label={prevLabel}
+        aria-label={prevAria}
         onClick={() => {
-          if (canPrev) onPageChange(currentPage - 1);
+          if (canPrev) onPageChange(safeCurrent - 1);
         }}
       >
         {prevLabel}
@@ -135,7 +188,7 @@ export function Pagination({
             </span>
           );
         }
-        const isActive = p === currentPage;
+        const isActive = p === safeCurrent;
         return (
           <button
             key={p}
@@ -158,9 +211,9 @@ export function Pagination({
         type="button"
         className="ig-pagination-item ig-pagination-next"
         disabled={!canNext}
-        aria-label={nextLabel}
+        aria-label={nextAria}
         onClick={() => {
-          if (canNext) onPageChange(currentPage + 1);
+          if (canNext) onPageChange(safeCurrent + 1);
         }}
       >
         {nextLabel}

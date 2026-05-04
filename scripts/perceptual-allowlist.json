@@ -1,0 +1,23 @@
+{
+  "_doc": "Allowlist de pares perceptualmente cercanos por tema. Cada entrada documenta un par cuyo ΔE OKLab está bajo umbral 0.10 (warn) por decisión consciente. Si el ΔE real cae bajo 'deltaE_at_decision' * drift_tolerance (95% por defecto), el script falla — esto detecta drift silencioso. Nombre del par alfabético (a-b, no b-a).",
+  "version": 1,
+  "warn_threshold": 0.10,
+  "error_threshold": 0.05,
+  "drift_tolerance": 0.95,
+  "allowlist": [
+    {
+      "pair": "laurus-vitreus",
+      "theme": "light",
+      "deltaE_at_decision": 0.0847,
+      "decision_date": "2026-04-10",
+      "justification": "Eje fresco verde-cyan compartido. Decisión consciente desde beta.5; recalibrado en beta.8 desde 0.054 → 0.0847. Diferenciados por iconografía y semántica de role (brand vs success), no por color puro."
+    },
+    {
+      "pair": "malum-rutilus",
+      "theme": "dark",
+      "deltaE_at_decision": 0.0706,
+      "decision_date": "2026-05-04",
+      "justification": "Par perceptualmente más estrecho del sistema en DARK. Ambos cardinales cálidos (rojo-granate vs cobre). Diferenciados por iconografía/semántica (danger vs warning) y luminancia distinta. Recalibrar bajaría WCAG sobre fundus."
+    }
+  ]
+}

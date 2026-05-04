@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import {
   Card,
   CardHeader,
@@ -17,8 +18,8 @@ const demoImage =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300">` +
       `<defs>` +
         `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-          `<stop offset="0%" stop-color="#5eded5"/>` +
-          `<stop offset="100%" stop-color="#d4c2f9"/>` +
+          `<stop offset="0%" stop-color="#3ae2f7"/>` +
+          `<stop offset="100%" stop-color="#d2bff7"/>` +
         `</linearGradient>` +
         `<pattern id="p" width="40" height="40" patternUnits="userSpaceOnUse">` +
           `<circle cx="20" cy="20" r="1.2" fill="#0c1515" opacity="0.18"/>` +
@@ -148,4 +149,52 @@ export const Interactiva: Story = {
       <CardBody>Click, Enter o Space para activar. Es focusable por teclado.</CardBody>
     </Card>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div
+      style={{
+        display: "grid",
+        gap: "1rem",
+        gridTemplateColumns: "repeat(2, 1fr)",
+      }}
+    >
+      {(
+        ["brand", "secondary", "success", "warning", "danger", "info"] as const
+      ).map((v) => (
+        <div key={v} style={{ display: "grid", gap: "0.5rem" }}>
+          <Card variant={v}>
+            <CardBody>{v} default</CardBody>
+          </Card>
+          <Card variant={v} appearance="filled">
+            <CardBody>{v} filled</CardBody>
+          </Card>
+          <Card variant={v} bordered elevated>
+            <CardBody>{v} bordered+elevated</CardBody>
+          </Card>
+          <Card variant={v} glass>
+            <CardBody>{v} glass</CardBody>
+          </Card>
+        </div>
+      ))}
+      <Card interactive role="button" onClick={() => {}}>
+        <CardBody>interactive</CardBody>
+      </Card>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const cards = canvasElement.querySelectorAll(".ig-card");
+    await expect(cards.length).toBeGreaterThan(20);
+  },
 };

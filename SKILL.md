@@ -39,28 +39,72 @@ todas las combinaciones bg/cardinal del tema.**
 
 ## Watchlist — pares con ΔE OKLab marginal
 
-`Check 3` del script (`scripts/check-component-contrast.mjs`) avisa
-cuando dos cardinales de UI activa quedan separados por ΔE OKLab < 0.05
-(umbral conservador para detectar confusión visual). Hoy **no dispara**:
-todos los pares superan el umbral. Pero hay 3 pares que rozan el
-alambre y conviene tener vigilados al revisar capturas / Chromatic /
-diseño nuevo:
+`Check 3` de `scripts/check-component-contrast.mjs` valida la separación
+perceptual ΔE OKLab entre los cardinales de UI activa (excluye `cinis`,
+que es texto). Política desde `1.0.0-beta.19`:
 
-| Par | Tema  | ΔE     | Notas |
-|-----|-------|--------|-------|
-| axis ↔ kobalium   | dark  | ≈0.052 | Secondary violeta vs info cobalt |
-| vitreus ↔ cinis   | light | ≈0.070 | Brand vs texto cuerpo (cinis es texto-body, fuera de UI_CARDINALS, no dispara) |
-| malum ↔ rutilus   | ambos | ≈0.094 | Danger granate vs warning cobre |
+- **ERROR** si `ΔE < 0.05` y el par no está en `scripts/perceptual-allowlist.json`.
+- **ERROR** si un par allowlisted ha derivado más del 5% por debajo de
+  su `deltaE_at_decision` registrado (drift detection).
+- **WARN** si `ΔE < 0.10` (par cercano pero aceptable; revisar al
+  planificar futuras paletas).
+- Pares allowlisted con su valor de decisión vigente: `WARN` informativo.
 
-Resuelto en `1.0.0-rc.1`: `vitreus ↔ laurus` en LIGHT estaba en ≈0.054.
-Se recalibró `laurus` de H=149° a H≈140° (hex `#143d0a`/`#6aed4a`),
-subiendo ΔE a 0.074. Sin cambio de geometría dual ni de aliases.
+Para regenerar la tabla: `node scripts/check-component-contrast.mjs --print-perceptual-table`.
 
-Plan: en `1.1.0` (post-`1.0.0`) se promueve `Check 3` a **error** (no
-warning) tras una auditoría visual de los pares restantes. Si la
-auditoría encuentra confusión real, se ajusta el hue del cardinal
-afectado en ±5°-10° respetando geometría dual; si no, se sube el umbral
-a 0.05 estricto y se documenta la decisión.
+### LIGHT (suffix -lux)
+
+| Par | ΔE | Estado |
+|-----|-------|--------|
+| laurus-vitreus    | 0.0847 | allowlisted (ref=0.0847, eje fresco) |
+| malum-rutilus     | 0.0943 | bajo warn=0.10 |
+| axis-kobalium     | 0.0951 | bajo warn=0.10 |
+| kobalium-vitreus  | 0.0962 | bajo warn=0.10 |
+| laurus-rutilus    | 0.1085 | ok |
+| rutilus-vitreus   | 0.1176 | ok |
+| axis-malum        | 0.1531 | ok |
+| axis-vitreus      | 0.1602 | ok |
+| malum-vitreus     | 0.1751 | ok |
+| kobalium-laurus   | 0.1809 | ok |
+| kobalium-rutilus  | 0.1829 | ok |
+| axis-rutilus      | 0.1892 | ok |
+| kobalium-malum    | 0.1953 | ok |
+| laurus-malum      | 0.1979 | ok |
+| axis-laurus       | 0.2356 | ok |
+
+### DARK (suffix -nox)
+
+| Par | ΔE | Estado |
+|-----|-------|--------|
+| axis-kobalium     | 0.0522 | bajo warn=0.10 (par UI más estrecho del sistema) |
+| malum-rutilus     | 0.0706 | allowlisted (ref=0.0706, danger vs warning cálidos) |
+| axis-malum        | 0.0929 | bajo warn=0.10 |
+| kobalium-vitreus  | 0.1058 | ok |
+| kobalium-malum    | 0.1257 | ok |
+| axis-rutilus      | 0.1402 | ok |
+| kobalium-rutilus  | 0.1504 | ok |
+| axis-vitreus      | 0.1580 | ok |
+| rutilus-vitreus   | 0.2136 | ok |
+| malum-vitreus     | 0.2174 | ok |
+| laurus-vitreus    | 0.2184 | ok |
+| laurus-rutilus    | 0.2391 | ok |
+| kobalium-laurus   | 0.2705 | ok |
+| laurus-malum      | 0.2973 | ok |
+| axis-laurus       | 0.3070 | ok |
+
+### Notas y decisiones
+
+- `laurus ↔ vitreus` LIGHT (0.0847): par cromáticamente vecino en el eje
+  fresco verde-cyan. Decisión consciente desde `1.0.0-beta.8`
+  (recalibración de `laurus` H=149° → H≈140°), confirmada tras la
+  recolocación de `vitreus` a H=207.5° en `1.0.0-beta.16`. La confusión
+  perceptual se resuelve con iconografía en componentes (Badge con
+  icono, Alert con icono), no moviendo más hex. **Allowlisted**.
+- `malum ↔ rutilus` DARK (0.0706): par cálido danger vs warning. Allowlisted
+  como decisión consciente; recalibrar bajaría WCAG sobre `fundus`.
+- `axis ↔ kobalium` DARK (0.0522): no allowlisted intencionadamente.
+  Par UI más estrecho del sistema; un drift ligero a la baja debe
+  hacer fallar CI.
 
 ## Cinis es un cardinal especial
 

@@ -1,6 +1,6 @@
 {
   "name": "reactigoded",
-  "version": "1.0.0-beta.18",
+  "version": "1.0.0-beta.19",
   "description": "Igoded Design System — componentes React + CSS utility-first state-driven",
   "license": "MIT",
   "author": "ivangc1",
@@ -115,13 +115,13 @@
     {
       "name": "design.css meta-importer",
       "path": "dist/styles/igoded-design.css",
-      "limit": "5 KB",
+      "limit": "2 KB",
       "gzip": true
     },
     {
       "name": "tokens.css solo (consumer minimal)",
       "path": "dist/styles/igoded-tokens.css",
-      "limit": "25 KB",
+      "limit": "30 KB",
       "gzip": true
     },
     {
@@ -146,6 +146,12 @@
       "name": "fonts.css Google Fonts opt-in",
       "path": "dist/styles/igoded-fonts.css",
       "limit": "1 KB",
+      "gzip": true
+    },
+    {
+      "name": "state.css opt-in (utilities pseudo-class)",
+      "path": "dist/styles/igoded-state-css.css",
+      "limit": "800 KB",
       "gzip": true
     }
   ],
