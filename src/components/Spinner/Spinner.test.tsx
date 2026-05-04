@@ -65,3 +65,23 @@ describe("Spinner — AllStates regression", () => {
     expect(container.querySelectorAll('[role="status"]').length).toBeGreaterThan(20);
   });
 });
+
+describe("Spinner — i18n label prop", () => {
+  it("label custom override aria-label default", () => {
+    render(<Spinner label="Loading…" />);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-label", "Loading…");
+  });
+
+  it("aria-label directo vía rest gana sobre label prop", () => {
+    render(<Spinner label="Loading…" aria-label="Custom override" />);
+    expect(screen.getByRole("status")).toHaveAttribute(
+      "aria-label",
+      "Custom override",
+    );
+  });
+
+  it("sin label ni aria-label cae a 'Cargando…' ES", () => {
+    render(<Spinner />);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-label", "Cargando…");
+  });
+});
