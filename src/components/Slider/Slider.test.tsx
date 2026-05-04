@@ -70,15 +70,39 @@ describe("Slider", () => {
     expect(screen.getByLabelText("v")).not.toHaveAttribute("aria-valuetext");
   });
 
-  it("transición uncontrolled→controlled emite warning de React", () => {
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { rerender } = render(<Slider aria-label="v" defaultValue={20} />);
-    rerender(<Slider aria-label="v" value={50} onChange={() => {}} />);
-    expect(
-      errSpy.mock.calls.some((call) =>
-        String(call[0]).includes("controlled"),
-      ),
-    ).toBe(true);
-    errSpy.mockRestore();
+  it("transición uncontrolled → controlled: el wrapper React→DOM respeta value externo", () => {
+    // Smoke test del wrapping React→DOM. Antes este test verificaba el
+    // warning de React vía `console.error` mock, pero React deduplica
+    // ese warning por worker y vitest corre con `isolate: false` —
+    // resultaba flaky según orden. El comportamiento importante para el
+    // consumer es que el input nativo refleje el value externo tras la
+    // transición; el warning de React es side-effect de React, no del DS.
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Slider aria-label="v" defaultValue={20} />,
+    );
+    expect(screen.getByLabelText<HTMLInputElement>("v").value).toBe("20");
+
+    rerender(<Slider aria-label="v" value={50} onChange={onChange} />);
+    expect(screen.getByLabelText<HTMLInputElement>("v").value).toBe("50");
+  });
+
+  it("transición controlled → uncontrolled: el wrapper React→DOM mantiene el input nativo", () => {
+    // Smoke test del wrapping React→DOM en input[type=range]. El
+    // contrato abstracto del hook lo cubre useControllableState.test.ts;
+    // aquí solo verificamos que el componente sigue vivo y rendereando
+    // un input válido tras la transición.
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Slider aria-label="v" value={50} onChange={onChange} />,
+    );
+    const input = screen.getByLabelText<HTMLInputElement>("v");
+    expect(input.value).toBe("50");
+    expect(input).toHaveAttribute("type", "range");
+
+    rerender(<Slider aria-label="v" defaultValue={20} />);
+    const inputAfter = screen.getByLabelText<HTMLInputElement>("v");
+    expect(inputAfter).toHaveAttribute("type", "range");
+    expect(inputAfter).toHaveClass("ig-slider");
   });
 });

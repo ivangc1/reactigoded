@@ -233,4 +233,111 @@ describe("useControllableState", () => {
     expect(onChange1).not.toHaveBeenCalled();
     expect(onChange2).toHaveBeenCalledWith("b");
   });
+
+  // ─── Transiciones controlled ↔ uncontrolled ──────────────────
+  // Tests del CONTRATO ABSTRACTO del hook. Si pasan, los 9
+  // componentes que wrappean el hook (Accordion, Alert, Dropdown,
+  // Rating, Sidebar, Slider, Switch, Tabs, ThemeSwitch) respetan
+  // por construcción el contrato de transición — sin necesidad de
+  // duplicar el test 9×.
+
+  describe("transiciones controlled ↔ uncontrolled", () => {
+    it("uncontrolled → controlled: el value externo gana sobre el state interno (modo clásico)", () => {
+      const { result, rerender } = renderHook(
+        ({ value }: { value: string | undefined }) =>
+          useControllableState({
+            value,
+            defaultValue: "internal-initial",
+            onChange: vi.fn(),
+          }),
+        { initialProps: { value: undefined as string | undefined } },
+      );
+
+      expect(result.current.value).toBe("internal-initial");
+      expect(result.current.isControlled).toBe(false);
+
+      act(() => {
+        result.current.setValue("internal-modified");
+      });
+      expect(result.current.value).toBe("internal-modified");
+
+      rerender({ value: "external-controlled" });
+
+      expect(result.current.value).toBe("external-controlled");
+      expect(result.current.isControlled).toBe(true);
+    });
+
+    it("controlled → uncontrolled: vuelve al state interno preservado (modo clásico)", () => {
+      const initialProps: { value: string | undefined } = {
+        value: "external-a",
+      };
+      const { result, rerender } = renderHook(
+        ({ value }: { value: string | undefined }) =>
+          useControllableState({
+            value,
+            defaultValue: "internal-initial",
+          }),
+        { initialProps },
+      );
+
+      expect(result.current.value).toBe("external-a");
+      expect(result.current.isControlled).toBe(true);
+
+      rerender({ value: undefined });
+
+      // NOTA: comportamiento documentado del hook. El state interno
+      // mantuvo su valor inicial mientras estaba controlled (setValue
+      // era no-op en isControlled), por lo que al destransicionar
+      // vuelve al defaultValue, NO al último external value.
+      expect(result.current.value).toBe("internal-initial");
+      expect(result.current.isControlled).toBe(false);
+    });
+
+    it("derive mode uncontrolled → controlled: respeta value externo", () => {
+      const { result, rerender } = renderHook(
+        ({ value }: { value: string | undefined }) => {
+          const [backing, setBacking] = useState("derived-internal");
+          return useControllableState<string>({
+            value,
+            derive: () => backing,
+            setDerivedValue: setBacking,
+          });
+        },
+        { initialProps: { value: undefined as string | undefined } },
+      );
+
+      expect(result.current.value).toBe("derived-internal");
+      expect(result.current.isControlled).toBe(false);
+
+      rerender({ value: "external" });
+
+      expect(result.current.value).toBe("external");
+      expect(result.current.isControlled).toBe(true);
+    });
+
+    it("derive mode controlled → uncontrolled: vuelve a derive()", () => {
+      const initialProps: { value: string | undefined } = {
+        value: "external-controlled",
+      };
+      const { result, rerender } = renderHook(
+        ({ value }: { value: string | undefined }) => {
+          const [backing] = useState("derived-stable");
+          return useControllableState<string>({
+            value,
+            derive: () => backing,
+            setDerivedValue: vi.fn(),
+          });
+        },
+        { initialProps },
+      );
+
+      expect(result.current.value).toBe("external-controlled");
+      expect(result.current.isControlled).toBe(true);
+
+      rerender({ value: undefined });
+
+      expect(result.current.value).toBe("derived-stable");
+      expect(result.current.isControlled).toBe(false);
+    });
+  });
 });

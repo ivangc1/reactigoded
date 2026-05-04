@@ -408,6 +408,66 @@ que el siguiente que escriba una story de catálogo las tenga delante.
 
 ---
 
+## Capa 6 — Convenciones de tests unit
+
+### 6.1 NO afirmar sobre `console.error` mock para warnings de React
+
+`vitest.config.ts` usa `pool: "threads"`, `maxWorkers: 1`,
+`isolate: false`. Todos los archivos comparten worker → React
+deduplica sus warnings dev por proceso (un mismo warning solo se
+emite la primera vez). Cualquier test que afirme sobre
+`console.error.mock.calls` para detectar warnings de React
+(`"controlled to uncontrolled"`, key warnings, deprecations) **es
+flaky por orden de ejecución**: pasa aislado, falla en el suite
+completo.
+
+**Caso histórico**: Slider/Switch en beta.20 sub-Bloque D —
+2 tests viejos (`"transición uncontrolled→controlled emite warning
+de React"`) eran flaky. Reemplazados por assertions sobre
+**comportamiento observable** (input nativo refleja `value`/`checked`
+externo tras rerender) en commit del Bloque D.
+
+**Regla**: assertions sobre warnings dev de React están prohibidas.
+Si hace falta verificar transición controlled↔uncontrolled, usar
+patrón "comportamiento":
+
+```ts
+const { rerender } = render(<Comp defaultValue="a" />);
+expect(getInput().value).toBe("a");
+rerender(<Comp value="b" onChange={() => {}} />);
+expect(getInput().value).toBe("b");
+```
+
+Si por alguna razón es indispensable testar warning emission,
+configurar el test file con `isolate: true` localmente (override del
+config global).
+
+**Componentes auditados**: Slider, Switch (corregidos beta.20). Sin
+otros casos detectados.
+**Estimación capa 6**: 0 (regla; no hay deuda activa más allá de
+esta documentación).
+
+### 6.2 Estructura DOM de Switch: `ig-switch` va en `<label>`, no en `<input>`
+
+Anti-patrón fácil de cometer al escribir tests: `screen.getByRole("switch")`
+devuelve el `<input type="checkbox">` interno, NO el `<label>`
+wrapper. La clase `ig-switch` está en el `<label>`. Para asserts
+sobre la clase wrapper desde el input:
+
+```ts
+const input = screen.getByRole<HTMLInputElement>("switch");
+expect(input.closest("label")).toHaveClass("ig-switch");
+```
+
+**Documentar**: añadir nota en JSDoc de `Switch.tsx` sobre la
+estructura `<label class="ig-switch"> > <input> + <span class="ig-switch-track">`
+para evitar el anti-patrón en futuros tests.
+
+**Estimación**: 5 min (comentario JSDoc).
+**Detectado**: beta.20 sub-Bloque D.
+
+---
+
 ## Auditoría reset.css [pendiente capa propia]
 
 `reset.css` opcional que el consumer importa. Asume contexto de fondo
@@ -439,6 +499,8 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 2.3 stories hover/active | 1-2h | 1.1.0 | ⏳ |
 | Auditoría reset.css | 1-2h | 1.1.0 | ⏳ |
 | Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min | beta.20/post | ⏳ |
+| 6.1 regla anti-`console.error` warnings React | 0 (regla) | beta.20 | ✅ documentada |
+| 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20/post | ⏳ |
 
 **Total restante**: 13-20h Claude Code distribuidas en milestones.
 
