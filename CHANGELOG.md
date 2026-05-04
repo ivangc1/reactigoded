@@ -7,6 +7,23 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+- `Progress`: nuevas props `loadingLabel` (default `"Cargando"`) y
+  `formatLabel?: (percent: number) => string` para i18n del
+  `aria-label`. Cierra el inventario de strings hardcoded
+  user-facing del DS — todos los componentes con strings ES default
+  ahora exponen override por prop o por `aria-label` HTML estándar.
+- `docs/CSSAPI.mdx`: nueva sección "i18n y a11y strings" con tabla
+  de overrides por componente y patrón de uso con `react-i18next`.
+
+### Changed
+- Defaults ES de strings user-facing (`Alert.closeLabel`,
+  `Chip.removeLabel`, `ModalClose aria-label`, `Pagination.prevLabel`/
+  `nextLabel`, `Progress.loadingLabel`, `Stepper aria-label`,
+  `Toast.closeLabel`) declarados intencionales en `CSSAPI.mdx`.
+  Audience inicial hispanohablante; cambio a EN se reevaluará en
+  1.1.0 si demanda real lo justifica.
+
 ## [1.0.0-beta.19] — 2026-05-04
 
 ### Breaking

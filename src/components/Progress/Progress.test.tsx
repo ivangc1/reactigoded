@@ -73,6 +73,57 @@ describe("Progress", () => {
     );
   });
 
+  it("loadingLabel override en indeterminate", () => {
+    render(<Progress indeterminate loadingLabel="Loading…" />);
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-label",
+      "Loading…",
+    );
+  });
+
+  it("formatLabel formatea aria-label en determinate", () => {
+    render(
+      <Progress
+        value={75}
+        loadingLabel="Cargando"
+        formatLabel={(p) => `${String(p)}% done`}
+      />,
+    );
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-label",
+      "75% done",
+    );
+  });
+
+  it("aria-label HTML std gana sobre formatLabel y loadingLabel", () => {
+    render(
+      <Progress
+        value={50}
+        aria-label="Override total"
+        loadingLabel="Loading…"
+        formatLabel={(p) => `${String(p)}%`}
+      />,
+    );
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-label",
+      "Override total",
+    );
+  });
+
+  it("formatLabel NO aplica en indeterminate (sin porcentaje)", () => {
+    render(
+      <Progress
+        indeterminate
+        loadingLabel="Loading…"
+        formatLabel={(p) => `${String(p)}% done`}
+      />,
+    );
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-label",
+      "Loading…",
+    );
+  });
+
   it("forwarda ref", () => {
     const ref = createRef<HTMLDivElement>();
     render(<Progress ref={ref} value={0} />);
