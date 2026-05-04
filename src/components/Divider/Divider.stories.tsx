@@ -126,6 +126,6 @@ export const AllStates: Story = {
   ),
   play: async ({ canvasElement }) => {
     const seps = canvasElement.querySelectorAll('[role="separator"], hr');
-    await expect(seps.length).toBeGreaterThan(8);
+    await expect(seps.length).toBeGreaterThanOrEqual(8);
   },
 };

@@ -177,16 +177,42 @@ export const AllStates: Story = {
       },
     },
   },
+  // Cada Input necesita label vinculado, aria-label o placeholder para
+  // cumplir axe rule `label`. La fila de "con valor" no tenía
+  // placeholder, así que usamos aria-label explícito.
   render: () => (
     <div style={{ display: "grid", gap: "1rem", maxWidth: 600 }}>
       {(["sm", "md", "lg"] as const).map((size) => (
         <div key={size} style={{ display: "grid", gap: "0.5rem" }}>
           <strong>size: {size}</strong>
-          <Input size={size} placeholder="default" />
-          <Input size={size} state="error" placeholder="error state" />
-          <Input size={size} state="success" placeholder="success state" />
-          <Input size={size} disabled placeholder="disabled" />
-          <Input size={size} defaultValue="con valor" />
+          <Input
+            size={size}
+            placeholder="default"
+            aria-label={`Input ${size} default`}
+          />
+          <Input
+            size={size}
+            state="error"
+            placeholder="error state"
+            aria-label={`Input ${size} error`}
+          />
+          <Input
+            size={size}
+            state="success"
+            placeholder="success state"
+            aria-label={`Input ${size} success`}
+          />
+          <Input
+            size={size}
+            disabled
+            placeholder="disabled"
+            aria-label={`Input ${size} disabled`}
+          />
+          <Input
+            size={size}
+            defaultValue="con valor"
+            aria-label={`Input ${size} con valor`}
+          />
         </div>
       ))}
     </div>

@@ -67,18 +67,21 @@ export const AllStates: Story = {
     },
   },
   render: () => (
+    // aria-label distinto por instancia para cumplir axe `landmark-unique`:
+    // varios <nav> con el mismo aria-label (default "Migas de pan") los
+    // marcaría como ambiguos para SR.
     <div style={{ display: "grid", gap: "1.5rem" }}>
-      <Breadcrumb>
+      <Breadcrumb aria-label="Migas: ruta corta">
         <BreadcrumbItem href="/">Home</BreadcrumbItem>
         <BreadcrumbItem current>Actual</BreadcrumbItem>
       </Breadcrumb>
-      <Breadcrumb>
+      <Breadcrumb aria-label="Migas: ruta media">
         <BreadcrumbItem href="/">Home</BreadcrumbItem>
         <BreadcrumbItem href="/cat">Categoría</BreadcrumbItem>
         <BreadcrumbItem href="/cat/sub">Subcategoría</BreadcrumbItem>
         <BreadcrumbItem current>Producto</BreadcrumbItem>
       </Breadcrumb>
-      <Breadcrumb separator="›">
+      <Breadcrumb aria-label="Migas: ruta larga" separator="›">
         <BreadcrumbItem href="/">Home</BreadcrumbItem>
         <BreadcrumbItem href="/a">A</BreadcrumbItem>
         <BreadcrumbItem href="/a/b">B</BreadcrumbItem>
