@@ -52,3 +52,15 @@ describe("AvatarGroup", () => {
     expect(screen.getByTestId("g")).toHaveClass("ig-avatar-group");
   });
 });
+
+describe("Avatar — AllStates regression", () => {
+  it("AllStates renderiza sizes y AvatarGroup", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Avatar.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    expect(container.querySelectorAll(".ig-avatar").length).toBeGreaterThan(15);
+    expect(container.querySelector(".ig-avatar-group")).not.toBeNull();
+    expect(container.querySelector(".ig-avatar-rounded")).not.toBeNull();
+  });
+});

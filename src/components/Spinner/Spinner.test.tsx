@@ -43,3 +43,25 @@ describe("Spinner", () => {
     expect(ref.current).toBeInstanceOf(HTMLSpanElement);
   });
 });
+
+describe("Spinner — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants × sizes", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Spinner.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-spinner-${v}`)).not.toBeNull();
+    }
+    expect(container.querySelectorAll('[role="status"]').length).toBeGreaterThan(20);
+  });
+});

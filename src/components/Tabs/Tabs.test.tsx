@@ -304,3 +304,16 @@ describe("Tabs — className merge", () => {
     expect(tab).toHaveClass("my-tab");
   });
 });
+
+describe("Tabs — AllStates regression", () => {
+  it("AllStates renderiza tablists default/pills/vertical", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Tabs.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    const tablists = container.querySelectorAll('[role="tablist"]');
+    expect(tablists.length).toBe(3);
+    expect(container.querySelector(".ig-tabs-pills")).not.toBeNull();
+    expect(container.querySelector(".ig-tabs-vertical")).not.toBeNull();
+  });
+});

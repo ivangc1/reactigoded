@@ -125,3 +125,17 @@ describe("Button", () => {
     expect(ref.current).toBeInstanceOf(HTMLButtonElement);
   });
 });
+
+describe("Button — AllStates regression", () => {
+  it("AllStates renderiza variants, outline y ghost", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Button.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-btn-${v}`)).not.toBeNull();
+      expect(container.querySelector(`.ig-btn-outline-${v}`)).not.toBeNull();
+      expect(container.querySelector(`.ig-btn-ghost-${v}`)).not.toBeNull();
+    }
+  });
+});

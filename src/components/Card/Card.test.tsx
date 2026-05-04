@@ -278,3 +278,27 @@ describe("Card — className merge", () => {
     expect(el).toHaveClass("extra");
   });
 });
+
+describe("Card — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants outline + filled", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Card.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-card-${v}`)).not.toBeNull();
+      expect(container.querySelector(`.ig-card-${v}-filled`)).not.toBeNull();
+    }
+    expect(container.querySelector(".ig-card-glass")).not.toBeNull();
+    expect(container.querySelector(".ig-card-interactive")).not.toBeNull();
+  });
+});

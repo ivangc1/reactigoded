@@ -75,3 +75,24 @@ describe("Checkbox", () => {
     expect(input).toBePartiallyChecked();
   });
 });
+
+describe("Checkbox — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants × estados", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Checkbox.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-checkbox-${v}`)).not.toBeNull();
+    }
+  });
+});

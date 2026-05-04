@@ -95,3 +95,25 @@ describe("Progress", () => {
     });
   });
 });
+
+describe("Progress — AllStates regression", () => {
+  const VARIANTS = [
+    "brand",
+    "secondary",
+    "success",
+    "warning",
+    "danger",
+    "info",
+  ] as const;
+
+  it("AllStates renderiza variants × valores", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Progress.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    for (const v of VARIANTS) {
+      expect(container.querySelector(`.ig-progress-${v}`)).not.toBeNull();
+    }
+    expect(container.querySelector(".ig-progress-indeterminate")).not.toBeNull();
+  });
+});

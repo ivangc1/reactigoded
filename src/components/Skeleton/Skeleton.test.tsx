@@ -23,3 +23,13 @@ describe("Skeleton", () => {
     expect(el).toHaveStyle({ width: "200px" });
   });
 });
+
+describe("Skeleton — AllStates regression", () => {
+  it("AllStates renderiza múltiples skeletons", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Skeleton.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    expect(container.querySelectorAll(".ig-skeleton").length).toBeGreaterThan(8);
+  });
+});

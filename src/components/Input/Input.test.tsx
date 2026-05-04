@@ -157,3 +157,17 @@ describe("InputGroup / InputAddon", () => {
     );
   });
 });
+
+describe("Input — AllStates regression", () => {
+  it("AllStates renderiza states error/success y sizes", async () => {
+    const { composeStory } = await import("@storybook/react");
+    const stories = await import("./Input.stories");
+    const Story = composeStory(stories.AllStates, stories.default);
+    const { container } = render(<Story />);
+    expect(container.querySelector(".ig-input-error")).not.toBeNull();
+    expect(container.querySelector(".ig-input-success")).not.toBeNull();
+    expect(container.querySelector(".ig-input-sm")).not.toBeNull();
+    expect(container.querySelector(".ig-input-lg")).not.toBeNull();
+    expect(container.querySelectorAll(".ig-input").length).toBeGreaterThan(10);
+  });
+});
