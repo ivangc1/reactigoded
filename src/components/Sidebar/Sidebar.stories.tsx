@@ -75,10 +75,10 @@ const I = {
   refresh: <Icon d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />,
 };
 
-const Demo = () => (
+const Demo = ({ navLabel }: { navLabel?: string } = {}) => (
   <>
     <SidebarHeader icon={I.star}>Mi App</SidebarHeader>
-    <SidebarNav>
+    <SidebarNav aria-label={navLabel ?? "Principal"}>
       <SidebarSection>Principal</SidebarSection>
       <SidebarItem href="#inicio" icon={I.home} active>
         Inicio
@@ -230,5 +230,40 @@ export const ToggleInteraction: Story = {
     // Tras colapsar, el botón cambia su aria-label a "Expandir".
     const expandToggle = canvas.getByRole("button", { name: /expandir/i });
     await expect(expandToggle).toHaveAttribute("aria-expanded", "false");
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "fullscreen",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    // aria-label único por cada landmark (axe rule landmark-unique):
+    // por cada Sidebar (`<aside>`) Y por cada SidebarNav (`<nav>`).
+    <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr 1fr" }}>
+      <div className="ig-story-shell">
+        <Sidebar ariaLabel="Sidebar expandida">
+          <Demo navLabel="Navegación expandida" />
+        </Sidebar>
+      </div>
+      <div className="ig-story-shell">
+        <Sidebar ariaLabel="Sidebar colapsada" defaultCollapsed>
+          <Demo navLabel="Navegación colapsada" />
+        </Sidebar>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const sidebars = canvasElement.querySelectorAll(".ig-sidebar");
+    await expect(sidebars.length).toBe(2);
+    const collapsed = canvasElement.querySelectorAll(".ig-sidebar-collapsed");
+    await expect(collapsed.length).toBe(1);
   },
 };

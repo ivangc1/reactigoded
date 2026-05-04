@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
+import { isDev } from "@/utils/env";
 
 export interface UseControllableStateBaseOptions<T> {
   /**
@@ -169,6 +170,24 @@ export function useControllableState<T>(
   const setDerivedValueRef = useRef<((next: T) => void) | undefined>(
     isDerived ? options.setDerivedValue : undefined,
   );
+
+  // Dev-only warn: controlled sin onChange = UI bloqueada. El consumer
+  // pasó `value` pero olvidó el handler, y el control no responderá a
+  // ningún input. Una vez por instancia. En useEffect (no during
+  // render) por la regla react-hooks/refs.
+  const warnedControlledNoHandlerRef = useRef(false);
+  useEffect(() => {
+    if (!isDev() || warnedControlledNoHandlerRef.current) return;
+    if (isControlled && options.onChange === undefined) {
+      warnedControlledNoHandlerRef.current = true;
+      console.warn(
+        "[useControllableState] componente controlled (value definido) sin " +
+          "onChange. La UI quedará bloqueada al input del usuario. Usa " +
+          "`defaultValue=` para modo uncontrolled, o pasa `onChange` para " +
+          "controlar el valor.",
+      );
+    }
+  }, [isControlled, options.onChange]);
 
   useIsoLayoutEffect(() => {
     isControlledRef.current = isControlled;

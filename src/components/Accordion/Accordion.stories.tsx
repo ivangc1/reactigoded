@@ -180,3 +180,60 @@ export const Interaction: Story = {
     await expect(headerB).toHaveFocus();
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem", maxWidth: 600 }}>
+      <div>
+        <strong>Single — collapsible</strong>
+        <Accordion type="single" defaultValue="a" collapsible>
+          <AccordionItem value="a">
+            <AccordionHeader>Pregunta abierta</AccordionHeader>
+            <AccordionContent>Respuesta visible.</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="b">
+            <AccordionHeader>Pregunta cerrada</AccordionHeader>
+            <AccordionContent>Respuesta oculta.</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="c">
+            <AccordionHeader>Otra pregunta</AccordionHeader>
+            <AccordionContent>Otra respuesta.</AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+      <div>
+        <strong>Multiple — varios abiertos</strong>
+        <Accordion type="multiple" defaultValue={["a", "c"]}>
+          <AccordionItem value="a">
+            <AccordionHeader>Sección A</AccordionHeader>
+            <AccordionContent>Contenido A abierto.</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="b">
+            <AccordionHeader>Sección B</AccordionHeader>
+            <AccordionContent>Contenido B cerrado.</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="c">
+            <AccordionHeader>Sección C</AccordionHeader>
+            <AccordionContent>Contenido C abierto.</AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const items = canvasElement.querySelectorAll(".ig-accordion-item");
+    await expect(items.length).toBe(6);
+    const open = canvasElement.querySelectorAll(".ig-accordion-item-open");
+    await expect(open.length).toBe(3);
+  },
+};
