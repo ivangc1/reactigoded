@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { useState } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { useControllableState } from "./useControllableState";
 
@@ -101,6 +102,131 @@ describe("useControllableState", () => {
       { initialProps: { onChange: onChange1 } },
     );
     rerender({ onChange: onChange2 });
+    act(() => {
+      result.current.setValue("b");
+    });
+    expect(onChange1).not.toHaveBeenCalled();
+    expect(onChange2).toHaveBeenCalledWith("b");
+  });
+
+  // ─── Modo derive ──────────────────────────────────────────────
+
+  it("derived uncontrolled: derive() es la fuente de verdad", () => {
+    const { result } = renderHook(() => {
+      const [backing, setBacking] = useState("a");
+      return useControllableState<string>({
+        derive: () => backing,
+        setDerivedValue: setBacking,
+      });
+    });
+    expect(result.current.value).toBe("a");
+    expect(result.current.isControlled).toBe(false);
+    act(() => {
+      result.current.setValue("b");
+    });
+    expect(result.current.value).toBe("b");
+  });
+
+  it("derived uncontrolled: setValue dispara onChange", () => {
+    const onChange = vi.fn();
+    const { result } = renderHook(() => {
+      const [backing, setBacking] = useState("a");
+      return useControllableState<string>({
+        derive: () => backing,
+        setDerivedValue: setBacking,
+        onChange,
+      });
+    });
+    act(() => {
+      result.current.setValue("b");
+    });
+    expect(result.current.value).toBe("b");
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+
+  it("derived uncontrolled: silent actualiza backing sin onChange", () => {
+    const onChange = vi.fn();
+    const { result } = renderHook(() => {
+      const [backing, setBacking] = useState("a");
+      return useControllableState<string>({
+        derive: () => backing,
+        setDerivedValue: setBacking,
+        onChange,
+      });
+    });
+    act(() => {
+      result.current.setValue("b", { silent: true });
+    });
+    expect(result.current.value).toBe("b");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("derived controlled: value externo gana sobre derive()", () => {
+    const setDerivedValue = vi.fn();
+    const { result } = renderHook(() =>
+      useControllableState<string>({
+        value: "controlled",
+        derive: () => "derived",
+        setDerivedValue,
+      }),
+    );
+    expect(result.current.value).toBe("controlled");
+    expect(result.current.isControlled).toBe(true);
+  });
+
+  it("derived controlled: setValue no llama setDerivedValue, sólo onChange", () => {
+    const setDerivedValue = vi.fn();
+    const onChange = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ value }: { value: string }) =>
+        useControllableState<string>({
+          value,
+          derive: () => "derived",
+          setDerivedValue,
+          onChange,
+        }),
+      { initialProps: { value: "a" } },
+    );
+    act(() => {
+      result.current.setValue("b");
+    });
+    expect(result.current.value).toBe("a");
+    expect(setDerivedValue).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith("b");
+    rerender({ value: "b" });
+    expect(result.current.value).toBe("b");
+  });
+
+  it("derived: setValue mantiene identidad estable entre renders", () => {
+    const { result, rerender } = renderHook(() => {
+      const [backing, setBacking] = useState("a");
+      return useControllableState<string>({
+        derive: () => backing,
+        setDerivedValue: setBacking,
+      });
+    });
+    const first = result.current.setValue;
+    rerender();
+    expect(result.current.setValue).toBe(first);
+  });
+
+  it("derived: respeta onChange actualizado sin recrear setValue", () => {
+    const onChange1 = vi.fn();
+    const onChange2 = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ onChange }: { onChange: (value: string) => void }) => {
+        const [backing, setBacking] = useState("a");
+        return useControllableState<string>({
+          derive: () => backing,
+          setDerivedValue: setBacking,
+          onChange,
+        });
+      },
+      { initialProps: { onChange: onChange1 } },
+    );
+    const first = result.current.setValue;
+    rerender({ onChange: onChange2 });
+    expect(result.current.setValue).toBe(first);
     act(() => {
       result.current.setValue("b");
     });
