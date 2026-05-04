@@ -180,7 +180,8 @@ todos kebab-case y todos compuestos por concatenación con guion.
 
 Tabla mínima (clase base por componente). Los modifiers siguen el patrón
 estándar `{base}-{variant}` / `{base}-{size}` y se documentan exhaustivamente
-en Storybook → *Fundamentos / CSS API pública*.
+en Storybook → *Fundamentos / CSS API pública* — [referencia con
+tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?path=/docs/fundamentos-css-api-publica--docs).
 
 | Componente              | Clase base                | Modifiers principales                                                                  |
 |-------------------------|---------------------------|----------------------------------------------------------------------------------------|

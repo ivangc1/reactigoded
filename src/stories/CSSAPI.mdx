@@ -1,0 +1,716 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Fundamentos/CSS API pública" />
+
+# CSS API pública
+
+Las clases `.ig-*` son **contrato público** del DS. Documentadas aquí
+para consumers que usan reactigoded sin React (HTML estático, Astro,
+Hugo, templates server-side, otros frameworks).
+
+## Convenciones
+
+- Todos los selectores empiezan por `.ig-*`.
+- Variants semánticas: `brand`, `secondary`, `success`, `warning`, `danger`, `info`.
+- Sizes: `sm`, `md` (default, sin clase modificadora), `lg`. Algunos componentes añaden `xs` y `xl`.
+- Modificadores se concatenan: `<button class="ig-btn ig-btn-brand ig-btn-sm">…</button>`.
+- Estados (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador o el consumer.
+- Algunas clases de variant se construyen dinámicamente — se documentan los patrones (`ig-btn-{variant}`) en lugar de listar las 6 explícitamente.
+
+## Componentes (32)
+
+---
+
+### Accordion
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-accordion` |
+| Item | `.ig-accordion-item` (contenedor por sección) · `.ig-accordion-item-open` (estado abierto) |
+| Header | `.ig-accordion-header` · `.ig-accordion-icon` (chevron) |
+| Content | `.ig-accordion-content` |
+
+```html
+<div class="ig-accordion">
+  <div class="ig-accordion-item ig-accordion-item-open">
+    <button class="ig-accordion-header" aria-expanded="true">
+      Pregunta 1 <span class="ig-accordion-icon" aria-hidden="true">▾</span>
+    </button>
+    <div class="ig-accordion-content">Respuesta 1</div>
+  </div>
+</div>
+```
+
+---
+
+### Alert
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-alert` |
+| Variants | `.ig-alert-{brand,secondary,success,warning,danger,info,neutral}` |
+| Slots | `.ig-alert-icon` · `.ig-alert-content` · `.ig-alert-title` · `.ig-alert-description` · `.ig-alert-close` |
+
+```html
+<div class="ig-alert ig-alert-success" role="status">
+  <span class="ig-alert-icon" aria-hidden="true">✓</span>
+  <div class="ig-alert-content">
+    <strong class="ig-alert-title">Guardado</strong>
+    <p class="ig-alert-description">Cambios persistidos.</p>
+  </div>
+  <button class="ig-alert-close" aria-label="Cerrar">×</button>
+</div>
+```
+
+---
+
+### Avatar / AvatarGroup
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-avatar` · `.ig-avatar-group` |
+| Sizes | `.ig-avatar-{xs,sm,md,lg,xl,2xl}` |
+| Shape | `.ig-avatar-rounded` (círculo) |
+| Status | `.ig-avatar-status` · `.ig-avatar-status-{online,offline,busy,away}` |
+
+```html
+<span class="ig-avatar ig-avatar-md ig-avatar-rounded">
+  <img src="/me.jpg" alt="Iván" />
+  <span class="ig-avatar-status ig-avatar-status-online" role="img" aria-label="Estado: en línea"></span>
+</span>
+
+<div class="ig-avatar-group">
+  <span class="ig-avatar"><span aria-hidden="true">A</span></span>
+  <span class="ig-avatar"><span aria-hidden="true">B</span></span>
+</div>
+```
+
+---
+
+### Badge
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-badge` |
+| Filled | `.ig-badge-{brand,secondary,success,warning,danger,info}` |
+| Outline | `.ig-badge-outline-{variant}` (combinado con la variant) |
+| Sizes | `.ig-badge-{sm,lg}` |
+| Modifiers | `.ig-badge-pill` · `.ig-badge-dot` |
+
+```html
+<span class="ig-badge ig-badge-brand">Nuevo</span>
+<span class="ig-badge ig-badge-outline-danger ig-badge-sm">Bloqueado</span>
+<span class="ig-badge ig-badge-success ig-badge-pill">Activo</span>
+<span class="ig-badge ig-badge-success ig-badge-dot">Conectado</span>
+```
+
+---
+
+### Breadcrumb
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-breadcrumb` (sobre `<nav>`) |
+| Item | `.ig-breadcrumb-item` |
+| Current | `.ig-breadcrumb-current` (último, con `aria-current="page"`) |
+| Separator | `.ig-breadcrumb-separator` |
+
+```html
+<nav class="ig-breadcrumb" aria-label="Migas de pan">
+  <ol>
+    <li class="ig-breadcrumb-item"><a href="/">Inicio</a></li>
+    <li class="ig-breadcrumb-separator" aria-hidden="true">/</li>
+    <li class="ig-breadcrumb-item"><a href="/cat">Categoría</a></li>
+    <li class="ig-breadcrumb-separator" aria-hidden="true">/</li>
+    <li class="ig-breadcrumb-current" aria-current="page">Producto</li>
+  </ol>
+</nav>
+```
+
+---
+
+### Button
+
+| Categoría | Clases |
+|---|---|
+| Base | `.ig-btn` |
+| Filled | `.ig-btn-{brand,secondary,success,warning,danger,info}` |
+| Outline | `.ig-btn-outline-{variant}` |
+| Ghost | `.ig-btn-ghost-{variant}` |
+| Link | `.ig-btn-link` (sin variant) |
+| Sizes | `.ig-btn-{xs,sm,md,lg,xl}` |
+| Modifiers | `.ig-btn-block` · `.ig-btn-icon` · `.ig-btn-loading` |
+
+```html
+<button class="ig-btn ig-btn-brand">Guardar</button>
+<button class="ig-btn ig-btn-outline-danger ig-btn-sm">Eliminar</button>
+<button class="ig-btn ig-btn-ghost-secondary" disabled>Disabled</button>
+<a href="#" class="ig-btn ig-btn-link">Link variant</a>
+<button class="ig-btn ig-btn-brand ig-btn-block ig-btn-loading">Procesando…</button>
+```
+
+---
+
+### Card (compound)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-card` |
+| Variants | `.ig-card-{variant}` (outline) · `.ig-card-{variant}-filled` |
+| Modifiers | `.ig-card-bordered` · `.ig-card-elevated` · `.ig-card-glass` · `.ig-card-interactive` |
+| Slots | `.ig-card-header` · `.ig-card-body` · `.ig-card-footer` · `.ig-card-image` (`.ig-card-image-top` para top-anchor) · `.ig-card-divider` |
+
+```html
+<article class="ig-card ig-card-brand ig-card-elevated">
+  <img src="/cover.jpg" alt="" class="ig-card-image ig-card-image-top" />
+  <div class="ig-card-header">Título</div>
+  <div class="ig-card-body">Contenido principal.</div>
+  <hr class="ig-card-divider" />
+  <div class="ig-card-footer">
+    <button class="ig-btn ig-btn-brand ig-btn-sm">Acción</button>
+  </div>
+</article>
+```
+
+---
+
+### Checkbox
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-checkbox` (sobre `<label>`) |
+| Variants | `.ig-checkbox-{brand,secondary,success,warning,danger,info}` |
+| Mark | `.ig-checkbox-mark` (decorativo) |
+
+Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`, `.indeterminate`).
+
+```html
+<label class="ig-checkbox ig-checkbox-brand">
+  <input type="checkbox" />
+  <span class="ig-checkbox-mark" aria-hidden="true"></span>
+  <span>Acepto los términos</span>
+</label>
+```
+
+---
+
+### Chip
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-chip` |
+| Variants | `.ig-chip-{brand,secondary,success,warning,danger,info}` |
+| Sizes | `.ig-chip-{sm,lg}` |
+| Modifiers | `.ig-chip-selectable` · `.ig-chip-selected` · `.ig-chip-close` |
+
+```html
+<span class="ig-chip ig-chip-brand">Etiqueta</span>
+<span class="ig-chip ig-chip-success ig-chip-sm">
+  Removible <button class="ig-chip-close" aria-label="Quitar">×</button>
+</span>
+<button class="ig-chip ig-chip-secondary ig-chip-selectable ig-chip-selected">Selección</button>
+```
+
+---
+
+### Divider
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-divider` (sobre `<hr>`) o `.ig-divider-with-text` (sobre `<div>`) |
+| Variants | `.ig-divider-{brand,secondary,success,warning,danger,info}` |
+| Modifiers | `.ig-divider-dashed` · `.ig-divider-vertical` |
+
+```html
+<hr class="ig-divider" />
+<hr class="ig-divider ig-divider-brand ig-divider-dashed" />
+<div class="ig-divider-with-text" role="separator">OR</div>
+<span class="ig-divider ig-divider-vertical" aria-hidden="true"></span>
+```
+
+---
+
+### Dropdown (compound)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-dropdown` |
+| Trigger | `.ig-dropdown-trigger` (sobre `<button>`) |
+| Menu | `.ig-dropdown-menu` (`role="menu"`) |
+| Item | `.ig-dropdown-item` (`role="menuitem"`) · `.ig-dropdown-item-active` · `.ig-dropdown-item-danger` |
+| Slots | `.ig-dropdown-header` · `.ig-dropdown-divider` |
+| Estado | `.ig-dropdown-open` (en wrapper) |
+| Posición | `.ig-dropdown-right` · `.ig-dropdown-up` |
+
+```html
+<div class="ig-dropdown ig-dropdown-open">
+  <button class="ig-dropdown-trigger" aria-expanded="true">Acciones</button>
+  <div class="ig-dropdown-menu" role="menu">
+    <div class="ig-dropdown-header">Cuenta</div>
+    <button class="ig-dropdown-item" role="menuitem">Perfil</button>
+    <button class="ig-dropdown-item ig-dropdown-item-active" role="menuitem">Ajustes</button>
+    <hr class="ig-dropdown-divider" />
+    <button class="ig-dropdown-item ig-dropdown-item-danger" role="menuitem">Cerrar sesión</button>
+  </div>
+</div>
+```
+
+---
+
+### Input (compound)
+
+| Categoría | Clases |
+|---|---|
+| Input | `.ig-input` |
+| States | `.ig-input-error` · `.ig-input-success` |
+| Sizes | `.ig-input-{sm,lg}` |
+| Helpers | `.ig-label` · `.ig-label-required` · `.ig-helper` · `.ig-error` |
+| Group | `.ig-input-group` · `.ig-input-addon` |
+
+```html
+<label class="ig-label ig-label-required" for="email">Email</label>
+<input id="email" class="ig-input ig-input-error" type="email" aria-invalid="true" />
+<p class="ig-error">Formato inválido.</p>
+
+<div class="ig-input-group">
+  <span class="ig-input-addon">$</span>
+  <input class="ig-input" type="number" />
+  <span class="ig-input-addon">USD</span>
+</div>
+```
+
+---
+
+### Modal (`<dialog>` nativo)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-dialog` (sobre `<dialog>`) |
+| Sizes | `.ig-dialog-{sm,md,lg,xl,full}` |
+| Backdrop | `.ig-dialog-backdrop-{blur,dark,light}` · `.ig-dialog-no-backdrop` |
+| Slots | `.ig-dialog-header` · `.ig-dialog-body` · `.ig-dialog-footer` · `.ig-dialog-close` |
+| Estado | `.ig-dialog-loading` |
+
+```html
+<dialog class="ig-dialog ig-dialog-md ig-dialog-backdrop-blur" open>
+  <header class="ig-dialog-header">
+    Confirmar
+    <button class="ig-dialog-close" aria-label="Cerrar">×</button>
+  </header>
+  <div class="ig-dialog-body">¿Seguro que quieres continuar?</div>
+  <footer class="ig-dialog-footer">
+    <button class="ig-btn ig-btn-secondary">Cancelar</button>
+    <button class="ig-btn ig-btn-brand">Aceptar</button>
+  </footer>
+</dialog>
+```
+
+---
+
+### Navbar (compound)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-navbar` (sobre `<header>`) |
+| Position | `.ig-navbar-sticky` · `.ig-navbar-fixed` |
+| Modifier | `.ig-navbar-glass` |
+| Slots | `.ig-navbar-brand` · `.ig-navbar-nav` · `.ig-navbar-actions` · `.ig-navbar-menu-btn` |
+| Link | `.ig-navbar-link` · `.ig-navbar-link-active` |
+
+```html
+<header class="ig-navbar ig-navbar-sticky">
+  <a class="ig-navbar-brand" href="/">Mi App</a>
+  <nav class="ig-navbar-nav" aria-label="Principal">
+    <a class="ig-navbar-link ig-navbar-link-active" href="/" aria-current="page">Inicio</a>
+    <a class="ig-navbar-link" href="/precios">Precios</a>
+  </nav>
+  <div class="ig-navbar-actions">
+    <button class="ig-btn ig-btn-ghost-secondary">Login</button>
+    <button class="ig-btn ig-btn-brand">Sign up</button>
+  </div>
+</header>
+```
+
+---
+
+### Pagination
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-pagination` (sobre `<nav>`) |
+| Variants | `.ig-pagination-{brand,secondary,success,warning,danger,info}` |
+| Item | `.ig-pagination-item` |
+| Active | `.ig-pagination-active` |
+| Ellipsis | `.ig-pagination-ellipsis` |
+
+```html
+<nav class="ig-pagination ig-pagination-brand" aria-label="Paginación">
+  <button class="ig-pagination-item">‹</button>
+  <button class="ig-pagination-item">1</button>
+  <button class="ig-pagination-item ig-pagination-active" aria-current="page">2</button>
+  <span class="ig-pagination-ellipsis" aria-hidden="true">…</span>
+  <button class="ig-pagination-item">10</button>
+  <button class="ig-pagination-item">›</button>
+</nav>
+```
+
+---
+
+### Progress
+
+| Categoría | Clases |
+|---|---|
+| Track | `.ig-progress` (`role="progressbar"`) |
+| Fill | `.ig-progress-bar` |
+| Variants | `.ig-progress-{brand,secondary,success,warning,danger,info}` |
+| Sizes | `.ig-progress-{sm,lg}` |
+| Estado | `.ig-progress-indeterminate` |
+
+```html
+<div class="ig-progress ig-progress-success" role="progressbar"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="70">
+  <div class="ig-progress-bar" style="width: 70%"></div>
+</div>
+
+<div class="ig-progress ig-progress-indeterminate" role="progressbar" aria-label="Cargando">
+  <div class="ig-progress-bar"></div>
+</div>
+```
+
+---
+
+### Radio
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-radio` (sobre `<label>`) |
+| Variants | `.ig-radio-{brand,secondary,success,warning,danger,info}` |
+| Mark | `.ig-radio-mark` (decorativo) |
+
+```html
+<label class="ig-radio ig-radio-brand">
+  <input type="radio" name="plan" value="free" />
+  <span class="ig-radio-mark" aria-hidden="true"></span>
+  <span>Free</span>
+</label>
+```
+
+---
+
+### Rating
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-rating` (`role="radiogroup"`) |
+| Sizes | `.ig-rating-{sm,lg,xl}` |
+| Modifier | `.ig-rating-readonly` (con `aria-readonly="true"`) |
+| Star | `.ig-star` · `.ig-star-filled` |
+
+```html
+<div class="ig-rating" role="radiogroup" aria-label="Puntuación">
+  <button class="ig-star ig-star-filled" role="radio" aria-checked="true">★</button>
+  <button class="ig-star ig-star-filled" role="radio" aria-checked="false">★</button>
+  <button class="ig-star" role="radio" aria-checked="false">★</button>
+</div>
+```
+
+---
+
+### Select
+
+Usa el contrato del `Input` para estados:
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-select` (sobre `<select>`) |
+| States | `.ig-input-error` · `.ig-input-success` |
+
+```html
+<select class="ig-select">
+  <option value="">Selecciona…</option>
+  <option value="es">España</option>
+  <option value="mx">México</option>
+</select>
+<select class="ig-select ig-input-error" aria-invalid="true">…</select>
+```
+
+---
+
+### Sidebar (compound)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-sidebar` (sobre `<aside>`) |
+| Estado | `.ig-sidebar-collapsed` |
+| Slots | `.ig-sidebar-header` · `.ig-sidebar-nav` · `.ig-sidebar-section` · `.ig-sidebar-footer` · `.ig-sidebar-divider` · `.ig-sidebar-toggle` |
+| Item | `.ig-sidebar-item` · `.ig-sidebar-item-active` · `.ig-sidebar-icon` · `.ig-sidebar-text` |
+
+```html
+<aside class="ig-sidebar" aria-label="Navegación lateral">
+  <header class="ig-sidebar-header">Mi App</header>
+  <nav class="ig-sidebar-nav">
+    <a class="ig-sidebar-item ig-sidebar-item-active" href="/">
+      <span class="ig-sidebar-icon">🏠</span>
+      <span class="ig-sidebar-text">Inicio</span>
+    </a>
+  </nav>
+  <hr class="ig-sidebar-divider" />
+  <footer class="ig-sidebar-footer">
+    <button class="ig-sidebar-toggle" aria-label="Colapsar">‹</button>
+  </footer>
+</aside>
+```
+
+---
+
+### Skeleton
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-skeleton` |
+| Shapes | `.ig-skeleton-text` · `.ig-skeleton-avatar` · `.ig-skeleton-avatar-lg` · `.ig-skeleton-card` · `.ig-skeleton-image` · `.ig-skeleton-button` · `.ig-skeleton-title` |
+
+```html
+<div class="ig-skeleton ig-skeleton-title"></div>
+<div class="ig-skeleton ig-skeleton-text"></div>
+<div class="ig-skeleton ig-skeleton-avatar"></div>
+<div class="ig-skeleton ig-skeleton-image" style="height: 140px"></div>
+```
+
+---
+
+### Slider
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-slider` (sobre `<input type="range">`) |
+| Group | `.ig-slider-group` (cuando `showValue`) |
+| Value | `.ig-slider-value` (label numérico) |
+
+```html
+<input class="ig-slider" type="range" min="0" max="100" value="50" />
+
+<div class="ig-slider-group">
+  <input class="ig-slider" type="range" min="0" max="100" value="60" />
+  <span class="ig-slider-value" aria-hidden="true">60</span>
+</div>
+```
+
+---
+
+### Spinner
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-spinner` (`role="status"`) |
+| Variants | `.ig-spinner-{brand,secondary,success,warning,danger,info}` |
+| Sizes | `.ig-spinner-{xs,sm,lg,xl}` (md sin clase) |
+
+```html
+<span class="ig-spinner ig-spinner-brand" role="status" aria-label="Cargando…"></span>
+<span class="ig-spinner ig-spinner-success ig-spinner-lg" role="status" aria-label="Procesando…"></span>
+```
+
+---
+
+### Stepper
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-stepper` · `.ig-stepper-labeled` (con label debajo) |
+| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` |
+| Slots | `.ig-step-item` · `.ig-step-label` |
+| Connector | `.ig-step-line` · `.ig-step-line-complete` |
+
+```html
+<div class="ig-stepper-labeled" role="group" aria-label="Progreso">
+  <div class="ig-step-item">
+    <div class="ig-step ig-step-complete">1</div>
+    <div class="ig-step-label">Carrito</div>
+  </div>
+  <span class="ig-step-line ig-step-line-complete" aria-hidden="true"></span>
+  <div class="ig-step-item">
+    <div class="ig-step ig-step-active" aria-current="step">2</div>
+    <div class="ig-step-label">Pago</div>
+  </div>
+  <span class="ig-step-line" aria-hidden="true"></span>
+  <div class="ig-step-item">
+    <div class="ig-step">3</div>
+    <div class="ig-step-label">Confirmación</div>
+  </div>
+</div>
+```
+
+---
+
+### Switch
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-switch` (sobre `<label>`) |
+| Variants | `.ig-switch-{brand,secondary,success,warning,danger,info}` |
+| Track | `.ig-switch-track` (decorativo) |
+
+```html
+<label class="ig-switch ig-switch-brand">
+  <input type="checkbox" role="switch" />
+  <span class="ig-switch-track" aria-hidden="true"></span>
+  <span>Notificaciones</span>
+</label>
+```
+
+---
+
+### Table (compound)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-table` (sobre `<table>`) |
+| Modifiers | `.ig-table-bordered` · `.ig-table-striped` · `.ig-table-hover` · `.ig-table-compact` · `.ig-table-fixed` |
+| Caption | `.ig-caption-top` (caption arriba en lugar de abajo) |
+
+```html
+<table class="ig-table ig-table-bordered ig-table-striped ig-table-hover">
+  <caption class="ig-caption-top">Pedidos recientes</caption>
+  <thead>
+    <tr><th>ID</th><th>Cliente</th><th>Total</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>#001</td><td>Ana</td><td>€42.00</td></tr>
+  </tbody>
+</table>
+```
+
+---
+
+### Tabs (compound)
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-tabs` |
+| Variants | `.ig-tabs-{brand,secondary,success,warning,danger,info}` |
+| Modifiers | `.ig-tabs-pills` · `.ig-tabs-vertical` |
+| Slots | `.ig-tabs-list` (`role="tablist"`) · `.ig-tabs-content` |
+| Tab | `.ig-tab` · `.ig-tab-active` |
+| Panel | `.ig-tab-panel` · `.ig-tab-panel-active` |
+
+```html
+<div class="ig-tabs ig-tabs-brand">
+  <div class="ig-tabs-list" role="tablist">
+    <button class="ig-tab ig-tab-active" role="tab" aria-selected="true">Perfil</button>
+    <button class="ig-tab" role="tab" aria-selected="false">Seguridad</button>
+  </div>
+  <div class="ig-tabs-content">
+    <div class="ig-tab-panel ig-tab-panel-active" role="tabpanel">Datos personales</div>
+  </div>
+</div>
+```
+
+---
+
+### Textarea
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-textarea` (sobre `<textarea>`) |
+| States | `.ig-input-error` · `.ig-input-success` |
+| Modifier | `.ig-textarea-auto` (auto-grow con `field-sizing` nativo) |
+
+```html
+<textarea class="ig-textarea" rows="3"></textarea>
+<textarea class="ig-textarea ig-textarea-auto"></textarea>
+<textarea class="ig-textarea ig-input-error" aria-invalid="true"></textarea>
+```
+
+---
+
+### ThemeSwitch
+
+ThemeSwitch reusa internamente el contrato de **Switch** (`.ig-switch`,
+variants, track). No emite clases propias adicionales — la lógica de
+tema vive en `data-theme="light|dark"` aplicado a `<html>`.
+
+```html
+<label class="ig-switch ig-switch-brand">
+  <input type="checkbox" role="switch" checked />
+  <span class="ig-switch-track" aria-hidden="true"></span>
+  <span>Dark</span>
+</label>
+```
+
+---
+
+### Timeline
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-timeline` |
+| Item | `.ig-timeline-item` |
+| Marker | `.ig-timeline-dot` · `.ig-timeline-dot-{brand,secondary,success,warning,danger,info,default}` |
+| Slots | `.ig-timeline-content` · `.ig-timeline-title` · `.ig-timeline-description` · `.ig-timeline-date` |
+
+```html
+<ol class="ig-timeline">
+  <li class="ig-timeline-item">
+    <span class="ig-timeline-dot ig-timeline-dot-success" aria-hidden="true"></span>
+    <div class="ig-timeline-content">
+      <p class="ig-timeline-title">Pedido confirmado</p>
+      <p class="ig-timeline-description">Procesando pago…</p>
+      <time class="ig-timeline-date">Hoy 10:34</time>
+    </div>
+  </li>
+</ol>
+```
+
+---
+
+### Toast (con ToastProvider)
+
+| Categoría | Clases |
+|---|---|
+| Container | `.ig-toast-container` |
+| Placement | `.ig-toast-{top-left,top-right,top-center,bottom-left,bottom-right,bottom-center}` |
+| Toast | `.ig-toast` · `.ig-toast-{brand,secondary,success,warning,danger,info}` |
+| Slots | `.ig-toast-icon` · `.ig-toast-content` · `.ig-toast-title` · `.ig-toast-message` · `.ig-toast-close` |
+
+```html
+<div class="ig-toast-container ig-toast-bottom-right" role="region" aria-label="Notificaciones">
+  <div class="ig-toast ig-toast-success" role="status">
+    <span class="ig-toast-icon" aria-hidden="true">✓</span>
+    <div class="ig-toast-content">
+      <strong class="ig-toast-title">Guardado</strong>
+      <p class="ig-toast-message">Cambios persistidos.</p>
+    </div>
+    <button class="ig-toast-close" aria-label="Cerrar">×</button>
+  </div>
+</div>
+```
+
+---
+
+### Tooltip
+
+| Categoría | Clases |
+|---|---|
+| Wrapper | `.ig-tooltip` |
+| Placement | `.ig-tooltip-place-{top,right,bottom,left}` |
+| Variants | `.ig-tooltip-color-{brand,secondary,success,warning,danger,info}` |
+| Atributo | `data-tooltip="..."` (el texto va aquí, lo lee el `::before` CSS) |
+| SR | `<span class="ig-sr-only" role="tooltip">…</span>` para lectores de pantalla |
+
+> **Migración pre-1.0.0**: las clases pasaron de `ig-tooltip-{placement}` y `ig-tooltip-{variant}` a prefijos únicos `ig-tooltip-place-*` y `ig-tooltip-color-*` para evitar colisión semántica.
+
+```html
+<span class="ig-tooltip ig-tooltip-place-top ig-tooltip-color-brand" data-tooltip="Eliminar">
+  <button aria-describedby="tt-1" aria-label="Eliminar">×</button>
+  <span id="tt-1" role="tooltip" class="ig-sr-only">Eliminar</span>
+</span>
+```
+
+---
+
+## Notas finales
+
+- Los slots compound (`-header`, `-body`, `-footer`, etc.) están pensados para reflejar la jerarquía semántica nativa del HTML; no son obligatorios si construyes un layout custom encima.
+- Los componentes con múltiples sub-clases (Sidebar, Card, Modal, Dropdown, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
+- Estados del navegador (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador automáticamente cuando los elementos son interactivos. La librería utility-pseudo (`state.css`, opt-in) permite forzar estados desde HTML estático sin depender del estado real del DOM.
