@@ -140,3 +140,49 @@ export const ControlledDismissible: Story = {
     return <ControlledDemo />;
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <Alert variant="brand" title="Brand">Mensaje informativo brand.</Alert>
+      <Alert variant="secondary" title="Secondary">
+        Mensaje informativo secondary.
+      </Alert>
+      <Alert variant="success" title="Éxito">
+        Operación completada correctamente.
+      </Alert>
+      <Alert variant="warning" title="Aviso">
+        Revisa antes de continuar.
+      </Alert>
+      <Alert variant="danger" title="Error">
+        No se pudo completar la operación.
+      </Alert>
+      <Alert variant="info" title="Info">
+        Información adicional para el usuario.
+      </Alert>
+      <Alert variant="neutral" title="Neutral">
+        Comentario neutro sin variant semántica.
+      </Alert>
+      <Alert variant="success" title="Con icono" icon="✓">
+        Variante con icono custom.
+      </Alert>
+      <Alert variant="warning" title="Dismissible" dismissible>
+        Se puede cerrar.
+      </Alert>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const alerts = canvasElement.querySelectorAll(".ig-alert");
+    await expect(alerts.length).toBeGreaterThanOrEqual(9);
+  },
+};

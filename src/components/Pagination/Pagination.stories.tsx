@@ -88,3 +88,56 @@ export const PageClickInteraction: Story = {
     await expect(args.onPageChange).toHaveBeenCalledWith(4);
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    // aria-label único por instancia (axe rule landmark-unique).
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      <Pagination
+        aria-label="Paginación corta"
+        currentPage={1}
+        totalPages={3}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación larga con ellipsis"
+        currentPage={6}
+        totalPages={20}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación primera página"
+        currentPage={1}
+        totalPages={10}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación última página"
+        currentPage={10}
+        totalPages={10}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación brand"
+        variant="brand"
+        currentPage={3}
+        totalPages={7}
+        onPageChange={() => {}}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const navs = canvasElement.querySelectorAll('nav[aria-label^="Paginación"]');
+    await expect(navs.length).toBe(5);
+  },
+};

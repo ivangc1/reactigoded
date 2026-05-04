@@ -131,3 +131,54 @@ export const A11yInteraction: Story = {
     await expect(tooltipNode).toHaveTextContent("Eliminar elemento");
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="ig-story-frame ig-story-frame--lg">
+        <Story />
+      </div>
+    ),
+  ],
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem" }}>
+      <div className="ig-story-row ig-story-row--gap-lg">
+        <Tooltip text="Top" placement="top">
+          <Button variant="secondary">top</Button>
+        </Tooltip>
+        <Tooltip text="Bottom" placement="bottom">
+          <Button variant="secondary">bottom</Button>
+        </Tooltip>
+        <Tooltip text="Left" placement="left">
+          <Button variant="secondary">left</Button>
+        </Tooltip>
+        <Tooltip text="Right" placement="right">
+          <Button variant="secondary">right</Button>
+        </Tooltip>
+      </div>
+      <div className="ig-story-row ig-story-row--gap-lg">
+        {(
+          ["brand", "secondary", "success", "warning", "danger", "info"] as const
+        ).map((v) => (
+          <Tooltip key={v} text={v} variant={v} placement="top">
+            <Button variant={v}>{v}</Button>
+          </Tooltip>
+        ))}
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const tooltips = canvasElement.querySelectorAll(".ig-tooltip");
+    await expect(tooltips.length).toBeGreaterThanOrEqual(10);
+  },
+};

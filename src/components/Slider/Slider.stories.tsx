@@ -111,3 +111,47 @@ export const OnValueChange: Story = {
     return <Demo />;
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 400 }}>
+      <Slider aria-label="Slider mínimo" defaultValue={0} />
+      <Slider aria-label="Slider intermedio" defaultValue={50} />
+      <Slider aria-label="Slider máximo" defaultValue={100} />
+      <Slider
+        aria-label="Slider con valor visible"
+        defaultValue={60}
+        showValue
+      />
+      <Slider
+        aria-label="Slider porcentaje"
+        defaultValue={75}
+        showValue
+        formatValue={(v) => `${String(v)}%`}
+      />
+      <Slider
+        aria-label="Slider con pasos"
+        defaultValue={40}
+        min={0}
+        max={100}
+        step={20}
+        showValue
+      />
+      <Slider aria-label="Slider deshabilitado" defaultValue={30} disabled />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const sliders = canvasElement.querySelectorAll('input[type="range"]');
+    await expect(sliders.length).toBeGreaterThanOrEqual(7);
+  },
+};

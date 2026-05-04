@@ -117,3 +117,39 @@ describe("Stepper", () => {
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
   });
 });
+
+describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
+  it("step active no aplica selector global al wrapper item", () => {
+    // Bug latente desde beta.5: la regla CSS `.ig-step-active` global
+    // matcheaba tanto el dot como el wrapper `.ig-step-item.ig-step-active`,
+    // pintando el wrapper de axis-nox y dejando el `.ig-step-label`
+    // (color cinis-nox via `var(--ig-text-body)`) en contraste 1.02.
+    // Fix beta.20: selector compound `.ig-step.ig-step-active` limita
+    // la regla al dot. Este test ancla la separación a nivel DOM.
+    const { container } = render(
+      <Stepper labeled active={2} aria-label="test">
+        <Step label="Uno" />
+        <Step label="Dos" />
+        <Step label="Tres" />
+      </Stepper>,
+    );
+
+    const wrapper = container.querySelector(".ig-step-item.ig-step-active");
+    const dot = container.querySelector(".ig-step.ig-step-active");
+
+    expect(wrapper).toBeTruthy();
+    expect(dot).toBeTruthy();
+
+    // Selector compound `.ig-step.ig-step-active` solo debe matchear el dot.
+    expect(wrapper?.matches(".ig-step.ig-step-active")).toBe(false);
+    expect(dot?.matches(".ig-step.ig-step-active")).toBe(true);
+
+    // Misma garantía para complete:
+    const completeWrapper = container.querySelector(
+      ".ig-step-item.ig-step-complete",
+    );
+    const completeDot = container.querySelector(".ig-step.ig-step-complete");
+    expect(completeWrapper?.matches(".ig-step.ig-step-complete")).toBe(false);
+    expect(completeDot?.matches(".ig-step.ig-step-complete")).toBe(true);
+  });
+});

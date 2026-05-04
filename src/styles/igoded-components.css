@@ -8985,13 +8985,19 @@ CUÁNDO USAR:
   transition: var(--ig-transition-normal);
 }
 
-.ig-step-active {
+/* Selector compound `.ig-step.ig-step-active` (en lugar de `.ig-step-active`
+   suelto) limita la regla al DOT — el wrapper `.ig-step-item.ig-step-active`
+   también lleva la clase pero NO debe heredar el background del dot.
+   Bug latente desde beta.5: `.ig-step-active` global pintaba el wrapper de
+   axis-nox dejando el `.ig-step-label` (color cinis-nox via
+   `var(--ig-text-body)`) en contraste 1.02. Detectado por AllStates Ola 2. */
+.ig-step.ig-step-active {
   background-color: var(--ig-stepper-dot-bg-active);
   color: var(--ig-text-on-secondary);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--ig-axis) 20%, transparent);
 }
 
-.ig-step-complete {
+.ig-step.ig-step-complete {
   background-color: var(--ig-stepper-dot-bg-complete);
   color: var(--ig-text-on-success);
 }

@@ -213,6 +213,21 @@ function buildThemeMap(themeKey) {
 }
 
 // ─── Check 1: WCAG en igoded-components.css ─────────────────────────
+//
+// LIMITACIÓN CONOCIDA: este script audita pares bg+color dentro del
+// MISMO bloque CSS (mismo selector). NO resuelve cascada cruzada — un
+// caso típico es texto cuyo `color` viene de una regla anidada (ej.
+// `.parent.active .child`) sobre un fondo definido en una regla global
+// (ej. `.active`) donde el matching del wrapper es accidental por
+// scope incorrecto.
+//
+// Para esos casos, la cobertura está en storybook + axe corriendo en
+// chromium real, que sí resuelve la cascada del DOM completo.
+//
+// Caso histórico que justifica esta nota: bug Stepper beta.20
+// (.ig-step-active sin scope matcheaba el wrapper .ig-step-item
+// pintándolo con axis-nox; el .ig-step-label heredaba cinis-nox vía
+// regla más específica → contraste 1.02 invisible para este script).
 
 function extractRoleFromColorVar(value) {
   // Captura el primer var(--ig-XXXX) presente en `value`.
