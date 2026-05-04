@@ -6,6 +6,7 @@ import {
   type Ref,
 } from "react";
 import { Switch, type SwitchProps } from "../Switch";
+import { useControllableState } from "../../hooks/useControllableState";
 import type { Theme } from "../../hooks/useTheme";
 
 export interface ThemeSwitchProps
@@ -93,23 +94,34 @@ export function ThemeSwitch({
   ref,
   ...rest
 }: ThemeSwitchProps) {
-  const isControlled = themeProp !== undefined;
   const stored = useStoredTheme(storageKey);
   const [override, setOverride] = useState<Theme | null>(null);
 
-  // Default `dark` desde `1.0.0-beta.3` para alinear con `useTheme` y el
-  // branding dark-first del DS (manager.ts también arranca dark).
-  const current: Theme = isControlled
-    ? themeProp
-    : (override ?? stored ?? defaultTheme ?? "dark");
+  // Modo derive del hook: la fuente uncontrolled se computa en render
+  // como `override ?? stored ?? defaultTheme ?? "dark"`. `override` es
+  // state React local — NO localStorage. El effect post-mount se
+  // encarga de persistir el valor; useStoredTheme se mantiene para
+  // sync cross-tab vía StorageEvent nativo.
+  const { value: current, setValue: setTheme } = useControllableState<Theme>({
+    value: themeProp,
+    derive: () => override ?? stored ?? defaultTheme ?? "dark",
+    setDerivedValue: setOverride,
+    onChange: onThemeChange,
+  });
 
+  // Aplica `data-theme` al DOM y persiste storage. Bail-out
+  // `readStoredTheme(storageKey) !== current` antes del setItem evita
+  // escrituras redundantes y rompe cualquier loop con
+  // useSyncExternalStore en happy-dom.
   useEffect(() => {
     if (attribute && typeof document !== "undefined") {
       document.documentElement.setAttribute(attribute, current);
     }
     if (storageKey && typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(storageKey, current);
+        if (readStoredTheme(storageKey) !== current) {
+          window.localStorage.setItem(storageKey, current);
+        }
       } catch {
         /* localStorage no disponible — ignoramos. */
       }
@@ -118,9 +130,8 @@ export function ThemeSwitch({
 
   const toggle = useCallback(() => {
     const next: Theme = current === "dark" ? "light" : "dark";
-    if (!isControlled) setOverride(next);
-    onThemeChange?.(next);
-  }, [current, isControlled, onThemeChange]);
+    setTheme(next);
+  }, [current, setTheme]);
 
   const renderedLabel =
     typeof label === "function"

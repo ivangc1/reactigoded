@@ -29,13 +29,59 @@ export interface UseControllableStateDerivedOptions<T>
    */
   derive: () => T;
   /**
-   * Setter de la fuente local que alimenta `derive()`. Se invoca cuando
-   * el consumer llama a `setValue` y el componente NO es controlled.
+   * Setter de la fuente local React que alimenta `derive()`.
+   *
+   * IMPORTANTE: debe actualizar una fuente React/local que `derive()`
+   * lea. No debe escribir únicamente en una fuente externa como
+   * `localStorage`, porque `useSyncExternalStore` no notifica cambios
+   * same-tab en browsers reales y la UI no se actualizaría tras una
+   * interacción del usuario.
+   *
+   * Ejemplo correcto en ThemeSwitch:
+   *
+   * ```ts
+   * const [override, setOverride] = useState<Theme | null>(null);
+   *
+   * useControllableState({
+   *   derive: () => override ?? stored ?? defaultTheme ?? "dark",
+   *   setDerivedValue: setOverride,
+   * });
+   * ```
    */
   setDerivedValue: (next: T) => void;
   defaultValue?: never;
 }
 
+/**
+ * Opciones de `useControllableState`.
+ *
+ * Dos modos mutuamente excluyentes garantizados por unión discriminada:
+ *
+ * **Modo interno clásico** — para componentes con state interno simple.
+ *
+ * ```ts
+ * useControllableState({
+ *   value,
+ *   defaultValue,
+ *   onChange,
+ * });
+ * ```
+ *
+ * **Modo derivado** — para componentes cuyo valor uncontrolled deriva de
+ * fuentes externas o compuestas.
+ *
+ * ```ts
+ * useControllableState({
+ *   value,
+ *   derive: () => override ?? stored ?? defaultValue ?? "fallback",
+ *   setDerivedValue: setOverride,
+ *   onChange,
+ * });
+ * ```
+ *
+ * En modo derivado NO pases `defaultValue`; mete el fallback dentro de
+ * `derive()`. TypeScript impide la combinación inválida vía `never`.
+ */
 export type UseControllableStateOptions<T> =
   | UseControllableStateInternalOptions<T>
   | UseControllableStateDerivedOptions<T>;
@@ -102,14 +148,6 @@ function isDerivedOptions<T>(
  *   onChange: onThemeChange,
  * });
  */
-export function useControllableState<T>(
-  options: UseControllableStateInternalOptions<T>,
-): UseControllableStateReturn<T>;
-
-export function useControllableState<T>(
-  options: UseControllableStateDerivedOptions<T>,
-): UseControllableStateReturn<T>;
-
 export function useControllableState<T>(
   options: UseControllableStateOptions<T>,
 ): UseControllableStateReturn<T> {
