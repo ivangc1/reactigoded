@@ -128,12 +128,14 @@ export function Pagination({
   // ni dejar el `aria-current` huérfano si el consumer pasa basura.
   // Cualquier non-finite o ≤ 0 cae a defaults seguros (totalPages=1,
   // currentPage=1, siblingCount=0).
-  const safeTotal = Math.max(1, Math.floor(Number(totalPages) || 1));
+  // `|| 1` cubre 0, NaN e -Infinity por la coerción de OR a falsy/finite.
+  // Math.floor + max/min normaliza Infinity y negativos.
+  const safeTotal = Math.max(1, Math.floor(totalPages || 1));
   const safeCurrent = Math.min(
-    Math.max(1, Math.floor(Number(currentPage) || 1)),
+    Math.max(1, Math.floor(currentPage || 1)),
     safeTotal,
   );
-  const safeSiblings = Math.max(0, Math.floor(Number(siblingCount) || 0));
+  const safeSiblings = Math.max(0, Math.floor(siblingCount || 0));
 
   // Dev-only warning si tuvimos que clamp-ear (input fuera de rango).
   // En useEffect (no durante render) por la regla react-hooks/refs.
