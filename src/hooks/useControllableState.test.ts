@@ -233,32 +233,4 @@ describe("useControllableState", () => {
     expect(onChange1).not.toHaveBeenCalled();
     expect(onChange2).toHaveBeenCalledWith("b");
   });
-
-  // ─── Dev warn: controlled sin onChange ─────────────────────────
-
-  it("dev: warn al pasar value sin onChange (UI bloqueada)", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    renderHook(() => useControllableState({ value: "ext" }));
-    expect(warn).toHaveBeenCalledOnce();
-    const msg = String(warn.mock.calls[0]?.[0] ?? "");
-    expect(msg).toContain("controlled");
-    expect(msg).toContain("onChange");
-    warn.mockRestore();
-  });
-
-  it("dev: NO warn cuando value + onChange están ambos", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    renderHook(() =>
-      useControllableState({ value: "ext", onChange: () => {} }),
-    );
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  it("dev: NO warn en uncontrolled (sin value)", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    renderHook(() => useControllableState({ defaultValue: "a" }));
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
 });

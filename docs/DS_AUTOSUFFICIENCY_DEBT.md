@@ -108,15 +108,78 @@ también para `<footer>` con `contentinfo`.
 **Detectado**: beta.20 sub-B (Navbar `landmark-no-duplicate-banner`,
 4 instancias en grid AllStates).
 
-### 1.4 `value=` sin `onChange=` (controlled sin handler) ✅ aplicado en beta.20
+### 1.4 `value=` sin `onChange=` (controlled sin handler) ⏳ Diferido a rc.1
 
-**Solución aplicada**: `useControllableState` warn en dev cuando
-`isControlled === true && options.onChange === undefined`. Una vez
-por instancia.
+**Intento beta.20** (commit `2975e19`, revertido): warn dev en
+`useControllableState` cuando `isControlled === true && options.onChange === undefined`.
+Removido posteriormente por falsos positivos: el patrón
+`<Rating value={N} readOnly />` (y equivalentes de display-only) es
+legítimo — no es un controlled "roto", es un componente intencionalmente
+no-mutable. La variante `Rating.SoloLectura` y `Rating.AllStates`
+disparaban el warn sin que hubiese bug.
+
+**Diagnóstico**: el warn detecta correctamente la forma sintáctica
+(`value=` sin `onChange=`) pero ignora el caso semántico real
+(`readOnly` o equivalente). Filtrar por `readOnly` desde el hook
+acopla el hook a una prop de cada componente; declarar handlers stub
+en cada story es ruido y degrada el ejemplo público.
+
+**Diseño aprobado para rc.1 (Option E)** — escape hatch interno:
+
+```ts
+// Internal-only flag, NO documentado en API pública. Usado por
+// componentes que tienen un modo legítimo de "value sin onChange"
+// (Rating readOnly, Slider readOnly futuro, etc.) para silenciar
+// el warn del hook sin necesidad de stub onChange.
+type UseControllableStateOptions<T> = {
+  // …existing fields
+  /** @internal */
+  __suppressNoHandlerWarn?: boolean;
+};
+
+// En el componente:
+function Rating({ value, onChange, readOnly, ...rest }) {
+  const state = useControllableState({
+    value,
+    defaultValue: 0,
+    onChange,
+    __suppressNoHandlerWarn: readOnly === true,
+  });
+  // …
+}
+```
+
+El warn vuelve a activarse en el hook con la condición:
+
+```ts
+isControlled
+  && options.onChange === undefined
+  && options.__suppressNoHandlerWarn !== true
+```
+
+**Componentes a auditar antes de re-activar**:
+- Rating (`readOnly` prop) — caso conocido del fallo beta.20.
+- Slider (`readOnly` futuro si se añade) — preventivo.
+- Switch (no tiene readOnly hoy, pero algunos consumers lo usan
+  como display-only via `disabled`; revisar si pasa el warn).
+- Resto (Tabs, Accordion, Modal, Toast, Dropdown, Pagination,
+  Stepper, ThemeSwitch, Input compound): no tienen modo
+  display-only legítimo, deberían disparar el warn correctamente.
+
+**Tests anti-regresión para rc.1**:
+- Hook test: warn se dispara sin `__suppressNoHandlerWarn`.
+- Hook test: warn NO se dispara con `__suppressNoHandlerWarn: true`.
+- Story test: `Rating.SoloLectura` no genera warn en consola
+  (assertion sobre `console.error` mock).
 
 **Componentes afectados**: los 10 componentes con `useControllableState`.
-**Coste real**: ~30 min (edición trivial al hook + 3 tests anti-regresión).
+**Coste real beta.20**: ~30 min implementación + ~30 min revert +
+~30 min documentación = 1.5h gastadas en producir → revertir.
+**Coste estimado rc.1**: 1.5h (re-aplicar warn con flag + auditar
+3 componentes con modo display-only + tests anti-regresión).
 **Detectado**: beta.19 (varios AllStates Ola 1).
+**Falso positivo detectado**: beta.20 sub-D verificación pre-commit
+(Rating.SoloLectura/AllStates).
 
 ### 1.5 Plays con `[role="X"]` no resuelven role implícito ✅ aplicado en beta.20
 
@@ -364,7 +427,7 @@ asunciones de contexto, documentar cuáles dependen del padre.
 
 | Capa / Item | Estimación | Cuándo | Estado |
 |---|---|---|---|
-| 1.4 warn `useControllableState` | 30 min | beta.20 | ✅ aplicado |
+| 1.4 warn `useControllableState` (Option E) | 1.5h | rc.1 | ⏳ diferido (intento beta.20 revertido) |
 | 1.5 utility `queryAllByRoleSafe` | 30 min | beta.20 | ✅ aplicado |
 | 1.6 utility `expectAtLeast` | 30 min | beta.20 | ✅ aplicado |
 | 1.1 hook `useA11yWarnInput` | 1-2h | post-beta.20 | ⏳ |
