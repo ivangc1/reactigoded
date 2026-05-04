@@ -250,3 +250,40 @@ export const OpenInteraction: Story = {
     await expect(labelledBy).toBeTruthy();
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <Modal open size="md">
+      <ModalHeader>
+        Confirmar acción
+        <ModalClose />
+      </ModalHeader>
+      <ModalBody>
+        ¿Seguro que quieres continuar? Esta acción afecta a 3 elementos.
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary">Cancelar</Button>
+        <Button variant="brand">Aceptar</Button>
+      </ModalFooter>
+    </Modal>
+  ),
+  play: async () => {
+    // <dialog> se monta en top-layer del documento, no necesariamente
+    // dentro de canvasElement. Querying global es seguro.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const dialog = document.querySelector("dialog[open].ig-dialog");
+    await expect(dialog).toBeTruthy();
+    const header = document.querySelector(".ig-dialog-header");
+    await expect(header).toBeTruthy();
+  },
+};

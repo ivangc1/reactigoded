@@ -195,3 +195,52 @@ function PositionsDemo() {
     </div>
   );
 }
+
+function AllVariantsTrigger() {
+  const { toast } = useToast();
+  const variants = ["brand", "secondary", "success", "warning", "danger", "info", "neutral"] as const;
+  return (
+    <div className="ig-story-row ig-story-row--gap-sm">
+      <Button
+        onClick={() => {
+          for (const v of variants) {
+            toast({
+              title: v.charAt(0).toUpperCase() + v.slice(1),
+              message: `Toast variant ${v}`,
+              variant: v,
+              duration: 0,
+            });
+          }
+        }}
+      >
+        Disparar todos los toasts
+      </Button>
+    </div>
+  );
+}
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <ToastProvider position="top-right">
+      <AllVariantsTrigger />
+    </ToastProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByRole("button", { name: /disparar todos los toasts/i });
+    await userEvent.click(trigger);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const toasts = document.querySelectorAll(".ig-toast");
+    await expect(toasts.length).toBeGreaterThanOrEqual(4);
+  },
+};
