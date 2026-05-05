@@ -271,6 +271,51 @@ describe("Tabs", () => {
   });
 });
 
+describe("Tabs — controlled inválido fallback tabIndex (H-26)", () => {
+  // En modo controlled con `value` que no matchea ningún Tab montado,
+  // el componente NO auto-corrige. Sin fallback, todos los Tabs tendrían
+  // tabIndex=-1 y el tablist quedaría sin tab stop accesible. H-26
+  // hace que el primer Tab montado entre en modo "fallback tab stop"
+  // (tabIndex=0) sin tocar aria-selected (que sigue false en todos).
+  it("primer Tab tiene tabIndex=0 cuando value=missing en modo controlled", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(
+      <Tabs value="missing">
+        <TabList aria-label="Demo">
+          <Tab value="a">Alpha</Tab>
+          <Tab value="b">Beta</Tab>
+        </TabList>
+        <TabPanel value="a">A</TabPanel>
+        <TabPanel value="b">B</TabPanel>
+      </Tabs>,
+    );
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs[0]).toHaveAttribute("tabIndex", "0");
+    expect(tabs[1]).toHaveAttribute("tabIndex", "-1");
+    // aria-selected sigue false en todos (el value inválido NO selecciona).
+    expect(tabs[0]).toHaveAttribute("aria-selected", "false");
+    expect(tabs[1]).toHaveAttribute("aria-selected", "false");
+    warn.mockRestore();
+  });
+
+  it("cuando value matchea, el primer Tab no entra en fallback", () => {
+    render(
+      <Tabs value="b">
+        <TabList aria-label="Demo">
+          <Tab value="a">Alpha</Tab>
+          <Tab value="b">Beta</Tab>
+        </TabList>
+        <TabPanel value="a">A</TabPanel>
+        <TabPanel value="b">B</TabPanel>
+      </Tabs>,
+    );
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs[0]).toHaveAttribute("tabIndex", "-1");
+    expect(tabs[1]).toHaveAttribute("tabIndex", "0");
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+  });
+});
+
 describe("useTabs fuera de provider", () => {
   it("lanza error útil", () => {
     function Boom() {

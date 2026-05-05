@@ -93,34 +93,32 @@ export function Tabs({
     [setSelectedRaw],
   );
 
-  // Registro de Tabs montados. Resuelve dos casos edge sin pisar la
-  // intención del consumer:
+  // Registro de Tabs montados como state (no ref) desde beta.22 / H-26:
+  // el render necesita leer el registry para calcular `selectedExists` y
+  // `firstRegistered` (fallback de tabIndex en modo controlled inválido),
+  // y leer un ref durante render dispara la regla react-hooks/refs y
+  // puede entregar un snapshot stale.
+  //
+  // Resuelve dos casos edge sin pisar la intención del consumer:
   //  (a) `<Tabs>` sin `defaultValue`/`value` → el primer Tab registrado se
   //      auto-selecciona (el `internal` arrancó como "").
   //  (b) `<Tabs defaultValue="missing">` → tras montar TODOS los Tabs, si
   //      el internal actual no matchea ninguno, fallback al primero +
-  //      console.warn dev-only. Lo hacemos en un useEffect independiente
-  //      con timeout 0, no dentro del register, para que NO se dispare
-  //      durante la fase de registro tab-a-tab.
-  //  En modo controlled: warning sin auto-corregir.
-  const registeredRef = useRef<string[]>([]);
+  //      console.warn dev-only. Lo hacemos en un useEffect independiente,
+  //      no dentro del register, para que NO se dispare durante la fase
+  //      de registro tab-a-tab. En modo controlled: warning sin
+  //      auto-corregir + fallback de tabIndex en Tab.tsx (H-26).
+  const [registered, setRegistered] = useState<readonly string[]>([]);
   const warnedRef = useRef(false);
-  const [registryVersion, setRegistryVersion] = useState(0);
 
-  // `register` se referencia con identidad estable desde el efecto de
-  // Tab. Sin closure stale: el setter del hook ya es estable y
-  // setSelectedRaw siempre escribe el state correcto.
+  // `register` con identidad estable; usa el setter functional del state
+  // para evitar closure stale.
   const register = useCallback((tabValue: string) => {
-    if (!registeredRef.current.includes(tabValue)) {
-      registeredRef.current.push(tabValue);
-      // Notifica al efecto de validación post-mount.
-      setRegistryVersion((v) => v + 1);
-    }
+    setRegistered((prev) =>
+      prev.includes(tabValue) ? prev : [...prev, tabValue],
+    );
     return () => {
-      registeredRef.current = registeredRef.current.filter(
-        (v) => v !== tabValue,
-      );
-      setRegistryVersion((v) => v + 1);
+      setRegistered((prev) => prev.filter((v) => v !== tabValue));
     };
   }, []);
 
@@ -132,26 +130,26 @@ export function Tabs({
     if (didAutoSelectRef.current) return;
     if (isControlled) return;
     if (selected !== "") return;
-    const first = registeredRef.current[0];
+    const first = registered[0];
     if (first === undefined) return;
     didAutoSelectRef.current = true;
     setSelectedRaw(first, { silent: true });
-  }, [registryVersion, isControlled, selected, setSelectedRaw]);
+  }, [registered, isControlled, selected, setSelectedRaw]);
 
   // Caso (b): validación post-mount para defaultValue/value inválido.
   // Si el effective no matchea ningún Tab montado, fallback al primero
   // (silent — no es acción del usuario) y warn dev-only.
   useEffect(() => {
-    if (registeredRef.current.length === 0) return;
+    if (registered.length === 0) return;
     if (selected === "") return; // caso (a) ya cubierto arriba
-    if (registeredRef.current.includes(selected)) return;
-    const firstRegistered = registeredRef.current[0];
+    if (registered.includes(selected)) return;
+    const firstRegistered = registered[0];
     if (firstRegistered === undefined) return;
     if (!warnedRef.current && import.meta.env.DEV) {
       warnedRef.current = true;
       const propName = isControlled ? "value" : "defaultValue";
       const action = isControlled
-        ? "El tablist queda sin tab stop accesible. Pasa un value que coincida con un Tab montado."
+        ? "El tablist queda sin tab stop accesible. El primer Tab montado entra en modo fallback con tabIndex=0 para mantener el tablist navegable; pasa un value que matchee un Tab para restaurar aria-selected correcto."
         : `Cayendo a "${firstRegistered}". Pasa un defaultValue que coincida con el value de un Tab.`;
       console.warn(
         `[reactigoded] <Tabs ${propName}="${selected}"> no matchea ningún <Tab>. ${action}`,
@@ -160,11 +158,37 @@ export function Tabs({
     if (!isControlled) {
       setSelectedRaw(firstRegistered, { silent: true });
     }
-  }, [registryVersion, selected, isControlled, setSelectedRaw]);
+  }, [registered, selected, isControlled, setSelectedRaw]);
+
+  // H-26: en modo controlled con `value` inválido, el componente NO
+  // auto-corrige (warn pero no toca el state). Sin un fallback de
+  // tabIndex, TODOS los Tab tendrían tabIndex=-1 y el tablist quedaría
+  // inaccesible por teclado. Calculamos en cada render si el `selected`
+  // actual matchea algún Tab montado, y exponemos el primer registrado
+  // como fallback. Tab.tsx aplica tabIndex=0 al primer Tab si
+  // selectedExists es false.
+  const selectedExists = registered.includes(selected);
+  const firstRegistered = registered[0];
 
   const ctxValue = useMemo(
-    () => ({ selected, setSelected, baseId, orientation, register }),
-    [selected, setSelected, baseId, orientation, register],
+    () => ({
+      selected,
+      setSelected,
+      baseId,
+      orientation,
+      register,
+      selectedExists,
+      firstRegistered,
+    }),
+    [
+      selected,
+      setSelected,
+      baseId,
+      orientation,
+      register,
+      selectedExists,
+      firstRegistered,
+    ],
   );
 
   return (

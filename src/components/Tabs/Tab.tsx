@@ -26,10 +26,25 @@ export function Tab({
   ref,
   ...rest
 }: TabProps) {
-  const { selected, setSelected, baseId, orientation, register } = useTabs();
+  const {
+    selected,
+    setSelected,
+    baseId,
+    orientation,
+    register,
+    selectedExists,
+    firstRegistered,
+  } = useTabs();
   const isActive = selected === value;
   const tabId = `${baseId}-tab-${value}`;
   const panelId = `${baseId}-panel-${value}`;
+  // H-26: si el `selected` del Tabs no matchea ningún Tab montado
+  // (controlled con value inválido), el PRIMER Tab registrado entra
+  // en modo fallback con tabIndex=0 para mantener el tablist accesible
+  // por teclado. Sin esto, todos los Tabs tendrían tabIndex=-1 y el
+  // tablist quedaría sin tab stop. NO afecta a aria-selected (sigue
+  // false en todos), solo al tab stop.
+  const isFirstFallback = !selectedExists && value === firstRegistered;
 
   // Registra este Tab al montar; el primer Tab montado es la selección
   // inicial cuando el consumer omite `value` y `defaultValue`. Usamos
@@ -80,7 +95,7 @@ export function Tab({
       id={tabId}
       aria-selected={isActive}
       aria-controls={panelId}
-      tabIndex={isActive ? 0 : -1}
+      tabIndex={isActive || isFirstFallback ? 0 : -1}
       disabled={disabled}
       className={cn("ig-tab", isActive && "ig-tab-active", className)}
       onClick={(e) => {
