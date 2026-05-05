@@ -7,6 +7,43 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.21] — 2026-05-05
+
+### Added
+- **`useControllableState`** dev warn re-aplicado vía Option E
+  (escape hatch interno `__suppressNoHandlerWarn`). Avisa cuando
+  un componente está en modo controlled (`value` definido) sin
+  `onChange` y sin el flag de suppress. Una vez por instancia.
+  Tras el revert en beta.20 por falsos positivos en
+  `Rating.SoloLectura`, ahora cada componente con modo
+  display-only legítimo (Rating con `readOnly`) suprime el warn
+  vía el flag interno.
+- **Audit consistente del hook** en los 9 componentes que lo
+  usan: Rating y Slider ahora pasan `onChange: onValueChange` al
+  hook (eliminando llamadas duplicadas locales). Switch usa
+  `__suppressNoHandlerWarn: true` permanente porque su `onChange`
+  recibe `ChangeEvent` (no boolean) y tiene un warn local más
+  específico.
+- **Script `scripts/check-css-scope-leaks.mjs`** + allowlist
+  `scope-leak-allowlist.json`. Cierra deuda capa 3.1 (PRIORIDAD
+  ALTA). Detecta riesgo de scope-leak: clases globales
+  modificadoras (`.ig-X-active`, `.ig-X-danger`…) emitidas en >1
+  elemento del mismo componente. Modo `--strict` integrado en
+  `verify:unit` pipeline. Run inicial: 420 candidatas / 6
+  allowlisted (audit case-by-case con razón documentada) / 0
+  riesgos nuevos.
+
+### Tests
+- Hook: 5 tests del warn (dispara/no dispara/escape hatch/una
+  vez por instancia).
+- Rating: 2 tests anti-regresión (`readOnly` no genera warn;
+  controlled sin readOnly y sin onValueChange sí lo genera).
+
+### Internal
+- `Rating.stories.tsx AllStates`: instancias `<Rating value={N} />`
+  marcadas `readOnly` (eran galería visual, no interactivas).
+- README.md: actualizado a "última publicación: 1.0.0-beta.20".
+
 ## [1.0.0-beta.20] — 2026-05-05
 
 ### Added
