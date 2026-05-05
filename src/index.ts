@@ -1,3 +1,4 @@
+"use client";
 /**
  * Igoded Design System — entry point del paquete.
  *

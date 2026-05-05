@@ -93,6 +93,14 @@ export default defineConfig({
     rollupOptions: {
       external: ["react", "react-dom", "react/jsx-runtime"],
       output: {
+        // B-17: garantiza que la directiva "use client" llegue al bundle
+        // publicado (dist/index.js + dist/index.cjs), preservada como
+        // primera línea del chunk. Sin esto, el minifier de Rollup la
+        // puede tratar como expresión irrelevante y eliminarla. La
+        // directiva la añadimos también en src/index.ts para que tsc
+        // y los autodocs la vean en source, pero el banner es la única
+        // garantía cross-version de que termine en el dist.
+        banner: '"use client";',
         globals: {
           react: "React",
           "react-dom": "ReactDOM",
