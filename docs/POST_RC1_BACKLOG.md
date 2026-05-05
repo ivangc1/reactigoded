@@ -50,104 +50,52 @@ asuste si ve `rewrite()` corriendo en pares en DevTools.
 
 ---
 
-## CI step explícito de greps `console.*` en `dist/`
+## CI step explícito de greps `console.*` en `dist/` ✅ cerrado en `1b84a4f`
 
-**De dónde sale**: B-07 (commit `626ef77`) — verificación local
-imposible en Windows por el bug de `@rolldown/binding-win32-x64-msvc`.
-
-**Observación**: hoy si un `console.warn` sobreviviese a producción,
-`size-limit` lo detectaría como crecimiento de bundle, pero la señal
-no es limpia (puede confundirse con features legítimas).
-
-**Acción**: añadir step a `.github/workflows/verify.yml`:
-
-```yaml
-- name: Bundle has no dev warns
-  run: |
-    test "$(grep -c 'console\.' dist/index.js || true)" = "0"
-    test "$(grep -c 'console\.' dist/index.cjs || true)" = "0"
-    test "$(grep -c '\[reactigoded\]' dist/index.js || true)" = "0"
-```
-
-(Ya hay registro previo en `docs/RC1_FOUND_DURING_FIX.md`. Esta
-entrada lo eleva a backlog accionable post-RC1.)
+**De dónde sale**: B-07.
+**Acción**: step `Bundle has no dev warns` añadido a
+`.github/workflows/verify.yml` entre `Build` y `Size budgets`. Falla
+si `console.*` o `[reactigoded]` aparecen en `dist/index.{js,cjs}`.
 
 ---
 
-## `src/utils/env.ts` huérfano
+## `src/utils/env.ts` huérfano ✅ cerrado en `e07eead`
 
-**De dónde sale**: B-07 (commit `626ef77`) eliminó todos los imports
-de `isDev()` desde componentes.
-
-**Observación**: la función `isDev()` ya no es importada por ningún
-archivo del repo (sólo el archivo que la define). Está excluida del
-dts publicado vía `tsconfig.build.json` y del tarball vía
-`scripts/clean-internal-dist.mjs`.
-
-**Por qué no se arregla ahora**: borrarla en este ciclo es scope creep
-para B-07. La regla "un commit, un objetivo" lo prohíbe.
-
-**Acción**: en una sesión post-RC1 borrar `src/utils/env.ts`,
-`src/utils/env.test.ts` (si existe) y limpiar la entrada
-`"src/utils/env.ts"` del exclude de `tsconfig.build.json` y del
-prefix list de `clean-internal-dist.mjs`. Commit
-`chore: remove orphaned env.ts util`.
+**De dónde sale**: B-07.
+**Acción**: archivo borrado, entradas correspondientes en
+`tsconfig.build.json:exclude` y `scripts/clean-internal-dist.mjs`
+(prefix `env.`) limpiadas.
 
 ---
 
-## `.claude/` directorio untracked en el repo
+## `.claude/` directorio untracked en el repo ✅ cerrado en `4eba440`
 
-**De dónde sale**: visible en `git status` durante toda la sesión
-RC1.
-
-**Observación**: el directorio contiene datos de sesión Claude Code
-(prompts, transcripts internos). Si en algún commit alguien ejecuta
-`git add -A` o `git add .`, el directorio entra al repo público con
-todo el contenido sensible.
-
-**Por qué no se arregla ahora**: intencionalmente no lo añadí al
-`.gitignore` durante esta sesión porque ya existían los archivos en
-working tree y quería evitar agruparlo con los Blockers.
-
-**Acción**: en un commit limpio y separado:
-```bash
-echo ".claude/" >> .gitignore
-git add .gitignore
-git commit -m "chore(gitignore): exclude .claude/ session data"
-```
+**De dónde sale**: `git status` toda la sesión.
+**Acción**: `.claude/` añadido a `.gitignore`.
 
 ---
 
-## ThemeSwitch SSR test versión A (borrar `globalThis.document`)
+## Notas dispersas locales del autor ✅ cerrado en `6b28080`
 
-**De dónde sale**: C6 (B-08). El test #6 actual (`renderToString` smoke)
-valida que ThemeSwitch no rompe en `react-dom/server`, pero NO valida
-explícitamente el branch `typeof document === "undefined"` del `derive`
-porque jsdom siempre tiene `document`.
+**De dónde sale**: `git status` toda la sesión.
+**Acción**: patrones `.notes-*`, `.release-*`, `BLOQUEOS.md`,
+`SESION-RESUMEN*.md` añadidos a `.gitignore` para que cualquier
+`git add -A` futuro no los incluya por accidente.
 
-**Por qué no se hace ahora**: borrar `globalThis.document` con
-`vi.stubGlobal('document', undefined)` y restaurarlo en cleanup tiene
-casos esquina (otros tests, internals de React, internals del runner)
-que justifican una sesión propia con cleanup robusto. Pre-RC1 el coste
-supera al beneficio incremental.
+---
 
-**Acción**: activar si un consumer SSR real abre issue de regresión
-(Next.js, Astro, Remix). Implementación esperada:
+## ThemeSwitch SSR test versión A ✅ aplicado en `72c4e13` (pendiente verde CI)
 
-```ts
-it("SSR sin document: derive cae a defaultTheme sin lanzar", () => {
-  vi.stubGlobal('document', undefined);
-  try {
-    const html = renderToString(<ThemeSwitch defaultTheme="light" />);
-    expect(html).toContain('role="switch"');
-  } finally {
-    vi.unstubAllGlobals();
-  }
-});
-```
+**De dónde sale**: C6 (B-08).
+**Acción**: test añadido a `ThemeSwitch.test.tsx` con
+`vi.stubGlobal('document', undefined)` + `vi.unstubAllGlobals()` en
+`finally`. Valida explícitamente el branch
+`typeof document === "undefined"` del derive.
 
-Validar antes que `vi.unstubAllGlobals()` no rompe el runner, y que
-internals de React 19 no requieren `document` en `renderToString`.
+**Pendiente**: la verificación funcional la hace CI Linux (rolldown
+bloquea vitest local en Windows). Si CI marca rojo, revertir el
+commit `72c4e13` y sustituir esta entrada por una nueva con el
+error literal y diagnóstico.
 
 ---
 
