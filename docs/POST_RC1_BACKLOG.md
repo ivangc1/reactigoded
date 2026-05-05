@@ -151,6 +151,39 @@ internals de React 19 no requieren `document` en `renderToString`.
 
 ---
 
+## Reevaluación del tripwire `dark axis-kobalium` (post-RC1)
+
+**De dónde sale**: B-13. Tras el audit RC1, el tripwire introducido en
+`c8a5202` (beta.18) resultó no-operativo (`error_threshold=0.05`
+quedaba por debajo del valor real `0.0522`, así que pasaba como warn).
+beta.22 lo allowlistea con justificación honesta como reversión
+consciente.
+
+**Acción post-RC1**: revisar la allowlist tras 1-2 betas con feedback
+real de consumers. Tres condiciones para reabrir y recalibrar tokens:
+
+1. Un consumer reporta confusión visual entre `axis` y `kobalium` en
+   tema oscuro.
+2. Un componente nuevo del DS coloca ambos cardinales adyacentes en
+   un patrón documentado (Toast con icono `axis` + chip `info`,
+   Sidebar con item `secondary` + badge `info`, etc.).
+3. El audit cross-check de `1.0.0` final pide endurecer el threshold.
+
+Si ninguna de las tres se cumple en 2 meses, dejar la allowlist
+permanentemente y considerarlo cerrado.
+
+**Implementación si toca recalibrar**: opciones del plan original B-13:
+
+- (Opción 1) Rotar `--ig-axis-nox` H +12° (separa de kobalium pero
+  introduce tinte rosado en gris secundario).
+- (Opción 2) Mover `--ig-kobalium-nox` H 240°→220° (acerca a vitreus
+  brand H≈207°; cross-check ΔE con vitreus tras el cambio).
+
+Recalibrar dispara cascada WCAG en 30+ componentes. NO empezar sin
+validación de Iván sobre los OKLCH alternativos visualmente.
+
+---
+
 ## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`)
 
 **De dónde sale**: `git status` durante toda la sesión.

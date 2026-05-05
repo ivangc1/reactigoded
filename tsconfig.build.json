@@ -19,6 +19,7 @@
     "src/test/**",
     "src/test-utils/**",
     "src/stories/**",
+    "src/_audit/**",
     "src/main.tsx",
     "src/App.tsx",
     "src/App.css",

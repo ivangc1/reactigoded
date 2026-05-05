@@ -18,6 +18,13 @@
       "deltaE_at_decision": 0.0706,
       "decision_date": "2026-05-04",
       "justification": "Par perceptualmente más estrecho del sistema en DARK. Ambos cardinales cálidos (rojo-granate vs cobre). Diferenciados por iconografía/semántica (danger vs warning) y luminancia distinta. Recalibrar bajaría WCAG sobre fundus."
+    },
+    {
+      "pair": "axis-kobalium",
+      "theme": "dark",
+      "deltaE_at_decision": 0.0522,
+      "decision_date": "2026-05-06",
+      "justification": "Reversión consciente del tripwire de c8a5202 (beta.18). c8a5202 dejó este par fuera de la allowlist con la intención de que un drift hacia menor ΔE rompiese CI; la decisión nunca fue operativa porque error_threshold (0.05) está por debajo de 0.0522, así que el valor pasaba como warn no como error. Razones de la reversión: (1) ningún componente del DS usa axis y kobalium adyacentes en patrones documentados, (2) recalibrar el hue de cualquiera dispara cascada WCAG en 30+ componentes, (3) el riesgo es teórico, no observado en feedback. Reabrir si: consumer reporta confusión visual axis↔kobalium, nuevo componente usa el par adyacente, o el cross-check de 1.0.0 final revisa el threshold. Tracking en docs/POST_RC1_BACKLOG.md."
     }
   ]
 }

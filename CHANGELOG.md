@@ -44,6 +44,21 @@ versionado [SemVer](https://semver.org/lang/es/).
   Props: `label?: string` (default ES `"Cargando contenido…"`),
   `children`. Acepta `aria-label` directo vía rest (gana sobre `label`).
 
+### Internal
+
+- **Perceptual allowlist**: reversión consciente del tripwire
+  introducido en `c8a5202` (beta.18) para `dark axis-kobalium`
+  (ΔE 0.0522). Razón: el tripwire nunca fue operativo
+  (`error_threshold=0.05` queda por debajo de `0.0522`, así que el
+  valor pasaba como warn, no como error). Decisión beta.22:
+  allowlistear con justificación honesta + trigger de reapertura
+  documentado (consumer reporta confusión, nuevo componente con
+  par adyacente, o cross-check de 1.0.0). NO se tocan tokens. NO
+  cambia `error_threshold` ni `warn_threshold`. Tracking en
+  `docs/POST_RC1_BACKLOG.md`. Anti-regresión:
+  `src/_audit/perceptual-allowlist.test.ts` falla CI si alguien
+  retira la entrada sin razón documentada.
+
 ## [1.0.0-beta.21] — 2026-05-05
 
 ### Added
