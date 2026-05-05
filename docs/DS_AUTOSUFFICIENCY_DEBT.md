@@ -251,7 +251,7 @@ checks estáticos. Requiere ojo humano o comparación visual.
 
 Patrones detectables sin navegador con un parser AST/CSS.
 
-### 3.1 CSS scope-leak detection [PRIORIDAD ALTA]
+### 3.1 CSS scope-leak detection ✅ aplicada en beta.21
 
 Patrón comprobadamente recurrente: clases globales de variant
 (`.ig-divider-brand`, `.ig-step-active`) sin scope compound matchean
@@ -263,28 +263,44 @@ accidentalmente wrappers anidados.
 - Stepper beta.20: `.ig-step-active` pintaba `.ig-step-item` wrapper
   completo, dejando label invisible (contraste 1.02).
 
-**Solución propuesta** — `scripts/check-css-scope-leaks.mjs`:
+**Solución aplicada** — `scripts/check-css-scope-leaks.mjs`:
 
-1. Parsear `src/styles/igoded-components.css` con PostCSS.
-2. Listar todas las clases que aparecen como selectores globales sin
+1. ✅ Parsea `src/styles/igoded-components.css` con PostCSS.
+2. ✅ Lista todas las clases que aparecen como selectores globales sin
    compound (`.ig-X-foo` solo, NO `.ig-X.ig-X-foo` ni `.ig-Y .ig-X-foo`).
-3. Cruzar con HTML emitido por componentes (`grep` classNames en
-   `src/components/**/*.tsx`).
-4. Warn cuando una clase global se emite en >1 elemento de la jerarquía
-   DOM del componente.
+3. ✅ Filtra a clases con sufijo de modificador (estados: `-active`,
+   `-complete`, `-disabled`…; variantes: `-brand`, `-success`, `-danger`…;
+   apariencia: `-filled`, `-outline`, `-dashed`…). Las clases base de
+   wrapper/slot no son riesgo de scope-leak.
+4. ✅ Cuenta líneas distintas con la clase en cada `.tsx` del componente
+   (heurística proxy de "≥ 2 elementos JSX que la emiten"; ignora
+   comentarios).
+5. ✅ Cruza con `scripts/scope-leak-allowlist.json` (entradas auditadas
+   intencionales; ifs/else mutuamente excluyentes, modes con renderizado
+   exclusivo, slots con sufijo coincidente con variant).
+6. ✅ Modo `--strict` (CI) sale con código no-cero ante riesgo NUEVO.
+   Modo soft solo warn.
 
-**Output esperado**:
-```
-[scope-leak risk] .ig-step-active emitida en 2 elementos:
-  - <div class="ig-step-item ig-step-active"> (Step.tsx:54)
-  - <span class="ig-step ig-step-active"> (Step.tsx:67)
-Recomendación: cambiar regla CSS a .ig-step.ig-step-active
-```
+**Run inicial beta.21**: 420 clases modificadoras candidatas, 6
+allowlisted (Step labeled, Sidebar/Dropdown link-vs-button modes,
+Divider variants, Navbar brand slot), 0 riesgos nuevos.
 
-**Estimación**: 3-4h.
-**ROI**: alto — previene clase entera de bugs que han aparecido 2
-veces en 2 años con CSS de 200k+ líneas. Otros candidatos a auditar
-con el script: Sidebar nested, Modal con compound, Toast con compound.
+**Limitaciones documentadas** (en JSDoc del script):
+- No captura "cascade reach" (clase global aplicada a UN elemento que
+  pinta también descendientes vía herencia o `*`). Caso Divider
+  beta.14 NO se captura aquí. Cobertura adicional:
+  `check-component-contrast.mjs` con DOM real.
+- Heurística sobre líneas: clase emitida vía `.map()` rendereando
+  varios items podría tener N ocurrencias visuales pero solo 1 línea
+  fuente. NO se marca como leak en ese caso.
+
+**Integración**: `npm run test:scope-leaks` (modo strict) en
+`verify:unit` pipeline.
+
+**Coste real**: ~2h (script + heurística refinada + allowlist + audit
+de 6 findings).
+**ROI confirmado**: ya capturó intencionalmente el patrón Stepper
+post-fix (allowlist), bloqueando regresiones futuras.
 
 ### 3.2 Drift hex hardcoded vs tokens
 
@@ -492,7 +508,7 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 1.1 hook `useA11yWarnInput` | 1-2h | post-beta.20 | ⏳ |
 | 1.2 hook `useLandmarkRegistry` | 2-3h | rc.1 | ⏳ |
 | 1.3 detección banner top-level | 2h | rc.1 | ⏳ |
-| 3.1 script CSS scope-leak | 3-4h | rc.1 (PRIORIDAD ALTA) | ⏳ |
+| 3.1 script CSS scope-leak | 2h real | beta.21 | ✅ aplicada |
 | 3.2 script hex drift detection | 2-3h | rc.1 | ⏳ |
 | 2.2 stories focus-visible | 1-2h | 1.0.0 final | ⏳ |
 | 2.3 stories hover/active | 1-2h | 1.1.0 | ⏳ |
