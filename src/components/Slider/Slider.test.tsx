@@ -105,4 +105,27 @@ describe("Slider", () => {
     expect(inputAfter).toHaveAttribute("type", "range");
     expect(inputAfter).toHaveClass("ig-slider");
   });
+
+  // H-27 (beta.22): warn dev-only cuando el consumer pasa value=NaN.
+  // El warn de defaultValue no-finito ya existía; faltaba el de value
+  // controlado no-finito.
+  it("avisa en dev cuando value es NaN [H-27]", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(
+      <Slider aria-label="v" value={NaN} onValueChange={() => undefined} />,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("no es un número finito"),
+    );
+    warn.mockRestore();
+  });
+
+  it("NO avisa cuando value es un number válido [H-27]", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(
+      <Slider aria-label="v" value={50} onValueChange={() => undefined} />,
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

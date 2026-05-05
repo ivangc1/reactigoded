@@ -107,8 +107,22 @@ export function Slider({
       console.warn(
         `[reactigoded] <Slider defaultValue=${JSON.stringify(defaultValue)}> no es un número finito; arrancando en min=${String(safeMin)}.`,
       );
+    } else if (
+      // H-27: value controlado no-finito. Diferencia con defaultValue:
+      // aquí el slider entra en uncontrolled (passControlled=undefined)
+      // y el consumer probablemente no nota el bug hasta que el slider
+      // "deja de seguir" su state. Avisamos para que pase un number
+      // válido o use defaultValue.
+      value !== undefined &&
+      controlledNum !== undefined &&
+      !Number.isFinite(controlledNum)
+    ) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Slider value=${JSON.stringify(value)}> no es un número finito; el slider opera en modo uncontrolled. Pasa un number válido o usa defaultValue.`,
+      );
     }
-  }, [defaultValue, parsedDefault, safeMin]);
+  }, [defaultValue, parsedDefault, safeMin, value, controlledNum]);
 
   const rawCurrent = internal;
   // Si `value="abc"` o `internal` quedó NaN por algún edge, no queremos
