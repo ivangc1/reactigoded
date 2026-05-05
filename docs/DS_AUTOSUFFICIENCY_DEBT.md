@@ -108,7 +108,17 @@ también para `<footer>` con `contentinfo`.
 **Detectado**: beta.20 sub-B (Navbar `landmark-no-duplicate-banner`,
 4 instancias en grid AllStates).
 
-### 1.4 `value=` sin `onChange=` (controlled sin handler) ⏳ Diferido a rc.1
+### 1.4 `value=` sin `onChange=` (controlled sin handler) ✅ aplicada en beta.21
+
+**Cerrado en beta.21** (commit `d7589d8`) vía Option E descrita
+abajo: el warn dev se re-aplicó en `useControllableState` con un
+escape hatch interno `__suppressNoHandlerWarn` que los componentes
+con modo display-only legítimo (Rating con `readOnly`) activan
+explícitamente. Desde beta.22 el flag además se elimina del `.d.ts`
+publicado vía `stripInternal: true` en `tsconfig.build.json`
+(B-02), así que NO aparece en autocomplete del consumer.
+
+
 
 **Intento beta.20** (commit `2975e19`, revertido): warn dev en
 `useControllableState` cuando `isControlled === true && options.onChange === undefined`.
@@ -502,7 +512,7 @@ asunciones de contexto, documentar cuáles dependen del padre.
 
 | Capa / Item | Estimación | Cuándo | Estado |
 |---|---|---|---|
-| 1.4 warn `useControllableState` (Option E) | 1.5h | rc.1 | ⏳ diferido (intento beta.20 revertido) |
+| 1.4 warn `useControllableState` (Option E) | 1.5h | beta.21 | ✅ aplicada (commit `d7589d8`); desde beta.22 el flag interno se elimina del dts vía stripInternal (B-02) |
 | 1.5 utility `queryAllByRoleSafe` | 30 min | beta.20 | ✅ aplicado |
 | 1.6 utility `expectAtLeast` | 30 min | beta.20 | ✅ aplicado |
 | 1.1 hook `useA11yWarnInput` | 1-2h | post-beta.20 | ⏳ |
