@@ -176,8 +176,8 @@ versionado [SemVer](https://semver.org/lang/es/).
 ### Internal
 - Stories storybook con `chromatic.modes light+dark` ya
   proporcionan dual-theme matrix sin duplicar archivos test:storybook.
-- BLOQUEOS.md actualizado tras beta.20 con secciones
-  Resuelto / Pendiente rc.1 / Diferido / Decisiones permanentes.
+- Tracking de decisiones diferidas y deuda RC1 vive en
+  `docs/DS_AUTOSUFFICIENCY_DEBT.md`.
 - Decisión arquitectónica registrada: warn dev de
   `useControllableState` para `value=` sin `onChange=` diferido a
   rc.1 con escape hatch interno `__suppressNoHandlerWarn`.
