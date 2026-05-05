@@ -25,7 +25,8 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   /**
    * Etiqueta accesible (aria-label) cuando el componente no recibe
    * `aria-label` explícito. Default `"Cargando"` (ES intencional —
-   * audience inicial hispanohablante; ver `docs/CSSAPI.mdx` sección
+   * audience inicial hispanohablante; ver Storybook → *Fundamentos /
+   * CSS API pública* (renderizada desde `docs/CSSAPI.mdx`) sección
    * "i18n y a11y strings").
    *
    * Override para apps en otros idiomas:

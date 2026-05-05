@@ -2,6 +2,10 @@ import type { StorybookConfig } from "@storybook/react-vite";
 
 const config: StorybookConfig = {
   stories: [
+    // M-06 (beta.22): MDX de Foundations canónicamente en docs/.
+    // src/**/*.mdx se mantiene por si algún componente trae su propio
+    // MDX de docs (raro hoy pero patrón válido).
+    "../docs/**/*.mdx",
     "../src/**/*.mdx",
     "../src/**/*.stories.@(ts|tsx|mdx)",
   ],
