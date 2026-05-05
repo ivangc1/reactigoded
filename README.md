@@ -368,6 +368,31 @@ scripts/
 - **`sideEffects: ["**/*.css"]`** — bundlers tree-shake JS pero conservan
   CSS imports.
 
+## Desarrollo
+
+Para trabajar sobre el repo (no como consumidor del paquete) usar
+`--legacy-peer-deps` al instalar:
+
+```bash
+git clone https://github.com/ivangc1/reactigoded.git
+cd reactigoded
+npm ci --legacy-peer-deps
+```
+
+Causa del flag: conflicto peer-dep entre `@storybook/addon-vitest`
+(que pin-ea una versión de `@vitest/browser` que no coincide con el
+mismo paquete declarado en nuestras `devDependencies` para usar la
+API de tests directamente). El instalador moderno de npm marca esto
+como bloqueante por defecto desde npm 7. El flag baja el conflicto a
+warning y procede.
+
+**No afecta a los consumidores del paquete**: cuando alguien instala
+`reactigoded` como dep, solo se resuelven `peerDependencies` (`react`
+y `react-dom`). Las devDependencies del repo no viajan al consumer.
+
+Tracking: post-RC1 evaluar bump de Storybook o vitest para alinear
+las dos referencias y eliminar el flag.
+
 ## Licencia
 
 MIT — ver [LICENSE](./LICENSE).
