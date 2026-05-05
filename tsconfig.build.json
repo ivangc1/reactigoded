@@ -17,10 +17,15 @@
     "src/**/*.stories.*",
     "src/**/*.test.*",
     "src/test/**",
+    "src/test-utils/**",
+    "src/stories/**",
     "src/main.tsx",
     "src/App.tsx",
     "src/App.css",
-    "src/vite-env.d.ts"
+    "src/vite-env.d.ts",
+    "src/utils/env.ts",
+    "src/utils/useIsoLayoutEffect.ts",
+    "src/utils/mergeDescribedBy.ts"
   ],
   "_doc": "vite-env.d.ts se excluye porque contiene module declarations *.css/*.svg que no queremos exportar al consumer. import.meta.env se accede via src/utils/env.ts con cast inline para no contaminar el typing del consumer."
 }
