@@ -20,10 +20,12 @@ const config: StorybookConfig = {
     // Las páginas MDX de Foundations sí están en español ("Fundamentos/...").
     defaultName: "Docs",
   },
-  // Inyecta meta tags + un MutationObserver que reescribe el `<title>` cada
-  // vez que Storybook lo cambia (el router del manager pone "<story> ⋅ Storybook"
-  // tras cada navegación). El observer es preferible a un setInterval porque
-  // reacciona inmediatamente y no consume CPU en idle.
+  // Inyecta meta tags + un script que (1) fuerza lang="es" en <html>,
+  // (2) elimina <title> y <meta name="description"> duplicados que
+  // Storybook puede inyectar en algunos paths del manager, y
+  // (3) reescribe el <title> cada vez que Storybook lo cambia
+  // (el router del manager pone "<story> ⋅ Storybook" tras cada
+  // navegación). MutationObserver, no polling.
   managerHead: (head: string | undefined) => `
     ${head ?? ""}
     <meta name="description" content="Igoded Design System — componentes React 19 + TypeScript + CSS utility-first state-driven, con accesibilidad WCAG AA verificada." />
@@ -37,10 +39,24 @@ const config: StorybookConfig = {
     <script>
       (function () {
         var BRAND = "Igoded Design System";
+
+        // 1. Lang correcto (B-04) — Storybook publica con lang="" por defecto.
+        if (document.documentElement.lang !== "es") {
+          document.documentElement.lang = "es";
+        }
+
+        // 2. Dedupe <title> y <meta name="description"> (B-05).
+        function dedupe() {
+          var titles = document.querySelectorAll("head > title");
+          for (var i = 1; i < titles.length; i++) titles[i].remove();
+          var descs = document.querySelectorAll('head > meta[name="description"]');
+          for (var j = 1; j < descs.length; j++) descs[j].remove();
+        }
+
+        // 3. Rewrite del título a brand cuando Storybook lo restaura a su default.
         function rewrite() {
           var t = document.title;
           if (!t) return;
-          // Storybook genera "Storybook" o "<story> ⋅ Storybook".
           if (t === "Storybook" || t === "storybook - Storybook") {
             document.title = BRAND;
           } else if (/⋅\\s*Storybook$/.test(t)) {
@@ -49,21 +65,29 @@ const config: StorybookConfig = {
             document.title = t.replace(/-\\s*Storybook$/, "· " + BRAND);
           }
         }
+
+        dedupe();
         rewrite();
-        // MutationObserver sobre <head> — captura cualquier cambio de <title>
-        // sin polling.
+
+        // MutationObserver sobre <title> — captura cualquier cambio sin polling.
         var titleEl = document.querySelector("title");
         if (titleEl && typeof MutationObserver !== "undefined") {
-          new MutationObserver(rewrite).observe(titleEl, {
+          new MutationObserver(function () {
+            rewrite();
+            dedupe();
+          }).observe(titleEl, {
             childList: true,
             characterData: true,
             subtree: true,
           });
         }
         // Fallback: si el <title> se reemplaza entero (no solo su texto),
-        // observa el <head> también.
+        // observa el <head> también para re-disparar dedupe + rewrite.
         if (typeof MutationObserver !== "undefined") {
-          new MutationObserver(rewrite).observe(document.head, {
+          new MutationObserver(function () {
+            rewrite();
+            dedupe();
+          }).observe(document.head, {
             childList: true,
           });
         }
