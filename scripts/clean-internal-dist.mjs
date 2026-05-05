@@ -73,6 +73,12 @@ const INTERNAL_UTILS_PREFIXES = [
 ];
 rmFilesByPrefix("utils", INTERNAL_UTILS_PREFIXES);
 
+// Defensa: si tsc emite por error los `.d.ts` ambient root-level
+// (`_internal-env`, `vite-env`), eliminarlos. Hoy tsc NO los emite
+// (es .d.ts → no source) pero un cambio futuro de configuración podría
+// regresar el comportamiento. Mantener el guardrail aquí es barato.
+rmFilesByPrefix(".", ["_internal-env.", "vite-env."]);
+
 // Por si alguno de los archivos *.test.* se cuela en dist/.
 function rmTestArtifactsRecursive(dir) {
   if (!existsSync(dir)) return;
