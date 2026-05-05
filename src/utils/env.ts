@@ -1,18 +1,16 @@
 /**
- * Detecta si estamos en build de desarrollo (Vite-aware).
+ * Helpers de entorno (uso interno del DS).
  *
- * Usamos `import.meta.env.DEV` directamente, pero con un cast local en
- * vez de declararlo en `env.d.ts` ambient. Razón:
- *  - `env.d.ts` con declaraciones globales se filtraba al `dist/` y los
- *    consumers acababan viendo `interface ImportMetaEnv` mergeada en
- *    su propia `ImportMetaEnv`, contaminando su typing.
- *  - Centralizar el acceso aquí evita el cast disperso por componentes
- *    y ofrece un único punto de cambio si en el futuro saltamos a otra
- *    convención (process.env.NODE_ENV, custom build flag, etc.).
+ * **NOTA**: `isDev()` se DESACONSEJA dentro de componentes. Usa
+ * `import.meta.env.DEV` directamente — esbuild/Vite hacen DCE
+ * (Dead Code Elimination) del bloque dev-only en producción cuando lo
+ * ven como expresión literal estática, pero NO lo hacen cuando está
+ * tras una llamada de función. Mantenemos `isDev()` solo para casos
+ * raros donde el resultado se pasa como dato (raros).
  *
- * El bundler (Vite/Rollup) reemplaza `import.meta.env.DEV` por
- * `true`/`false` literal en build, así que el tree-shaker elimina los
- * bloques de warnings dev-only en producción.
+ * Cierra B-07: ningún componente del DS importa esta función desde
+ * 1.0.0-beta.22; todos usan `import.meta.env.DEV` directo y los
+ * `console.warn` dev-only desaparecen del bundle producción.
  */
 export const isDev = (): boolean => {
   const env = (import.meta as unknown as { env?: { DEV?: boolean } }).env;

@@ -1,6 +1,5 @@
 import { useEffect, useId, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useModalContextOptional } from "./ModalContext";
 
 export interface ModalHeaderProps extends HTMLAttributes<HTMLDivElement> {
@@ -31,7 +30,7 @@ export function ModalHeader({
   useEffect(() => {
     if (!setHeaderId) return;
     if (
-      isDev() &&
+      import.meta.env.DEV &&
       currentHeaderId &&
       currentHeaderId !== id
     ) {

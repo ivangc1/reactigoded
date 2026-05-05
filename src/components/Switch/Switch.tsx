@@ -6,7 +6,6 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 import { useControllableState } from "@/hooks/useControllableState";
 
@@ -94,7 +93,7 @@ export function Switch({
   const warnedControlledRef = useRef(false);
   useEffect(() => {
     if (
-      isDev() &&
+      import.meta.env.DEV &&
       !warnedControlledRef.current &&
       isControlled &&
       !onChange &&

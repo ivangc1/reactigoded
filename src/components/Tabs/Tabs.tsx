@@ -9,7 +9,6 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useControllableState } from "@/hooks/useControllableState";
 import { TabsContext } from "./TabsContext";
 
@@ -148,7 +147,7 @@ export function Tabs({
     if (registeredRef.current.includes(selected)) return;
     const firstRegistered = registeredRef.current[0];
     if (firstRegistered === undefined) return;
-    if (!warnedRef.current && isDev()) {
+    if (!warnedRef.current && import.meta.env.DEV) {
       warnedRef.current = true;
       const propName = isControlled ? "value" : "defaultValue";
       const action = isControlled

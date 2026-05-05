@@ -1,6 +1,5 @@
 import { useEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useControllableState } from "@/hooks/useControllableState";
 
 export type PaginationVariant =
@@ -167,7 +166,8 @@ export function Pagination({
   // siempre está dentro de rango porque solo lo movemos vía setPage.
   const warnedRef = useRef(false);
   useEffect(() => {
-    if (!isDev() || warnedRef.current) return;
+    if (!import.meta.env.DEV) return;
+    if (warnedRef.current) return;
     const isControlled = currentPage !== undefined;
     const outOfRange =
       isControlled

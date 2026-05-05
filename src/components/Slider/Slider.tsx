@@ -1,7 +1,6 @@
 import type { InputHTMLAttributes, Ref } from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useControllableState } from "@/hooks/useControllableState";
 
 export interface SliderProps
@@ -88,7 +87,8 @@ export function Slider({
   // por el lint react-hooks/refs.
   const warnedRef = useRef(false);
   useEffect(() => {
-    if (!isDev() || warnedRef.current) return;
+    if (!import.meta.env.DEV) return;
+    if (warnedRef.current) return;
     if (Array.isArray(defaultValue)) {
       warnedRef.current = true;
       const allFinite = defaultValue.every((v) =>

@@ -6,7 +6,6 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
 export type CheckboxVariant =
@@ -76,7 +75,7 @@ export function Checkbox({
   const isControlled = (rest as { checked?: boolean }).checked !== undefined;
   useEffect(() => {
     if (
-      isDev() &&
+      import.meta.env.DEV &&
       !warnedControlledRef.current &&
       isControlled &&
       !onChange &&
