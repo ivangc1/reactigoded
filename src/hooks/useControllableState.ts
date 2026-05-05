@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
+import { isDev } from "@/utils/env";
 
 export interface UseControllableStateBaseOptions<T> {
   /**
@@ -10,6 +11,17 @@ export interface UseControllableStateBaseOptions<T> {
   value?: T | undefined;
   /** Callback al cambiar el valor. Disparado en ambos modos. */
   onChange?: ((value: T) => void) | undefined;
+  /**
+   * Escape hatch interno (NO documentado en API pública). Suprime el
+   * dev warn cuando un componente está en modo controlled (`value`
+   * definido) sin `onChange`. Usado por componentes con un modo
+   * legítimo de "value sin onChange" (Rating con `readOnly`,
+   * display-only patterns) para no acoplar el hook a la prop específica
+   * del componente. Para uso interno del DS — los consumers no deberían
+   * pasar este flag.
+   * @internal
+   */
+  __suppressNoHandlerWarn?: boolean;
 }
 
 export interface UseControllableStateInternalOptions<T>
@@ -197,6 +209,33 @@ export function useControllableState<T>(
       onChangeRef.current?.(next);
     }
   }, []);
+
+  // Dev-only warn: controlled (`value` definido) sin `onChange` y sin
+  // el escape hatch `__suppressNoHandlerWarn` = UI bloqueada al input
+  // del usuario. Una vez por instancia. En useEffect (no during render)
+  // por la regla react-hooks/refs.
+  //
+  // El flag interno `__suppressNoHandlerWarn` lo activan los
+  // componentes con modo display-only legítimo (Rating con `readOnly`)
+  // para no disparar el warn donde el patrón es intencional.
+  // beta.21: re-aplicado tras revert en beta.20 con Option E.
+  const warnedControlledNoHandlerRef = useRef(false);
+  useEffect(() => {
+    if (!isDev() || warnedControlledNoHandlerRef.current) return;
+    if (
+      isControlled &&
+      options.onChange === undefined &&
+      options.__suppressNoHandlerWarn !== true
+    ) {
+      warnedControlledNoHandlerRef.current = true;
+      console.warn(
+        "[useControllableState] componente controlled (value definido) sin " +
+          "onChange. La UI quedará bloqueada al input del usuario. Usa " +
+          "`defaultValue=` para modo uncontrolled, o pasa `onChange` para " +
+          "controlar el valor.",
+      );
+    }
+  }, [isControlled, options.onChange, options.__suppressNoHandlerWarn]);
 
   return { value, setValue, isControlled };
 }

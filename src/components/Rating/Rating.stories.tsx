@@ -86,9 +86,9 @@ export const AllStates: Story = {
       {(["sm", "md", "lg", "xl"] as const).map((size) => (
         <div key={size} style={{ display: "grid", gap: "0.5rem" }}>
           <strong>size: {size}</strong>
-          <Rating size={size} aria-label={`Rating ${size} vacío`} value={0} />
-          <Rating size={size} aria-label={`Rating ${size} parcial`} value={2} />
-          <Rating size={size} aria-label={`Rating ${size} máximo`} value={5} />
+          <Rating size={size} aria-label={`Rating ${size} vacío`} value={0} readOnly />
+          <Rating size={size} aria-label={`Rating ${size} parcial`} value={2} readOnly />
+          <Rating size={size} aria-label={`Rating ${size} máximo`} value={5} readOnly />
           <Rating
             size={size}
             aria-label={`Rating ${size} readonly`}

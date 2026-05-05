@@ -78,6 +78,14 @@ export function Switch({
   const { value: isOn, setValue: setIsOn, isControlled } = useControllableState<boolean>({
     value: checked,
     defaultValue: defaultChecked === true,
+    // El componente Switch tiene su propio warn dev específico
+    // (línea siguiente) que mejora el mensaje genérico del hook con
+    // contexto del control nativo. Suprime el warn del hook para
+    // evitar duplicación. La firma del onChange nativo
+    // (ChangeEvent<HTMLInputElement>) tampoco mapea directamente al
+    // onChange del hook (que recibe boolean), así que delegar al
+    // local es la opción correcta.
+    __suppressNoHandlerWarn: true,
   });
 
   // Dev-only warning: controlled sin handler. El consumer pasa `checked`

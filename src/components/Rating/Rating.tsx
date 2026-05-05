@@ -69,6 +69,11 @@ export function Rating({
   const { value: rawValue, setValue: setInternal } = useControllableState<number>({
     value: valueProp,
     defaultValue: clampedDefault,
+    onChange: onValueChange,
+    // Suprime el warn dev del hook cuando Rating está en modo display-only
+    // legítimo (`readOnly`). El consumer pasa value=N intencionalmente
+    // sin handler — no es UI bloqueada, es una representación visual.
+    __suppressNoHandlerWarn: readOnly === true,
   });
   // Si el consumer pasa value=10 con max=5, en vez de romper la a11y
   // (focusableValue=10 → ningún radio matchea → tablist sin tab stop) lo
@@ -84,8 +89,8 @@ export function Rating({
   const setValueAndFocus = (v: number, target: HTMLElement | null) => {
     if (readOnly) return;
     const clamped = Math.min(Math.max(v, 1), safeMax);
+    // setInternal dispara onValueChange vía el hook (onChange).
     setInternal(clamped);
-    onValueChange?.(clamped);
     // Mover foco al nuevo radio
     target?.focus();
   };
@@ -126,8 +131,8 @@ export function Rating({
       case " ":
       case "Enter": {
         event.preventDefault();
+        // setInternal dispara onValueChange vía el hook (onChange).
         setInternal(v);
-        onValueChange?.(v);
         break;
       }
       default:
@@ -176,8 +181,8 @@ export function Rating({
             className={cn("ig-star", filled && "ig-star-filled")}
             onClick={() => {
               if (readOnly) return;
+              // setInternal dispara onValueChange vía el hook (onChange).
               setInternal(v);
-              onValueChange?.(v);
             }}
             onKeyDown={(e) => {
               handleKeyDown(e, v);

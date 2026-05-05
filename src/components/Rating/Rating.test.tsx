@@ -82,6 +82,25 @@ describe("Rating", () => {
     expect(screen.getByRole("radio", { name: "4 estrellas" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "2 estrellas" })).not.toBeChecked();
   });
+
+  it("readOnly: <Rating value={N} readOnly /> NO dispara warn dev", () => {
+    // Anti-regresión Option E (beta.21): Rating en modo display-only
+    // (readOnly) suprime el warn del hook vía __suppressNoHandlerWarn.
+    // Sin esto, Rating.SoloLectura/AllStates lanza falsos positivos.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<Rating value={3} readOnly />);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("controlled sin readOnly y sin onValueChange SÍ dispara warn dev", () => {
+    // El warn del hook se mantiene para los casos legítimos (consumer
+    // olvidó el handler).
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<Rating value={3} />);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
 });
 
 describe("Rating — roving tabindex + keyboard nav (WAI-ARIA APG)", () => {

@@ -340,4 +340,58 @@ describe("useControllableState", () => {
       expect(result.current.isControlled).toBe(false);
     });
   });
+
+  // ─── Dev warn: controlled sin onChange (Option E, beta.21) ───
+  describe("dev warn: controlled sin onChange", () => {
+    it("avisa cuando isControlled && !onChange && !__suppressNoHandlerWarn", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      renderHook(() => useControllableState({ value: "x" }));
+      expect(warn).toHaveBeenCalledOnce();
+      const msg = String(warn.mock.calls[0]?.[0] ?? "");
+      expect(msg).toContain("controlled");
+      expect(msg).toContain("onChange");
+      warn.mockRestore();
+    });
+
+    it("NO avisa con onChange definido", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      renderHook(() =>
+        useControllableState({ value: "x", onChange: () => {} }),
+      );
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("NO avisa en uncontrolled (sin value)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      renderHook(() => useControllableState({ defaultValue: "a" }));
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("NO avisa con __suppressNoHandlerWarn=true (escape hatch)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      renderHook(() =>
+        useControllableState({
+          value: "x",
+          __suppressNoHandlerWarn: true,
+        }),
+      );
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("avisa solo una vez por instancia (no en cada rerender)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { rerender } = renderHook(
+        ({ value }: { value: string }) =>
+          useControllableState({ value }),
+        { initialProps: { value: "a" } },
+      );
+      rerender({ value: "b" });
+      rerender({ value: "c" });
+      expect(warn).toHaveBeenCalledOnce();
+      warn.mockRestore();
+    });
+  });
 });
