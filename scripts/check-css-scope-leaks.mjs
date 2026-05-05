@@ -61,7 +61,7 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve, join } from "node:path";
+import { dirname, resolve, join, relative, sep } from "node:path";
 import postcss from "postcss";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -259,7 +259,7 @@ for (const cls of candidateClasses) {
   for (const file of componentFiles) {
     const count = countLinesWithClass(file, cls);
     if (count >= 2) {
-      const relFile = file.replace(repoRoot + "/", "");
+      const relFile = relative(repoRoot, file).split(sep).join("/");
       const key = `${cls}|${relFile}`;
       const entry = {
         class: cls,
