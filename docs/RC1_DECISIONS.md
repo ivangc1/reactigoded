@@ -1,37 +1,45 @@
-# RC1 — decisiones humanas tomadas con default razonable
+# RC1 — decisiones humanas
 
-**Fecha**: 2026-05-05
-**Branch**: `rc1-gate-fixes`
+**Fecha inicial**: 2026-05-05 (defaults razonables aplicados por Claude
+para no bloquear la sesión).
+**Confirmación explícita**: 2026-05-05 (Iván confirma todas las decisiones
+desde su cuenta tras revisión).
+**Branch**: `rc1-gate-fixes`.
 **Origen**: las 4 decisiones de la fase B del plan
 `CLAUDE_CODE_RC1_PLAN.md` que requerían input humano.
 
-Iván autorizó proceder con defaults conservadores (sesión `/loop`-style con
-mandamiento 7 desactivado). Cada default queda documentado aquí para que
-pueda revertirse antes del merge a `main` si no encaja.
+Cada decisión queda documentada aquí para que pueda revertirse antes del
+merge a `main` si surge un cambio de criterio.
 
 ---
 
-## B1 — ¿Publicar `1.0.0-beta.21` a npm o reescribir docs como pre-publicación?
+## B1 — ¿Publicar `1.0.0-beta.21` a npm o saltar a rc.1 directo?
 
-**Default elegido**: **(b) reescribir docs**.
+**Default inicial**: **(b) saltar publicación, reescribir docs como
+pre-publicación**.
 
-**Por qué**:
-- El plan dice "Si (a): yo lo hago manualmente. Tú no publicas". No
-  puedo ejecutar publicación a npm sin Iván.
-- Reescribir docs no bloquea la promoción a rc.1; publicar exige
-  esperar 1-2 semanas de feedback adicionales.
-- (b) está alineado con avanzar el ciclo RC1 sin depender de canales
-  externos.
+**Decisión confirmada (Iván, 2026-05-05)**: **(a) publicar betas** —
+más feedback real antes de congelar API.
 
-**Reversible**: trivial. Si Iván decide (a) después, basta con publicar
-y eliminar el banner de pre-publicación que se añadirá en B-11.
+**Implicaciones del cambio respecto al default inicial**:
+- B-11 (banner Introduction.mdx) cambia de tono: en lugar de "no
+  publicado, clona y npm link" pasa a recomendar
+  `npm install reactigoded@beta`.
+- README línea 7 dirá `Estado: 1.0.0-beta.22 (saneamiento RC1)`, no
+  "sin publicaciones aún en npm".
+- El bump de Fase E sigue siendo `npm version 1.0.0-beta.22`
+  (el commit final). La publicación a npm la hace Iván tras el merge,
+  fuera de esta sesión.
 
 ---
 
 ## B2 — Skeleton API: ¿breaking ahora o nunca?
 
-**Default elegido**: **(a) breaking ahora — split `Skeleton` (decorativo)
+**Default inicial**: **(a) breaking ahora — split `Skeleton` (decorativo)
 + `SkeletonContainer` (a11y wrapper)**.
+
+**Decisión confirmada (Iván, 2026-05-05)**: **(a) breaking ahora** —
+mejor BC pre-rc.1 que bug ARIA permanente.
 
 **Por qué**:
 - El informe lo marca **Blocker**. Si no se arregla en RC1, queda
@@ -49,7 +57,9 @@ dev sobre uso múltiple.
 
 ## B3 — Sidebar `ariaLabel`: ¿eliminar o mantener?
 
-**Default elegido**: **(a) eliminar**.
+**Default inicial**: **(a) eliminar**.
+
+**Decisión confirmada (Iván, 2026-05-05)**: **(a) eliminar**.
 
 **Por qué**:
 - Consistencia con el resto del DS (las demás props `ariaLabel` se
@@ -67,7 +77,10 @@ consumers que la usaban.
 
 ## B4 — RSC: `"use client"` global o subpath?
 
-**Default elegido**: **(a) global** (`"use client";` en `src/index.ts`).
+**Default inicial**: **(a) global** (`"use client";` en `src/index.ts`).
+
+**Decisión confirmada (Iván, 2026-05-05)**: **(a) global** — más
+simple, menos superficie API.
 
 **Por qué**:
 - El plan lo describe como "más simple" y "sin BC".
@@ -102,7 +115,7 @@ Las 4 decisiones afectan a estos blockers (commits separados):
 
 | Decisión | Blocker(s) | Commits a revertir |
 |---|---|---|
-| B1 = (b) | B-11 | el commit `[B-11]` |
+| B1 = (a) | B-11 (banner publicación) | el commit `[B-11]` |
 | B2 = (a) | B-12 | el commit `[B-12]` |
 | B3 = (a) | B-09 | el commit `[B-09]` |
 | B4 = (a) | B-17 | el commit `[B-17]` |
