@@ -72,8 +72,8 @@
     "not dead"
   ],
   "scripts": {
-    "_comment_prepack": "Aplica patches con patch-package en el momento previo al npm pack/publish, donde realmente importan. Antes era 'prepare' que se ejecuta también en npm install del consumer (no debería; B-H-01 fix beta.22).",
-    "prepack": "patch-package",
+    "_comment_prepare": "Aplica patches con patch-package SOLO en dev local (npm install desde git checkout). NO se ejecuta cuando un consumer instala reactigoded como dep.",
+    "prepare": "patch-package",
     "dev": "vite",
     "build": "tsc -p tsconfig.build.json && vite build -c vite.lib.config.ts && node scripts/clean-internal-dist.mjs",
     "preview": "vite preview",
