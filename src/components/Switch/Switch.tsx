@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   type ChangeEvent,
@@ -107,11 +108,18 @@ export function Switch({
   }, [isControlled, onChange, disabled]);
 
   const internalRef = useRef<HTMLInputElement>(null);
-  const setRefs = (el: HTMLInputElement | null) => {
-    internalRef.current = el;
-    if (typeof ref === "function") ref(el);
-    else if (ref) ref.current = el;
-  };
+  // setRefs estabilizado con useCallback — alineado con el patrón
+  // canónico del DS (Stepper, Checkbox post-beta.22). Sin `useCallback`
+  // la identidad cambia por render y React invocaría cleanup+rewrite
+  // del ref en cada commit.
+  const setRefs = useCallback(
+    (el: HTMLInputElement | null) => {
+      internalRef.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
 
   // useIsoLayoutEffect (layout en cliente, effect en server): el
   // atributo `indeterminate` es DOM-only y no se refleja en el HTML
