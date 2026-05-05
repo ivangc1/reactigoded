@@ -42,6 +42,13 @@ jobs:
       - name: Contrast guard (WCAG + OKLCH + ΔE)
         run: npm run test:contrast
 
+      - name: CSS scope-leak guard (--strict)
+        # Bloquea si una clase modificadora (-active, -danger, -open, etc.)
+        # se emite en >1 elemento de un mismo componente sin compound CSS
+        # selector. Patrón histórico: bug Stepper beta.20 con
+        # `.ig-step-active`. Allowlist en scripts/scope-leak-allowlist.json.
+        run: npm run test:scope-leaks
+
       - name: Build (lib + dts + styles)
         run: npm run build
 
