@@ -220,4 +220,38 @@ describe("ThemeSwitch — respects pre-set html[data-theme] on mount (B-08)", ()
     expect(html).toContain('role="switch"');
     expect(html).not.toContain("data-theme=");
   });
+
+  /**
+   * SSR test versión A — valida explícitamente el branch
+   * `typeof document === "undefined"` del derive borrando
+   * `globalThis.document` con `vi.stubGlobal`. Resto de tests del
+   * archivo no lo necesitan porque jsdom lo expone, pero este test
+   * verifica que si un consumer SSR real renderea sin document
+   * (Astro+Solid-style server runtime, p.ej.) el derive cae a
+   * defaultTheme sin lanzar.
+   *
+   * Cleanup CRÍTICO con vi.unstubAllGlobals() — sin él, los tests
+   * posteriores del archivo (y del archivo siguiente, si vitest
+   * reordena) heredarían document=undefined y fallarían en cascada.
+   *
+   * Si este test no funciona (renderToString interno toca document
+   * y falla con error distinto al esperado), la entrada del backlog
+   * documenta el fallo y se revierte. Validar que el HTML emitido
+   * contiene role="switch" — si está, el render llegó al final.
+   */
+  it("SSR sin document: derive cae a defaultTheme sin lanzar [B-08-followup]", () => {
+    vi.stubGlobal("document", undefined);
+    try {
+      // eslint-disable-next-line testing-library/render-result-naming-convention -- this is renderToString from react-dom/server, not testing-library's render
+      const html = renderToString(<ThemeSwitch defaultTheme="light" />);
+      // Si renderToString llega al final (no lanza) y el HTML contiene
+      // el switch, el derive corrió con document=undefined sin
+      // crashear. Esto valida el branch typeof document !== "undefined"
+      // del derive (líneas con if (typeof document !== "undefined" &&
+      // attribute) en ThemeSwitch.tsx).
+      expect(html).toContain('role="switch"');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
