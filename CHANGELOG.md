@@ -20,6 +20,29 @@ versionado [SemVer](https://semver.org/lang/es/).
   + <Sidebar aria-label="Navegación principal">…</Sidebar>
   ```
   Sin override sigue cayendo al default ES `"Navegación lateral"`.
+- **Skeleton**: cambio del patrón ARIA. `Skeleton` ahora es decorativo
+  (`role="presentation"` + `aria-hidden="true"`). Para anunciar carga
+  al lector de pantalla, envuelve un grupo en
+  `<SkeletonContainer label="...">`, que dispara UN solo aviso
+  (`role="status"` + `aria-busy` + `aria-live="polite"`). El patrón
+  anterior generaba spam de "status busy" en SR cuando había varios
+  `Skeleton`. Migration:
+  ```diff
+  - <Skeleton variant="text" />
+  - <Skeleton variant="text" />
+  + <SkeletonContainer label="Cargando lista">
+  +   <Skeleton variant="text" />
+  +   <Skeleton variant="text" />
+  + </SkeletonContainer>
+  ```
+  El layout del wrapper es neutro (`display: contents`): no añade caja
+  al flujo, los hijos se posicionan como si el container no existiese.
+
+### Added
+
+- **`SkeletonContainer`**: nuevo wrapper a11y para grupos de `Skeleton`.
+  Props: `label?: string` (default ES `"Cargando contenido…"`),
+  `children`. Acepta `aria-label` directo vía rest (gana sobre `label`).
 
 ## [1.0.0-beta.21] — 2026-05-05
 

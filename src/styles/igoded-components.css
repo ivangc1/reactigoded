@@ -7744,7 +7744,31 @@ VARIANTES:
 - ig-skeleton-card: rectángulo grande para cards/imágenes
 - ig-skeleton-image: imagen con aspect ratio 16:9
 - ig-skeleton-button: forma de botón
+
+WRAPPER A11Y (B-12, beta.22):
+- ig-skeleton-container: wrapper que envuelve un grupo de Skeleton para
+  anunciar la carga UNA vez al SR. Layout-neutro (display: contents).
 */
+
+/* SkeletonContainer: layout neutro, no añade caja al flujo.
+ *
+ * Fallback documentado para navegadores antiguos donde `display:
+ * contents` saca el elemento del árbol de accesibilidad (bug arreglado
+ * en Chrome ~120 / Firefox ~117). Si llega un report de un consumer
+ * en Electron viejo o WebView corporativo donde el SR no anuncia la
+ * carga, sustituir esta regla por:
+ *
+ *   :where(.ig-skeleton-container) {
+ *     display: block;
+ *     margin: 0; padding: 0; border: 0; background: transparent;
+ *   }
+ *
+ * Coste: el wrapper pasa a estar en el flujo (block-level box).
+ * El cambio es 1 línea CSS sin tocar JSX.
+ */
+:where(.ig-skeleton-container) {
+  display: contents;
+}
 
 .ig-skeleton {
   background: linear-gradient(
