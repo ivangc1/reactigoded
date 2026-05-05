@@ -73,6 +73,21 @@ export const Interactiva: Story = {
   },
 };
 
+export const Uncontrolled: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Modo **uncontrolled**: el componente maneja su propio state interno arrancando en `defaultPage`. Pasa `onPageChange` (opcional) para reaccionar (fetch, sync URL, analytics). Patrón consistente con Tabs/Accordion/Dropdown del DS.",
+      },
+    },
+  },
+  // En uncontrolled NO pasamos currentPage. Renderizamos sin él.
+  render: () => (
+    <Pagination defaultPage={1} totalPages={15} variant="brand" />
+  ),
+};
+
 export const PageClickInteraction: Story = {
   args: { currentPage: 3, totalPages: 10, siblingCount: 1 },
   play: async ({ canvasElement, args }) => {

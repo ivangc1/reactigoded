@@ -206,4 +206,62 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
     await user.click(screen.getByRole("button", { name: "Anterior" }));
     expect(onPageChange).toHaveBeenCalledWith(4);
   });
+
+  // ─── Uncontrolled (beta.20) ───────────────────────────────────
+
+  it("uncontrolled: arranca en defaultPage y avanza con click", async () => {
+    const user = userEvent.setup();
+    render(<Pagination totalPages={5} defaultPage={2} />);
+    expect(
+      screen.getByRole("button", { name: "Página 2" }),
+    ).toHaveAttribute("aria-current", "page");
+
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+    expect(
+      screen.getByRole("button", { name: "Página 3" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("uncontrolled: defaultPage por defecto es 1", () => {
+    render(<Pagination totalPages={5} />);
+    expect(
+      screen.getByRole("button", { name: "Página 1" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("uncontrolled: onPageChange (opcional) recibe el nuevo page como side-effect", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+    render(
+      <Pagination
+        totalPages={5}
+        defaultPage={1}
+        onPageChange={onPageChange}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+    // Y el state interno avanzó solo (no hace falta rerender):
+    expect(
+      screen.getByRole("button", { name: "Página 2" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("controlled: setPage interno NO actualiza el visible si el consumer no rerendera", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+    render(
+      <Pagination
+        currentPage={2}
+        totalPages={5}
+        onPageChange={onPageChange}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+    expect(onPageChange).toHaveBeenCalledWith(3);
+    // currentPage sigue siendo 2 hasta que el consumer rerendere
+    expect(
+      screen.getByRole("button", { name: "Página 2" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
 });
