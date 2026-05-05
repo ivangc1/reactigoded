@@ -118,6 +118,39 @@ git commit -m "chore(gitignore): exclude .claude/ session data"
 
 ---
 
+## ThemeSwitch SSR test versión A (borrar `globalThis.document`)
+
+**De dónde sale**: C6 (B-08). El test #6 actual (`renderToString` smoke)
+valida que ThemeSwitch no rompe en `react-dom/server`, pero NO valida
+explícitamente el branch `typeof document === "undefined"` del `derive`
+porque jsdom siempre tiene `document`.
+
+**Por qué no se hace ahora**: borrar `globalThis.document` con
+`vi.stubGlobal('document', undefined)` y restaurarlo en cleanup tiene
+casos esquina (otros tests, internals de React, internals del runner)
+que justifican una sesión propia con cleanup robusto. Pre-RC1 el coste
+supera al beneficio incremental.
+
+**Acción**: activar si un consumer SSR real abre issue de regresión
+(Next.js, Astro, Remix). Implementación esperada:
+
+```ts
+it("SSR sin document: derive cae a defaultTheme sin lanzar", () => {
+  vi.stubGlobal('document', undefined);
+  try {
+    const html = renderToString(<ThemeSwitch defaultTheme="light" />);
+    expect(html).toContain('role="switch"');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+```
+
+Validar antes que `vi.unstubAllGlobals()` no rompe el runner, y que
+internals de React 19 no requieren `document` en `renderToString`.
+
+---
+
 ## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`)
 
 **De dónde sale**: `git status` durante toda la sesión.
