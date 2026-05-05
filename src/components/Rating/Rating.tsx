@@ -73,7 +73,7 @@ export function Rating({
     // Suprime el warn dev del hook cuando Rating está en modo display-only
     // legítimo (`readOnly`). El consumer pasa value=N intencionalmente
     // sin handler — no es UI bloqueada, es una representación visual.
-    __suppressNoHandlerWarn: readOnly === true,
+    __suppressNoHandlerWarn: readOnly,
   });
   // Si el consumer pasa value=10 con max=5, en vez de romper la a11y
   // (focusableValue=10 → ningún radio matchea → tablist sin tab stop) lo
