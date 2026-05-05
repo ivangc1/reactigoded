@@ -1,9 +1,9 @@
 import type {
   ComponentPropsWithoutRef,
+  ComponentPropsWithRef,
   ElementType,
   KeyboardEvent,
   ReactElement,
-  Ref,
 } from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
@@ -54,7 +54,7 @@ interface CardOwnProps<C extends ElementType = "div"> {
   /**
    * Ref polimórfica al elemento subyacente. El tipo se infiere de `as`.
    */
-  ref?: Ref<unknown>;
+  ref?: ComponentPropsWithRef<C>["ref"];
 }
 
 export type CardProps<C extends ElementType = "div"> = CardOwnProps<C> &
