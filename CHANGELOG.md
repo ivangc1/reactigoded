@@ -7,6 +7,20 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.22] — saneamiento RC1 (en progreso)
+
+### Breaking
+
+- **Sidebar**: prop `ariaLabel` eliminada por consistencia con el resto
+  del DS (Pagination, Spinner, Stepper, TabList, Rating, Timeline ya
+  habían eliminado la prop separada en beta.4 y posteriores). Sidebar
+  era el último outlier. Migration:
+  ```diff
+  - <Sidebar ariaLabel="Navegación principal">…</Sidebar>
+  + <Sidebar aria-label="Navegación principal">…</Sidebar>
+  ```
+  Sin override sigue cayendo al default ES `"Navegación lateral"`.
+
 ## [1.0.0-beta.21] — 2026-05-05
 
 ### Added

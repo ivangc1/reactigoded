@@ -10,12 +10,6 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
   defaultCollapsed?: boolean;
   /** Callback al cambiar collapsed. */
   onCollapsedChange?: (collapsed: boolean) => void;
-  /**
-   * Etiqueta accesible del `<aside>`. Por defecto `"Navegación lateral"`
-   * (ES). Sustituye el `aria-label` para i18n. Si pasas también
-   * `aria-label` directo (vía rest), `aria-label` gana sobre `ariaLabel`.
-   */
-  ariaLabel?: string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -40,13 +34,16 @@ export function Sidebar({
   collapsed: collapsedProp,
   defaultCollapsed = false,
   onCollapsedChange,
-  ariaLabel,
   className,
   children,
   ref,
   ...rest
 }: SidebarProps) {
-  // Precedencia desde beta.19: aria-label (rest) > ariaLabel prop > default ES.
+  // Precedencia desde beta.22: aria-label (rest) > default ES.
+  // La prop `ariaLabel` separada se eliminó en beta.22 por consistencia
+  // con el resto del DS (Pagination, Spinner, Stepper, TabList, Rating
+  // ya usaban aria-label estándar desde beta.4). Migration: rename
+  // ariaLabel → aria-label en el JSX consumidor.
   const { "aria-label": ariaLabelOverride, ...asideRest } = rest;
   const { value: collapsed, setValue: setCollapsed } = useControllableState<boolean>({
     value: collapsedProp,
@@ -64,7 +61,7 @@ export function Sidebar({
       <aside
         {...asideRest}
         ref={ref}
-        aria-label={ariaLabelOverride ?? ariaLabel ?? "Navegación lateral"}
+        aria-label={ariaLabelOverride ?? "Navegación lateral"}
         className={cn(
           "ig-sidebar",
           collapsed && "ig-sidebar-collapsed",
