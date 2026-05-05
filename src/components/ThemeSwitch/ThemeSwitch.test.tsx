@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { ThemeSwitch } from "./index";
 
@@ -149,5 +150,74 @@ describe("ThemeSwitch", () => {
       "aria-label",
       "Switch tema personalizado",
     );
+  });
+});
+
+describe("ThemeSwitch — respects pre-set html[data-theme] on mount (B-08)", () => {
+  // Bloque self-contained: cleanup propio (no hereda del describe anterior),
+  // así pasa estable aunque cambie el orden de ejecución entre suites.
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-mode");
+  });
+
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-mode");
+  });
+
+  it("conserva data-theme='light' pre-puesto cuando no hay storage ni override", () => {
+    document.documentElement.setAttribute("data-theme", "light");
+    render(<ThemeSwitch />);
+    expect(screen.getByRole("switch")).not.toBeChecked();
+  });
+
+  it("conserva data-theme='dark' pre-puesto cuando no hay storage ni override", () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    render(<ThemeSwitch />);
+    expect(screen.getByRole("switch")).toBeChecked();
+  });
+
+  it("sin attr y sin storage usa defaultTheme='light'", () => {
+    render(<ThemeSwitch defaultTheme="light" />);
+    expect(screen.getByRole("switch")).not.toBeChecked();
+  });
+
+  it("attribute={null} ignora data-theme pre-puesto y usa defaultTheme", () => {
+    // Anti-regresión: si attribute=null el componente NO debe leer ni escribir
+    // el atributo. defaultTheme='dark' debe ganar al data-theme='light' del DOM.
+    document.documentElement.setAttribute("data-theme", "light");
+    render(<ThemeSwitch attribute={null} defaultTheme="dark" />);
+    expect(screen.getByRole("switch")).toBeChecked();
+  });
+
+  it("data-theme con valor inválido ('system') cae a defaultTheme", () => {
+    // El derive solo acepta 'light' o 'dark'. Cualquier otra cosa
+    // (e.g. 'system' inyectado por un anti-flash agresivo, '' vacío,
+    // 'auto') debe ignorarse y caer a defaultTheme.
+    document.documentElement.setAttribute("data-theme", "system");
+    render(<ThemeSwitch defaultTheme="light" />);
+    expect(screen.getByRole("switch")).not.toBeChecked();
+  });
+
+  /**
+   * Smoke SSR. Valida:
+   * - ThemeSwitch es importable desde react-dom/server.
+   * - renderToString no lanza.
+   * - El HTML emitido contiene role="switch".
+   * - El HTML emitido NO incluye data-theme= (useEffect no corre en server).
+   *
+   * NO valida:
+   * - El branch `typeof document === "undefined"` del derive (jsdom siempre
+   *   tiene document; borrarlo rompe el runner). La defensa de ese branch es
+   *   "by construction" en el comentario del código del derive. Pospuesto
+   *   en docs/POST_RC1_BACKLOG.md como "ThemeSwitch SSR test versión A".
+   */
+  it("SSR (renderToString) no falla y emite el switch con defaultTheme", () => {
+    // eslint-disable-next-line testing-library/render-result-naming-convention -- this is renderToString from react-dom/server, not testing-library's render
+    const html = renderToString(<ThemeSwitch defaultTheme="light" />);
+    expect(html).toContain('role="switch"');
+    expect(html).not.toContain("data-theme=");
   });
 });
