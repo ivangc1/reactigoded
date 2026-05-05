@@ -62,7 +62,7 @@ import "reactigoded/styles/fonts.css";      // ~2 KB (solo @import a Google Font
 
 // Utilities pseudo-class (hover:ig-bg-brand, focus:..., etc.) — solo si
 // usas las utilities directamente en HTML.
-import "reactigoded/styles/state.css";      // ~7.1 MB
+import "reactigoded/styles/state.css";      // ~6.5 MB sin gzip / ~700 KB gzipped
 
 // Atajo final: design + reset + state vía @import (sin duplicar bytes).
 import "reactigoded/styles/all.css";

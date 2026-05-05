@@ -7,7 +7,7 @@ import { withThemeByDataAttribute } from "@storybook/addon-themes";
 //   2. reset.css  → estilos por defecto para HTML nativo (h1-h6, p, a, table…).
 //                   Lo importamos aquí para que las demos del catálogo se vean
 //                   "como un consumer con reset opt-in". Documentado en README.
-//   3. state.css  → NO se importa por defecto (es 7.1 MB, solo necesario si
+//   3. state.css  → NO se importa por defecto (~6.5 MB sin gzip / ~700 KB gzipped, solo necesario si
 //                   las demos usan utilities pseudo-class como `hover:ig-bg-brand`
 //                   directamente en HTML, lo cual ningún componente hace).
 import "../src/styles/igoded-design.css";

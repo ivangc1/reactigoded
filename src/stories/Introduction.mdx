@@ -2,6 +2,11 @@ import { Meta } from "@storybook/addon-docs/blocks";
 
 <Meta title="Introducción" />
 
+> ⚠️ **Estado pre-1.0.0-rc.1**: API en estabilización. Las versiones
+> beta pueden incluir cambios incompatibles entre sí. Para usar en
+> producción, espera a `1.0.0-rc.1`. Si quieres probar antes:
+> `npm install reactigoded@beta`.
+
 # Igoded Design System
 
 Componentes React tipados + sistema CSS utility-first state-driven.
@@ -35,7 +40,7 @@ import "reactigoded/styles/design.css";
 import "reactigoded/styles/reset.css";
 
 // Opcional: utilities pseudo-class (`hover:ig-bg-brand`, `focus:…`, etc.).
-// 7.1 MB sin gzip — solo si usas las utilities directamente en HTML.
+// ~6.5 MB sin gzip / ~700 KB gzipped — solo si usas las utilities directamente en HTML.
 import "reactigoded/styles/state.css";
 
 // Tipografías Google Fonts oficiales del DS (Electrolize / Saira /
