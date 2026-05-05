@@ -51,7 +51,7 @@ export interface TabsProps extends HTMLAttributes<HTMLDivElement> {
  *
  * @example
  * <Tabs defaultValue="perfil">
- *   <TabList ariaLabel="Cuenta">
+ *   <TabList aria-label="Cuenta">
  *     <Tab value="perfil">Perfil</Tab>
  *     <Tab value="seguridad">Seguridad</Tab>
  *   </TabList>
