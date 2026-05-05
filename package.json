@@ -1,6 +1,6 @@
 {
   "name": "reactigoded",
-  "version": "1.0.0-beta.19",
+  "version": "1.0.0-beta.21",
   "description": "Igoded Design System — componentes React + CSS utility-first state-driven",
   "license": "MIT",
   "author": "ivangc1",
@@ -84,12 +84,13 @@
     "test:unit:ci": "vitest run --project unit --isolate --pool=forks",
     "test:storybook": "vitest run --project storybook",
     "test:contrast": "node scripts/check-component-contrast.mjs",
+    "test:scope-leaks": "node scripts/check-css-scope-leaks.mjs --strict",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "verify:unit": "npm run lint && npm run typecheck && npm run test:unit && npm run test:contrast && npm run build",
+    "verify:unit": "npm run lint && npm run typecheck && npm run test:unit && npm run test:contrast && npm run test:scope-leaks && npm run build",
     "verify:storybook": "npm run test:storybook",
     "verify:size": "size-limit",
     "verify": "npm run verify:unit && npm run verify:storybook && npm run verify:size",
@@ -103,7 +104,7 @@
     {
       "name": "JS bundle ESM (gzip)",
       "path": "dist/index.js",
-      "limit": "15 KB",
+      "limit": "16 KB",
       "gzip": true
     },
     {

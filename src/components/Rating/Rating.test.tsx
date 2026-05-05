@@ -67,6 +67,40 @@ describe("Rating", () => {
     // En uncontrolled, el state interno arranca de defaultValue=0.
     expect(screen.getByRole("radio", { name: "1 estrella" })).not.toBeChecked();
   });
+
+  it("transición uncontrolled → controlled: el wrapper React→DOM respeta value externo", () => {
+    // Smoke test del wrapping. El contrato abstracto del hook lo cubre
+    // useControllableState.test.ts; aquí verificamos que Rating reflecta
+    // el value en el aria-checked del button[role=radio] correcto.
+    const onValueChange = vi.fn();
+    const { rerender } = render(
+      <Rating defaultValue={2} onValueChange={onValueChange} />,
+    );
+    expect(screen.getByRole("radio", { name: "2 estrellas" })).toBeChecked();
+
+    rerender(<Rating value={4} onValueChange={onValueChange} />);
+    expect(screen.getByRole("radio", { name: "4 estrellas" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "2 estrellas" })).not.toBeChecked();
+  });
+
+  it("readOnly: <Rating value={N} readOnly /> NO dispara warn dev", () => {
+    // Anti-regresión Option E (beta.21): Rating en modo display-only
+    // (readOnly) suprime el warn del hook vía __suppressNoHandlerWarn.
+    // Sin esto, Rating.SoloLectura/AllStates lanza falsos positivos.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<Rating value={3} readOnly />);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("controlled sin readOnly y sin onValueChange SÍ dispara warn dev", () => {
+    // El warn del hook se mantiene para los casos legítimos (consumer
+    // olvidó el handler).
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<Rating value={3} />);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
 });
 
 describe("Rating — roving tabindex + keyboard nav (WAI-ARIA APG)", () => {

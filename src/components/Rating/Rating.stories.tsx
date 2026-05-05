@@ -69,3 +69,38 @@ export const ClickEstrella: Story = {
     await expect(args.onValueChange).toHaveBeenCalledWith(4);
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      {(["sm", "md", "lg", "xl"] as const).map((size) => (
+        <div key={size} style={{ display: "grid", gap: "0.5rem" }}>
+          <strong>size: {size}</strong>
+          <Rating size={size} aria-label={`Rating ${size} vacío`} value={0} readOnly />
+          <Rating size={size} aria-label={`Rating ${size} parcial`} value={2} readOnly />
+          <Rating size={size} aria-label={`Rating ${size} máximo`} value={5} readOnly />
+          <Rating
+            size={size}
+            aria-label={`Rating ${size} readonly`}
+            value={3}
+            readOnly
+          />
+        </div>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const groups = canvasElement.querySelectorAll('[role="radiogroup"]');
+    await expect(groups.length).toBeGreaterThanOrEqual(16);
+  },
+};

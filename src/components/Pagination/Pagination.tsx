@@ -1,6 +1,7 @@
 import { useEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { isDev } from "@/utils/env";
+import { useControllableState } from "@/hooks/useControllableState";
 
 export type PaginationVariant =
   | "brand"
@@ -12,14 +13,28 @@ export type PaginationVariant =
 
 export interface PaginationProps
   extends Omit<HTMLAttributes<HTMLElement>, "onChange"> {
-  /** Página actual (1-based). */
-  currentPage: number;
+  /**
+   * Página actual (1-based) en modo **controlled**. Si se pasa, el
+   * consumer es responsable de actualizar la prop en respuesta a
+   * `onPageChange`. Si se omite, el componente arranca en `defaultPage`
+   * y maneja el state internamente.
+   */
+  currentPage?: number;
+  /**
+   * Página inicial (1-based) en modo **uncontrolled**. Default `1`.
+   * Ignorado si `currentPage` está definido.
+   */
+  defaultPage?: number;
   /** Número total de páginas (>=1). */
   totalPages: number;
   /** Cuántas páginas mostrar a cada lado de la actual antes de elipsis. Por defecto 1. */
   siblingCount?: number;
-  /** Callback al cambiar de página. */
-  onPageChange: (page: number) => void;
+  /**
+   * Callback al cambiar de página. Opcional en modo uncontrolled (el
+   * componente actualiza su state interno) y útil para reaccionar al
+   * cambio (fetch de datos, sync con URL, etc.).
+   */
+  onPageChange?: (page: number) => void;
   /** Color de la página activa. */
   variant?: PaginationVariant;
   /**
@@ -49,23 +64,6 @@ export interface PaginationProps
 type PageItem = number | "ellipsis-start" | "ellipsis-end";
 
 /**
- * Pagination — navegación paginada accesible.
- *
- * Renderiza un `<nav>` con `aria-label`, botón "anterior", páginas (con
- * elipsis cuando hay muchas) y botón "siguiente". La página activa lleva
- * `aria-current="page"`. Cada página tiene `aria-label="Página N"`.
- *
- * Es controlled-only: el consumer mantiene `currentPage` y reacciona a
- * `onPageChange`.
- *
- * @example
- * <Pagination
- *   currentPage={page}
- *   totalPages={total}
- *   onPageChange={setPage}
- * />
- */
-/**
  * Genera la lista de páginas a mostrar con elipsis. Para totalPages pequeñas
  * (<=7) las muestra todas; para más grandes intercala "…" alrededor de la
  * actual respetando `siblingCount`.
@@ -94,13 +92,30 @@ function buildPages(
 }
 
 /**
- * Pagination — `<nav>` con botones de navegación entre páginas.
+ * Pagination — navegación paginada accesible.
  *
- * Renderiza Anterior/Siguiente + páginas con elipsis. Cada página es un
- * `<button>`; la activa lleva `aria-current="page"`.
+ * Renderiza un `<nav>` con `aria-label`, botón "anterior", páginas (con
+ * elipsis cuando hay muchas) y botón "siguiente". La página activa lleva
+ * `aria-current="page"`. Cada página tiene `aria-label="Página N"`.
+ *
+ * Soporta **controlled** (`currentPage` + `onPageChange`) y **uncontrolled**
+ * (`defaultPage`, opcional `onPageChange` para reaccionar). Idéntico
+ * patrón a otros componentes con state del DS (Tabs, Accordion, etc.).
+ *
+ * @example
+ * // Uncontrolled — el componente maneja el state internamente
+ * <Pagination totalPages={20} defaultPage={1} onPageChange={fetchPage} />
+ *
+ * // Controlled — el consumer mantiene currentPage
+ * <Pagination
+ *   totalPages={20}
+ *   currentPage={page}
+ *   onPageChange={setPage}
+ * />
  */
 export function Pagination({
   currentPage,
+  defaultPage = 1,
   totalPages,
   siblingCount = 1,
   onPageChange,
@@ -124,6 +139,15 @@ export function Pagination({
   // resto de componentes que ya usan rest. Migration: rename ariaLabel→aria-label.
   const { "aria-label": ariaLabelOverride, ...navRest } = rest;
 
+  // beta.20: Pagination soporta controlled + uncontrolled vía
+  // useControllableState. En uncontrolled, el state interno arranca en
+  // defaultPage y onPageChange (si existe) actúa como side-effect.
+  const { value: page, setValue: setPage } = useControllableState<number>({
+    value: currentPage,
+    defaultValue: defaultPage,
+    onChange: onPageChange,
+  });
+
   // Clamps: el componente jamás debe renderizar páginas fuera de rango
   // ni dejar el `aria-current` huérfano si el consumer pasa basura.
   // Cualquier non-finite o ≤ 0 cae a defaults seguros (totalPages=1,
@@ -132,17 +156,24 @@ export function Pagination({
   // Math.floor + max/min normaliza Infinity y negativos.
   const safeTotal = Math.max(1, Math.floor(totalPages || 1));
   const safeCurrent = Math.min(
-    Math.max(1, Math.floor(currentPage || 1)),
+    Math.max(1, Math.floor(page || 1)),
     safeTotal,
   );
   const safeSiblings = Math.max(0, Math.floor(siblingCount || 0));
 
   // Dev-only warning si tuvimos que clamp-ear (input fuera de rango).
   // En useEffect (no durante render) por la regla react-hooks/refs.
+  // Solo aplicamos a controlled mode: en uncontrolled el internal state
+  // siempre está dentro de rango porque solo lo movemos vía setPage.
   const warnedRef = useRef(false);
   useEffect(() => {
     if (!isDev() || warnedRef.current) return;
-    if (currentPage !== safeCurrent || totalPages !== safeTotal) {
+    const isControlled = currentPage !== undefined;
+    const outOfRange =
+      isControlled
+        ? currentPage !== safeCurrent || totalPages !== safeTotal
+        : totalPages !== safeTotal;
+    if (outOfRange) {
       warnedRef.current = true;
       console.warn(
         `[reactigoded] <Pagination currentPage=${String(currentPage)} totalPages=${String(totalPages)}> fuera de rango. Clamped a currentPage=${String(safeCurrent)}, totalPages=${String(safeTotal)}.`,
@@ -153,6 +184,11 @@ export function Pagination({
   const pages = buildPages(safeCurrent, safeTotal, safeSiblings);
   const canPrev = safeCurrent > 1;
   const canNext = safeCurrent < safeTotal;
+
+  const goTo = (next: number) => {
+    if (next === safeCurrent) return;
+    setPage(next);
+  };
 
   return (
     <nav
@@ -171,7 +207,7 @@ export function Pagination({
         disabled={!canPrev}
         aria-label={prevAria}
         onClick={() => {
-          if (canPrev) onPageChange(safeCurrent - 1);
+          if (canPrev) goTo(safeCurrent - 1);
         }}
       >
         {prevLabel}
@@ -200,7 +236,7 @@ export function Pagination({
             aria-current={isActive ? "page" : undefined}
             aria-label={`Página ${String(p)}`}
             onClick={() => {
-              if (!isActive) onPageChange(p);
+              if (!isActive) goTo(p);
             }}
           >
             {p}
@@ -213,7 +249,7 @@ export function Pagination({
         disabled={!canNext}
         aria-label={nextAria}
         onClick={() => {
-          if (canNext) onPageChange(safeCurrent + 1);
+          if (canNext) goTo(safeCurrent + 1);
         }}
       >
         {nextLabel}

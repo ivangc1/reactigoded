@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { fn } from "storybook/test";
+import { expect, fn } from "storybook/test";
 import { Radio } from "./Radio";
+import { MatrixGrid, type Variant } from "../../stories/_matrix";
 
 const meta = {
   title: "Componentes/Radio",
@@ -67,5 +68,47 @@ export const Variantes: Story = {
 
 export const Deshabilitado: Story = {
   args: { disabled: true, defaultChecked: true },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <MatrixGrid
+      renderRow={(v) => (
+        <>
+          <Radio name={`row-${v}-unchecked`} variant={v as Variant}>
+            unchecked
+          </Radio>
+          <Radio name={`row-${v}-checked`} variant={v as Variant} defaultChecked>
+            checked
+          </Radio>
+          <Radio name={`row-${v}-disabled`} variant={v as Variant} disabled>
+            disabled
+          </Radio>
+          <Radio
+            name={`row-${v}-checked-disabled`}
+            variant={v as Variant}
+            defaultChecked
+            disabled
+          >
+            checked disabled
+          </Radio>
+        </>
+      )}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const radios = canvasElement.querySelectorAll('input[type="radio"]');
+    await expect(radios.length).toBeGreaterThanOrEqual(20);
+  },
 };
 

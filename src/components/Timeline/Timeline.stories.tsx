@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Timeline, TimelineItem } from "./index";
 
 const meta = {
@@ -113,4 +114,91 @@ export const TodasLasVariantes: Story = {
       <TimelineItem date="info" title="Info" dotVariant="info" />
     </Timeline>
   ),
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem" }}>
+      <div>
+        <strong>Variantes</strong>
+        <Timeline aria-label="Timeline variantes">
+          <TimelineItem
+            date="default"
+            title="Default"
+            description="Sin variant semántico"
+            dotVariant="default"
+          />
+          <TimelineItem
+            date="brand"
+            title="Brand"
+            description="Variante brand"
+            dotVariant="brand"
+          />
+          <TimelineItem
+            date="secondary"
+            title="Secondary"
+            description="Variante secondary"
+            dotVariant="secondary"
+          />
+          <TimelineItem
+            date="success"
+            title="Success"
+            description="Variante success"
+            dotVariant="success"
+          />
+          <TimelineItem
+            date="warning"
+            title="Warning"
+            description="Variante warning"
+            dotVariant="warning"
+          />
+          <TimelineItem
+            date="danger"
+            title="Danger"
+            description="Variante danger"
+            dotVariant="danger"
+          />
+          <TimelineItem
+            date="info"
+            title="Info"
+            description="Variante info"
+            dotVariant="info"
+          />
+        </Timeline>
+      </div>
+      <div>
+        <strong>Con dot custom + children</strong>
+        <Timeline aria-label="Timeline con dot custom">
+          <TimelineItem
+            dotContent={<span style={{ fontSize: "0.65rem" }}>1</span>}
+            dotVariant="brand"
+          >
+            <div className="ig-timeline-date">v1.0.0</div>
+            <div className="ig-timeline-title">Release inicial</div>
+          </TimelineItem>
+          <TimelineItem
+            dotContent={<span style={{ fontSize: "0.65rem" }}>2</span>}
+            dotVariant="success"
+          >
+            <div className="ig-timeline-date">v1.1.0</div>
+            <div className="ig-timeline-title">Mejoras</div>
+          </TimelineItem>
+        </Timeline>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const items = canvasElement.querySelectorAll(".ig-timeline-item");
+    await expect(items.length).toBeGreaterThanOrEqual(9);
+  },
 };

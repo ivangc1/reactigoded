@@ -80,6 +80,7 @@ export function Slider({
     useControllableState<number>({
       value: passControlled,
       defaultValue: initial,
+      onChange: onValueChange,
     });
 
   // Dev-only warnings: capturan errores típicos del consumer que la
@@ -145,9 +146,10 @@ export function Slider({
       {...domValueProp}
       onChange={(e) => {
         const next = Number(e.target.value);
+        // setInternal dispara onValueChange vía el hook (onChange).
+        // El onChange nativo (ChangeEvent) se llama por separado.
         setInternal(next);
         onChange?.(e);
-        onValueChange?.(next);
       }}
     />
   );

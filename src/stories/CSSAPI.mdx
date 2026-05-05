@@ -172,6 +172,13 @@ Hugo, templates server-side, otros frameworks).
 </article>
 ```
 
+> **API React polimórfica**: el componente `<Card>` acepta la prop
+> `as` para renderear cualquier elemento HTML (`as="article"`,
+> `as="a"` con `href`, `as="section"`) o componente
+> (`as={Link}` para react-router/next). Las props específicas del
+> elemento subyacente se tipan automáticamente vía genéricos TS.
+> Las clases CSS son las mismas independientemente de `as`.
+
 ---
 
 ### Checkbox
@@ -354,6 +361,12 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 </nav>
 ```
 
+> **API React controlled + uncontrolled**: `currentPage` y
+> `onPageChange` son opcionales. Pasa `currentPage`+`onPageChange`
+> para controlled, o `defaultPage` (default 1) para uncontrolled
+> (el componente maneja state interno; `onPageChange` opcional como
+> side-effect). Patrón consistente con Tabs / Accordion / Dropdown.
+
 ---
 
 ### Progress
@@ -518,9 +531,15 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-stepper` · `.ig-stepper-labeled` (con label debajo) |
-| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` |
+| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` · `.ig-step-interactive` (modo keyboard nav) |
 | Slots | `.ig-step-item` · `.ig-step-label` |
 | Connector | `.ig-step-line` · `.ig-step-line-complete` |
+
+> **Modo interactive**: cuando el componente recibe `onActiveChange`,
+> cada `.ig-step` añade `.ig-step-interactive` y se vuelve focuseable
+> (`role="button"` + roving tabIndex). Soporta ArrowLeft/Right/Up/Down
+> + Home/End + Enter/Space. Sin `onActiveChange` el Stepper es
+> presentational (no focus, no keyboard).
 
 ```html
 <div class="ig-stepper-labeled" role="group" aria-label="Progreso">
@@ -706,6 +725,62 @@ tema vive en `data-theme="light|dark"` aplicado a `<html>`.
   <span id="tt-1" role="tooltip" class="ig-sr-only">Eliminar</span>
 </span>
 ```
+
+---
+
+## i18n y a11y strings
+
+El DS expone strings user-facing (a11y labels y texto visible mínimo) con **defaults en español** porque la audience inicial — InfiniteRol y consumers hispanohablantes — no necesita configuración para empezar. **No es descuido**: la decisión está registrada y se reevaluará en 1.1.0 si la demanda real lo justifica. Cada componente acepta override por prop o por `aria-label` HTML estándar — la migración i18n para apps anglo o multiidioma es trivial.
+
+### Componentes con override de a11y label
+
+| Componente | Default ES | Prop override |
+|---|---|---|
+| `Alert` | "Cerrar" | `closeLabel` |
+| `Chip` | "Eliminar" | `removeLabel` |
+| `ModalClose` | "Cerrar" | `aria-label` (HTML estándar) |
+| `Pagination` | "Anterior" / "Siguiente" | `prevLabel`, `nextLabel` |
+| `Progress` | "Cargando" / "X por ciento completado" | `loadingLabel`, `formatLabel` |
+| `Stepper` | "Progreso" | `aria-label` (HTML estándar) |
+| `Toast` | "Cerrar" | `closeLabel` |
+
+### Patrón de uso para apps multiidioma
+
+Usa tu sistema i18n (react-intl, lingui, i18next, etc.) y pasa los strings traducidos como props:
+
+```tsx
+import { useTranslation } from "react-i18next";
+import { Alert, Pagination } from "@igoded/reactigoded";
+
+function MyAlert() {
+  const { t } = useTranslation();
+  return <Alert closeLabel={t("common.close")}>Mensaje</Alert>;
+}
+
+function MyPager() {
+  const { t } = useTranslation();
+  return (
+    <Pagination
+      page={1}
+      totalPages={10}
+      prevLabel={t("pagination.prev")}
+      nextLabel={t("pagination.next")}
+      onChange={() => {}}
+    />
+  );
+}
+```
+
+Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaje redondeado y devuelve el `aria-label`):
+
+```tsx
+<Progress
+  value={percent}
+  formatLabel={(p) => t("progress.format", { percent: p })}
+/>
+```
+
+`aria-label` HTML estándar siempre gana sobre cualquier prop dedicada — útil para casos one-off donde no quieres centralizar el string.
 
 ---
 

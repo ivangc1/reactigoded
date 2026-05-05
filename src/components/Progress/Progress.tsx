@@ -22,6 +22,37 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   size?: ProgressSize;
   /** Modo indeterminado: barra animada sin valor concreto. */
   indeterminate?: boolean;
+  /**
+   * Etiqueta accesible (aria-label) cuando el componente no recibe
+   * `aria-label` explícito. Default `"Cargando"` (ES intencional —
+   * audience inicial hispanohablante; ver `docs/CSSAPI.mdx` sección
+   * "i18n y a11y strings").
+   *
+   * Override para apps en otros idiomas:
+   * ```tsx
+   * <Progress loadingLabel="Loading" indeterminate />
+   * ```
+   *
+   * Si pasas `aria-label` como prop HTML estándar, gana sobre
+   * `loadingLabel` y `formatLabel`.
+   */
+  loadingLabel?: string;
+  /**
+   * Función opcional para formatear el `aria-label` con el porcentaje
+   * actual. Útil con sistemas i18n con interpolación. No aplica en
+   * `indeterminate` (no hay porcentaje).
+   *
+   * @example
+   * ```tsx
+   * <Progress value={75} formatLabel={(p) => `${p}% done`} />
+   * // i18n:
+   * <Progress
+   *   value={percent}
+   *   formatLabel={(p) => t("progress.format", { percent: p })}
+   * />
+   * ```
+   */
+  formatLabel?: (percent: number) => string;
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -43,6 +74,8 @@ export function Progress({
   variant,
   size = "md",
   indeterminate = false,
+  loadingLabel = "Cargando",
+  formatLabel,
   className,
   ref,
   ...rest
@@ -55,14 +88,18 @@ export function Progress({
   const safeValue = Number.isNaN(value) ? 0 : value;
   const clamped = Math.min(Math.max(safeValue, 0), safeMax);
   const percent = (clamped / safeMax) * 100;
-  // 1.0.0-beta.4: aria-label del rest (HTML std). Si no llega, calcula uno
-  // descriptivo basado en porcentaje (o "Cargando" si indeterminate).
+  // 1.0.0-beta.4: aria-label del rest (HTML std). Si no llega, resolver
+  // por prioridad: aria-label > formatLabel(percent) > loadingLabel
+  // (en indeterminate) > fallback español "X por ciento completado"
+  // (determinate sin formatLabel). beta.20: añadido loadingLabel +
+  // formatLabel para i18n.
   const { "aria-label": ariaLabelOverride, ...divRest } = rest;
   const resolvedAriaLabel =
     ariaLabelOverride ??
     (indeterminate
-      ? "Cargando"
-      : `${String(Math.round(percent))} por ciento completado`);
+      ? loadingLabel
+      : (formatLabel?.(Math.round(percent)) ??
+        `${String(Math.round(percent))} por ciento completado`));
 
   return (
     <div

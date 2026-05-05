@@ -194,3 +194,77 @@ export const ItemDisabled: Story = {
     </div>
   ),
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div
+      style={{
+        display: "grid",
+        gap: "3rem",
+        gridTemplateColumns: "1fr 1fr",
+        minHeight: 360,
+      }}
+    >
+      <div>
+        <strong>Cerrado</strong>
+        <Dropdown>
+          <DropdownTrigger>Cerrado ▼</DropdownTrigger>
+          <DropdownMenu>
+            <DropdownItem>Editar</DropdownItem>
+            <DropdownItem>Compartir</DropdownItem>
+          </DropdownMenu>
+        </Dropdown>
+      </div>
+      <div>
+        <strong>Abierto con todos los slots</strong>
+        <Dropdown defaultOpen>
+          <DropdownTrigger>Acciones ▼</DropdownTrigger>
+          <DropdownMenu>
+            <DropdownHeader>Cuenta</DropdownHeader>
+            <DropdownItem>Perfil</DropdownItem>
+            <DropdownItem active>Ajustes (active)</DropdownItem>
+            <DropdownItem disabled>Bloqueado</DropdownItem>
+            <DropdownDivider />
+            <DropdownItem danger>Cerrar sesión</DropdownItem>
+          </DropdownMenu>
+        </Dropdown>
+      </div>
+      <div>
+        <strong>Placement right</strong>
+        <Dropdown defaultOpen placement="right">
+          <DropdownTrigger>Right ▼</DropdownTrigger>
+          <DropdownMenu>
+            <DropdownItem>Uno</DropdownItem>
+            <DropdownItem>Dos</DropdownItem>
+          </DropdownMenu>
+        </Dropdown>
+      </div>
+      <div>
+        <strong>Direction up</strong>
+        <Dropdown defaultOpen direction="up">
+          <DropdownTrigger>Up ▼</DropdownTrigger>
+          <DropdownMenu>
+            <DropdownItem>Uno</DropdownItem>
+            <DropdownItem>Dos</DropdownItem>
+          </DropdownMenu>
+        </Dropdown>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const dropdowns = canvasElement.querySelectorAll(".ig-dropdown");
+    await expect(dropdowns.length).toBe(4);
+    const opens = canvasElement.querySelectorAll(".ig-dropdown-open");
+    await expect(opens.length).toBe(3);
+  },
+};

@@ -73,6 +73,21 @@ export const Interactiva: Story = {
   },
 };
 
+export const Uncontrolled: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Modo **uncontrolled**: el componente maneja su propio state interno arrancando en `defaultPage`. Pasa `onPageChange` (opcional) para reaccionar (fetch, sync URL, analytics). Patrón consistente con Tabs/Accordion/Dropdown del DS.",
+      },
+    },
+  },
+  // En uncontrolled NO pasamos currentPage. Renderizamos sin él.
+  render: () => (
+    <Pagination defaultPage={1} totalPages={15} variant="brand" />
+  ),
+};
+
 export const PageClickInteraction: Story = {
   args: { currentPage: 3, totalPages: 10, siblingCount: 1 },
   play: async ({ canvasElement, args }) => {
@@ -86,5 +101,58 @@ export const PageClickInteraction: Story = {
     // Click en "Siguiente" (avanza a 4).
     await userEvent.click(canvas.getByRole("button", { name: /siguiente/i }));
     await expect(args.onPageChange).toHaveBeenCalledWith(4);
+  },
+};
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    // aria-label único por instancia (axe rule landmark-unique).
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      <Pagination
+        aria-label="Paginación corta"
+        currentPage={1}
+        totalPages={3}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación larga con ellipsis"
+        currentPage={6}
+        totalPages={20}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación primera página"
+        currentPage={1}
+        totalPages={10}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación última página"
+        currentPage={10}
+        totalPages={10}
+        onPageChange={() => {}}
+      />
+      <Pagination
+        aria-label="Paginación brand"
+        variant="brand"
+        currentPage={3}
+        totalPages={7}
+        onPageChange={() => {}}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const navs = canvasElement.querySelectorAll('nav[aria-label^="Paginación"]');
+    await expect(navs.length).toBe(5);
   },
 };

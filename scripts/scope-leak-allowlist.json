@@ -1,0 +1,35 @@
+{
+  "$schema": "Allowlist de scope-leak findings considerados intencionales o seguros tras audit. Cada entrada documenta la razón. Revisar al editar el componente correspondiente.",
+  "entries": [
+    {
+      "class": "ig-step-active",
+      "file": "src/components/Stepper/Step.tsx",
+      "reason": "Emitida en wrapper (.ig-step-item) + dot (.ig-step) en modo `labeled`. Fix beta.20: regla CSS principal usa compound `.ig-step.ig-step-active` que limita el color al dot. La regla suelta restante está en `@media (forced-colors: active)` con `Highlight` system color, intencional para ambos elementos."
+    },
+    {
+      "class": "ig-sidebar-item-active",
+      "file": "src/components/Sidebar/SidebarItem.tsx",
+      "reason": "Emitida en `<a>` y `<button>` por if/else mutuamente excluyente (link vs button mode). En runtime solo se renderea uno; no es scope-leak."
+    },
+    {
+      "class": "ig-dropdown-item-active",
+      "file": "src/components/Dropdown/DropdownItem.tsx",
+      "reason": "Emitida en `<a>` y `<button>` por if/else mutuamente excluyente. En runtime solo se renderea uno; no es scope-leak."
+    },
+    {
+      "class": "ig-dropdown-item-danger",
+      "file": "src/components/Dropdown/DropdownItem.tsx",
+      "reason": "Mismo patrón que ig-dropdown-item-active: ramas exclusivas link/button del mismo componente."
+    },
+    {
+      "class": "ig-divider-dashed",
+      "file": "src/components/Divider/Divider.tsx",
+      "reason": "Style modifier (border-style: dashed). 3 líneas en Divider.tsx corresponden a las 3 variantes de orientación del componente (horizontal sin texto, horizontal con texto, vertical) que aplican la clase de manera consistente — todas en branches mutuamente excluyentes."
+    },
+    {
+      "class": "ig-navbar-brand",
+      "file": "src/components/Navbar/NavbarBrand.tsx",
+      "reason": "Falso positivo del filtro de modificadores: `-brand` se interpreta como variant semántica (rojo brand color) pero aquí es slot del logo del Navbar. Las 2 ocurrencias son por modes link/no-link del componente."
+    }
+  ]
+}

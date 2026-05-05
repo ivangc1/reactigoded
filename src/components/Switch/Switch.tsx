@@ -42,6 +42,20 @@ export interface SwitchProps
  * anuncien como toggle (no como checkbox). Va envuelto en `<label>` con una
  * pista visual decorativa.
  *
+ * **Estructura DOM**:
+ * ```
+ * <label class="ig-switch ig-switch-{variant}">
+ *   <input type="checkbox" role="switch" />
+ *   <span class="ig-switch-track" aria-hidden="true" />
+ *   {children}  ← label de texto opcional
+ * </label>
+ * ```
+ *
+ * La clase `ig-switch` vive en el `<label>` wrapper, NO en el `<input>`.
+ * En tests, `screen.getByRole("switch")` devuelve el input — para
+ * asserts sobre la clase wrapper desde el input usar
+ * `input.closest("label")`.
+ *
  * @example
  * <Switch defaultChecked>Recibir notificaciones</Switch>
  * <Switch indeterminate>Notificaciones por categoría</Switch>
@@ -64,6 +78,14 @@ export function Switch({
   const { value: isOn, setValue: setIsOn, isControlled } = useControllableState<boolean>({
     value: checked,
     defaultValue: defaultChecked === true,
+    // El componente Switch tiene su propio warn dev específico
+    // (línea siguiente) que mejora el mensaje genérico del hook con
+    // contexto del control nativo. Suprime el warn del hook para
+    // evitar duplicación. La firma del onChange nativo
+    // (ChangeEvent<HTMLInputElement>) tampoco mapea directamente al
+    // onChange del hook (que recibe boolean), así que delegar al
+    // local es la opción correcta.
+    __suppressNoHandlerWarn: true,
   });
 
   // Dev-only warning: controlled sin handler. El consumer pasa `checked`

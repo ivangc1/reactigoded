@@ -125,3 +125,46 @@ export const ToggleInteraction: Story = {
     await expect(sw).toHaveAttribute("aria-checked", "true");
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 320 }}>
+      <ThemeSwitch
+        defaultTheme="dark"
+        storageKey={null}
+        aria-label="ThemeSwitch dark default"
+      />
+      <ThemeSwitch
+        defaultTheme="light"
+        storageKey={null}
+        aria-label="ThemeSwitch light default"
+      />
+      <ThemeSwitch
+        defaultTheme="dark"
+        storageKey={null}
+        label={(t) => (t === "dark" ? "🌙 Oscuro" : "☀️ Claro")}
+        aria-label="ThemeSwitch label función"
+      />
+      <ThemeSwitch
+        defaultTheme="dark"
+        storageKey={null}
+        attribute={null}
+        aria-label="ThemeSwitch sin attribute DOM"
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const switches = canvasElement.querySelectorAll('[role="switch"]');
+    await expect(switches.length).toBe(4);
+  },
+};

@@ -61,3 +61,52 @@ export const ChangeInteraction: Story = {
     await expect(args.onChange).toHaveBeenCalled();
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  // Cada Select con aria-label único (axe rule label).
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 320 }}>
+      <Select aria-label="Select default">
+        <option value="">Selecciona…</option>
+        <option value="a">Opción A</option>
+        <option value="b">Opción B</option>
+      </Select>
+      <Select aria-label="Select preselect" defaultValue="b">
+        <option value="a">A</option>
+        <option value="b">B preselect</option>
+        <option value="c">C</option>
+      </Select>
+      <Select aria-label="Select error" state="error">
+        <option value="">Error state</option>
+        <option value="a">A</option>
+      </Select>
+      <Select aria-label="Select success" state="success" defaultValue="ok">
+        <option value="ok">Success</option>
+      </Select>
+      <Select aria-label="Select disabled" disabled>
+        <option value="">Disabled</option>
+      </Select>
+      <Select aria-label="Select opciones largas">
+        <option value="">— seleccione —</option>
+        <option value="x">
+          Opción larga que puede desbordar visualmente el contenedor
+        </option>
+        <option value="y">Opción corta</option>
+      </Select>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const selects = canvasElement.querySelectorAll("select");
+    await expect(selects.length).toBe(6);
+  },
+};

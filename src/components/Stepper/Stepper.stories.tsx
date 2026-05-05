@@ -123,3 +123,63 @@ export const Interactivo: Story = {
     await expect(after[0]?.textContent ?? "").toBe("2");
   },
 };
+
+export const AllStates: Story = {
+  parameters: {
+    layout: "padded",
+    docs: { disable: true },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "2rem" }}>
+      <div>
+        <strong>Compact — todos los stages</strong>
+        <Stepper active={0} aria-label="Stepper inicio">
+          <Step />
+          <Step />
+          <Step />
+          <Step />
+        </Stepper>
+        <Stepper active={2} aria-label="Stepper a la mitad">
+          <Step />
+          <Step />
+          <Step />
+          <Step />
+        </Stepper>
+        <Stepper active={3} aria-label="Stepper último">
+          <Step />
+          <Step />
+          <Step />
+          <Step />
+        </Stepper>
+      </div>
+      <div>
+        <strong>Labeled — todos los stages</strong>
+        <Stepper labeled active={0} aria-label="Labeled inicio">
+          <Step label="Carrito" />
+          <Step label="Pago" />
+          <Step label="Confirmación" />
+        </Stepper>
+        <Stepper labeled active={1} aria-label="Labeled a la mitad">
+          <Step label="Carrito" />
+          <Step label="Pago" />
+          <Step label="Confirmación" />
+        </Stepper>
+        <Stepper labeled active={2} aria-label="Labeled completo">
+          <Step label="Carrito" />
+          <Step label="Pago" />
+          <Step label="Confirmación" />
+        </Stepper>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const groups = canvasElement.querySelectorAll('[role="group"]');
+    await expect(groups.length).toBeGreaterThanOrEqual(6);
+  },
+};

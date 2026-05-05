@@ -19,6 +19,21 @@ describe("ThemeSwitch", () => {
     expect(screen.getByText("Dark")).toBeInTheDocument();
   });
 
+  it("uncontrolled: click actualiza UI vía override React, no vía StorageEvent (regresión beta.20 derive)", async () => {
+    // Anti-regresión del bug del intento 1: si setDerivedValue fuese
+    // writeStoredTheme (escritura directa a localStorage), el
+    // useSyncExternalStore NO notificaría same-tab y el state React no
+    // cambiaría, dejando el switch checked tras el toggle.
+    // setDerivedValue debe actualizar una fuente React local (override).
+    const user = userEvent.setup();
+    render(<ThemeSwitch defaultTheme="dark" />);
+    const sw = screen.getByRole("switch");
+    expect(sw).toBeChecked();
+    await user.click(sw);
+    expect(sw).not.toBeChecked();
+    expect(window.localStorage.getItem("theme")).toBe("light");
+  });
+
   it("hidrata desde localStorage si hay valor guardado (dark)", () => {
     window.localStorage.setItem("theme", "dark");
     render(<ThemeSwitch />);

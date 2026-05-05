@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Stepper, Step } from "./index";
 
 describe("Stepper", () => {
@@ -115,5 +116,248 @@ describe("Stepper", () => {
       </Stepper>,
     );
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
+  });
+});
+
+describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
+  it("sin onActiveChange los dots NO son focuseables (presentational)", () => {
+    const { container } = render(
+      <Stepper active={1}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = container.querySelectorAll(".ig-step");
+    for (const d of dots) {
+      expect(d).not.toHaveAttribute("role", "button");
+      expect(d).not.toHaveAttribute("tabindex");
+    }
+  });
+
+  it("con onActiveChange cada dot es role=button con roving tabIndex", () => {
+    const { container } = render(
+      <Stepper active={1} onActiveChange={() => {}}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = container.querySelectorAll<HTMLElement>(
+      '.ig-step[role="button"]',
+    );
+    expect(dots).toHaveLength(3);
+    expect(dots[0]).toHaveAttribute("tabindex", "-1");
+    expect(dots[1]).toHaveAttribute("tabindex", "0"); // active
+    expect(dots[2]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("ArrowRight avanza al siguiente step", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[0]?.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(onActiveChange).toHaveBeenCalledWith(1);
+  });
+
+  it("ArrowLeft retrocede al anterior", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={2} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[2]?.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(onActiveChange).toHaveBeenCalledWith(1);
+  });
+
+  it("ArrowRight en último step wrappea al primero", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={2} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[2]?.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(onActiveChange).toHaveBeenCalledWith(0);
+  });
+
+  it("ArrowLeft en primer step wrappea al último", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[0]?.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(onActiveChange).toHaveBeenCalledWith(2);
+  });
+
+  it("Home va al primer step", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={2} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[2]?.focus();
+    await user.keyboard("{Home}");
+    expect(onActiveChange).toHaveBeenCalledWith(0);
+  });
+
+  it("End va al último step", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[0]?.focus();
+    await user.keyboard("{End}");
+    expect(onActiveChange).toHaveBeenCalledWith(3);
+  });
+
+  it("Enter activa el step focuseado (vía click semantics)", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    // En modo interactive solo el active tiene tabindex 0; para forzar el
+    // foco en otro hacemos focus manual (simula que el usuario navegó).
+    dots[2]?.focus();
+    await user.keyboard("{Enter}");
+    expect(onActiveChange).toHaveBeenCalledWith(2);
+  });
+
+  it("Space activa el step focuseado", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[1]?.focus();
+    await user.keyboard(" ");
+    expect(onActiveChange).toHaveBeenCalledWith(1);
+  });
+
+  it("click en dot dispara onActiveChange con su índice 0-based", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    if (dots[2]) await user.click(dots[2]);
+    expect(onActiveChange).toHaveBeenCalledWith(2);
+  });
+
+  it("click en el dot active NO dispara onActiveChange (no-op)", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper active={1} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    if (dots[1]) await user.click(dots[1]);
+    expect(onActiveChange).not.toHaveBeenCalled();
+  });
+
+  it("aria-label del dot interactivo es 'Paso N'", () => {
+    render(
+      <Stepper active={0} onActiveChange={() => {}}>
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    expect(screen.getByRole("button", { name: "Paso 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paso 2" })).toBeInTheDocument();
+  });
+});
+
+describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
+  it("step active no aplica selector global al wrapper item", () => {
+    // Bug latente desde beta.5: la regla CSS `.ig-step-active` global
+    // matcheaba tanto el dot como el wrapper `.ig-step-item.ig-step-active`,
+    // pintando el wrapper de axis-nox y dejando el `.ig-step-label`
+    // (color cinis-nox via `var(--ig-text-body)`) en contraste 1.02.
+    // Fix beta.20: selector compound `.ig-step.ig-step-active` limita
+    // la regla al dot. Este test ancla la separación a nivel DOM.
+    const { container } = render(
+      <Stepper labeled active={2} aria-label="test">
+        <Step label="Uno" />
+        <Step label="Dos" />
+        <Step label="Tres" />
+      </Stepper>,
+    );
+
+    const wrapper = container.querySelector(".ig-step-item.ig-step-active");
+    const dot = container.querySelector(".ig-step.ig-step-active");
+
+    expect(wrapper).toBeTruthy();
+    expect(dot).toBeTruthy();
+
+    // Selector compound `.ig-step.ig-step-active` solo debe matchear el dot.
+    expect(wrapper?.matches(".ig-step.ig-step-active")).toBe(false);
+    expect(dot?.matches(".ig-step.ig-step-active")).toBe(true);
+
+    // Misma garantía para complete:
+    const completeWrapper = container.querySelector(
+      ".ig-step-item.ig-step-complete",
+    );
+    const completeDot = container.querySelector(".ig-step.ig-step-complete");
+    expect(completeWrapper?.matches(".ig-step.ig-step-complete")).toBe(false);
+    expect(completeDot?.matches(".ig-step.ig-step-complete")).toBe(true);
   });
 });
