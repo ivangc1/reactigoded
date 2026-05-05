@@ -52,6 +52,18 @@ jobs:
       - name: Build (lib + dts + styles)
         run: npm run build
 
+      - name: Bundle has no dev warns (B-07 follow-up)
+        # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`
+        # para que esbuild/Vite los hagan DCE en producción. Si una
+        # regresión introduce un \`console.warn\` que no respeta el guard,
+        # llegaría al bundle publicado. size-limit lo detecta indirectamente
+        # como crecimiento; este step lo fuerza directamente.
+        run: |
+          test "$(grep -c 'console\.' dist/index.js  || true)" = "0"
+          test "$(grep -c 'console\.' dist/index.cjs || true)" = "0"
+          test "$(grep -c '\[reactigoded\]' dist/index.js  || true)" = "0"
+          test "$(grep -c '\[reactigoded\]' dist/index.cjs || true)" = "0"
+
       - name: Size budgets
         run: npm run verify:size
 
