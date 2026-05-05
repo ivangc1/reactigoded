@@ -24,7 +24,6 @@
     "src/App.tsx",
     "src/App.css",
     "src/vite-env.d.ts",
-    "src/utils/env.ts",
     "src/utils/useIsoLayoutEffect.ts",
     "src/utils/mergeDescribedBy.ts"
   ],

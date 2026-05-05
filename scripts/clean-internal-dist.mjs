@@ -67,7 +67,6 @@ rmDir("stories");
 
 // Files internos en dist/utils/ — sólo cn.* es público.
 const INTERNAL_UTILS_PREFIXES = [
-  "env.",
   "mergeDescribedBy.",
   "useIsoLayoutEffect.",
 ];
