@@ -33,7 +33,7 @@
     "igoded"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=18"
   },
   "type": "module",
   "sideEffects": [
