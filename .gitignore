@@ -40,6 +40,10 @@ coverage/
 # RC1 baseline snapshots (local-only)
 .rc1-baseline/
 
+# Claude Code session data (prompts, transcripts internos).
+# Excluido para evitar leak accidental por git add -A.
+.claude/
+
 # Env
 .env
 .env.local
