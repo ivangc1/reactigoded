@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef } from "react";
+import { createRef, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -276,6 +276,106 @@ describe("Card — className merge", () => {
     expect(el).toHaveClass("ig-card-elevated");
     expect(el).toHaveClass("my-card");
     expect(el).toHaveClass("extra");
+  });
+});
+
+describe("Card — polimorfismo (as)", () => {
+  it("por defecto renderea <div>", () => {
+    render(<Card data-testid="c">x</Card>);
+    expect(screen.getByTestId("c").tagName).toBe("DIV");
+  });
+
+  it("as='article' renderea <article> con clase ig-card", () => {
+    render(
+      <Card as="article" data-testid="c">
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el.tagName).toBe("ARTICLE");
+    expect(el).toHaveClass("ig-card");
+  });
+
+  it("as='a' acepta href tipado y lo renderea", () => {
+    render(
+      <Card as="a" href="/posts/1" data-testid="c">
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el.tagName).toBe("A");
+    expect(el).toHaveAttribute("href", "/posts/1");
+  });
+
+  it("as={CustomComponent} renderea el componente y propaga props", () => {
+    const Link = ({
+      to,
+      children,
+      ...rest
+    }: {
+      to: string;
+      children?: ReactNode;
+      [k: string]: unknown;
+    }) => (
+      <a href={to} data-component="Link" {...rest}>
+        {children}
+      </a>
+    );
+    render(
+      <Card as={Link} to="/x" data-testid="c">
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el.tagName).toBe("A");
+    expect(el).toHaveAttribute("data-component", "Link");
+    expect(el).toHaveAttribute("href", "/x");
+    expect(el).toHaveClass("ig-card");
+  });
+
+  it("ref polimórfica: con as='article' el ref es HTMLElement", () => {
+    const ref = createRef<HTMLElement>();
+    render(
+      <Card as="article" ref={ref}>
+        x
+      </Card>,
+    );
+    expect(ref.current).toBeInstanceOf(HTMLElement);
+    expect(ref.current?.tagName).toBe("ARTICLE");
+  });
+
+  it("variants y modificadores se aplican igual con as polimórfico", () => {
+    render(
+      <Card
+        as="section"
+        variant="brand"
+        appearance="filled"
+        bordered
+        elevated
+        data-testid="c"
+      >
+        x
+      </Card>,
+    );
+    const el = screen.getByTestId("c");
+    expect(el.tagName).toBe("SECTION");
+    expect(el).toHaveClass(
+      "ig-card",
+      "ig-card-brand-filled",
+      "ig-card-bordered",
+      "ig-card-elevated",
+    );
+  });
+
+  it("as='a' interactive NO emite warn aunque omita role='button' (link nativo activa por teclado)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(
+      <Card as="a" href="/x" interactive onClick={() => {}}>
+        x
+      </Card>,
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

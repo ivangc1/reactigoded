@@ -151,6 +151,53 @@ export const Interactiva: Story = {
   ),
 };
 
+export const Polimorfica: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`Card` acepta la prop `as` para renderear cualquier elemento HTML o componente. Útil para cards semánticas (`as=\"article\"`), links nativos (`as=\"a\"`) o componentes de routing (`as={Link}` con react-router/next). Las props específicas del elemento subyacente (`href`, `to`, etc.) se tipan automáticamente vía genéricos TS.",
+      },
+    },
+  },
+  render: () => (
+    <div className="ig-story-stack ig-story-stack--md">
+      <Card as="article" elevated className="ig-story-card-md">
+        <CardHeader title="as='article'" />
+        <CardBody>
+          Renderea un &lt;article&gt; con clase ig-card. Ideal para listas
+          de posts, recetas, productos.
+        </CardBody>
+      </Card>
+      <Card
+        as="a"
+        href="#polimorfica"
+        interactive
+        bordered
+        className="ig-story-card-md"
+      >
+        <CardHeader title="as='a' href" />
+        <CardBody>
+          Link nativo con apariencia de card. Activa por click + Enter/Space
+          sin necesidad de role='button' (el navegador lo hace).
+        </CardBody>
+      </Card>
+      <Card
+        as="section"
+        variant="brand"
+        appearance="filled"
+        className="ig-story-card-md"
+      >
+        <CardHeader title="as='section' brand filled" />
+        <CardBody>
+          Cualquier elemento HTML. Las variants y modificadores siguen
+          aplicando.
+        </CardBody>
+      </Card>
+    </div>
+  ),
+};
+
 export const AllStates: Story = {
   parameters: {
     layout: "padded",
