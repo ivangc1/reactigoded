@@ -7,22 +7,113 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.20] — 2026-05-05
+
 ### Added
-- `Progress`: nuevas props `loadingLabel` (default `"Cargando"`) y
+- **`Card`**: prop polimórfica `as` con genéricos TS
+  (`<C extends ElementType = "div">`). Acepta strings HTML
+  (`as="article"`, `as="a"` con `href` tipado) y componentes
+  (`as={Link}` para react-router/next). Las props específicas del
+  elemento subyacente se tipan automáticamente. Story `Polimorfica`
+  añadida.
+- **`Pagination`**: modo **uncontrolled** vía `useControllableState`.
+  `currentPage` y `onPageChange` ahora opcionales; `defaultPage`
+  (default 1) inicializa el state interno. Patrón consistente con
+  Tabs / Accordion / Dropdown / etc. Story `Uncontrolled` añadida.
+- **`Stepper`**: modo **interactive** opt-in con `onActiveChange`.
+  Cuando se pasa el callback, cada step se vuelve focuseable
+  (`role="button"` + roving tabIndex) y soporta keyboard nav
+  completo: ArrowLeft/Right/Up/Down, Home/End, Enter/Space. Sin
+  `onActiveChange` permanece presentational (backwards compatible).
+  Nueva clase `.ig-step-interactive`. `aria-label="Paso N"` en
+  cada dot interactivo.
+- **`Progress`**: props `loadingLabel` (default `"Cargando"`) y
   `formatLabel?: (percent: number) => string` para i18n del
   `aria-label`. Cierra el inventario de strings hardcoded
-  user-facing del DS — todos los componentes con strings ES default
-  ahora exponen override por prop o por `aria-label` HTML estándar.
-- `docs/CSSAPI.mdx`: nueva sección "i18n y a11y strings" con tabla
-  de overrides por componente y patrón de uso con `react-i18next`.
+  user-facing del DS.
+- **`AllStates` matrix Ola 2 (16 componentes)**: stories
+  `chromatic.modes light+dark` para Alert, Radio, Rating, Slider,
+  Stepper, Pagination, Tooltip, Timeline, Accordion, Sidebar,
+  Navbar, ThemeSwitch, Toast, Dropdown, Modal, Input compound,
+  Table, Textarea, Select. Cobertura visual completa en Chromatic
+  bajo dual-mode.
+- **`useControllableState` derive mode**: `ThemeSwitch` migrado
+  a `useControllableState({ derive, setDerivedValue, ... })`.
+  Consolida los 9 componentes con state controlled/uncontrolled
+  bajo el mismo hook + soporte explícito para fuente de verdad
+  externa.
+- **`docs/CSSAPI.mdx`**: nueva sección "i18n y a11y strings" con
+  tabla de overrides + patrón de uso con `react-i18next`. Notas
+  sobre `Card.as` polimórfica y `Pagination` controlled+uncontrolled.
+- **`docs/DS_AUTOSUFFICIENCY_DEBT.md`**: capa 6 nueva
+  "Convenciones de tests unit". 6.1 ✅ regla anti-`console.error`
+  mock para warnings React (causa: vitest `isolate: false` +
+  React dedupe). 6.2 ✅ nota DOM Switch (`ig-switch` en `<label>`).
+- **`src/test-utils/`**: utilities `queryAllByRoleSafe()` y
+  `expectAtLeast()` exportadas (capa 1.5/1.6 debt doc).
+- **Tests del CONTRATO** de `useControllableState` (4 tests
+  hook-first cubriendo ambos modos × ambas direcciones de
+  transición controlled↔uncontrolled). Smokes en componentes
+  con input nativo (Rating, Slider, Switch).
 
 ### Changed
+- **`Pagination`**: `currentPage` y `onPageChange` pasaron de
+  required a opcionales. Cambio API público pre-1.0.0 (sin
+  breaking productivo). Consumers que ya pasaban ambos siguen
+  funcionando idénticamente.
+- **`Stepper`**: clase global `.ig-step-active` migrada a selector
+  compound `.ig-step.ig-step-active` para evitar scope-leak al
+  wrapper `.ig-step-item.ig-step-active` (bug latente desde beta.5
+  detectado en sub-Bloque A: dejaba label en contraste 1.02).
+  Anti-regresión test añadido.
 - Defaults ES de strings user-facing (`Alert.closeLabel`,
   `Chip.removeLabel`, `ModalClose aria-label`, `Pagination.prevLabel`/
   `nextLabel`, `Progress.loadingLabel`, `Stepper aria-label`,
   `Toast.closeLabel`) declarados intencionales en `CSSAPI.mdx`.
   Audience inicial hispanohablante; cambio a EN se reevaluará en
   1.1.0 si demanda real lo justifica.
+- **`Slider` / `Switch`** tests viejos de transición controlled↔
+  uncontrolled que afirmaban sobre warning de React vía
+  `console.error` mock reemplazados por assertions sobre
+  comportamiento observable. Los anteriores eran flaky por orden:
+  vitest `isolate: false` + React dedupe de warnings dev por
+  proceso. Documentado como regla en debt doc capa 6.1.
+
+### Fixed
+- **`Stepper`**: scope-leak CSS de `.ig-step-active` (ver Changed).
+- Documentación JSDoc de `Switch` clarifica estructura DOM
+  (`ig-switch` en `<label>` wrapper, NO en `<input>`).
+
+### Internal
+- Stories storybook con `chromatic.modes light+dark` ya
+  proporcionan dual-theme matrix sin duplicar archivos test:storybook.
+- BLOQUEOS.md actualizado tras beta.20 con secciones
+  Resuelto / Pendiente rc.1 / Diferido / Decisiones permanentes.
+- Decisión arquitectónica registrada: warn dev de
+  `useControllableState` para `value=` sin `onChange=` diferido a
+  rc.1 con escape hatch interno `__suppressNoHandlerWarn`.
+  Intento beta.20 (commit 2975e19) revertido por falsos positivos
+  en `Rating.SoloLectura` (readOnly legítimo). Diseño Option E
+  documentado en debt doc sección 1.4.
+
+### Bundle stats (size-limit, gzip)
+
+| Bundle | Tamaño | Límite | Uso |
+|---|---|---|---|
+| JS ESM | 14.91 KB | 15 KB | 99.4% |
+| JS CJS | 12.85 KB | 15 KB | 85.7% |
+| `tokens.css` | 6.53 KB | 30 KB | 21.8% |
+| `components.css` | 28.05 KB | 75 KB | 37.4% |
+| `base.css` | 453 B | 2 KB | 22.7% |
+| `reset.css` | 924 B | 2 KB | 46.2% |
+| `fonts.css` | 142 B | 1 KB | 14.2% |
+| `state.css` | 713.54 KB | 800 KB | 89.2% |
+| `design.css` (meta) | 70 B | 2 KB | 3.5% |
+
+JS ESM al 99% del budget — beta.21/rc.1 debería revisar headroom o
+subir el límite ante crecimiento de features (Card.as polimórfica
++ Stepper keyboard nav son los principales nuevos). state.css cerca
+del límite (89%) — es natural por el growth de utilities pseudo-class.
 
 ## [1.0.0-beta.19] — 2026-05-04
 

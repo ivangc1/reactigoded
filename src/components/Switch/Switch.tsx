@@ -42,6 +42,20 @@ export interface SwitchProps
  * anuncien como toggle (no como checkbox). Va envuelto en `<label>` con una
  * pista visual decorativa.
  *
+ * **Estructura DOM**:
+ * ```
+ * <label class="ig-switch ig-switch-{variant}">
+ *   <input type="checkbox" role="switch" />
+ *   <span class="ig-switch-track" aria-hidden="true" />
+ *   {children}  ← label de texto opcional
+ * </label>
+ * ```
+ *
+ * La clase `ig-switch` vive en el `<label>` wrapper, NO en el `<input>`.
+ * En tests, `screen.getByRole("switch")` devuelve el input — para
+ * asserts sobre la clase wrapper desde el input usar
+ * `input.closest("label")`.
+ *
  * @example
  * <Switch defaultChecked>Recibir notificaciones</Switch>
  * <Switch indeterminate>Notificaciones por categoría</Switch>

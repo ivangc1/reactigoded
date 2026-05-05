@@ -172,6 +172,13 @@ Hugo, templates server-side, otros frameworks).
 </article>
 ```
 
+> **API React polimórfica**: el componente `<Card>` acepta la prop
+> `as` para renderear cualquier elemento HTML (`as="article"`,
+> `as="a"` con `href`, `as="section"`) o componente
+> (`as={Link}` para react-router/next). Las props específicas del
+> elemento subyacente se tipan automáticamente vía genéricos TS.
+> Las clases CSS son las mismas independientemente de `as`.
+
 ---
 
 ### Checkbox
@@ -354,6 +361,12 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 </nav>
 ```
 
+> **API React controlled + uncontrolled**: `currentPage` y
+> `onPageChange` son opcionales. Pasa `currentPage`+`onPageChange`
+> para controlled, o `defaultPage` (default 1) para uncontrolled
+> (el componente maneja state interno; `onPageChange` opcional como
+> side-effect). Patrón consistente con Tabs / Accordion / Dropdown.
+
 ---
 
 ### Progress
@@ -518,9 +531,15 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-stepper` · `.ig-stepper-labeled` (con label debajo) |
-| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` |
+| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` · `.ig-step-interactive` (modo keyboard nav) |
 | Slots | `.ig-step-item` · `.ig-step-label` |
 | Connector | `.ig-step-line` · `.ig-step-line-complete` |
+
+> **Modo interactive**: cuando el componente recibe `onActiveChange`,
+> cada `.ig-step` añade `.ig-step-interactive` y se vuelve focuseable
+> (`role="button"` + roving tabIndex). Soporta ArrowLeft/Right/Up/Down
+> + Home/End + Enter/Space. Sin `onActiveChange` el Stepper es
+> presentational (no focus, no keyboard).
 
 ```html
 <div class="ig-stepper-labeled" role="group" aria-label="Progreso">

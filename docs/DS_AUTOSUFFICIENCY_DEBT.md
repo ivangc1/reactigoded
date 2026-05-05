@@ -447,7 +447,7 @@ otros casos detectados.
 **Estimación capa 6**: 0 (regla; no hay deuda activa más allá de
 esta documentación).
 
-### 6.2 Estructura DOM de Switch: `ig-switch` va en `<label>`, no en `<input>`
+### 6.2 Estructura DOM de Switch: `ig-switch` va en `<label>`, no en `<input>` ✅ aplicada
 
 Anti-patrón fácil de cometer al escribir tests: `screen.getByRole("switch")`
 devuelve el `<input type="checkbox">` interno, NO el `<label>`
@@ -459,11 +459,10 @@ const input = screen.getByRole<HTMLInputElement>("switch");
 expect(input.closest("label")).toHaveClass("ig-switch");
 ```
 
-**Documentar**: añadir nota en JSDoc de `Switch.tsx` sobre la
-estructura `<label class="ig-switch"> > <input> + <span class="ig-switch-track">`
-para evitar el anti-patrón en futuros tests.
+**Aplicado**: nota añadida en JSDoc de `Switch.tsx` (beta.20) con la
+estructura DOM completa y ejemplo de assert correcto desde tests.
 
-**Estimación**: 5 min (comentario JSDoc).
+**Coste real**: 5 min (comentario JSDoc).
 **Detectado**: beta.20 sub-Bloque D.
 
 ---
@@ -500,7 +499,7 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | Auditoría reset.css | 1-2h | 1.1.0 | ⏳ |
 | Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min | beta.20/post | ⏳ |
 | 6.1 regla anti-`console.error` warnings React | 0 (regla) | beta.20 | ✅ documentada |
-| 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20/post | ⏳ |
+| 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20 | ✅ aplicada |
 
 **Total restante**: 13-20h Claude Code distribuidas en milestones.
 
