@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef } from "react";
+import { createRef, useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Stepper, Step } from "./index";
@@ -323,6 +323,33 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     );
     expect(screen.getByRole("button", { name: "Paso 1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paso 2" })).toBeInTheDocument();
+  });
+
+  // H-25 (beta.22): focus management sin setTimeout. Tras un ArrowRight
+  // que dispara onActiveChange, cuando el consumer aplica el cambio
+  // (rerender con active+1), el effect post-commit debe focusear el
+  // nuevo dot. Sin la prop active actualizándose, el effect no
+  // dispara — es el contrato del componente: el focus salta solo
+  // cuando el state realmente cambia, no por intent solo.
+  it("mueve foco al nuevo step tras keyboard nav cuando active se actualiza [H-25]", async () => {
+    const user = userEvent.setup();
+    function Wrapper() {
+      const [active, setActive] = useState(0);
+      return (
+        <Stepper active={active} onActiveChange={setActive}>
+          <Step />
+          <Step />
+          <Step />
+        </Stepper>
+      );
+    }
+    render(<Wrapper />);
+    const dots = screen.getAllByRole("button");
+    dots[0]?.focus();
+    expect(dots[0]).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    // El effect H-25 corrió tras el rerender con active=1 y movió focus.
+    expect(dots[1]).toHaveFocus();
   });
 });
 

@@ -151,6 +151,36 @@ internals de React 19 no requieren `document` en `renderToString`.
 
 ---
 
+## Patrón `merge-refs` inconsistente entre componentes
+
+**De dónde sale**: D5 (H-25). Stepper usa `useCallback(setRefs, [ref])`
+para estabilizar la identidad del ref-callback entre renders;
+Checkbox.tsx:65 y Switch.tsx:110 usan callbacks inline que se recrean
+cada render. **Los tres son funcionalmente correctos**, pero la
+inconsistencia complica reasoning futuro y el contraste hace que la
+regla `react-hooks/refs` solo dispare en Stepper (la versión `useCallback`).
+
+| Componente | Patrón | Por qué válido |
+|---|---|---|
+| Stepper | `useCallback(setRefs, [ref])` | Estabiliza identidad — útil si en algún momento se pasa el callback como prop a un hijo memoizado o se compara por referencia. |
+| Checkbox | inline `(el) => {...}` | Identidad cambia por render pero el callback es trivial; React invoca cleanup + write y los costes son nulos. |
+| Switch | inline `(el) => {...}` | Idem. |
+
+**Acción post-RC1**:
+
+1. Documentar el patrón canónico (probable: `useCallback` estabilizado,
+   alineado con Stepper) en `docs/CSSAPI.mdx` o un nuevo
+   `docs/PATTERNS.md`.
+2. Migrar Checkbox y Switch al patrón canónico para consistencia.
+3. Sin urgencia — ningún componente está roto, solo es housekeeping.
+
+Riesgo de la migración: introducir `useCallback` en Checkbox/Switch
+disparará la misma `react-hooks/refs` (confirmado en D5 sobre Stepper).
+La salida es el mismo `eslint-disable-next-line` con el comentario
+canónico que documenta el falso positivo.
+
+---
+
 ## Reevaluación del tripwire `dark axis-kobalium` (post-RC1)
 
 **De dónde sale**: B-13. Tras el audit RC1, el tripwire introducido en
