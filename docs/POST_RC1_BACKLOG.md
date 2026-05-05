@@ -99,7 +99,7 @@ si `console.*` o `[reactigoded]` aparecen en `dist/index.{js,cjs}`.
 
 ---
 
-## ThemeSwitch SSR test versión A ✅ aplicado en `72c4e13` (pendiente verde CI)
+## ThemeSwitch SSR test versión A ✅ aplicado y verificado en `72c4e13`
 
 **De dónde sale**: C6 (B-08).
 **Acción**: test añadido a `ThemeSwitch.test.tsx` con
@@ -107,10 +107,12 @@ si `console.*` o `[reactigoded]` aparecen en `dist/index.{js,cjs}`.
 `finally`. Valida explícitamente el branch
 `typeof document === "undefined"` del derive.
 
-**Pendiente**: la verificación funcional la hace CI Linux (rolldown
-bloquea vitest local en Windows). Si CI marca rojo, revertir el
-commit `72c4e13` y sustituir esta entrada por una nueva con el
-error literal y diagnóstico.
+**Verificación**: ejecutado local en WSL Linux aarch64 (Iván tiene
+WSL2 con node 24.15 vía nvm; el wsl.exe -- bash es accesible desde
+el agente). Resultado: 23 tests unit + 7 storybook = 30/30 verdes
+para ThemeSwitch, suite global 596/596. El test no rompe el runner
+ni los tests posteriores; el `vi.unstubAllGlobals()` restaura
+`document` correctamente.
 
 ---
 
