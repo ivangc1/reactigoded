@@ -1,9 +1,17 @@
 <!--
-  Título estático del chrome (no del iframe del preview). Storybook por
-  defecto pinta "Storybook"; con esto la pestaña del navegador y los
-  metadatos OG (cuando se sirve estático) muestran la marca del DS.
+  Metas estáticas del chrome del manager (no del iframe del preview).
+  Único sitio donde viven <title>, description, OG, twitter, canonical
+  y theme-color. Antes de beta.22 estas metas estaban DUPLICADAS entre
+  este archivo y `.storybook/main.ts:managerHead()` — el duplicado lo
+  limpiaba un script runtime (B-05 dedupe). Ahora consolidado aquí en
+  origen; el dedupe del script queda como red de seguridad defensiva.
 -->
 <title>Igoded Design System</title>
-<meta name="description" content="Catálogo y documentación del design system reactigoded — 32 componentes React 19 con tokens OKLCH y CSS utility-first." />
+<meta name="description" content="Igoded Design System — componentes React 19 + TypeScript + CSS utility-first state-driven, con accesibilidad WCAG AA verificada." />
+<meta name="theme-color" content="#0c1515" />
 <meta property="og:title" content="Igoded Design System" />
-<meta property="og:description" content="Catálogo y documentación del design system reactigoded — 32 componentes React 19 con tokens OKLCH y CSS utility-first." />
+<meta property="og:description" content="Componentes React, tokens CSS, accesibilidad y documentación visual." />
+<meta property="og:url" content="https://igoded.es" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<link rel="canonical" href="https://igoded.es" />

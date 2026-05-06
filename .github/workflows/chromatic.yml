@@ -31,4 +31,10 @@ jobs:
       - name: Run Chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        run: npx chromatic --exit-zero-on-changes --exit-once-uploaded --only-changed --auto-accept-changes=main
+        # H-02 (rc1): visual review is gated. Removed --exit-zero-on-changes
+        # (so a snapshot drift now FAILS the job) and --auto-accept-changes=main
+        # (every change to main has to be approved by a human reviewer in
+        # the Chromatic UI). --exit-once-uploaded stays so the job does not
+        # block waiting for review — the gating is the green/red on the PR
+        # and the manual approval in chromatic.com.
+        run: npx chromatic --exit-once-uploaded --only-changed

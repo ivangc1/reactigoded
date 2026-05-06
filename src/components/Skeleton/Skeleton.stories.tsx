@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
-import { Skeleton } from "./Skeleton";
+import { Skeleton, SkeletonContainer } from "./Skeleton";
 
 const meta = {
   title: "Componentes/Skeleton",
@@ -49,6 +49,32 @@ export const Variantes: Story = {
 
 export const Card: Story = {
   args: { variant: "card", style: { width: 280, height: 180 } },
+};
+
+export const ConContainer: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Patrón A11y completo (B-12): un grupo de Skeleton dentro de un `SkeletonContainer` que anuncia el estado de carga UNA vez al lector de pantalla.",
+      },
+    },
+  },
+  render: () => (
+    <SkeletonContainer label="Cargando perfil de usuario">
+      <div className="ig-story-stack ig-story-stack--md">
+        <div className="ig-story-row">
+          <Skeleton variant="avatar" />
+          <div style={{ flex: 1 }}>
+            <Skeleton variant="title" />
+            <Skeleton variant="text" style={{ width: "60%", marginTop: 6 }} />
+          </div>
+        </div>
+        <Skeleton variant="text" />
+        <Skeleton variant="text" style={{ width: "80%" }} />
+      </div>
+    </SkeletonContainer>
+  ),
 };
 
 export const AllStates: Story = {

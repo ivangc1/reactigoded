@@ -1,13 +1,12 @@
 import type {
   ComponentPropsWithoutRef,
+  ComponentPropsWithRef,
   ElementType,
   KeyboardEvent,
   ReactElement,
-  Ref,
 } from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 
 export type CardVariant =
   | "brand"
@@ -55,7 +54,7 @@ interface CardOwnProps<C extends ElementType = "div"> {
   /**
    * Ref polimórfica al elemento subyacente. El tipo se infiere de `as`.
    */
-  ref?: Ref<unknown>;
+  ref?: ComponentPropsWithRef<C>["ref"];
 }
 
 export type CardProps<C extends ElementType = "div"> = CardOwnProps<C> &
@@ -122,7 +121,7 @@ export function Card<C extends ElementType = "div">({
   // (`a` con href, `button`) — esos ya activan por teclado nativamente.
   const warnedRef = useRef(false);
   useEffect(() => {
-    if (!isDev()) return;
+    if (!import.meta.env.DEV) return;
     if (warnedRef.current) return;
     const isNativeInteractive =
       as === "a" || as === "button" || as === "summary";

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   type ChangeEvent,
@@ -6,7 +7,6 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
 export type CheckboxVariant =
@@ -63,11 +63,19 @@ export function Checkbox({
 }: CheckboxProps) {
   const internalRef = useRef<HTMLInputElement>(null);
 
-  const setRefs = (el: HTMLInputElement | null) => {
-    internalRef.current = el;
-    if (typeof ref === "function") ref(el);
-    else if (ref) ref.current = el;
-  };
+  // setRefs estabilizado con useCallback — alineado con el patrón
+  // canónico del DS (Stepper). Sin `useCallback` la identidad cambia
+  // por render y React invocaría cleanup+rewrite del ref en cada
+  // commit. Con `useCallback` solo se invoca en mount/unmount o si
+  // el `ref` consumer cambia.
+  const setRefs = useCallback(
+    (el: HTMLInputElement | null) => {
+      internalRef.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
 
   // Dev-only warning: controlled sin handler. Consumer pasa `checked`
   // pero olvida `onChange` → el checkbox parece roto. En useEffect (no
@@ -76,7 +84,7 @@ export function Checkbox({
   const isControlled = (rest as { checked?: boolean }).checked !== undefined;
   useEffect(() => {
     if (
-      isDev() &&
+      import.meta.env.DEV &&
       !warnedControlledRef.current &&
       isControlled &&
       !onChange &&

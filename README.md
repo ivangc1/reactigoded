@@ -4,7 +4,7 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `pre-1.0.0-rc.1` (última publicación: `1.0.0-beta.20`).
+> **Estado**: `1.0.0-beta.22` (saneamiento RC1).
 > Paleta cardinal estable: 7 cardinales con geometría OKLCH dual
 > (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos
 > del tema en ambos modos. El cardinal `info` se llama internamente
@@ -62,7 +62,7 @@ import "reactigoded/styles/fonts.css";      // ~2 KB (solo @import a Google Font
 
 // Utilities pseudo-class (hover:ig-bg-brand, focus:..., etc.) — solo si
 // usas las utilities directamente en HTML.
-import "reactigoded/styles/state.css";      // ~7.1 MB
+import "reactigoded/styles/state.css";      // ~6.5 MB sin gzip / ~700 KB gzipped
 
 // Atajo final: design + reset + state vía @import (sin duplicar bytes).
 import "reactigoded/styles/all.css";
@@ -236,8 +236,9 @@ const [tab, setTab] = useState("perfil");
 <Tabs value={tab} onValueChange={setTab}>…</Tabs>
 ```
 
-`Modal` y `Pagination` son **controlled-only** (siempre necesitan
-`open`+`onClose` o `currentPage`+`onPageChange`).
+`Modal` es **controlled-only** (siempre necesita `open`+`onClose`).
+`Pagination` soporta tanto controlled (`currentPage`+`onPageChange`) como
+uncontrolled (`defaultPage`, `onPageChange` opcional) desde 1.0.0-beta.20.
 
 ### Tema light/dark
 
@@ -366,6 +367,31 @@ scripts/
   publican (útiles para "go-to-definition" desde consumer).
 - **`sideEffects: ["**/*.css"]`** — bundlers tree-shake JS pero conservan
   CSS imports.
+
+## Desarrollo
+
+Para trabajar sobre el repo (no como consumidor del paquete) usar
+`--legacy-peer-deps` al instalar:
+
+```bash
+git clone https://github.com/ivangc1/reactigoded.git
+cd reactigoded
+npm ci --legacy-peer-deps
+```
+
+Causa del flag: conflicto peer-dep entre `@storybook/addon-vitest`
+(que pin-ea una versión de `@vitest/browser` que no coincide con el
+mismo paquete declarado en nuestras `devDependencies` para usar la
+API de tests directamente). El instalador moderno de npm marca esto
+como bloqueante por defecto desde npm 7. El flag baja el conflicto a
+warning y procede.
+
+**No afecta a los consumidores del paquete**: cuando alguien instala
+`reactigoded` como dep, solo se resuelven `peerDependencies` (`react`
+y `react-dom`). Las devDependencies del repo no viajan al consumer.
+
+Tracking: post-RC1 evaluar bump de Storybook o vitest para alinear
+las dos referencias y eliminar el flag.
 
 ## Licencia
 

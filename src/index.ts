@@ -1,3 +1,4 @@
+"use client";
 /**
  * Igoded Design System — entry point del paquete.
  *
@@ -14,7 +15,7 @@
  *
  *   reset.css        estilos por defecto para HTML nativo (h1-h6, p, a,
  *                    button, input, table…). Opt-in.
- *   state.css        utilities pseudo-class (hover:, focus:). 7.1 MB. Opt-in.
+ *   state.css        utilities pseudo-class (hover:, focus:). ~6.5 MB sin gzip / ~700 KB gzipped. Opt-in.
  *   all.css          atajo: design + reset + state.
  *
  * USO POR ESCENARIO:

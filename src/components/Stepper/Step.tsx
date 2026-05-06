@@ -75,6 +75,17 @@ export function Step({
     onStepKeyDown?.(event);
   };
 
+  // data-step-index 0-based: lo usa el effect H-25 del Stepper para
+  // localizar el dot a focusear sin depender del orden DOM nth-of-type
+  // (robusto contra conditional rendering, Steps decorativos sin
+  // role=button intercalados, o reordenamiento por CSS `order`). Es
+  // implementation detail, NO API pública — un consumer no debe
+  // targetear con CSS `[data-step-index]`. `index` (1-based) lo
+  // inyecta el Stepper para el aria-label visible "Paso N";
+  // restamos 1 para volver al índice 0-based del array.
+  const dataStepIndex =
+    interactive && index !== undefined ? index - 1 : undefined;
+
   const dot = (
     <span
       aria-current={ariaCurrent}
@@ -83,6 +94,7 @@ export function Step({
       aria-label={
         interactive && index !== undefined ? `Paso ${String(index)}` : undefined
       }
+      data-step-index={dataStepIndex}
       onClick={interactive ? onActivate : undefined}
       onKeyDown={interactive ? handleKeyDown : undefined}
       className={cn(

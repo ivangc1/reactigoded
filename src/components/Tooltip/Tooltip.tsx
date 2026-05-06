@@ -8,7 +8,6 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 
 export type TooltipPlacement = "top" | "bottom" | "left" | "right";
 
@@ -79,7 +78,7 @@ export function Tooltip({
       ? `${existing} ${tooltipId}`
       : tooltipId;
     child = cloneElement(typed, { "aria-describedby": combined });
-  } else if (isDev() && children !== null && children !== undefined) {
+  } else if (import.meta.env.DEV && children !== null && children !== undefined) {
     // Sin un elemento React válido NO podemos inyectar
     // aria-describedby; el SR no asociará el tooltip al control.
     // Avisamos en dev — si el consumer pasa texto plano o un Fragment,

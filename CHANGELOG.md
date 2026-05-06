@@ -7,6 +7,180 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.22] — 2026-05-06 (saneamiento RC1)
+
+Cierra los 18 Blockers + 8 Highs del audit RC1
+(`rc1-gate-review-reactigoded.md`) más limpieza adicional descubierta
+durante el ciclo. **Última pre-release antes de `1.0.0-rc.1`**.
+
+### Breaking
+
+- **Sidebar**: prop `ariaLabel` eliminada por consistencia con el resto
+  del DS (Pagination, Spinner, Stepper, TabList, Rating, Timeline ya
+  habían eliminado la prop separada en beta.4 y posteriores). Sidebar
+  era el último outlier. Migration:
+  ```diff
+  - <Sidebar ariaLabel="Navegación principal">…</Sidebar>
+  + <Sidebar aria-label="Navegación principal">…</Sidebar>
+  ```
+  Sin override sigue cayendo al default ES `"Navegación lateral"`.
+- **Skeleton**: cambio del patrón ARIA. `Skeleton` ahora es decorativo
+  (`role="presentation"` + `aria-hidden="true"`). Para anunciar carga
+  al lector de pantalla, envuelve un grupo en
+  `<SkeletonContainer label="...">`, que dispara UN solo aviso
+  (`role="status"` + `aria-busy` + `aria-live="polite"`). El patrón
+  anterior generaba spam de "status busy" en SR cuando había varios
+  `Skeleton`. Migration:
+  ```diff
+  - <Skeleton variant="text" />
+  - <Skeleton variant="text" />
+  + <SkeletonContainer label="Cargando lista">
+  +   <Skeleton variant="text" />
+  +   <Skeleton variant="text" />
+  + </SkeletonContainer>
+  ```
+  El layout del wrapper es neutro (`display: contents`): no añade caja
+  al flujo, los hijos se posicionan como si el container no existiese.
+
+### Added
+
+- **`SkeletonContainer`** [B-12]: nuevo wrapper a11y para grupos de
+  `Skeleton`. Props: `label?: string` (default ES
+  `"Cargando contenido…"`), `children`. Acepta `aria-label` directo
+  vía rest (gana sobre `label`).
+- **`Pagination` uncontrolled state sync** [B-18]: cuando `totalPages`
+  baja por debajo del page interno, el componente sincroniza `page`
+  al clamped current con `silent: true` (no dispara `onPageChange`).
+  Cuando `totalPages` vuelve a subir, NO "salta" al page viejo.
+- **`Tabs` controlled inválido — fallback tab stop** [H-26]: cuando
+  `value` no matchea ningún Tab montado, el primer Tab registrado
+  recibe `tabIndex=0` para mantener el tablist navegable por
+  teclado. `aria-selected` permanece `false` en todos. Mensaje de
+  warn dev actualizado.
+- **`useControllableState` warn re-aplicado** [B-08-followup en
+  beta.21]: ahora con escape hatch `__suppressNoHandlerWarn` que se
+  elimina del `.d.ts` publicado vía `stripInternal`.
+- **`Card.ref` polimórfica tipada** [B-03]: `ref` infiere desde
+  `as`. `<Card as="a" ref={r}>` → `r` es `RefObject<HTMLAnchorElement>`.
+- **Skeleton + Stepper data-step-index** [H-25]: el dot interactivo
+  del Stepper expone `data-step-index` (implementation detail, NO
+  API pública) para que el effect post-commit de focus management
+  resuelva por índice lógico, no por orden DOM.
+
+### Fixed
+
+- **Bundle prod sin `console.*` dev warns** [B-07]: 9 componentes
+  migrados de `if (!isDev())` a `if (!import.meta.env.DEV)` para
+  que esbuild/Vite hagan DCE de los warn dev en build de producción.
+  Verificado: `grep -c console.* dist/index.js` = 0; `grep -c
+  console.* dist/index.cjs` = 0. CI ahora gated por step explícito.
+- **`ThemeSwitch` respeta `<html data-theme>` pre-puesto** [B-08]:
+  el derive lee `<html data-theme>` antes de caer a `defaultTheme`,
+  así que un script anti-flash del consumer
+  (`<html data-theme="light">` antes de hidratar) ya no se sobreescribe.
+  6 tests añadidos (incluido SSR `renderToString` smoke + SSR test
+  versión A que stuba `globalThis.document` y valida el branch
+  `typeof document === "undefined"` del derive).
+- **`Stepper` focus management sin `setTimeout`** [H-25]: el focus
+  al nuevo step ya no usa `setTimeout(0)`; ahora usa un
+  `useEffect([active])` post-commit y `data-step-index` para resolver
+  el target de forma robusta contra conditional rendering, Steps
+  decorativos sin role=button, o CSS reordering.
+- **`Slider` warn dev cuando `value=NaN`** [H-27]: el path controlled
+  no-finito ya no es silencioso; emite warn dev-only similar al que
+  existía para `defaultValue` no-finito.
+- **`Sidebar` blindaje a11y** [B-09]: `role`/`aria-busy`/`aria-live`
+  en `<aside>` no pueden ser overrideados por consumer (extracción
+  explícita de `aria-label` desde rest). Mismo patrón canónico del DS.
+- **`Card.ref` con `Ref<unknown>`** [B-03]: pasa a
+  `ComponentPropsWithRef<C>["ref"]`. Consumers en strict TS configs
+  ya no reciben tipo laxo.
+- **Sitio (igoded.es / Storybook)**:
+  - `<html lang="es">` forzado runtime + estático [B-04 + B-04-followup].
+  - Dedupe de `<title>` y `<meta name="description">` [B-05]. Causa
+    raíz arreglada: metas estáticas consolidadas en
+    `.storybook/manager-head.html` (eran duplicadas con
+    `main.ts:managerHead()`); el script runtime queda como red de
+    seguridad defensiva.
+
+### Internal
+
+- **`stripInternal: true`** en `tsconfig.build.json` [B-02]:
+  `__suppressNoHandlerWarn` y cualquier miembro `@internal` no
+  aparecen en el `.d.ts` publicado.
+- **Excludes del dts publicado** [B-06]: `src/test-utils/`,
+  `src/stories/`, helpers internos (`env.ts` borrado, `useIsoLayoutEffect`,
+  `mergeDescribedBy`) ya no viajan al tarball. Script
+  `scripts/clean-internal-dist.mjs` post-build defensivo.
+- **`vite-env.d.ts` aislado** [B-07-followup]: nuevo
+  `src/_internal-env.d.ts` con SOLO `ImportMetaEnv` para que tsc.build
+  resuelva `import.meta.env.DEV` sin contaminar el dts publicado con
+  `declare module "*.css"`.
+- **MDX foundations canónicamente en `docs/`** [M-06]: 6 páginas
+  movidas de `src/stories/` a `docs/`. Storybook `main.ts` añade
+  `../docs/**/*.mdx` a `stories`.
+- **`"use client";` en bundle** [B-17]: directiva añadida vía
+  `output.banner` en `vite.lib.config.ts` (además del source) para
+  garantizar que llega al bundle final tras minify. Soporta consumers
+  Next.js App Router en Server Components.
+- **CI verify pipeline reforzado**:
+  - `test:scope-leaks --strict` [B-15] añadido como step.
+  - `verify:unit` ahora encadena `test:unit:ci` (isolate + forks),
+    no `test:unit` [B-16].
+  - Bundle dev-warn guard con greps explícitos [B-07-followup].
+  - Chromatic sin `--auto-accept-changes=main` ni
+    `--exit-zero-on-changes` [H-02]: revisión visual humana
+    obligatoria pre-RC1.
+- **Build optimizado** [H-04]: `vite.lib.config.ts`
+  `build.minify: "esbuild"`. Shave ~15% del bundle gzipped.
+- **Perceptual allowlist** [B-13]: reversión consciente del tripwire
+  `dark axis-kobalium` (ΔE 0.0522) introducido en c8a5202 (beta.18).
+  El tripwire nunca fue operativo (`error_threshold=0.05 < 0.0522`).
+  NO se tocan tokens. Anti-regresión:
+  `src/_audit/perceptual-allowlist.test.ts` falla CI si la entrada
+  desaparece sin razón documentada.
+- **`merge-refs` consistente**: Stepper, Checkbox y Switch usan
+  ahora el mismo patrón `useCallback(setRefs, [ref])`.
+- **Higiene del repo**: `.claude/`, `.notes-*`, `.release-*`,
+  `BLOQUEOS.md`, `SESION-RESUMEN*.md` añadidos a `.gitignore`.
+  `src/utils/env.ts` (huérfano post-B-07) borrado.
+
+### Docs
+
+- **Pagination** uncontrolled documentado en README [B-14].
+- **`Introduction.mdx`**: banner pre-publicación recomendando
+  `npm install reactigoded@beta` [B-11].
+- **`state.css` size** corregida en 4 sitios:
+  `~6.5 MB sin gzip / ~700 KB gzipped` (antes "7.1 MB") [B-11].
+- **JSDoc** de `Rating`, `Tabs`, `TabsContext`: ejemplos migrados
+  a `aria-label` HTML estándar (antes mostraban API obsoleta
+  `ariaLabel`) [B-10].
+- **`docs/DS_AUTOSUFFICIENCY_DEBT.md`** capa 1.4 marcada cerrada
+  [H-06].
+- **CHANGELOG** referencia stale a `BLOQUEOS.md` reemplazada por
+  puntero a `docs/DS_AUTOSUFFICIENCY_DEBT.md` [H-07].
+- **`docs/RC1_DECISIONS.md`**: registro de las 4 decisiones humanas
+  B1-B4 confirmadas explícitamente.
+- **`docs/POST_RC1_BACKLOG.md`** + **`docs/RC1_FOUND_DURING_FIX.md`**:
+  trackers de la deuda diferida y los hallazgos descubiertos durante
+  el ciclo.
+- **README**: sección "Desarrollo" documenta el requisito de
+  `npm ci --legacy-peer-deps` [H-08].
+
+### Bundle stats (size-limit, gzip)
+
+| Bundle | Tamaño | Límite | Uso |
+|---|---|---|---|
+| JS ESM | 13.96 KB | 16 KB | 87% |
+| JS CJS | 12.39 KB | 15 KB | 83% |
+| state.css | 713.54 KB | 800 KB | 89% |
+| components.css | 28.05 KB | 75 KB | 37% |
+| tokens.css | 6.53 KB | 30 KB | 22% |
+
+JS ESM bajó de 14.91 KB (beta.21) a 13.96 KB tras añadir
+`build.minify: "esbuild"` (H-04), absorbiendo además el coste del
+`SkeletonContainer` nuevo y los 5 tests de hook adicionales.
+
 ## [1.0.0-beta.21] — 2026-05-05
 
 ### Added
@@ -124,8 +298,8 @@ versionado [SemVer](https://semver.org/lang/es/).
 ### Internal
 - Stories storybook con `chromatic.modes light+dark` ya
   proporcionan dual-theme matrix sin duplicar archivos test:storybook.
-- BLOQUEOS.md actualizado tras beta.20 con secciones
-  Resuelto / Pendiente rc.1 / Diferido / Decisiones permanentes.
+- Tracking de decisiones diferidas y deuda RC1 vive en
+  `docs/DS_AUTOSUFFICIENCY_DEBT.md`.
 - Decisión arquitectónica registrada: warn dev de
   `useControllableState` para `value=` sin `onChange=` diferido a
   rc.1 con escape hatch interno `__suppressNoHandlerWarn`.

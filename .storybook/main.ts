@@ -2,6 +2,10 @@ import type { StorybookConfig } from "@storybook/react-vite";
 
 const config: StorybookConfig = {
   stories: [
+    // M-06 (beta.22): MDX de Foundations canónicamente en docs/.
+    // src/**/*.mdx se mantiene por si algún componente trae su propio
+    // MDX de docs (raro hoy pero patrón válido).
+    "../docs/**/*.mdx",
     "../src/**/*.mdx",
     "../src/**/*.stories.@(ts|tsx|mdx)",
   ],
@@ -20,27 +24,44 @@ const config: StorybookConfig = {
     // Las páginas MDX de Foundations sí están en español ("Fundamentos/...").
     defaultName: "Docs",
   },
-  // Inyecta meta tags + un MutationObserver que reescribe el `<title>` cada
-  // vez que Storybook lo cambia (el router del manager pone "<story> ⋅ Storybook"
-  // tras cada navegación). El observer es preferible a un setInterval porque
-  // reacciona inmediatamente y no consume CPU en idle.
+  // Script runtime del manager — solo lo dinámico:
+  // (1) fuerza lang="es" en <html> (B-04 — Storybook publica con
+  //     lang="" por defecto, este lo fija antes del paint).
+  // (2) reescribe <title> cuando Storybook lo cambia tras navegación
+  //     (router del manager pone "<story> ⋅ Storybook").
+  // (3) dedupe defensivo: red de seguridad por si Storybook clona el
+  //     <title> en algún path interno. Tras la consolidación de
+  //     metas estáticas en `.storybook/manager-head.html` (beta.22),
+  //     el dedupe ya no es CURATIVO sino DEFENSIVO; los observers se
+  //     mantienen porque cuestan ~0 y protegen contra futuras versiones
+  //     de Storybook que reintroduzcan el bug.
+  //
+  // Las metas estáticas (title, description, OG, twitter, canonical,
+  // theme-color) viven en `.storybook/manager-head.html` — único sitio.
+  // NO duplicar aquí (era la causa raíz del bug B-05).
   managerHead: (head: string | undefined) => `
     ${head ?? ""}
-    <meta name="description" content="Igoded Design System — componentes React 19 + TypeScript + CSS utility-first state-driven, con accesibilidad WCAG AA verificada." />
-    <meta name="theme-color" content="#0c1515" />
-    <meta property="og:title" content="Igoded Design System" />
-    <meta property="og:description" content="Componentes React, tokens CSS, accesibilidad y documentación visual." />
-    <meta property="og:url" content="https://igoded.es" />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary" />
-    <link rel="canonical" href="https://igoded.es" />
     <script>
       (function () {
         var BRAND = "Igoded Design System";
+
+        // 1. Lang correcto (B-04).
+        if (document.documentElement.lang !== "es") {
+          document.documentElement.lang = "es";
+        }
+
+        // 2. Dedupe defensivo (red de seguridad post-consolidación).
+        function dedupe() {
+          var titles = document.querySelectorAll("head > title");
+          for (var i = 1; i < titles.length; i++) titles[i].remove();
+          var descs = document.querySelectorAll('head > meta[name="description"]');
+          for (var j = 1; j < descs.length; j++) descs[j].remove();
+        }
+
+        // 3. Rewrite del título a brand cuando Storybook lo restaura a su default.
         function rewrite() {
           var t = document.title;
           if (!t) return;
-          // Storybook genera "Storybook" o "<story> ⋅ Storybook".
           if (t === "Storybook" || t === "storybook - Storybook") {
             document.title = BRAND;
           } else if (/⋅\\s*Storybook$/.test(t)) {
@@ -49,21 +70,29 @@ const config: StorybookConfig = {
             document.title = t.replace(/-\\s*Storybook$/, "· " + BRAND);
           }
         }
+
+        dedupe();
         rewrite();
-        // MutationObserver sobre <head> — captura cualquier cambio de <title>
-        // sin polling.
+
+        // MutationObserver sobre <title> — captura cualquier cambio sin polling.
         var titleEl = document.querySelector("title");
         if (titleEl && typeof MutationObserver !== "undefined") {
-          new MutationObserver(rewrite).observe(titleEl, {
+          new MutationObserver(function () {
+            rewrite();
+            dedupe();
+          }).observe(titleEl, {
             childList: true,
             characterData: true,
             subtree: true,
           });
         }
         // Fallback: si el <title> se reemplaza entero (no solo su texto),
-        // observa el <head> también.
+        // observa el <head> también para re-disparar dedupe + rewrite.
         if (typeof MutationObserver !== "undefined") {
-          new MutationObserver(rewrite).observe(document.head, {
+          new MutationObserver(function () {
+            rewrite();
+            dedupe();
+          }).observe(document.head, {
             childList: true,
           });
         }

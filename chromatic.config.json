@@ -1,0 +1,4 @@
+{
+  "$schema": "https://www.chromatic.com/docs/cli/#configuration-file",
+  "buildScriptName": "build-storybook:chromatic"
+}

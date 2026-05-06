@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
-import { isDev } from "@/utils/env";
 
 export interface UseControllableStateBaseOptions<T> {
   /**
@@ -221,7 +220,8 @@ export function useControllableState<T>(
   // beta.21: re-aplicado tras revert en beta.20 con Option E.
   const warnedControlledNoHandlerRef = useRef(false);
   useEffect(() => {
-    if (!isDev() || warnedControlledNoHandlerRef.current) return;
+    if (!import.meta.env.DEV) return;
+    if (warnedControlledNoHandlerRef.current) return;
     if (
       isControlled &&
       options.onChange === undefined &&

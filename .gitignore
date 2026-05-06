@@ -37,6 +37,21 @@ coverage/
 # Vite cache
 .vite/
 
+# RC1 baseline snapshots (local-only)
+.rc1-baseline/
+
+# Claude Code session data (prompts, transcripts internos).
+# Excluido para evitar leak accidental por git add -A.
+.claude/
+
+# Notas y scripts locales del autor (no API pública del repo).
+# Cubre patrones .notes-betaXX.txt, .release-betaXX.sh, BLOQUEOS.md,
+# SESION-RESUMEN*.md. El autor decide si moverlos fuera del repo.
+.notes-*
+.release-*
+BLOQUEOS.md
+SESION-RESUMEN*.md
+
 # Env
 .env
 .env.local

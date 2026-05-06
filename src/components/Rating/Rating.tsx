@@ -46,7 +46,7 @@ export interface RatingProps
  *
  * @example
  * <Rating defaultValue={3} max={5} />
- * <Rating value={r} onValueChange={setR} ariaLabel="Puntuación del producto" />
+ * <Rating value={r} onValueChange={setR} aria-label="Puntuación del producto" />
  * <Rating value={4} readOnly />
  */
 export function Rating({

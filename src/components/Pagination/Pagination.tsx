@@ -1,6 +1,5 @@
 import { useEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/utils/cn";
-import { isDev } from "@/utils/env";
 import { useControllableState } from "@/hooks/useControllableState";
 
 export type PaginationVariant =
@@ -161,13 +160,28 @@ export function Pagination({
   );
   const safeSiblings = Math.max(0, Math.floor(siblingCount || 0));
 
+  // B-18: sync uncontrolled state cuando totalPages cambia y deja el
+  // page interno fuera de rango (ej: estabas en página 5, totalPages
+  // baja a 3 → debes quedarte en 3, no volver a 5 si vuelve a subir).
+  // Solo aplica en uncontrolled — en controlled el consumer decide.
+  // silent: true para NO disparar onPageChange en este sync interno
+  // (sería ruido para el consumer; el clamp es decisión del componente,
+  // no acción del usuario).
+  useEffect(() => {
+    if (currentPage !== undefined) return;
+    if (page !== safeCurrent) {
+      setPage(safeCurrent, { silent: true });
+    }
+  }, [currentPage, page, safeCurrent, setPage]);
+
   // Dev-only warning si tuvimos que clamp-ear (input fuera de rango).
   // En useEffect (no durante render) por la regla react-hooks/refs.
   // Solo aplicamos a controlled mode: en uncontrolled el internal state
   // siempre está dentro de rango porque solo lo movemos vía setPage.
   const warnedRef = useRef(false);
   useEffect(() => {
-    if (!isDev() || warnedRef.current) return;
+    if (!import.meta.env.DEV) return;
+    if (warnedRef.current) return;
     const isControlled = currentPage !== undefined;
     const outOfRange =
       isControlled

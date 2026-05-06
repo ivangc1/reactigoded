@@ -195,26 +195,18 @@ describe("useSidebar fuera de provider", () => {
   });
 });
 
-describe("Sidebar — i18n ariaLabel prop", () => {
-  it("ariaLabel custom override aria-label default", () => {
-    render(<Sidebar ariaLabel="Side navigation" />);
+describe("Sidebar — i18n aria-label", () => {
+  // La prop separada `ariaLabel` se eliminó en beta.22 (B-09). Estos
+  // tests validan el patrón actual: aria-label HTML estándar vía rest.
+  it("aria-label custom override aria-label default", () => {
+    render(<Sidebar aria-label="Side navigation" />);
     expect(screen.getByRole("complementary")).toHaveAttribute(
       "aria-label",
       "Side navigation",
     );
   });
 
-  it("aria-label directo vía rest gana sobre ariaLabel prop", () => {
-    render(
-      <Sidebar ariaLabel="Side navigation" aria-label="Custom override" />,
-    );
-    expect(screen.getByRole("complementary")).toHaveAttribute(
-      "aria-label",
-      "Custom override",
-    );
-  });
-
-  it("sin overrides cae a 'Navegación lateral' ES", () => {
+  it("sin override cae a 'Navegación lateral' ES", () => {
     render(<Sidebar />);
     expect(screen.getByRole("complementary")).toHaveAttribute(
       "aria-label",

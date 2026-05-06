@@ -249,12 +249,12 @@ export const AllStates: Story = {
     // por cada Sidebar (`<aside>`) Y por cada SidebarNav (`<nav>`).
     <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr 1fr" }}>
       <div className="ig-story-shell">
-        <Sidebar ariaLabel="Sidebar expandida">
+        <Sidebar aria-label="Sidebar expandida">
           <Demo navLabel="Navegación expandida" />
         </Sidebar>
       </div>
       <div className="ig-story-shell">
-        <Sidebar ariaLabel="Sidebar colapsada" defaultCollapsed>
+        <Sidebar aria-label="Sidebar colapsada" defaultCollapsed>
           <Demo navLabel="Navegación colapsada" />
         </Sidebar>
       </div>

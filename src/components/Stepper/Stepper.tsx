@@ -4,6 +4,8 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
+  useEffect,
+  useRef,
   type HTMLAttributes,
   type KeyboardEvent,
   type ReactElement,
@@ -99,6 +101,32 @@ export function Stepper({
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
   const { "aria-label": ariaLabelOverride, ...divRest } = rest;
 
+  // H-25 (beta.22): focus management sin setTimeout suelto.
+  // - rootRef: ref interno al wrapper para localizar dots tras rerender.
+  // - focusTargetIdxRef: marca el step que el siguiente useEffect debe
+  //   focusear post-commit. Se setea en el handler de teclado y se
+  //   limpia en el effect.
+  // El effect dispara cuando cambia `active` (la prop la mueve el
+  // consumer tras `onActiveChange`), garantizando que el focus ocurre
+  // DESPUÉS del rerender que actualizó los `tabIndex` roving.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const focusTargetIdxRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (focusTargetIdxRef.current === null) return;
+    const idx = focusTargetIdxRef.current;
+    focusTargetIdxRef.current = null;
+    // data-step-index resuelve por índice lógico, no por orden DOM —
+    // robusto contra conditional rendering, Steps decorativos sin
+    // role=button intercalados o CSS reordering. Step.tsx inyecta el
+    // atributo a partir del prop `index` (1-based) que Stepper envía
+    // vía cloneElement.
+    const target = rootRef.current?.querySelector<HTMLElement>(
+      `.ig-step[role="button"][data-step-index="${String(idx)}"]`,
+    );
+    target?.focus();
+  }, [active]);
+
   const handleStepKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (!interactive) return;
@@ -123,21 +151,10 @@ export function Stepper({
           return;
       }
       event.preventDefault();
+      // Marca intent de focus; el effect post-commit lo aplicará
+      // cuando React termine de actualizar los tabIndex roving.
+      focusTargetIdxRef.current = nextIdx;
       onActiveChange(nextIdx);
-      // Mover foco al nuevo active después del rerender. Localizamos el
-      // wrapper desde el dot focuseado (event.currentTarget) vía
-      // closest — evita mantener un ref propio + merge con el ref del
-      // prop. setTimeout(0) garantiza que el focus ocurra tras el
-      // commit de React (el rerender ya actualizó los tabIndex roving).
-      const wrapper = event.currentTarget.closest(
-        ".ig-stepper, .ig-stepper-labeled",
-      );
-      setTimeout(() => {
-        const dots = wrapper?.querySelectorAll<HTMLElement>(
-          '.ig-step[role="button"]',
-        );
-        dots?.[nextIdx]?.focus();
-      }, 0);
     },
     [active, interactive, onActiveChange, steps.length],
   );
@@ -151,14 +168,33 @@ export function Stepper({
     [active, interactive, onActiveChange],
   );
 
+  // Callback ref que combina rootRef interno (focus management H-25) con
+  // el ref opcional del consumer. useCallback ESTABILIZA la identidad
+  // del callback entre renders — sin él, cada render dispararía
+  // cleanup+rewrite del ref por React, lo cual es importante en
+  // Stepper porque el useEffect H-25 LEE rootRef.current y necesita
+  // que esté escrito sólo en mount/unmount, no en cada render.
+  // (Checkbox y Switch usan el mismo patrón sin useCallback — invisible
+  // allí porque nunca leen el ref. Apuntado en POST_RC1_BACKLOG.md
+  // para alinear esos dos al patrón de Stepper post-RC1.)
+  const setRefs = useCallback(
+    (node: HTMLDivElement | null) => {
+      rootRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+
   return (
     <div
       {...divRest}
-      ref={ref}
+      ref={setRefs}
       role="group"
       aria-label={ariaLabelOverride ?? "Progreso"}
       className={cn(labeled ? "ig-stepper-labeled" : "ig-stepper", className)}
     >
+      {/* eslint-disable-next-line react-hooks/refs -- la regla experimental marca useCallback que captura refs por riesgo de stale capture en closures persistentes. Para merge-refs es falso positivo: el callback solo escribe a refs en commit, no lee .current ni se pasa a hijos memoizados. Checkbox.tsx:65 y Switch.tsx:110 implementan el mismo patrón sin useCallback (callback inline) y por eso no disparan la regla — la diferencia es estilística, no funcional. */}
       {steps.map((step, idx) => {
         // En modo presentational omitimos los handlers (no los pasamos
         // como `undefined`) por exactOptionalPropertyTypes.

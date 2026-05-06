@@ -98,13 +98,25 @@ export function ThemeSwitch({
   const [override, setOverride] = useState<Theme | null>(null);
 
   // Modo derive del hook: la fuente uncontrolled se computa en render
-  // como `override ?? stored ?? defaultTheme ?? "dark"`. `override` es
-  // state React local — NO localStorage. El effect post-mount se
-  // encarga de persistir el valor; useStoredTheme se mantiene para
-  // sync cross-tab vía StorageEvent nativo.
+  // como `override ?? stored ?? <html data-theme> ?? defaultTheme ?? "dark"`.
+  // El paso intermedio `<html data-theme>` (B-08) respeta el script
+  // anti-flash del consumer: si la app inyecta `data-theme="light"` en
+  // `<html>` antes de hidratar, ThemeSwitch lo conserva en lugar de
+  // sobrescribirlo con su propio default. `override` sigue siendo state
+  // React local — NO localStorage. El effect post-mount persiste el
+  // valor; useStoredTheme se mantiene para sync cross-tab vía
+  // StorageEvent nativo.
   const { value: current, setValue: setTheme } = useControllableState<Theme>({
     value: themeProp,
-    derive: () => override ?? stored ?? defaultTheme ?? "dark",
+    derive: () => {
+      if (override) return override;
+      if (stored) return stored;
+      if (typeof document !== "undefined" && attribute) {
+        const fromAttr = document.documentElement.getAttribute(attribute);
+        if (fromAttr === "light" || fromAttr === "dark") return fromAttr;
+      }
+      return defaultTheme ?? "dark";
+    },
     setDerivedValue: setOverride,
     onChange: onThemeChange,
   });

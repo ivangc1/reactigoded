@@ -16,6 +16,18 @@ export interface TabsContextValue {
    * `defaultValue` sin dejar el tablist sin tab stop accesible.
    */
   register: (value: string) => () => void;
+  /**
+   * H-26: `true` si `selected` matchea el `value` de algún Tab montado.
+   * En modo controlled con `value` inválido, este flag es `false` y
+   * el primer Tab registrado entra en modo "fallback tabindex" para
+   * NO dejar el tablist sin tab stop accesible.
+   */
+  selectedExists: boolean;
+  /**
+   * H-26: `value` del primer Tab registrado. Sirve como fallback de
+   * tab stop cuando `selectedExists === false`.
+   */
+  firstRegistered: string | undefined;
 }
 
 export const TabsContext = createContext<TabsContextValue | null>(null);
@@ -37,7 +49,7 @@ export const TabsContext = createContext<TabsContextValue | null>(null);
  * function App() {
  *   return (
  *     <Tabs defaultValue="perfil">
- *       <TabList ariaLabel="Cuenta">
+ *       <TabList aria-label="Cuenta">
  *         <Tab value="perfil">Perfil</Tab>
  *         <Tab value="seguridad">Seguridad</Tab>
  *       </TabList>

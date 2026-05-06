@@ -265,3 +265,43 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 });
+
+describe("Pagination — uncontrolled state sync (B-18)", () => {
+  // En uncontrolled, si totalPages baja por debajo del page interno
+  // el componente debe sincronizar el state al clamped current,
+  // y NO debe disparar onPageChange (sync silencioso). Cuando totalPages
+  // sube de nuevo, NO debe "saltar" al valor viejo (3 ≠ 5).
+  it("sincroniza state interno cuando totalPages baja por debajo del current", () => {
+    const { rerender } = render(<Pagination totalPages={10} defaultPage={5} />);
+    expect(
+      screen.getByRole("button", { name: "Página 5" }),
+    ).toHaveAttribute("aria-current", "page");
+
+    rerender(<Pagination totalPages={3} defaultPage={5} />);
+    expect(
+      screen.getByRole("button", { name: "Página 3" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("NO vuelve al valor viejo cuando totalPages sube de nuevo", () => {
+    const { rerender } = render(<Pagination totalPages={10} defaultPage={5} />);
+    rerender(<Pagination totalPages={3} defaultPage={5} />);
+    rerender(<Pagination totalPages={10} defaultPage={5} />);
+    // El state interno es 3 (clamped), NO 5. Hasta que el usuario
+    // o un setPage explícito lo mueva, se queda donde estaba.
+    expect(
+      screen.getByRole("button", { name: "Página 3" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("NO llama a onPageChange durante el silent sync", () => {
+    const onPageChange = vi.fn();
+    const { rerender } = render(
+      <Pagination totalPages={10} defaultPage={5} onPageChange={onPageChange} />,
+    );
+    rerender(
+      <Pagination totalPages={3} defaultPage={5} onPageChange={onPageChange} />,
+    );
+    expect(onPageChange).not.toHaveBeenCalled();
+  });
+});
