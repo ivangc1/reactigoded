@@ -312,7 +312,7 @@ de 6 findings).
 **ROI confirmado**: ya capturó intencionalmente el patrón Stepper
 post-fix (allowlist), bloqueando regresiones futuras.
 
-### 3.2 Drift hex hardcoded vs tokens
+### 3.2 Drift hex hardcoded vs tokens ✅ aplicada en post-RC1
 
 Hex literales (`#3ae2f7`, `#d2bff7`, `#c4cada`…) aparecen hardcoded
 en stories, manager-head, MDX y comentarios. Cuando los tokens del DS
@@ -335,32 +335,33 @@ Patrón: cada vez que se recalibra un cardinal, se generan ~10-15 hex
 hardcoded en archivos no-CSS que hay que sincronizar a mano. Ningún
 test detecta el drift.
 
-**Solución propuesta** — `scripts/check-hex-drift.mjs`:
+**Solución aplicada** — `scripts/check-hex-drift.mjs`:
 
-1. Parsear `igoded-tokens.css` y extraer la tabla de tokens cardinales
-   (`--ig-vitreus-lux`, `--ig-vitreus-nox`, etc.) → set de hex
-   "vigentes".
-2. Grep `#[0-9a-fA-F]{6}` en `src/components/**/*.{tsx,stories.tsx}`,
-   `.storybook/**`, `src/stories/**/*.{mdx,tsx}`, `README.md`.
-3. Para cada hex encontrado, comprobar si existe en el set de tokens
-   vigentes. Si NO existe pero coincide cromáticamente cerca con un
-   token (ΔE < 0.05 en OKLab), reportar como "posible drift" — el
-   hex podría ser un valor stale de antes de una recalibración.
-4. Allowlist explícita en `scripts/hex-drift-allowlist.json` para hex
-   intencionales (transparentes, gradientes decorativos, ejemplos
-   docs no semánticos).
+1. ✅ Parsea `src/styles/igoded-tokens.css` y extrae tokens cardinales
+   + fundus (`--ig-{cardinal}-{lux|nox}`, `--ig-fundus-{lux|nox}`)
+   → set de hex VIGENTES.
+2. ✅ Grep `#[0-9a-fA-F]{6}` en `src/components/**.tsx`,
+   `.storybook/**.{ts,tsx,html}`, `src/stories/**.{mdx,tsx}`,
+   `docs/**.md`, `README.md`.
+3. ✅ Para cada hex: si está en el set vigente OK; si NO está pero
+   tiene ΔE OKLab < 0.05 con un token vigente → reportar drift
+   posible; si ΔE ≥ 0.05 con todos → hex no relacionado con paleta,
+   no reportar.
+4. ✅ Allowlist `scripts/hex-drift-allowlist.json` para hex
+   intencionales auditados (Storybook chrome elevation, ejemplos
+   documentales del propio bug histórico).
+5. ✅ Modo `--strict` (CI) sale con código no-cero ante drift nuevo.
+   Integrado en `verify:unit` pipeline vía `npm run test:hex-drift`.
 
-**Output esperado**:
-```
-[hex-drift] src/components/Card/Card.stories.tsx:18 → #5eded5
-  Token actual `--ig-vitreus-nox` = #3ae2f7 (ΔE=0.012, drift muy probable)
-  Hint: sustituir por `var(--ig-vitreus-nox)` o el hex actual.
-```
+**Run inicial post-RC1**: 49 hex escaneados, 18 tokens vigentes,
+4 entradas allowlisted (3 instancias de Storybook elevation + 3
+ejemplos doc del propio debt doc), 0 drifts nuevos.
 
-**Estimación**: 2-3h.
-**ROI**: alto — previene drift silencioso en cada recalibración
-futura. Especialmente útil pre-RC1 si se ajusta alguna paleta de
-último momento.
+**Coste real**: 2h (script + culori ΔE OKLab + allowlist + audit
+de 7 findings iniciales).
+**ROI confirmado**: previene drift silencioso en cada recalibración
+futura. Si beta.X recalibra un cardinal y queda hex viejo en
+manager.ts/stories/MDX, el script lo captura en CI antes del merge.
 
 ---
 
@@ -519,7 +520,7 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 1.2 hook `useLandmarkRegistry` | 2-3h | rc.1 | ⏳ |
 | 1.3 detección banner top-level | 2h | rc.1 | ⏳ |
 | 3.1 script CSS scope-leak | 2h real | beta.21 | ✅ aplicada |
-| 3.2 script hex drift detection | 2-3h | rc.1 | ⏳ |
+| 3.2 script hex drift detection | 2h real | post-RC1 | ✅ aplicada |
 | 2.2 stories focus-visible | 1-2h | 1.0.0 final | ⏳ |
 | 2.3 stories hover/active | 1-2h | 1.1.0 | ⏳ |
 | Auditoría reset.css | 1-2h | 1.1.0 | ⏳ |

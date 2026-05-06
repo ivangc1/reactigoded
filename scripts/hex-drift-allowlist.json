@@ -1,0 +1,25 @@
+{
+  "$schema": "Allowlist de hex drift findings considerados intencionales o documentales tras audit. Cada entrada documenta la razón. Revisar al editar el archivo correspondiente.",
+  "entries": [
+    {
+      "hex": "#101b1b",
+      "file": ".storybook/manager.ts",
+      "reason": "Storybook chrome elevation (appContentBg/barBg/inputBg). Color intencionalmente más claro que fundus-nox (#0c1515) por patrón UI estándar de Storybook (zonas de contenido sobre fundus base). NO es drift — es UI del manager, no token del DS."
+    },
+    {
+      "hex": "#5eded5",
+      "file": "docs/DS_AUTOSUFFICIENCY_DEBT.md",
+      "reason": "Ejemplo documental del caso histórico beta.16 (vitreus pre-recalibración H≈194°). El propio doc cita este hex como evidencia del bug que motivó el script — sustituirlo destruye la documentación del problema."
+    },
+    {
+      "hex": "#d4c2f9",
+      "file": "docs/DS_AUTOSUFFICIENCY_DEBT.md",
+      "reason": "Ejemplo documental del caso histórico beta.16 (axis pre-recalibración). Mismo patrón que #5eded5."
+    },
+    {
+      "hex": "#c3cbdb",
+      "file": "docs/DS_AUTOSUFFICIENCY_DEBT.md",
+      "reason": "Ejemplo documental del caso histórico beta.16 (cinis pre-recalibración). Mismo patrón que #5eded5."
+    }
+  ]
+}
