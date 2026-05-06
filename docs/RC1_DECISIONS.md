@@ -33,6 +33,45 @@ más feedback real antes de congelar API.
 
 ---
 
+### Actualización 2026-05-06: pausa operativa
+
+**Contexto**: tras cerrar el branch `rc1-gate-fixes` (41 commits, beta.22
+listo para publicar) y antes de hacer `npm publish --tag beta`, Iván
+decide pausar la publicación a npm sin fecha definida.
+
+**Razones**:
+- Iván es el único consumer previsible a corto plazo. No hay equipo
+  externo esperando feedback.
+- Publicar implica compromiso de mantenimiento sostenido (issues, PRs
+  de consumers, semver discipline). Sin urgencia de DS público, mejor
+  esperar.
+- El branch `rc1-gate-fixes` ya cierra los 18 Blockers + 8 Highs y
+  añade trazabilidad post-RC1. La calidad del código no requiere
+  publicación inmediata para ser real.
+
+**Implicaciones operativas (commit `7a5c922` B-01-followup)**:
+- `src/stories/Introduction.mdx`: banner pasa a "no publicado, clona
+  + npm link" (estado real).
+- `README.md`: instalación documentada como clone + npm link.
+- Tag git `v1.0.0-beta.22` se mantendrá tras merge para trazabilidad
+  histórica del repo, pero NO se acompaña de `npm publish`.
+
+**Reversión cuando se publique**:
+1. Decidir versión a publicar (probablemente `1.0.0-beta.23` con cambios
+   acumulados desde beta.22, o `beta.22` re-tagged si nada cambió).
+2. Revertir commit `7a5c922` (B-01-followup) o reescribir las docs
+   manualmente.
+3. Ejecutar `npm publish --tag beta`.
+4. Añadir nueva sección "Reactivación" a este MD documentando fecha y
+   versión publicada.
+
+**Decisión a largo plazo NO cambia**: B1 sigue siendo `(a) publicar
+betas`. Lo único que cambia es la fecha — de "tras merge de
+rc1-gate-fixes" a "cuando Iván tenga capacidad operativa o consumer
+externo lo justifique".
+
+---
+
 ## B2 — Skeleton API: ¿breaking ahora o nunca?
 
 **Default inicial**: **(a) breaking ahora — split `Skeleton` (decorativo)
