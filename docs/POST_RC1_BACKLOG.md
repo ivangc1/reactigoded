@@ -164,7 +164,7 @@ validación de Iván sobre los OKLCH alternativos visualmente.
 
 ---
 
-## Deploy externo igoded.es desacoplado del repo
+## Deploy externo igoded.es desacoplado del repo ✅ documentado
 
 **Observación**: el deploy a igoded.es se hace fuera del repo (manual o
 cron desde `~/domains/igoded.es/public_html/storybook/` en cPanel
@@ -180,14 +180,17 @@ Hostinger). Si quien deploya invoca un comando distinto a
 - Si quien deploya invoca `storybook build` directo, NO se aplica el
   lang fix y el log no aparece — eso ES la señal para auditar.
 
-**Acción post-RC1**: localizar el script/cron de deploy externo y
-añadirlo a este repo si es posible (workflow GitHub Actions con
-secret de Hostinger), o documentarlo en `docs/DEPLOY.md` con el
-comando exacto a usar.
+**Acción tomada**: documentado en `docs/DEPLOY.md` con (a) contrato
+actual + comando obligatorio, (b) síntomas de regresión silenciosa
+y debug, (c) Opción A workflow GitHub Actions con secret SFTP
+Hostinger, (d) Opción B script versionado `scripts/deploy-storybook.sh`.
+Decisión A vs B se difiere a post-1.0.0 según volumen de deploys
+reales. Iván sigue invocando manualmente con `npm run build-storybook`
+hasta que se elija opción.
 
 ---
 
-## Auditar todos los scripts de CI/build por contexto de invocación
+## Auditar todos los scripts de CI/build por contexto de invocación ✅ aplicado
 
 **Observación**: durante esta sesión se descubrieron 3 fallos de
 "by construction" donde un script asumía contexto de invocación que
@@ -201,14 +204,23 @@ no se sostuvo en CI/Chromatic real:
    pero Chromatic invoca el mismo script con `--output-dir=/tmp/...`
    provocando fallo. Resuelto vía split de scripts + `chromatic.config.json`.
 
-**Acción post-RC1**: cada script de CI/build debe documentar
-explícitamente:
-- Quién lo invoca (un workflow, un npm script, manualmente, un cron).
-- Qué espera del entorno (paths, env vars, archivos previos).
-- Qué hace si esas asunciones fallan (error explícito vs skip).
+**Acción aplicada**: cada script de `scripts/` ahora incluye un
+bloque `─── Contrato de invocación ───` con tres bullets:
+- **Invoker**: workflow / npm script / manual / cron.
+- **Entorno requerido**: paths, devDeps, archivos previos.
+- **Fallback / errores**: comportamiento si las asunciones fallan
+  (exit code, mensaje de error, propagación).
 
-Aplicar a `fix-storybook-static-lang.mjs`, `clean-internal-dist.mjs`,
-y cualquier futuro script que se encadene en `npm run`.
+**Scripts auditados**:
+- `clean-internal-dist.mjs`
+- `fix-storybook-static-lang.mjs`
+- `migrate-tooltip-prefixes.mjs` (one-shot histórico)
+- `strip-orphan-css.mjs` (one-shot histórico)
+- `check-component-contrast.mjs`
+- `check-css-scope-leaks.mjs`
+
+**Convención para nuevos scripts**: cualquier `.mjs` añadido a
+`scripts/` debe incluir el bloque del contrato en su header JSDoc.
 
 ---
 

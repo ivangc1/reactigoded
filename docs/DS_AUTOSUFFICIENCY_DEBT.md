@@ -425,12 +425,12 @@ del DS, capa 1.5) o selector HTML directo (`input[type="range"]`).
 `expectAtLeast(els, N)` (utility del DS, capa 1.6) o
 `toBeGreaterThanOrEqual(N)` directamente.
 
-**Acción pendiente**: extraer estas convenciones a un archivo
-`docs/STORY_CATALOG_CONVENTIONS.md` (o sección en CONTRIBUTING.md
-cuando se cree). Linkar desde el header del primer `_matrix.tsx` para
-que el siguiente que escriba una story de catálogo las tenga delante.
+**Acción aplicada (post-RC1)**: convenciones extraídas a
+`docs/STORY_CATALOG_CONVENTIONS.md` con ejemplos ❌/✅ por regla y
+linkado desde el header de `src/stories/_matrix.tsx` para que el
+siguiente que escriba una story de catálogo las tenga delante.
 
-**Estimación doc**: 30 min.
+**Coste real**: 30 min (extracción + reformulación + link).
 
 ---
 
@@ -523,7 +523,7 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 2.2 stories focus-visible | 1-2h | 1.0.0 final | ⏳ |
 | 2.3 stories hover/active | 1-2h | 1.1.0 | ⏳ |
 | Auditoría reset.css | 1-2h | 1.1.0 | ⏳ |
-| Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min | beta.20/post | ⏳ |
+| Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min real | post-RC1 | ✅ aplicada |
 | 6.1 regla anti-`console.error` warnings React | 0 (regla) | beta.20 | ✅ documentada |
 | 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20 | ✅ aplicada |
 

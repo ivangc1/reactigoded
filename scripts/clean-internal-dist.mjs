@@ -19,7 +19,17 @@
  * algunos consumers usan inline (decisión beta.X registrada en
  * docs/DS_AUTOSUFFICIENCY_DEBT.md).
  *
- * Cross-platform (Node `fs.rmSync` + `globSync`).
+ * ─── Contrato de invocación ─────────────────────────────────────
+ * • **Invoker**: encadenado en el script `build` de package.json
+ *   (`tsc -p tsconfig.build.json && vite build && node scripts/clean-internal-dist.mjs`).
+ *   También corre via `npm run build` y como dependencia indirecta
+ *   de `npm pack`/`npm publish` cuando `prepack` lo activa.
+ * • **Entorno requerido**: `dist/` debe existir tras tsc + vite build.
+ *   Los paths que limpia son los listados arriba; si tsc deja de
+ *   emitir alguno, el script lo ignora (no falla).
+ * • **Fallback / errores**: cross-platform via `fs.rmSync` y `unlinkSync`
+ *   con `force: true`. Si un archivo no existe, no aborta. Cualquier
+ *   error de I/O propaga (exit no-cero) — interrumpe el build.
  */
 import { rmSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";

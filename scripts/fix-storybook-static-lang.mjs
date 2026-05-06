@@ -13,16 +13,23 @@
  *   - pre-paint accessibility audits
  *   - lighthouse SEO con JS deshabilitado
  *
- * Quien lo invoca: `npm run build-storybook` (encadenado con `&&`).
- * Espera el output default de Storybook (`storybook-static/`); NO
- * acepta `--output-dir` por diseño consciente.
- *
- * Si Chromatic u otro caller buildea Storybook a `/tmp/...`, ese caller
- * NO debe encadenar este script (ver `chromatic.config.json` que
- * apunta a `build-storybook:chromatic`, sin lang fix). Si encadenas
- * a un caller con custom output dir, este script falla con error
- * explícito en stderr — eso es la red de seguridad para detectar la
- * regresión silenciosa de B-04.
+ * ─── Contrato de invocación ─────────────────────────────────────
+ * • **Invoker**: encadenado en `build-storybook` de package.json
+ *   (`storybook build && node scripts/fix-storybook-static-lang.mjs`).
+ *   NO se invoca desde `build-storybook:chromatic` (Chromatic
+ *   buildea a `/tmp/...` con `--output-dir`; ver
+ *   `chromatic.config.json`).
+ * • **Entorno requerido**: existencia de `./storybook-static/index.html`
+ *   y `./storybook-static/iframe.html`. NO acepta `--output-dir`
+ *   por diseño consciente — si Chromatic u otro caller con custom
+ *   output dir lo encadena, este script falla con error explícito en
+ *   stderr (red de seguridad para detectar regresión silenciosa de
+ *   B-04).
+ * • **Fallback / errores**: si los HTML faltan → exit 1 con mensaje
+ *   indicando que `build-storybook` no se ejecutó antes. Si el regex
+ *   no encuentra `<html lang="...">` → exit 0 con log informativo
+ *   (Storybook ya emite `lang="es"` correctamente, no hay que
+ *   parchear).
  *
  * Cross-platform Node (`fs.readFileSync` + regex).
  */

@@ -7,7 +7,15 @@
  * inexistentes y son código muerto. Este script las elimina con postcss
  * (parser CSS real, evita romper agrupaciones de selectores compartidos).
  *
- * Ejecutar: `node scripts/strip-orphan-css.mjs`
+ * ─── Contrato de invocación ─────────────────────────────────────
+ * • **Invoker**: one-shot, ejecutado tras eliminar tokens huérfanos.
+ *   No se encadena a `npm run build` ni a ningún script automático.
+ *   Re-ejecutar manualmente cuando se eliminen nuevos tokens y queden
+ *   utilities pseudo-class huérfanas.
+ * • **Entorno requerido**: PostCSS instalado;
+ *   `src/styles/igoded-state-css.css` existe.
+ * • **Fallback / errores**: idempotente (las utilities ya removidas
+ *   no vuelven a ser detectadas). Cualquier I/O error propaga.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

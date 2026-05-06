@@ -18,6 +18,24 @@
  *
  * Diseñado para correr en CI (rápido, sin browser). Complementa el
  * runner storybook+axe que valida contraste en el DOM real.
+ *
+ * ─── Contrato de invocación ─────────────────────────────────────
+ * • **Invoker**: `npm run test:contrast` (script en package.json) +
+ *   encadenado en `verify:unit` pipeline. CI workflow
+ *   `.github/workflows/verify.yml` lo invoca como gate previo a
+ *   `Build` y `Size budgets`.
+ * • **Entorno requerido**: PostCSS y culori (devDeps). Lectura de
+ *   `src/styles/igoded-tokens.css`, `src/styles/igoded-components.css`
+ *   y `scripts/perceptual-allowlist.json` (todos commited al repo).
+ * • **Fallback / errores**: ERROR (exit 1) si cualquier invariante
+ *   (1)/(2)/(3) falla o si la allowlist es inválida JSON. WARN
+ *   (exit 0) para hallazgos en `warn_threshold`. Modo
+ *   `--print-perceptual-table` imprime los 42 valores y sale 0.
+ *
+ * Limitación documentada: solo audita pares bg/color DENTRO del
+ * mismo bloque CSS. NO captura cascada cruzada (regla global de bg
+ * en padre + color en regla más específica del descendiente). Para
+ * eso está el gate storybook+axe en DOM real.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
