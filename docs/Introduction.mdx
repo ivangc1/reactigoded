@@ -2,10 +2,10 @@ import { Meta } from "@storybook/addon-docs/blocks";
 
 <Meta title="Introducción" />
 
-> ⚠️ **Estado pre-1.0.0-rc.1**: API en estabilización. Las versiones
-> beta pueden incluir cambios incompatibles entre sí. Para usar en
-> producción, espera a `1.0.0-rc.1`. Si quieres probar antes:
-> `npm install reactigoded@beta`.
+> ⚠️ **Estado pre-1.0.0-rc.1**: API en estabilización. El paquete aún
+> no está publicado en npm. Para probarlo, clona el repo y `npm link`
+> localmente. La instalación vía npm estará disponible cuando se
+> publique la primera beta a registro (decisión pendiente, sin fecha).
 
 # Igoded Design System
 
@@ -21,8 +21,19 @@ Componentes React tipados + sistema CSS utility-first state-driven.
 
 ## Instalación
 
+> **Nota**: el paquete aún no está publicado a npm. Mientras tanto,
+> instalación local vía clone + `npm link`:
+
 ```bash
-npm install reactigoded
+git clone https://github.com/ivangc1/reactigoded.git
+cd reactigoded
+npm ci --legacy-peer-deps
+npm run build
+npm link
+
+# en tu app:
+cd /tu/app
+npm link reactigoded
 ```
 
 ## Uso
