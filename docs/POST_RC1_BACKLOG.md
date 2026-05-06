@@ -164,6 +164,54 @@ validación de Iván sobre los OKLCH alternativos visualmente.
 
 ---
 
+## Deploy externo igoded.es desacoplado del repo
+
+**Observación**: el deploy a igoded.es se hace fuera del repo (manual o
+cron desde `~/domains/igoded.es/public_html/storybook/` en cPanel
+Hostinger). Si quien deploya invoca un comando distinto a
+`build-storybook` (ej. `storybook build` directo, o
+`npm run build-storybook:chromatic`), el HTML deployado pierde
+`lang="es"` en el `<html>` inicial y B-04 regresa silenciosamente.
+
+**Mitigación actual** (beta.22, commits del split build):
+- `package.json` documenta el split en `_comment_build_storybook`.
+- `scripts/fix-storybook-static-lang.mjs` emite log explícito al
+  ejecutarse con el path destino y el número de archivos modificados.
+- Si quien deploya invoca `storybook build` directo, NO se aplica el
+  lang fix y el log no aparece — eso ES la señal para auditar.
+
+**Acción post-RC1**: localizar el script/cron de deploy externo y
+añadirlo a este repo si es posible (workflow GitHub Actions con
+secret de Hostinger), o documentarlo en `docs/DEPLOY.md` con el
+comando exacto a usar.
+
+---
+
+## Auditar todos los scripts de CI/build por contexto de invocación
+
+**Observación**: durante esta sesión se descubrieron 3 fallos de
+"by construction" donde un script asumía contexto de invocación que
+no se sostuvo en CI/Chromatic real:
+
+1. H-01 (`prepare → prepack`): el patch local de jest-dom no se
+   aplicaba en `npm ci` de CI. Revertido en `7d62faf`.
+2. ESLint 10.3 + jest-dom rule `prefer-to-have-class` rompe sin el
+   patch local — síntoma de #1, no causa nueva.
+3. `fix-storybook-static-lang.mjs`: encadenado a `build-storybook`
+   pero Chromatic invoca el mismo script con `--output-dir=/tmp/...`
+   provocando fallo. Resuelto vía split de scripts + `chromatic.config.json`.
+
+**Acción post-RC1**: cada script de CI/build debe documentar
+explícitamente:
+- Quién lo invoca (un workflow, un npm script, manualmente, un cron).
+- Qué espera del entorno (paths, env vars, archivos previos).
+- Qué hace si esas asunciones fallan (error explícito vs skip).
+
+Aplicar a `fix-storybook-static-lang.mjs`, `clean-internal-dist.mjs`,
+y cualquier futuro script que se encadene en `npm run`.
+
+---
+
 ## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`)
 
 **De dónde sale**: `git status` durante toda la sesión.
