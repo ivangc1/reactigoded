@@ -133,9 +133,6 @@ durante el ciclo. **Última pre-release antes de `1.0.0-rc.1`**.
     obligatoria pre-RC1.
 - **Build optimizado** [H-04]: `vite.lib.config.ts`
   `build.minify: "esbuild"`. Shave ~15% del bundle gzipped.
-- **`prepare` → `prepack`** [H-01]: patches de `patch-package` ya
-  no se aplican en `npm install` del consumer, sólo en el flujo de
-  publicación.
 - **Perceptual allowlist** [B-13]: reversión consciente del tripwire
   `dark axis-kobalium` (ΔE 0.0522) introducido en c8a5202 (beta.18).
   El tripwire nunca fue operativo (`error_threshold=0.05 < 0.0522`).
