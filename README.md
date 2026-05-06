@@ -18,10 +18,20 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 
 ## Instalación
 
+> **Nota**: el paquete aún no está publicado a npm. La instalación
+> se hace vía clone + `npm link` mientras tanto. La publicación al
+> registro está prevista pero sin fecha confirmada.
+
 ```bash
-npm install reactigoded
-# o
-pnpm add reactigoded
+git clone https://github.com/ivangc1/reactigoded.git
+cd reactigoded
+npm ci --legacy-peer-deps
+npm run build
+npm link
+
+# en tu app:
+cd /tu/app
+npm link reactigoded
 ```
 
 `react` y `react-dom` >= 19 son `peerDependencies`.
