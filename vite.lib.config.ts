@@ -18,7 +18,13 @@ import dts from "vite-plugin-dts";
 import { transform as esbuildTransform } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +63,23 @@ function copyDesignSystemStyles(): PluginOption {
           minify: true,
         });
         writeFileSync(resolve(outDir, f), result.code);
+      }
+      // Fragmentos de state.css emitidos por
+      // scripts/build-state-css-fragments.mjs (post-RC1). Permite
+      // import granular: `reactigoded/styles/state/hover.css` solo.
+      const stateSrcDir = resolve(__dirname, "src/styles/state");
+      const stateOutDir = resolve(__dirname, "dist/styles/state");
+      if (existsSync(stateSrcDir)) {
+        mkdirSync(stateOutDir, { recursive: true });
+        for (const f of readdirSync(stateSrcDir)) {
+          if (!f.endsWith(".css")) continue;
+          const raw = readFileSync(resolve(stateSrcDir, f), "utf8");
+          const result = await esbuildTransform(raw, {
+            loader: "css",
+            minify: true,
+          });
+          writeFileSync(resolve(stateOutDir, f), result.code);
+        }
       }
       const allCss =
         `@import "./igoded-design.css";\n` +

@@ -7829,40 +7829,49 @@ WRAPPER A11Y (B-12, beta.22):
 83. TOOLTIP
 ═══════════════════════════════════════════════════════════════════════════════
 
-QUÉ ES: Pequeñas burbujas de información que aparecen al hacer hover.
+QUÉ ES: Pequeñas burbujas de información que aparecen al hacer hover/focus.
+Usan @floating-ui/react para positioning robusto: portal-out, flip,
+shift, autoUpdate (escapa overflow:hidden, viewport-aware, reactivo a
+scroll/resize).
 
-ESTRUCTURA (usando data-tooltip):
-<button class="ig-tooltip" data-tooltip="Texto del tooltip">
-  Hover me
-</button>
+ESTRUCTURA (React):
+<Tooltip text="Eliminar" placement="top" variant="brand">
+  <button>×</button>
+</Tooltip>
 
-POSICIONES:
-- ig-tooltip-top (por defecto)
-- ig-tooltip-bottom
-- ig-tooltip-left
-- ig-tooltip-right
+emite:
+  <span class="ig-tooltip-wrapper">
+    <button aria-describedby="...">×</button>
+    <span id="..." role="tooltip" class="ig-sr-only">Eliminar</span>
+  </span>
+  <!-- en portal cuando isOpen -->
+  <span class="ig-tooltip ig-tooltip-place-top ig-tooltip-color-brand">
+    Eliminar
+  </span>
 
-NOTA: Este tooltip usa CSS puro con ::before y ::after.
-Para tooltips más complejos, considera usar una librería JS.
+POSICIONES (preferida; Floating UI puede flipear si no cabe):
+- ig-tooltip-place-top (default)
+- ig-tooltip-place-bottom
+- ig-tooltip-place-left
+- ig-tooltip-place-right
+
+VARIANTES:
+- ig-tooltip-color-{brand,secondary,success,warning,danger,info}
+
+NOTA: Floating UI controla position/top/left vía `style` inline.
+Las clases `.ig-tooltip-place-*` quedan como hook informativo;
+si en el futuro queremos animaciones direccionales o
+transform-origin por dirección, se usan estas clases.
 */
 
+/* Wrapper invisible: agrupa child + sr-only sin afectar layout. */
+.ig-tooltip-wrapper {
+  display: contents;
+}
+
+/* Tooltip flotante en portal. Position lo controla Floating UI vía
+   style inline; aquí solo styling visual. */
 .ig-tooltip {
-  position: relative;
-}
-
-.ig-tooltip::before,
-.ig-tooltip::after {
-  position: absolute;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: var(--ig-transition-fast);
-  z-index: var(--ig-z-tooltip);
-}
-
-/* Contenido del tooltip */
-.ig-tooltip::before {
-  content: attr(data-tooltip);
   padding: var(--ig-tooltip-padding);
   background-color: var(--ig-tooltip-bg);
   color: var(--ig-tooltip-text);
@@ -7870,138 +7879,37 @@ Para tooltips más complejos, considera usar una librería JS.
   font-weight: var(--ig-fw-medium);
   white-space: nowrap;
   border-radius: var(--ig-tooltip-radius);
+  z-index: var(--ig-z-tooltip);
+  pointer-events: none;
+  /* Suavizado de aparición. Floating UI no inyecta animation; el
+     tooltip aparece/desaparece junto al mount/unmount del portal. */
+  animation: ig-tooltip-fade-in var(--ig-transition-fast) ease-out;
 }
 
-/* Flechita del tooltip */
-.ig-tooltip::after {
-  content: '';
-  border: 5px solid transparent;
+@keyframes ig-tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Posición Top (default) */
-.ig-tooltip::before,
-.ig-tooltip-place-top::before {
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
-}
+/* Variantes de color — solo el bg cambia. */
+.ig-tooltip-color-brand     { background-color: var(--ig-vitreus); }
+.ig-tooltip-color-secondary { background-color: var(--ig-axis); }
+.ig-tooltip-color-success   { background-color: var(--ig-laurus); }
+.ig-tooltip-color-warning   { background-color: var(--ig-rutilus); }
+.ig-tooltip-color-danger    { background-color: var(--ig-malum); }
+.ig-tooltip-color-info      { background-color: var(--ig-kobalium); }
 
-.ig-tooltip::after,
-.ig-tooltip-place-top::after {
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: -2px;
-  border-top-color: var(--ig-tooltip-bg);
-}
-
-/* Posición Bottom */
-.ig-tooltip-place-bottom::before {
-  top: 100%;
-  bottom: auto;
-  margin-top: 8px;
-  margin-bottom: 0;
-}
-
-.ig-tooltip-place-bottom::after {
-  top: 100%;
-  bottom: auto;
-  margin-top: -2px;
-  margin-bottom: 0;
-  border-top-color: transparent;
-  border-bottom-color: var(--ig-tooltip-bg);
-}
-
-/* Posición Left */
-.ig-tooltip-place-left::before {
-  right: 100%;
-  left: auto;
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%);
-  margin-right: 8px;
-  margin-bottom: 0;
-}
-
-.ig-tooltip-place-left::after {
-  right: 100%;
-  left: auto;
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%);
-  margin-right: -2px;
-  margin-bottom: 0;
-  border-top-color: transparent;
-  border-left-color: var(--ig-tooltip-bg);
-}
-
-/* Posición Right */
-.ig-tooltip-place-right::before {
-  left: 100%;
-  right: auto;
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%);
-  margin-left: 8px;
-  margin-bottom: 0;
-}
-
-.ig-tooltip-place-right::after {
-  left: 100%;
-  right: auto;
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%);
-  margin-left: -2px;
-  margin-bottom: 0;
-  border-top-color: transparent;
-  border-right-color: var(--ig-tooltip-bg);
-}
-
-/* Mostrar en hover */
-.ig-tooltip:hover::before,
-.ig-tooltip:hover::after {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Variantes de color (6 colores) */
-.ig-tooltip-color-brand::before { background-color: var(--ig-vitreus); }
-.ig-tooltip-color-brand::after { border-top-color: var(--ig-vitreus); }
-.ig-tooltip-color-brand.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-vitreus); }
-.ig-tooltip-color-brand.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-vitreus); }
-.ig-tooltip-color-brand.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-vitreus); }
-
-.ig-tooltip-color-secondary::before { background-color: var(--ig-axis); }
-.ig-tooltip-color-secondary::after { border-top-color: var(--ig-axis); }
-.ig-tooltip-color-secondary.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-axis); }
-.ig-tooltip-color-secondary.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-axis); }
-.ig-tooltip-color-secondary.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-axis); }
-
-.ig-tooltip-color-success::before { background-color: var(--ig-laurus); }
-.ig-tooltip-color-success::after { border-top-color: var(--ig-laurus); }
-.ig-tooltip-color-success.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-laurus); }
-.ig-tooltip-color-success.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-laurus); }
-.ig-tooltip-color-success.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-laurus); }
-
-.ig-tooltip-color-warning::before { background-color: var(--ig-rutilus); }
-.ig-tooltip-color-warning::after { border-top-color: var(--ig-rutilus); }
-.ig-tooltip-color-warning.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-rutilus); }
-.ig-tooltip-color-warning.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-rutilus); }
-.ig-tooltip-color-warning.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-rutilus); }
-
-.ig-tooltip-color-danger::before { background-color: var(--ig-malum); }
-.ig-tooltip-color-danger::after { border-top-color: var(--ig-malum); }
-.ig-tooltip-color-danger.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-malum); }
-.ig-tooltip-color-danger.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-malum); }
-.ig-tooltip-color-danger.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-malum); }
-
-.ig-tooltip-color-info::before { background-color: var(--ig-kobalium); }
-.ig-tooltip-color-info::after { border-top-color: var(--ig-kobalium); }
-.ig-tooltip-color-info.ig-tooltip-place-bottom::after { border-top-color: transparent; border-bottom-color: var(--ig-kobalium); }
-.ig-tooltip-color-info.ig-tooltip-place-left::after { border-top-color: transparent; border-left-color: var(--ig-kobalium); }
-.ig-tooltip-color-info.ig-tooltip-place-right::after { border-top-color: transparent; border-right-color: var(--ig-kobalium); }
+/* Las clases .ig-tooltip-place-* quedan vacías en CSS (Floating UI
+   maneja la posición vía style inline). Se mantienen como hook
+   informativo por si en el futuro queremos animaciones
+   direccionales o transformaciones direccionales (transform-origin,
+   slide-in, etc.). NO eliminar. */
 
 
 /*

@@ -789,3 +789,44 @@ Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaj
 - Los slots compound (`-header`, `-body`, `-footer`, etc.) están pensados para reflejar la jerarquía semántica nativa del HTML; no son obligatorios si construyes un layout custom encima.
 - Los componentes con múltiples sub-clases (Sidebar, Card, Modal, Dropdown, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
 - Estados del navegador (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador automáticamente cuando los elementos son interactivos. La librería utility-pseudo (`state.css`, opt-in) permite forzar estados desde HTML estático sin depender del estado real del DOM.
+
+---
+
+## State CSS — fragmentos por pseudo-class (post-RC1)
+
+`state.css` (~700 KB gzipped) es el archivo monolítico con TODAS las
+utility-pseudo (`hover`, `focus`, `active`, `disabled`, `focus-within`,
+`first-child`, `nth-child`, etc.). En post-RC1 se fragmentó por
+pseudo-class para que consumers que solo usen un subset puedan
+importar **únicamente lo que necesiten**.
+
+```ts
+// Antes (todo o nada):
+import "reactigoded/styles/state.css"; // ~700 KB gzipped
+
+// Ahora (granular):
+import "reactigoded/styles/state/hover.css";    // ~30 KB gzipped
+import "reactigoded/styles/state/focus.css";    // ~50 KB gzipped
+import "reactigoded/styles/state/disabled.css"; // ~32 KB gzipped
+```
+
+`reactigoded/styles/state.css` sigue funcionando como meta (backward
+compat 100%): si lo importas tienes todas las pseudo. Los fragmentos
+son **opcional** para consumers que quieren controlar el bundle.
+
+### Fragmentos disponibles
+
+Generados automáticamente por `scripts/build-state-css-fragments.mjs`
+en cada `npm run build`. Lista actual (28 fragmentos):
+
+`hover`, `focus`, `focus-within`, `active`, `disabled`, `checked`,
+`indeterminate`, `required`, `optional`, `invalid`, `valid`,
+`placeholder-shown`, `read-only`, `read-write`, `empty`, `target`,
+`first-child`, `last-child`, `first-of-type`, `last-of-type`,
+`nth-child`, `only-child`, `in-range`, `out-of-range`, `default`,
+`group-hover` (helper igoded), y `other` (cualquier regla sin
+pseudo conocido).
+
+> **No editar a mano**: cada fragmento se sobreescribe en cada build.
+> Para modificar reglas, editar `igoded-state-css.css` y re-correr
+> `npm run build`.

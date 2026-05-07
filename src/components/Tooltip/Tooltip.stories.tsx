@@ -178,7 +178,11 @@ export const AllStates: Story = {
     </div>
   ),
   play: async ({ canvasElement }) => {
-    const tooltips = canvasElement.querySelectorAll(".ig-tooltip");
-    await expect(tooltips.length).toBeGreaterThanOrEqual(10);
+    // Post-RC1: Tooltip migró a Floating UI. El elemento `.ig-tooltip`
+    // visual vive en portal y solo monta al hover. Para snapshot
+    // estático verificamos los wrappers persistentes (uno por
+    // instancia) en lugar de los tooltips abiertos.
+    const wrappers = canvasElement.querySelectorAll(".ig-tooltip-wrapper");
+    await expect(wrappers.length).toBeGreaterThanOrEqual(10);
   },
 };

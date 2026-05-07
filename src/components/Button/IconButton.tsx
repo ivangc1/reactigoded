@@ -47,8 +47,14 @@ export interface IconButtonProps
  * <IconButton variant="brand">★</IconButton>
  */
 export function IconButton({ children, ref, ...rest }: IconButtonProps) {
-  return (
+  // exactOptionalPropertyTypes: pasar `ref` solo si está definido
+  // para evitar `Ref<HTMLButtonElement> | undefined` ↛ `Ref<HTMLButtonElement>`.
+  return ref !== undefined ? (
     <Button icon {...rest} ref={ref}>
+      {children}
+    </Button>
+  ) : (
+    <Button icon {...rest}>
       {children}
     </Button>
   );
