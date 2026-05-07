@@ -7632,6 +7632,17 @@ TAMAÑOS:
 */
 
 .ig-spinner {
+  /* `<span>` es display:inline por defecto y en inline elements
+     width/height NO aplican — el span colapsa a 0×0 y solo el
+     border se renderiza, dejando una línea vertical fina como
+     artefacto. inline-block resuelve el caso de "spinner suelto en
+     flujo de texto" (consumer real); en flex/grid containers el
+     bug quedaba enmascarado porque el flex item adopta layout
+     block-like. vertical-align:middle alinea al x-height del texto
+     adyacente (ej. <Spinner /> + "Cargando…" inline) — sin él, el
+     spinner cae al baseline y visualmente "cuelga". */
+  display: inline-block;
+  vertical-align: middle;
   width: 1.5rem;
   height: 1.5rem;
   border: var(--ig-spinner-w) solid var(--ig-spinner-track);
