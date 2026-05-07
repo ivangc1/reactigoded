@@ -94,4 +94,51 @@ describe("useTopLevelLandmarkCheck", () => {
     setup(null, {});
     expect(warn).toHaveBeenCalled();
   });
+
+  // Sectioning content sin aria-label — HTML5 spec: dentro de
+  // `<aside>`, `<nav>`, `<section>`, `<article>` un `<header>` NO
+  // es banner top-level. Cubre el P2 de codex review post-RC1.
+  describe("sectioning content sin aria-label despromueve banner", () => {
+    it("<header> envuelto en <aside>: NO warn", () => {
+      const warn = spyWarn();
+      setup("aside", {});
+      setup("aside", {});
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("<header> envuelto en <nav>: NO warn", () => {
+      const warn = spyWarn();
+      setup("nav", {});
+      setup("nav", {});
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("<header> envuelto en <section> (sin aria-label): NO warn", () => {
+      const warn = spyWarn();
+      setup("section", {});
+      setup("section", {});
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("<header> envuelto en <article>: NO warn", () => {
+      const warn = spyWarn();
+      setup("article", {});
+      setup("article", {});
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("<header> envuelto en [role=complementary]: NO warn", () => {
+      const warn = spyWarn();
+      setup("div", { role: "complementary" });
+      setup("div", { role: "complementary" });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("<header> envuelto en [role=navigation]: NO warn", () => {
+      const warn = spyWarn();
+      setup("div", { role: "navigation" });
+      setup("div", { role: "navigation" });
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
 });

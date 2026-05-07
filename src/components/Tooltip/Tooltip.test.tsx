@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -172,5 +172,39 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
     await user.keyboard("{Escape}");
     expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+  });
+
+  // Anti-regresión: codex review post-RC1 marcó P1 — el cloneElement
+  // sobreescribía el ref y handlers del child. Verificamos que tras
+  // el fix con useMergeRefs + getReferenceProps(typed.props) ambos se
+  // preservan.
+  it("preserva el ref del child (P1 codex review)", () => {
+    const childRef = createRef<HTMLButtonElement>();
+    render(
+      <Tooltip text="Eliminar">
+        <button ref={childRef}>×</button>
+      </Tooltip>,
+    );
+    // El ref del consumer sigue apuntando al button real.
+    expect(childRef.current).toBeInstanceOf(HTMLButtonElement);
+    expect(childRef.current?.tagName).toBe("BUTTON");
+  });
+
+  it("preserva onMouseEnter / onFocus del child (P1 codex review)", async () => {
+    const user = userEvent.setup();
+    const onMouseEnter = vi.fn();
+    const onFocus = vi.fn();
+    render(
+      <Tooltip text="Eliminar">
+        <button onMouseEnter={onMouseEnter} onFocus={onFocus}>
+          ×
+        </button>
+      </Tooltip>,
+    );
+    const btn = screen.getByRole("button");
+    await user.hover(btn);
+    expect(onMouseEnter).toHaveBeenCalled();
+    btn.focus();
+    expect(onFocus).toHaveBeenCalled();
   });
 });

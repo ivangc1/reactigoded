@@ -10,14 +10,31 @@ import { useEffect, type RefObject } from "react";
  */
 const topLevelLandmarkCount = new Map<string, number>();
 
+// Sectioning content de HTML5 (`article`, `aside`, `nav`, `section`)
+// + sectioning roots (`main`, `[role="main"]`). Dentro de cualquiera
+// de estos, un `<header>` NO es role=banner top-level (es header de
+// la sección, no del documento). Análogamente para `<footer>` y
+// contentinfo. Por eso los tratamos como wrappers que despromueven
+// el rol implícito.
+//
+// Incluye también roles ARIA equivalentes para el caso de divs con
+// `role="..."`. Los selectores `section[aria-label]` / `[aria-labelledby]`
+// son redundantes ahora que `section` solo ya está, pero los dejamos
+// explícitos para claridad documental.
 const WRAPPER_SELECTOR = [
-  "main",
+  // Sectioning content (HTML5 spec)
   "article",
+  "aside",
+  "nav",
+  "section",
+  // Sectioning root
+  "main",
+  // Roles ARIA equivalentes (para div + role)
   '[role="main"]',
-  '[role="region"]',
   '[role="article"]',
-  "section[aria-label]",
-  "section[aria-labelledby]",
+  '[role="complementary"]',
+  '[role="navigation"]',
+  '[role="region"]',
 ].join(", ");
 
 /**

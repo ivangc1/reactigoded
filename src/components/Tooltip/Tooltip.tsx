@@ -4,6 +4,7 @@ import {
   useId,
   useState,
   type HTMLAttributes,
+  type HTMLProps,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -19,6 +20,7 @@ import {
   useFocus,
   useHover,
   useInteractions,
+  useMergeRefs,
 } from "@floating-ui/react";
 import { cn } from "@/utils/cn";
 
@@ -46,11 +48,6 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
   /** Delay en ms antes de ocultar al desactivar. Por defecto `0`. */
   closeDelay?: number;
   ref?: Ref<HTMLSpanElement>;
-}
-
-interface DescribableProps {
-  "aria-describedby"?: string;
-  ref?: Ref<unknown>;
 }
 
 /**
@@ -130,23 +127,49 @@ export function Tooltip({
     dismiss,
   ]);
 
-  // Inyectar refs/handlers de Floating UI + aria-describedby PERSISTENTE
-  // (apunta al sr-only span de abajo, no al portal). Orden importa:
-  // primero `getReferenceProps()` para no perder ningún handler que
-  // necesite Floating UI, luego nuestro aria-describedby al final
-  // para que NO sea sobreescrito.
+  // Preservar el `ref` del child (consumer puede tener uno para
+  // foco programático, mediciones, analytics, etc.) mergeándolo con
+  // `refs.setReference` de Floating UI vía `useMergeRefs`. Si el
+  // child no tiene ref, el merge funciona igual (Floating UI
+  // tolera null en el array). Hook fuera del `if` por la regla de
+  // hooks (orden estable entre renders).
+  // Cast única del child a `ReactElement<HTMLProps<HTMLElement>>` para
+  // alinear su firma con la que `getReferenceProps` y Floating UI
+  // esperan. El consumer puede pasar cualquier elemento HTML
+  // (`<button>`, `<a>`, `<span>`); `HTMLProps<HTMLElement>` cubre los
+  // shape comunes (handlers, ref) sin perder ayuda TS dentro del
+  // bloque (autocompleta `aria-describedby`, `onClick`, etc.).
+  const typedChild = isValidElement(children)
+    ? (children as ReactElement<HTMLProps<HTMLElement>>)
+    : null;
+
+  // Preservar el ref del child (consumer puede tener uno para foco
+  // programático, mediciones, analytics, etc.) mergeándolo con
+  // `refs.setReference` de Floating UI vía `useMergeRefs`. Si el
+  // child no tiene ref, el merge funciona igual (Floating UI tolera
+  // null en el array). Hook fuera del `if` por la regla de hooks
+  // (orden estable entre renders).
+  const childRef = typedChild?.props.ref ?? null;
+  const referenceRef = useMergeRefs([refs.setReference, childRef]);
+
+  // Inyectar handlers/refs de Floating UI MERGEADOS con los del child:
+  // - `getReferenceProps(typedChild.props)` pasa los props existentes,
+  //   así Floating UI fusiona `onMouseEnter`/`onFocus`/`onBlur`/etc.
+  //   del consumer con sus propios listeners en lugar de pisarlos.
+  // - `referenceRef` (mergeado arriba) preserva cualquier ref del
+  //   consumer en lugar de sobreescribirlo.
+  // - `aria-describedby` al final para que NO sea pisado (apunta al
+  //   sr-only span persistente, no al portal).
   let child: ReactNode = children;
-  if (isValidElement(children)) {
-    const typed = children as ReactElement<DescribableProps>;
-    const existing = typed.props["aria-describedby"];
+  if (typedChild) {
+    const existing = typedChild.props["aria-describedby"];
     const combined = existing ? `${existing} ${tooltipId}` : tooltipId;
-    /* eslint-disable react-hooks/refs -- refs.setReference es un callback ref de Floating UI que React invoca en commit. La regla experimental marca el paso de refs a cloneElement como "passing a ref to a function may read during render", pero el setReference NO lee `.current` — es un setter. Mismo patrón aceptado por el comentario disable en Stepper.tsx post-beta.22 y en el FloatingPortal de abajo. */
-    child = cloneElement(typed, {
-      ...getReferenceProps(),
-      ref: refs.setReference,
+    const referenceProps = getReferenceProps(typedChild.props);
+    child = cloneElement(typedChild, {
+      ...referenceProps,
+      ref: referenceRef,
       "aria-describedby": combined,
-    } as Partial<DescribableProps>);
-    /* eslint-enable react-hooks/refs */
+    });
   } else if (
     import.meta.env.DEV &&
     children !== null &&
@@ -173,7 +196,6 @@ export function Tooltip({
       {isOpen && (
         <FloatingPortal>
           <span
-            // eslint-disable-next-line react-hooks/refs -- refs.setFloating es un callback ref de @floating-ui/react. La regla experimental marca el acceso a `refs.X` durante render como riesgo de stale capture, pero aquí es un setter (no lectura de `.current`) y Floating UI lo gestiona internamente. Mismo patrón aceptado en Stepper post-beta.22.
             ref={refs.setFloating}
             style={floatingStyles}
             className={cn(
