@@ -564,7 +564,22 @@ está. Solo documentación.
 | 6.1 regla anti-`console.error` warnings React | 0 (regla) | beta.20 | ✅ documentada |
 | 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20 | ✅ aplicada |
 
-**Total restante**: 13-20h Claude Code distribuidas en milestones.
+**Total restante**: 0h — todas las capas accionables ✅ aplicadas en
+beta.20, beta.21 y post-RC1. Lo único que queda son items
+bloqueados por razón externa documentados en `POST_RC1_BACKLOG.md`
+(esperar 2 meses feedback para tripwire `axis-kobalium`, esperar
+1.0.0 estable para quitar Chromatic `--auto-accept-changes=main`)
+y la decisión humana sobre el ΔE Check 3 → ERROR con allowlist
+permanente (Punto 35 del plan beta.19, decisión pendiente).
+
+**Coste real total ejecutado** (vs estimación 13-20h):
+- Capa 1 (1.1, 1.2, 1.3, 1.4, 1.5, 1.6): ~5h.
+- Capa 2 (2.2, 2.3): ~2h.
+- Capa 3 (3.1, 3.2): ~4h.
+- Capa 5 (doc + audit): ~1.5h.
+- Capa 6 (6.1, 6.2): ~10 min.
+- Auditoría reset.css: 1h.
+- **Total ~13.5h** dentro del rango estimado.
 
 ---
 
