@@ -140,11 +140,13 @@ export function Tooltip({
     const typed = children as ReactElement<DescribableProps>;
     const existing = typed.props["aria-describedby"];
     const combined = existing ? `${existing} ${tooltipId}` : tooltipId;
+    /* eslint-disable react-hooks/refs -- refs.setReference es un callback ref de Floating UI que React invoca en commit. La regla experimental marca el paso de refs a cloneElement como "passing a ref to a function may read during render", pero el setReference NO lee `.current` — es un setter. Mismo patrón aceptado por el comentario disable en Stepper.tsx post-beta.22 y en el FloatingPortal de abajo. */
     child = cloneElement(typed, {
       ...getReferenceProps(),
       ref: refs.setReference,
       "aria-describedby": combined,
     } as Partial<DescribableProps>);
+    /* eslint-enable react-hooks/refs */
   } else if (
     import.meta.env.DEV &&
     children !== null &&
@@ -171,6 +173,7 @@ export function Tooltip({
       {isOpen && (
         <FloatingPortal>
           <span
+            // eslint-disable-next-line react-hooks/refs -- refs.setFloating es un callback ref de @floating-ui/react. La regla experimental marca el acceso a `refs.X` durante render como riesgo de stale capture, pero aquí es un setter (no lectura de `.current`) y Floating UI lo gestiona internamente. Mismo patrón aceptado en Stepper post-beta.22.
             ref={refs.setFloating}
             style={floatingStyles}
             className={cn(

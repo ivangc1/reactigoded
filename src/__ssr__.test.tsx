@@ -415,6 +415,7 @@ const cases: SsrCase[] = [
 describe("SSR — renderToString por componente del DS", () => {
   for (const c of cases) {
     it(`${c.name}: renderiza sin lanzar y emite clase base`, () => {
+      // eslint-disable-next-line testing-library/render-result-naming-convention -- `html` viene de renderToString de react-dom/server, no del `render` de testing-library; la regla no aplica.
       const html = renderToString(c.jsx());
       // Si `expects` es string vacío, solo validamos que no lanzó (el
       // assertion sobre `html` siempre pasa).

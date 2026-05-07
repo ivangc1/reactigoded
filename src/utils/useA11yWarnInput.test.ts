@@ -1,45 +1,42 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { useRef, type RefObject } from "react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { type RefObject } from "react";
 import { renderHook } from "@testing-library/react";
 import { useA11yWarnInput } from "./useA11yWarnInput";
 
 describe("useA11yWarnInput", () => {
-  let warn: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  });
-
   afterEach(() => {
-    warn.mockRestore();
+    vi.restoreAllMocks();
     // Limpiar el DOM entre tests — vitest usa `isolate: false` y los
     // tests cross-archivo comparten document si no limpiamos.
     document.body.innerHTML = "";
   });
 
-  // Helper que crea un input mock + ref que apunta a él, y luego invoca
-  // el hook. Devuelve el spy para asserts.
+  // Helper que crea un input mock + ref que apunta a él, espía
+  // console.warn, y luego invoca el hook. Devuelve { input, warn }
+  // para asserts.
   function setup(setupAttrs: (el: HTMLInputElement) => void) {
     const input = document.createElement("input");
     setupAttrs(input);
     document.body.appendChild(input);
     const refObj: RefObject<HTMLInputElement | null> = { current: input };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     renderHook(() => {
       useA11yWarnInput(refObj, "Input");
     });
-    return input;
+    return { input, warn };
   }
 
   it("warn cuando el input NO tiene aria-label, aria-labelledby, htmlFor ni placeholder", () => {
-    setup(() => {});
+    const { warn } = setup(() => {});
     expect(warn).toHaveBeenCalledOnce();
-    const msg = String(warn.mock.calls[0]?.[0] ?? "");
+    const firstCall = warn.mock.calls[0];
+    const msg = firstCall ? String(firstCall[0]) : "";
     expect(msg).toContain("<Input>");
     expect(msg).toContain("sin label asociado");
   });
 
   it("NO warn cuando hay aria-label", () => {
-    setup((el) => {
+    const { warn } = setup((el) => {
       el.setAttribute("aria-label", "Email del usuario");
     });
     expect(warn).not.toHaveBeenCalled();
@@ -49,21 +46,21 @@ describe("useA11yWarnInput", () => {
     const labelEl = document.createElement("span");
     labelEl.id = "label-x";
     document.body.appendChild(labelEl);
-    setup((el) => {
+    const { warn } = setup((el) => {
       el.setAttribute("aria-labelledby", "label-x");
     });
     expect(warn).not.toHaveBeenCalled();
   });
 
   it("NO warn cuando hay placeholder no vacío", () => {
-    setup((el) => {
+    const { warn } = setup((el) => {
       el.setAttribute("placeholder", "alguien@ejemplo.com");
     });
     expect(warn).not.toHaveBeenCalled();
   });
 
   it("SÍ warn cuando placeholder es string vacío", () => {
-    setup((el) => {
+    const { warn } = setup((el) => {
       el.setAttribute("placeholder", "");
     });
     expect(warn).toHaveBeenCalledOnce();
@@ -74,7 +71,7 @@ describe("useA11yWarnInput", () => {
     label.setAttribute("for", "input-x");
     label.textContent = "Email";
     document.body.appendChild(label);
-    setup((el) => {
+    const { warn } = setup((el) => {
       el.id = "input-x";
     });
     expect(warn).not.toHaveBeenCalled();
@@ -84,10 +81,12 @@ describe("useA11yWarnInput", () => {
     const ta = document.createElement("textarea");
     document.body.appendChild(ta);
     const refObj: RefObject<HTMLTextAreaElement | null> = { current: ta };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     renderHook(() => {
       useA11yWarnInput(refObj, "Textarea");
     });
-    const msg = String(warn.mock.calls[0]?.[0] ?? "");
+    const firstCall = warn.mock.calls[0];
+    const msg = firstCall ? String(firstCall[0]) : "";
     expect(msg).toContain("<Textarea>");
   });
 
@@ -95,6 +94,7 @@ describe("useA11yWarnInput", () => {
     const input = document.createElement("input");
     document.body.appendChild(input);
     const refObj: RefObject<HTMLInputElement | null> = { current: input };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { rerender } = renderHook(() => {
       useA11yWarnInput(refObj, "Input");
     });

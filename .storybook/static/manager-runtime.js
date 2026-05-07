@@ -1,3 +1,4 @@
+/* global document, MutationObserver */
 /**
  * Script runtime del manager de Storybook — externalizado en post-RC1
  * para permitir CSP estricta (`script-src 'self'`) en deploys que la

@@ -5,20 +5,28 @@ import {
   __resetLandmarkRegistryForTests,
 } from "./useLandmarkRegistry";
 
-describe("useLandmarkRegistry", () => {
-  let warn: ReturnType<typeof vi.spyOn>;
+/**
+ * Helper que crea un spy local en `console.warn`. El cleanup lo
+ * hace `vi.restoreAllMocks()` en `afterEach` global. Devolver el
+ * spy desde una función evita el `let warn: ReturnType<typeof
+ * vi.spyOn>` global que typescript-eslint trata como `any`.
+ */
+function spyWarn() {
+  return vi.spyOn(console, "warn").mockImplementation(() => {});
+}
 
+describe("useLandmarkRegistry", () => {
   beforeEach(() => {
-    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     __resetLandmarkRegistryForTests();
   });
 
   afterEach(() => {
-    warn.mockRestore();
+    vi.restoreAllMocks();
     __resetLandmarkRegistryForTests();
   });
 
   it("UN landmark único: NO warn", () => {
+    const warn = spyWarn();
     renderHook(() => {
       useLandmarkRegistry("navigation", "Migas de pan");
     });
@@ -26,6 +34,7 @@ describe("useLandmarkRegistry", () => {
   });
 
   it("DOS landmarks distinto role + mismo label: NO warn", () => {
+    const warn = spyWarn();
     renderHook(() => {
       useLandmarkRegistry("navigation", "Principal");
     });
@@ -36,6 +45,7 @@ describe("useLandmarkRegistry", () => {
   });
 
   it("DOS landmarks mismo role + label DISTINTO: NO warn", () => {
+    const warn = spyWarn();
     renderHook(() => {
       useLandmarkRegistry("navigation", "Migas de pan");
     });
@@ -46,6 +56,7 @@ describe("useLandmarkRegistry", () => {
   });
 
   it("DOS landmarks mismo role + mismo label: SÍ warn (colisión)", () => {
+    const warn = spyWarn();
     renderHook(() => {
       useLandmarkRegistry("navigation", "Principal");
     });
@@ -53,13 +64,15 @@ describe("useLandmarkRegistry", () => {
       useLandmarkRegistry("navigation", "Principal");
     });
     expect(warn).toHaveBeenCalled();
-    const msg = String(warn.mock.calls[0]?.[0] ?? "");
+    const firstCall = warn.mock.calls[0];
+    const msg = firstCall ? String(firstCall[0]) : "";
     expect(msg).toContain("navigation");
     expect(msg).toContain("Principal");
     expect(msg).toContain("aria-label");
   });
 
   it("ariaLabel undefined: NO warn (regla aparte)", () => {
+    const warn = spyWarn();
     renderHook(() => {
       useLandmarkRegistry("navigation", undefined);
     });
@@ -70,6 +83,7 @@ describe("useLandmarkRegistry", () => {
   });
 
   it("unmount limpia el registry: re-mount con mismo label NO warn", () => {
+    const warn = spyWarn();
     const { unmount } = renderHook(() => {
       useLandmarkRegistry("navigation", "Principal");
     });
@@ -81,6 +95,7 @@ describe("useLandmarkRegistry", () => {
   });
 
   it("3 instancias mismo label: warn en 2ª y 3ª (cada colisión nueva)", () => {
+    const warn = spyWarn();
     renderHook(() => {
       useLandmarkRegistry("navigation", "Principal");
     });
