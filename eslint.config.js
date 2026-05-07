@@ -110,7 +110,13 @@ export default defineConfig([
     },
   },
 
-  // Componentes que integran @floating-ui/react.
+  // Componentes que integran @floating-ui/react (subfamilia
+  // src/components/floating/). Estructura definida pre-rc.1
+  // para acomodar Tooltip + futuros Popover, HoverCard, menus
+  // (Dropdown/Context/MenuBar/Submenu), selection (Select/Combobox/
+  // Autocomplete/MultiSelect/TagInput), pickers (Date/Time/Color/
+  // Emoji), editor (FloatingToolbar/MentionMenu/SlashCommand) y
+  // overlays (Tour/FloatingActionMenu).
   //
   // La regla `react-hooks/refs` (eslint-plugin-react-hooks v7+,
   // compiler-aware) detecta lecturas de `ref.current` durante render —
@@ -124,14 +130,12 @@ export default defineConfig([
   // Floating UI usa (b) y (c) en cada componente. La regla y la
   // librería están en desacuerdo arquitectural, no caso por caso —
   // sembrar `eslint-disable-next-line` por cada uso multiplicaría
-  // ruido sin beneficio. Apagamos la regla solo en los archivos que
-  // integran Floating UI.
-  //
-  // Si en el futuro se añaden Popover/Combobox/Select-with-listbox/
-  // ComboBox basados en Floating UI, ampliar este `files` glob.
-  // Mientras tanto el scope está estrecho a Tooltip.
+  // ruido sin beneficio. Apagamos la regla en TODOS los archivos
+  // bajo `floating/`. El glob es estable: cualquier nuevo componente
+  // de Floating UI añadido a la subfamilia hereda la decisión sin
+  // tocar el config.
   {
-    files: ["src/components/Tooltip/**/*.tsx"],
+    files: ["src/components/floating/**/*.{ts,tsx}"],
     rules: {
       "react-hooks/refs": "off",
     },
