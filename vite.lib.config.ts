@@ -115,7 +115,22 @@ export default defineConfig({
         `index.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: ["react", "react-dom", "react/jsx-runtime"],
+      // @floating-ui/react: peer-dep externalizada desde post-RC1.
+      // Razones (decisión documentada en POST_RC1_BACKLOG.md):
+      //   • Tamaño: ahorra ~17 KB gz del bundle ESM (de ~31 KB → ~15 KB).
+      //   • Deduplicación: si el consumer ya tiene @floating-ui/react
+      //     en su árbol (Radix, Headless UI, otra DS), bundlearla
+      //     duplica la dep en runtime.
+      // NO externalizamos por "higiene de logs" — externalizar NO
+      // elimina los console del consumer, solo los mueve a su bundle.
+      // El guardrail CI con scope a `[reactigoded]` cubre la higiene
+      // en commit separado (`cade31e`).
+      external: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@floating-ui/react",
+      ],
       output: {
         // B-17: garantiza que la directiva "use client" llegue al bundle
         // publicado (dist/index.js + dist/index.cjs), preservada como

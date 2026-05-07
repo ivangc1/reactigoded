@@ -108,13 +108,13 @@
     {
       "name": "JS bundle ESM (gzip)",
       "path": "dist/index.js",
-      "limit": "35 KB",
+      "limit": "16 KB",
       "gzip": true
     },
     {
       "name": "JS bundle CJS (gzip)",
       "path": "dist/index.cjs",
-      "limit": "32 KB",
+      "limit": "15 KB",
       "gzip": true
     },
     {
@@ -185,15 +185,16 @@
     }
   ],
   "peerDependencies": {
+    "@floating-ui/react": ">=0.27.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0"
   },
   "dependencies": {
-    "@floating-ui/react": "^0.27.19",
     "clsx": "^2.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@floating-ui/react": "^0.27.19",
     "@size-limit/file": "^12.1.0",
     "@storybook/addon-a11y": "^10.3.6",
     "@storybook/addon-docs": "^10.3.6",

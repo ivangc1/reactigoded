@@ -13,7 +13,7 @@ Cada entrada documenta:
 
 ---
 
-## Externalizar `@floating-ui/react` como peer-dep (decisión separada)
+## Externalizar `@floating-ui/react` como peer-dep ✅ aplicado en post-RC1
 
 **De dónde sale**: post-RC1 sesión, tras añadir Tooltip Floating UI
 (commit `74d41b7`). El step CI `Bundle has no dev warns` falló por
@@ -50,6 +50,21 @@ CI con scope a `[reactigoded]`.
 
 **Estimación**: 1h (cambio config + actualizar docs + verificar
 Storybook).
+
+**Aplicado en post-RC1** (commit a continuación de cade31e):
+- `package.json`: `@floating-ui/react` movida de `dependencies` a
+  `peerDependencies` con range `>=0.27.0` (requerido, sin
+  `peerDependenciesMeta` opcional). Añadida también a
+  `devDependencies` (`^0.27.19`) para que el dev local + Storybook
+  la tengan resuelta.
+- `vite.lib.config.ts`: añadida a `rollupOptions.external`.
+- `README.md`: instalación documenta el peer obligatorio.
+- size-limit budgets ESM/CJS revertidos a 16/15 KB (era 35/32 KB
+  para acomodar floating-ui bundleada).
+- Verificado local: ESM 31.74 → 14.42 KB gz (−54%), CJS 28.5 →
+  12.89 KB gz (−55%). `console.*` count = 0 (la dep externalizada
+  se llevó el `console.error` de tabbable). `[reactigoded]` count
+  = 0 (DCE de nuestros warns intacto). 20/20 Tooltip tests verde.
 
 ---
 
