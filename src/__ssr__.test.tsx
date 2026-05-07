@@ -131,15 +131,15 @@ const cases: SsrCase[] = [
   },
   {
     name: "Avatar",
-    jsx: () => <Avatar name="Alex" />,
+    jsx: () => <Avatar initials="AX" />,
     expects: "ig-avatar",
   },
   {
     name: "AvatarGroup",
     jsx: () => (
       <AvatarGroup>
-        <Avatar name="A" />
-        <Avatar name="B" />
+        <Avatar initials="A" />
+        <Avatar initials="B" />
       </AvatarGroup>
     ),
     expects: "ig-avatar-group",
@@ -154,7 +154,7 @@ const cases: SsrCase[] = [
     jsx: () => (
       <Breadcrumb>
         <BreadcrumbItem href="/">Inicio</BreadcrumbItem>
-        <BreadcrumbItem isCurrentPage>Detalle</BreadcrumbItem>
+        <BreadcrumbItem current>Detalle</BreadcrumbItem>
       </Breadcrumb>
     ),
     expects: "ig-breadcrumb",
