@@ -52,17 +52,30 @@ jobs:
       - name: Build (lib + dts + styles)
         run: npm run build
 
-      - name: Bundle has no dev warns (B-07 follow-up)
+      - name: Bundle has no dev warns (B-07 follow-up, post-RC1 refined)
         # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`
         # para que esbuild/Vite los hagan DCE en producción. Si una
         # regresión introduce un \`console.warn\` que no respeta el guard,
         # llegaría al bundle publicado. size-limit lo detecta indirectamente
         # como crecimiento; este step lo fuerza directamente.
+        #
+        # Post-RC1 (Tooltip Floating UI): el assertion blanket
+        # \`grep -c 'console\\.'\` mezclaba dos clases distintas:
+        #   (1) dev-warns nuestros que deben podarse en producción.
+        #   (2) errores runtime legítimos de terceros (ej. tabbable
+        #       dispara \`console.error\` cuando detecta un radio button
+        #       mal configurado en runtime — info útil en producción
+        #       que no debe podarse aunque pudiéramos).
+        # La intención original del guardrail B-07 era detectar (1).
+        # Restringiendo el match al prefijo \`[reactigoded]\` (firma
+        # única de nuestros warns) cubrimos exactamente el caso de
+        # regresión nuestra y dejamos pasar los logs propios de deps.
+        # \`grep -F\` (fixed string, no regex) es lo más a prueba de
+        # futuro si mañana cambia el prefijo a algo con caracteres
+        # especiales.
         run: |
-          test "$(grep -c 'console\.' dist/index.js  || true)" = "0"
-          test "$(grep -c 'console\.' dist/index.cjs || true)" = "0"
-          test "$(grep -c '\[reactigoded\]' dist/index.js  || true)" = "0"
-          test "$(grep -c '\[reactigoded\]' dist/index.cjs || true)" = "0"
+          test "$(grep -cF '[reactigoded]' dist/index.js  || true)" = "0"
+          test "$(grep -cF '[reactigoded]' dist/index.cjs || true)" = "0"
 
       - name: Size budgets
         run: npm run verify:size

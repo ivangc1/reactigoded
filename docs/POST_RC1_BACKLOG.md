@@ -13,6 +13,46 @@ Cada entrada documenta:
 
 ---
 
+## Externalizar `@floating-ui/react` como peer-dep (decisión separada)
+
+**De dónde sale**: post-RC1 sesión, tras añadir Tooltip Floating UI
+(commit `74d41b7`). El step CI `Bundle has no dev warns` falló por
+el `console.error` de `tabbable` (dep transitiva de `@floating-ui/react`)
+que llega al bundle publicado.
+
+**Por qué no se arregla ahora**: la solución del fallo CI fue refinar
+el assertion (alcanzarlo solo a la firma `[reactigoded]`), no
+externalizar la dep. Externalizar es una decisión de empaquetado
+separada con su propio mérito y propios trade-offs.
+
+**Razones legítimas para externalizar (cuando se aborde)**:
+- **Tamaño**: ahorra ~17 KB gz del JS bundle ESM (de 31.74 → ~15 KB).
+- **Deduplicación**: si el consumer ya tiene `@floating-ui/react`
+  en su árbol (Radix, Headless UI, otra DS), la versión bundleada
+  duplica la dep en runtime.
+
+**NO es razón legítima**: "bundle más limpio sin console.error
+foreign". Externalizar NO elimina los console del consumer — solo
+los mueve a su bundle. La higiene de logs se cubre vía el guardrail
+CI con scope a `[reactigoded]`.
+
+**Decisiones a definir cuando se aplique**:
+- Range del peer (`"@floating-ui/react": "^0.27.0"` o el actual).
+- ¿`peerDependenciesMeta` opcional o requerido? **Probablemente
+  requerido** — sin la dep, Tooltip no renderea.
+- Verificar que Storybook propio tenga `@floating-ui/react` en
+  `devDependencies` directas (no solo transitiva vía la lib que
+  consume).
+- Documentar en CHANGELOG como BREAKING CHANGE (consumer debe
+  hacer `npm install @floating-ui/react`).
+- Ventana: post-1.0.0 estable. Pre-1.0.0 todavía aceptable como
+  breaking, pero merece su propio commit/PR aislado.
+
+**Estimación**: 1h (cambio config + actualizar docs + verificar
+Storybook).
+
+---
+
 ## CSP estricta — script inline en `.storybook/main.ts` ✅ resuelto en post-RC1
 
 **De dónde sale**: revisión humana de C5 (B-04 + B-05).
