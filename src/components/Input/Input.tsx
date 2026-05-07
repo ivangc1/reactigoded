@@ -1,6 +1,12 @@
-import type { InputHTMLAttributes, Ref } from "react";
+import {
+  useCallback,
+  useRef,
+  type InputHTMLAttributes,
+  type Ref,
+} from "react";
 import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
+import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
 export type InputSize = "sm" | "md" | "lg";
 export type InputState = "default" | "error" | "success";
@@ -33,6 +39,10 @@ export interface InputProps
  * Input — `<input>` estilizado con tamaños y estados de validación visual.
  * Acepta cualquier `type` válido de input nativo. Para enlazar `Helper` y
  * `ErrorText` a tecnologías asistivas, pasa sus `id` en `describedBy`.
+ *
+ * **A11y dev warn**: si en desarrollo se monta sin `<Label htmlFor>`,
+ * `aria-label`, `aria-labelledby` ni `placeholder`, se emite warn
+ * `[reactigoded] <Input> sin label asociado.` (capa 1.1 debt doc).
  */
 export function Input({
   size = "md",
@@ -45,10 +55,24 @@ export function Input({
   const { "aria-describedby": ariaDescribedByNative, ...inputRest } = rest;
   const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
 
+  const internalRef = useRef<HTMLInputElement>(null);
+  useA11yWarnInput(internalRef, "Input");
+  // setRefs estabilizado con useCallback — patrón canónico del DS
+  // (Stepper, Checkbox, Switch). Permite mantener un ref interno
+  // (para el hook a11y) sin perder el ref del consumer.
+  const setRefs = useCallback(
+    (el: HTMLInputElement | null) => {
+      internalRef.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
+
   return (
     <input
       {...inputRest}
-      ref={ref}
+      ref={setRefs}
       className={cn(
         "ig-input",
         size !== "md" && `ig-input-${size}`,

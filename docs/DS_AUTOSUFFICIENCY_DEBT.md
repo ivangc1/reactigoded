@@ -44,13 +44,13 @@ Patrones que el componente puede auto-detectar con dev-warn o hooks de
 validación. NO requieren navegador real. Cada solución va con su test
 unit anti-regresión y entry en CHANGELOG.
 
-### 1.1 Inputs sin label asociado
+### 1.1 Inputs sin label asociado ✅ aplicada en post-RC1
 
-**Estado actual**: consumer debe acordarse de `aria-label` /
-`placeholder` / `<Label htmlFor>`.
-
-**Solución**: hook `useA11yWarnInput()` que warn en dev si
-Input/Textarea/Select se monta sin ningún mecanismo de label.
+**Solución aplicada**: hook `src/utils/useA11yWarnInput.ts` que warn
+en dev cuando Input/Textarea/Select se montan sin ningún mecanismo
+de label (htmlFor, aria-label, aria-labelledby, placeholder no vacío).
+Una vez por instancia. Aplicado a Input, Textarea, Select. Tests
+anti-regresión cubren los 4 mecanismos + componentName en mensaje.
 
 ```tsx
 useEffect(() => {
@@ -73,29 +73,36 @@ useEffect(() => {
 **Estimación**: 1-2h.
 **Detectado**: beta.19 (AllStates Ola 1).
 
-### 1.2 Multi-landmarks `<nav>`/`<aside>` sin aria-label único
+### 1.2 Multi-landmarks `<nav>`/`<aside>` sin aria-label único ✅ aplicada en post-RC1
 
-**Estado actual**: consumer debe pasar aria-label único.
-
-**Solución**: registry global `useLandmarkRegistry(role, ariaLabel)`
-que warn en dev si detecta colisión de aria-label dentro del mismo
-role.
+**Solución aplicada**: hook `src/utils/useLandmarkRegistry.ts` con
+registry shared a nivel módulo (role → Map<label, count>). Warn dev
+cuando dos componentes con el mismo role landmark tienen aria-label
+idéntico vivos al mismo tiempo. Aplicado a Breadcrumb (navigation),
+NavbarNav (navigation), Pagination (navigation), Sidebar
+(complementary), SidebarNav (navigation). Tests anti-regresión
+cubren: NO warn con role distinto / label distinto / undefined,
+SÍ warn con colisión, unmount limpia el registry, 3 instancias
+warnean 2 veces.
 
 **Componentes afectados**: Sidebar, SidebarNav, Pagination, Breadcrumb,
 cualquier componente con `<nav>` o `<aside>`.
 **Estimación**: 2-3h (hook + adopción).
 **Detectado**: beta.19 (Breadcrumb), beta.20 sub-B (SidebarNav).
 
-### 1.3 Multi-landmarks `<header>`/`<footer>` top-level
+### 1.3 Multi-landmarks `<header>`/`<footer>` top-level ✅ aplicada en post-RC1
 
-**Estado actual**: consumer debe envolver instancias en wrapper
-landmark. En catálogos / galerías (AllStates, docs vivas) este patrón
-se rompe sistemáticamente.
-
-**Solución**: detección en mount con `node.closest()` para verificar
-si está dentro de contenedor landmark (`<main>`, `<article>`,
-`<section aria-label>`, `[role="region"]`). Warn si NO está envuelto y
-hay otra instancia top-level viva (counter shared a nivel módulo).
+**Solución aplicada**: hook
+`src/utils/useTopLevelLandmarkCheck.ts` con counter shared a nivel
+módulo. En mount, usa `closest(WRAPPER_SELECTOR)` para verificar si
+el elemento está dentro de un wrapper landmark (`<main>`, `<article>`,
+`<section aria-label>`, `[role="region"]`, etc.). Si NO está
+envuelto, contribuye al counter top-level. Si el counter sube de
+1 a 2, warn dev con el role afectado y mitigación sugerida
+(envolver en `<section aria-label>`). Aplicado a Navbar (banner).
+Tests anti-regresión cubren: 1 top-level NO warn, 2 SÍ warn,
+envuelto en main/section[aria-label]/[role=region] NO cuenta,
+mezcla top-level + envuelto.
 
 **Patrón documentado de mitigación story-level** (cuando el componente
 todavía no implementa el warn): envolver cada instancia en
@@ -516,9 +523,9 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 1.4 warn `useControllableState` (Option E) | 1.5h | beta.21 | ✅ aplicada (commit `d7589d8`); desde beta.22 el flag interno se elimina del dts vía stripInternal (B-02) |
 | 1.5 utility `queryAllByRoleSafe` | 30 min | beta.20 | ✅ aplicado |
 | 1.6 utility `expectAtLeast` | 30 min | beta.20 | ✅ aplicado |
-| 1.1 hook `useA11yWarnInput` | 1-2h | post-beta.20 | ⏳ |
-| 1.2 hook `useLandmarkRegistry` | 2-3h | rc.1 | ⏳ |
-| 1.3 detección banner top-level | 2h | rc.1 | ⏳ |
+| 1.1 hook `useA11yWarnInput` | 1h real | post-RC1 | ✅ aplicada |
+| 1.2 hook `useLandmarkRegistry` | 1.5h real | post-RC1 | ✅ aplicada |
+| 1.3 detección banner top-level | 1h real | post-RC1 | ✅ aplicada |
 | 3.1 script CSS scope-leak | 2h real | beta.21 | ✅ aplicada |
 | 3.2 script hex drift detection | 2h real | post-RC1 | ✅ aplicada |
 | 2.2 stories focus-visible | 1-2h | 1.0.0 final | ⏳ |

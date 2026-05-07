@@ -7,6 +7,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
 
 export interface BreadcrumbProps extends HTMLAttributes<HTMLElement> {
   /** Separador entre items. Por defecto `"/"`. Puede ser nodo (icono). */
@@ -31,12 +32,16 @@ export function Breadcrumb({
   const items = Children.toArray(children).filter(isValidElement);
   // 1.0.0-beta.4: aria-label del rest (HTML std).
   const { "aria-label": ariaLabelOverride, ...navRest } = rest;
+  const resolvedAriaLabel = ariaLabelOverride ?? "Migas de pan";
+  // Capa 1.2 debt doc: warn dev si dos <nav aria-label="..."> con el
+  // mismo label viven al mismo tiempo (axe rule landmark-unique).
+  useLandmarkRegistry("navigation", resolvedAriaLabel);
 
   return (
     <nav
       {...navRest}
       ref={ref}
-      aria-label={ariaLabelOverride ?? "Migas de pan"}
+      aria-label={resolvedAriaLabel}
       className={cn("ig-breadcrumb", className)}
     >
       {items.map((item, idx) => (

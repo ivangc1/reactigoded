@@ -1,6 +1,7 @@
 import { useEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";
+import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
 
 export type PaginationVariant =
   | "brand"
@@ -137,6 +138,11 @@ export function Pagination({
   // una prop `ariaLabel` separada — eliminada por consistencia con el
   // resto de componentes que ya usan rest. Migration: rename ariaLabel→aria-label.
   const { "aria-label": ariaLabelOverride, ...navRest } = rest;
+  const resolvedAriaLabel = ariaLabelOverride ?? "Paginación";
+  // Capa 1.2 debt doc: warn dev si dos <nav aria-label="Paginación">
+  // viven al mismo tiempo (ej. paginadores top + bottom de la misma
+  // tabla sin labels distintos).
+  useLandmarkRegistry("navigation", resolvedAriaLabel);
 
   // beta.20: Pagination soporta controlled + uncontrolled vía
   // useControllableState. En uncontrolled, el state interno arranca en
@@ -208,7 +214,7 @@ export function Pagination({
     <nav
       {...navRest}
       ref={ref}
-      aria-label={ariaLabelOverride ?? "Paginación"}
+      aria-label={resolvedAriaLabel}
       className={cn(
         "ig-pagination",
         variant && `ig-pagination-${variant}`,

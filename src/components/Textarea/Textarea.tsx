@@ -1,6 +1,12 @@
-import type { TextareaHTMLAttributes, Ref } from "react";
+import {
+  useCallback,
+  useRef,
+  type Ref,
+  type TextareaHTMLAttributes,
+} from "react";
 import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
+import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
 export type TextareaState = "default" | "error" | "success";
 
@@ -45,6 +51,10 @@ export interface TextareaProps
  * }
  * ```
  *
+ * **A11y dev warn**: si en desarrollo se monta sin `<Label htmlFor>`,
+ * `aria-label`, `aria-labelledby` ni `placeholder`, se emite warn
+ * `[reactigoded] <Textarea> sin label asociado.` (capa 1.1 debt doc).
+ *
  * @example
  * <Textarea placeholder="Cuéntanos…" rows={4} />
  * <Textarea state="error" describedBy={errorId} />
@@ -60,10 +70,22 @@ export function Textarea({
 }: TextareaProps) {
   const { "aria-describedby": ariaDescribedByNative, ...textareaRest } = rest;
   const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
+
+  const internalRef = useRef<HTMLTextAreaElement>(null);
+  useA11yWarnInput(internalRef, "Textarea");
+  const setRefs = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      internalRef.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
+
   return (
     <textarea
       {...textareaRest}
-      ref={ref}
+      ref={setRefs}
       className={cn(
         auto ? "ig-textarea-auto" : "ig-textarea",
         state === "error" && "ig-input-error",

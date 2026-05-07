@@ -1,6 +1,7 @@
 import { useMemo, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";
+import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
 import { SidebarContext } from "./SidebarContext";
 
 export interface SidebarProps extends HTMLAttributes<HTMLElement> {
@@ -45,6 +46,11 @@ export function Sidebar({
   // ya usaban aria-label estándar desde beta.4). Migration: rename
   // ariaLabel → aria-label en el JSX consumidor.
   const { "aria-label": ariaLabelOverride, ...asideRest } = rest;
+  const resolvedAriaLabel = ariaLabelOverride ?? "Navegación lateral";
+  // Capa 1.2 debt doc: warn dev si dos <aside aria-label="..."> con
+  // mismo label viven simultáneamente (ej. galería con varios sidebars
+  // sin labels únicos).
+  useLandmarkRegistry("complementary", resolvedAriaLabel);
   const { value: collapsed, setValue: setCollapsed } = useControllableState<boolean>({
     value: collapsedProp,
     defaultValue: defaultCollapsed,
@@ -61,7 +67,7 @@ export function Sidebar({
       <aside
         {...asideRest}
         ref={ref}
-        aria-label={ariaLabelOverride ?? "Navegación lateral"}
+        aria-label={resolvedAriaLabel}
         className={cn(
           "ig-sidebar",
           collapsed && "ig-sidebar-collapsed",
