@@ -195,6 +195,46 @@ export const ItemDisabled: Story = {
   ),
 };
 
+export const HoverItemAndDanger: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Hover programático sobre item normal e item danger para que axe evalúe contraste en hover. Estados hover sub-perceptibles eran zona ciega — fondo claro + texto poco contrastante en hover puede degradar bajo umbral WCAG sin que axe lo capture en snapshot estática. Cierra capa 2.3 del debt doc.",
+      },
+    },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <Dropdown defaultOpen>
+      <DropdownTrigger>Menu</DropdownTrigger>
+      <DropdownMenu>
+        <DropdownItem>Editar</DropdownItem>
+        <DropdownItem data-testid="hover-item">Duplicar</DropdownItem>
+        <DropdownItem danger data-testid="hover-danger">
+          Eliminar
+        </DropdownItem>
+      </DropdownMenu>
+    </Dropdown>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    // hover en item normal
+    const item = canvas.getByTestId("hover-item");
+    await userEvent.hover(item);
+    await new Promise((r) => setTimeout(r, 30));
+    // hover en item danger
+    const danger = canvas.getByTestId("hover-danger");
+    await userEvent.hover(danger);
+    await new Promise((r) => setTimeout(r, 50));
+  },
+};
+
 export const AllStates: Story = {
   parameters: {
     layout: "padded",

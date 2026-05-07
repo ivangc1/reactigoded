@@ -44,13 +44,13 @@ Patrones que el componente puede auto-detectar con dev-warn o hooks de
 validación. NO requieren navegador real. Cada solución va con su test
 unit anti-regresión y entry en CHANGELOG.
 
-### 1.1 Inputs sin label asociado
+### 1.1 Inputs sin label asociado ✅ aplicada en post-RC1
 
-**Estado actual**: consumer debe acordarse de `aria-label` /
-`placeholder` / `<Label htmlFor>`.
-
-**Solución**: hook `useA11yWarnInput()` que warn en dev si
-Input/Textarea/Select se monta sin ningún mecanismo de label.
+**Solución aplicada**: hook `src/utils/useA11yWarnInput.ts` que warn
+en dev cuando Input/Textarea/Select se montan sin ningún mecanismo
+de label (htmlFor, aria-label, aria-labelledby, placeholder no vacío).
+Una vez por instancia. Aplicado a Input, Textarea, Select. Tests
+anti-regresión cubren los 4 mecanismos + componentName en mensaje.
 
 ```tsx
 useEffect(() => {
@@ -73,29 +73,36 @@ useEffect(() => {
 **Estimación**: 1-2h.
 **Detectado**: beta.19 (AllStates Ola 1).
 
-### 1.2 Multi-landmarks `<nav>`/`<aside>` sin aria-label único
+### 1.2 Multi-landmarks `<nav>`/`<aside>` sin aria-label único ✅ aplicada en post-RC1
 
-**Estado actual**: consumer debe pasar aria-label único.
-
-**Solución**: registry global `useLandmarkRegistry(role, ariaLabel)`
-que warn en dev si detecta colisión de aria-label dentro del mismo
-role.
+**Solución aplicada**: hook `src/utils/useLandmarkRegistry.ts` con
+registry shared a nivel módulo (role → Map<label, count>). Warn dev
+cuando dos componentes con el mismo role landmark tienen aria-label
+idéntico vivos al mismo tiempo. Aplicado a Breadcrumb (navigation),
+NavbarNav (navigation), Pagination (navigation), Sidebar
+(complementary), SidebarNav (navigation). Tests anti-regresión
+cubren: NO warn con role distinto / label distinto / undefined,
+SÍ warn con colisión, unmount limpia el registry, 3 instancias
+warnean 2 veces.
 
 **Componentes afectados**: Sidebar, SidebarNav, Pagination, Breadcrumb,
 cualquier componente con `<nav>` o `<aside>`.
 **Estimación**: 2-3h (hook + adopción).
 **Detectado**: beta.19 (Breadcrumb), beta.20 sub-B (SidebarNav).
 
-### 1.3 Multi-landmarks `<header>`/`<footer>` top-level
+### 1.3 Multi-landmarks `<header>`/`<footer>` top-level ✅ aplicada en post-RC1
 
-**Estado actual**: consumer debe envolver instancias en wrapper
-landmark. En catálogos / galerías (AllStates, docs vivas) este patrón
-se rompe sistemáticamente.
-
-**Solución**: detección en mount con `node.closest()` para verificar
-si está dentro de contenedor landmark (`<main>`, `<article>`,
-`<section aria-label>`, `[role="region"]`). Warn si NO está envuelto y
-hay otra instancia top-level viva (counter shared a nivel módulo).
+**Solución aplicada**: hook
+`src/utils/useTopLevelLandmarkCheck.ts` con counter shared a nivel
+módulo. En mount, usa `closest(WRAPPER_SELECTOR)` para verificar si
+el elemento está dentro de un wrapper landmark (`<main>`, `<article>`,
+`<section aria-label>`, `[role="region"]`, etc.). Si NO está
+envuelto, contribuye al counter top-level. Si el counter sube de
+1 a 2, warn dev con el role afectado y mitigación sugerida
+(envolver en `<section aria-label>`). Aplicado a Navbar (banner).
+Tests anti-regresión cubren: 1 top-level NO warn, 2 SÍ warn,
+envuelto en main/section[aria-label]/[role=region] NO cuenta,
+mezcla top-level + envuelto.
 
 **Patrón documentado de mitigación story-level** (cuando el componente
 todavía no implementa el warn): envolver cada instancia en
@@ -312,7 +319,7 @@ de 6 findings).
 **ROI confirmado**: ya capturó intencionalmente el patrón Stepper
 post-fix (allowlist), bloqueando regresiones futuras.
 
-### 3.2 Drift hex hardcoded vs tokens
+### 3.2 Drift hex hardcoded vs tokens ✅ aplicada en post-RC1
 
 Hex literales (`#3ae2f7`, `#d2bff7`, `#c4cada`…) aparecen hardcoded
 en stories, manager-head, MDX y comentarios. Cuando los tokens del DS
@@ -335,32 +342,33 @@ Patrón: cada vez que se recalibra un cardinal, se generan ~10-15 hex
 hardcoded en archivos no-CSS que hay que sincronizar a mano. Ningún
 test detecta el drift.
 
-**Solución propuesta** — `scripts/check-hex-drift.mjs`:
+**Solución aplicada** — `scripts/check-hex-drift.mjs`:
 
-1. Parsear `igoded-tokens.css` y extraer la tabla de tokens cardinales
-   (`--ig-vitreus-lux`, `--ig-vitreus-nox`, etc.) → set de hex
-   "vigentes".
-2. Grep `#[0-9a-fA-F]{6}` en `src/components/**/*.{tsx,stories.tsx}`,
-   `.storybook/**`, `src/stories/**/*.{mdx,tsx}`, `README.md`.
-3. Para cada hex encontrado, comprobar si existe en el set de tokens
-   vigentes. Si NO existe pero coincide cromáticamente cerca con un
-   token (ΔE < 0.05 en OKLab), reportar como "posible drift" — el
-   hex podría ser un valor stale de antes de una recalibración.
-4. Allowlist explícita en `scripts/hex-drift-allowlist.json` para hex
-   intencionales (transparentes, gradientes decorativos, ejemplos
-   docs no semánticos).
+1. ✅ Parsea `src/styles/igoded-tokens.css` y extrae tokens cardinales
+   + fundus (`--ig-{cardinal}-{lux|nox}`, `--ig-fundus-{lux|nox}`)
+   → set de hex VIGENTES.
+2. ✅ Grep `#[0-9a-fA-F]{6}` en `src/components/**.tsx`,
+   `.storybook/**.{ts,tsx,html}`, `src/stories/**.{mdx,tsx}`,
+   `docs/**.md`, `README.md`.
+3. ✅ Para cada hex: si está en el set vigente OK; si NO está pero
+   tiene ΔE OKLab < 0.05 con un token vigente → reportar drift
+   posible; si ΔE ≥ 0.05 con todos → hex no relacionado con paleta,
+   no reportar.
+4. ✅ Allowlist `scripts/hex-drift-allowlist.json` para hex
+   intencionales auditados (Storybook chrome elevation, ejemplos
+   documentales del propio bug histórico).
+5. ✅ Modo `--strict` (CI) sale con código no-cero ante drift nuevo.
+   Integrado en `verify:unit` pipeline vía `npm run test:hex-drift`.
 
-**Output esperado**:
-```
-[hex-drift] src/components/Card/Card.stories.tsx:18 → #5eded5
-  Token actual `--ig-vitreus-nox` = #3ae2f7 (ΔE=0.012, drift muy probable)
-  Hint: sustituir por `var(--ig-vitreus-nox)` o el hex actual.
-```
+**Run inicial post-RC1**: 49 hex escaneados, 18 tokens vigentes,
+4 entradas allowlisted (3 instancias de Storybook elevation + 3
+ejemplos doc del propio debt doc), 0 drifts nuevos.
 
-**Estimación**: 2-3h.
-**ROI**: alto — previene drift silencioso en cada recalibración
-futura. Especialmente útil pre-RC1 si se ajusta alguna paleta de
-último momento.
+**Coste real**: 2h (script + culori ΔE OKLab + allowlist + audit
+de 7 findings iniciales).
+**ROI confirmado**: previene drift silencioso en cada recalibración
+futura. Si beta.X recalibra un cardinal y queda hex viejo en
+manager.ts/stories/MDX, el script lo captura en CI antes del merge.
 
 ---
 
@@ -425,12 +433,12 @@ del DS, capa 1.5) o selector HTML directo (`input[type="range"]`).
 `expectAtLeast(els, N)` (utility del DS, capa 1.6) o
 `toBeGreaterThanOrEqual(N)` directamente.
 
-**Acción pendiente**: extraer estas convenciones a un archivo
-`docs/STORY_CATALOG_CONVENTIONS.md` (o sección en CONTRIBUTING.md
-cuando se cree). Linkar desde el header del primer `_matrix.tsx` para
-que el siguiente que escriba una story de catálogo las tenga delante.
+**Acción aplicada (post-RC1)**: convenciones extraídas a
+`docs/STORY_CATALOG_CONVENTIONS.md` con ejemplos ❌/✅ por regla y
+linkado desde el header de `src/stories/_matrix.tsx` para que el
+siguiente que escriba una story de catálogo las tenga delante.
 
-**Estimación doc**: 30 min.
+**Coste real**: 30 min (extracción + reformulación + link).
 
 ---
 
@@ -493,7 +501,7 @@ estructura DOM completa y ejemplo de assert correcto desde tests.
 
 ---
 
-## Auditoría reset.css [pendiente capa propia]
+## Auditoría reset.css ✅ aplicada en post-RC1
 
 `reset.css` opcional que el consumer importa. Asume contexto de fondo
 del padre. Caso histórico beta.5: `<button>` con `background: vitreus`
@@ -501,10 +509,39 @@ del padre. Caso histórico beta.5: `<button>` con `background: vitreus`
 sus propios. Migración beta.5 ya retiró el patrón pero el reset sigue
 con asunciones implícitas.
 
-**Auditoría pendiente**: revisar reset.css regla por regla, listar
-asunciones de contexto, documentar cuáles dependen del padre.
+**Auditoría aplicada — patrón documentado**:
 
-**Estimación**: 1-2h.
+| Bloque | Regla | Asunción de contexto | Riesgo |
+|---|---|---|---|
+| `html` | `color: var(--ig-text-body)` + `background-color: var(--ig-bg-base)` | el `<html>` arranca con bg-base + text-body que están WCAG-calibrados entre sí | bajo (root) |
+| `h1-h6` | `color: var(--ig-text-heading)` (sin bg propio) | el padre tiene `bg-base` o `bg-sunken` | **MEDIO**: si un wrapper aplica bg vitreus/laurus/etc., los heading heredan color calibrado contra bg-base que puede degradar |
+| `p` | sin color propio (hereda de body) | el padre tiene bg compatible | bajo |
+| `a` | `color: var(--ig-link-color)` (sin bg) | mismo patrón heading | **MEDIO** mismo riesgo |
+| `button` | `bg: transparent` + `color: inherit` (post-beta.5) | hereda del padre intencionalmente | **OK** — fix beta.5 |
+| `input/textarea/select` | `bg: var(--ig-input-bg)` + `color: var(--ig-input-text)` | tokens dedicados con bg propio | OK |
+| `code/pre` | `bg: var(--ig-bg-muted)` | bg propio | OK |
+| `blockquote` | `color: var(--ig-text-muted)` | hereda padre | bajo |
+| `hr/table` | borders con `--ig-border-default` | OK |
+| `th` | `bg: var(--ig-bg-sunken)` | bg propio | OK |
+| `::selection` | bg/color tokens | OK |
+
+**Riesgo sistemático detectado**: `<h1>`-`<h6>`, `<a>`, `<p>`,
+`<blockquote>` heredan `color` calibrado contra `bg-base`. Si el
+consumer envuelve elementos del reset en un wrapper con bg distinto
+(ej. `<section style="background: var(--ig-vitreus)">`) el contraste
+puede degradar bajo WCAG sin que axe lo capture (no hay assertion
+de contraste sobre `bg` heredado).
+
+**Mitigación documentada** en `docs/CSSAPI.mdx` sección "Reset.css
+contexto de fondo": consumers que cambian `bg` en wrappers deben:
+(a) NO usar elementos HTML nativos del reset dentro de ese wrapper, o
+(b) re-aplicar `color` apropiado al wrapper, o
+(c) usar componentes del DS (que sí gestionan bg+color juntos).
+
+**Cambio post-RC1**: ninguno al CSS — el reset es razonable como
+está. Solo documentación.
+
+**Coste real**: 1h (audit + matriz + doc).
 
 ---
 
@@ -515,19 +552,34 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 1.4 warn `useControllableState` (Option E) | 1.5h | beta.21 | ✅ aplicada (commit `d7589d8`); desde beta.22 el flag interno se elimina del dts vía stripInternal (B-02) |
 | 1.5 utility `queryAllByRoleSafe` | 30 min | beta.20 | ✅ aplicado |
 | 1.6 utility `expectAtLeast` | 30 min | beta.20 | ✅ aplicado |
-| 1.1 hook `useA11yWarnInput` | 1-2h | post-beta.20 | ⏳ |
-| 1.2 hook `useLandmarkRegistry` | 2-3h | rc.1 | ⏳ |
-| 1.3 detección banner top-level | 2h | rc.1 | ⏳ |
+| 1.1 hook `useA11yWarnInput` | 1h real | post-RC1 | ✅ aplicada |
+| 1.2 hook `useLandmarkRegistry` | 1.5h real | post-RC1 | ✅ aplicada |
+| 1.3 detección banner top-level | 1h real | post-RC1 | ✅ aplicada |
 | 3.1 script CSS scope-leak | 2h real | beta.21 | ✅ aplicada |
-| 3.2 script hex drift detection | 2-3h | rc.1 | ⏳ |
-| 2.2 stories focus-visible | 1-2h | 1.0.0 final | ⏳ |
-| 2.3 stories hover/active | 1-2h | 1.1.0 | ⏳ |
-| Auditoría reset.css | 1-2h | 1.1.0 | ⏳ |
-| Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min | beta.20/post | ⏳ |
+| 3.2 script hex drift detection | 2h real | post-RC1 | ✅ aplicada |
+| 2.2 stories focus-visible | 1h real | post-RC1 | ✅ aplicada |
+| 2.3 stories hover/active | 1h real | post-RC1 | ✅ aplicada |
+| Auditoría reset.css | 1h real | post-RC1 | ✅ aplicada (doc only) |
+| Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min real | post-RC1 | ✅ aplicada |
 | 6.1 regla anti-`console.error` warnings React | 0 (regla) | beta.20 | ✅ documentada |
 | 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20 | ✅ aplicada |
 
-**Total restante**: 13-20h Claude Code distribuidas en milestones.
+**Total restante**: 0h — todas las capas accionables ✅ aplicadas en
+beta.20, beta.21 y post-RC1. Lo único que queda son items
+bloqueados por razón externa documentados en `POST_RC1_BACKLOG.md`
+(esperar 2 meses feedback para tripwire `axis-kobalium`, esperar
+1.0.0 estable para quitar Chromatic `--auto-accept-changes=main`)
+y la decisión humana sobre el ΔE Check 3 → ERROR con allowlist
+permanente (Punto 35 del plan beta.19, decisión pendiente).
+
+**Coste real total ejecutado** (vs estimación 13-20h):
+- Capa 1 (1.1, 1.2, 1.3, 1.4, 1.5, 1.6): ~5h.
+- Capa 2 (2.2, 2.3): ~2h.
+- Capa 3 (3.1, 3.2): ~4h.
+- Capa 5 (doc + audit): ~1.5h.
+- Capa 6 (6.1, 6.2): ~10 min.
+- Auditoría reset.css: 1h.
+- **Total ~13.5h** dentro del rango estimado.
 
 ---
 

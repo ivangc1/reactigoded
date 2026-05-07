@@ -58,6 +58,20 @@
  *   node scripts/check-css-scope-leaks.mjs           # soft (warn only)
  *   node scripts/check-css-scope-leaks.mjs --strict  # error si hay leaks
  *   node scripts/check-css-scope-leaks.mjs --json    # output JSON
+ *
+ * ─── Contrato de invocación ─────────────────────────────────────
+ * • **Invoker**: `npm run test:scope-leaks` (con `--strict`),
+ *   encadenado en `verify:unit` pipeline. CI lo invoca como gate
+ *   previo a `Build`.
+ * • **Entorno requerido**: PostCSS (devDep);
+ *   `src/styles/igoded-components.css`,
+ *   `src/components/**.tsx`,
+ *   `scripts/scope-leak-allowlist.json` (allowlist opcional —
+ *   funciona sin ella). Lectura solo, no modifica nada.
+ * • **Fallback / errores**: ERROR (exit 1) en `--strict` si hay
+ *   findings nuevos. WARN (exit 0) en modo soft. JSON parse error
+ *   de la allowlist NO aborta — el script ignora la allowlist y
+ *   trata todo como riesgo.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";

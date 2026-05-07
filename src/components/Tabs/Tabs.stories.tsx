@@ -182,6 +182,76 @@ export const KeyboardNavInteraction: Story = {
   },
 };
 
+export const FocusVisibleActiveTab: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Foco programático sobre la tab activa para que axe evalúe el ring de focus contra el fondo de la tab seleccionada (que en algunas variantes es brand-filled). Cierra capa 2.2 del debt doc.",
+      },
+    },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <Tabs defaultValue="b">
+      <TabList>
+        <Tab value="a">A</Tab>
+        <Tab value="b">B activa</Tab>
+        <Tab value="c">C</Tab>
+      </TabList>
+      <TabPanel value="a">A</TabPanel>
+      <TabPanel value="b">B</TabPanel>
+      <TabPanel value="c">C</TabPanel>
+    </Tabs>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const activeTab = canvas.getByRole("tab", { name: "B activa" });
+    activeTab.focus();
+    await new Promise((r) => setTimeout(r, 50));
+  },
+};
+
+export const HoverInactiveTab: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Hover programático sobre tab inactiva para que axe evalúe el contraste hover. Estados hover/active sub-perceptibles eran zona ciega de los gates pre-RC1 — `:hover` no se dispara en una snapshot estática. Cierra capa 2.3 del debt doc.",
+      },
+    },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <Tabs defaultValue="a">
+      <TabList>
+        <Tab value="a">A activa</Tab>
+        <Tab value="b">B hover</Tab>
+        <Tab value="c">C</Tab>
+      </TabList>
+      <TabPanel value="a">A</TabPanel>
+      <TabPanel value="b">B</TabPanel>
+      <TabPanel value="c">C</TabPanel>
+    </Tabs>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inactiveTab = canvas.getByRole("tab", { name: "B hover" });
+    await userEvent.hover(inactiveTab);
+    await new Promise((r) => setTimeout(r, 50));
+  },
+};
+
 export const AllStates: Story = {
   parameters: {
     layout: "padded",

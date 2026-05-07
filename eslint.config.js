@@ -109,4 +109,31 @@ export default defineConfig([
       "testing-library/no-node-access": "off",
     },
   },
+
+  // Componentes que integran @floating-ui/react.
+  //
+  // La regla `react-hooks/refs` (eslint-plugin-react-hooks v7+,
+  // compiler-aware) detecta lecturas de `ref.current` durante render —
+  // un anti-patrón que rompe la memoización de React Compiler. Pero NO
+  // distingue entre:
+  //   (a) lectura de `.current` durante render ❌ (lo que la regla quiere cazar).
+  //   (b) acceso a `refs.setReference` / `refs.setFloating` para
+  //       pasarlo como callback ref ✅ (Floating UI canónico).
+  //   (c) `useMergeRefs([floating, externalRef])` ✅ (canónico FUI).
+  //
+  // Floating UI usa (b) y (c) en cada componente. La regla y la
+  // librería están en desacuerdo arquitectural, no caso por caso —
+  // sembrar `eslint-disable-next-line` por cada uso multiplicaría
+  // ruido sin beneficio. Apagamos la regla solo en los archivos que
+  // integran Floating UI.
+  //
+  // Si en el futuro se añaden Popover/Combobox/Select-with-listbox/
+  // ComboBox basados en Floating UI, ampliar este `files` glob.
+  // Mientras tanto el scope está estrecho a Tooltip.
+  {
+    files: ["src/components/Tooltip/**/*.tsx"],
+    rules: {
+      "react-hooks/refs": "off",
+    },
+  },
 ]);

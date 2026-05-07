@@ -1,93 +1,35 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Tooltip } from "./Tooltip";
 
-describe("Tooltip", () => {
-  it("renderiza el child y el span role=tooltip sr-only", () => {
+describe("Tooltip — Floating UI (post-RC1)", () => {
+  it("renderiza el child y el span SR-only role=tooltip persistente", () => {
     render(
       <Tooltip text="Eliminar">
         <button>×</button>
       </Tooltip>,
     );
     expect(screen.getByRole("button", { name: /×/i })).toBeInTheDocument();
-    const tt = screen.getByRole("tooltip", { hidden: true });
-    expect(tt).toHaveTextContent("Eliminar");
-    expect(tt).toHaveClass("ig-sr-only");
+    // El span SR-only siempre está presente (incluso sin hover) para
+    // que aria-describedby tenga referente válido al cargar.
+    const sr = screen.getByText("Eliminar");
+    expect(sr).toHaveClass("ig-sr-only");
   });
 
-  it("aplica data-tooltip en el wrapper para el CSS", () => {
-    render(
-      <Tooltip text="Hola" data-testid="w">
-        <button>x</button>
-      </Tooltip>,
-    );
-    expect(screen.getByTestId("w")).toHaveAttribute("data-tooltip", "Hola");
-  });
-
-  it("conecta child con tooltip via aria-describedby", () => {
+  it("conecta child con el span SR-only via aria-describedby", () => {
     render(
       <Tooltip text="Pista">
         <button>x</button>
       </Tooltip>,
     );
     const btn = screen.getByRole("button");
-    const tt = screen.getByRole("tooltip", { hidden: true });
-    expect(btn).toHaveAttribute("aria-describedby", tt.id);
-  });
-
-  it("aplica clase de placement (top por defecto)", () => {
-    render(
-      <Tooltip text="x" data-testid="w">
-        <button>x</button>
-      </Tooltip>,
-    );
-    expect(screen.getByTestId("w")).toHaveClass(
-      "ig-tooltip",
-      "ig-tooltip-place-top",
-    );
-  });
-
-  describe.each(["top", "right", "bottom", "left"] as const)(
-    "placement=%s",
-    (p) => {
-      it(`aplica clase ig-tooltip-place-${p} (prefijo único pre-1.0.0)`, () => {
-        render(
-          <Tooltip text="x" placement={p} data-testid="w">
-            <button>x</button>
-          </Tooltip>,
-        );
-        expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-place-${p}`);
-      });
-    },
-  );
-
-  describe.each([
-    ["brand"],
-    ["secondary"],
-    ["success"],
-    ["warning"],
-    ["danger"],
-    ["info"],
-  ] as const)("variant=%s", (v) => {
-    it(`aplica clase ig-tooltip-color-${v} (prefijo único pre-1.0.0)`, () => {
-      render(
-        <Tooltip text="x" variant={v} data-testid="w">
-          <button>x</button>
-        </Tooltip>,
-      );
-      expect(screen.getByTestId("w")).toHaveClass(`ig-tooltip-color-${v}`);
-    });
-  });
-
-  it("forwarda ref al wrapper span", () => {
-    const ref = createRef<HTMLSpanElement>();
-    render(
-      <Tooltip text="x" ref={ref}>
-        <button>x</button>
-      </Tooltip>,
-    );
-    expect(ref.current).toBeInstanceOf(HTMLSpanElement);
+    const describedBy = btn.getAttribute("aria-describedby") ?? "";
+    expect(describedBy).toBeTruthy();
+    // El span SR-only tiene ese id.
+    const sr = document.getElementById(describedBy);
+    expect(sr).toHaveTextContent("Pista");
   });
 
   it("aria-describedby concatena con el del child existente (no sobreescribe)", () => {
@@ -99,9 +41,6 @@ describe("Tooltip", () => {
     const btn = screen.getByRole("button");
     const value = btn.getAttribute("aria-describedby") ?? "";
     expect(value.startsWith("existing-id ")).toBe(true);
-    // Y termina con el id del span role=tooltip
-    const tt = screen.getByRole("tooltip", { hidden: true });
-    expect(value.endsWith(tt.id)).toBe(true);
   });
 
   it("aria-describedby único cuando el child no tenía uno", () => {
@@ -114,5 +53,158 @@ describe("Tooltip", () => {
     const value = btn.getAttribute("aria-describedby") ?? "";
     expect(value).not.toContain(" ");
     expect(value).toBeTruthy();
+  });
+
+  it("portal NO monta el tooltip flotante por defecto (cerrado)", () => {
+    render(
+      <Tooltip text="Eliminar">
+        <button>×</button>
+      </Tooltip>,
+    );
+    // El portal con clase ig-tooltip-place-X NO está montado al inicio.
+    expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+  });
+
+  it("portal monta el tooltip flotante al hover (open=true)", async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip text="Eliminar">
+        <button>×</button>
+      </Tooltip>,
+    );
+    const btn = screen.getByRole("button");
+    await user.hover(btn);
+    // Tras hover, el portal monta con clase de placement.
+    const portal = document.querySelector(".ig-tooltip-place-top");
+    expect(portal).not.toBeNull();
+    expect(portal).toHaveTextContent("Eliminar");
+  });
+
+  it("portal monta al focus (keyboard)", async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip text="Eliminar">
+        <button>×</button>
+      </Tooltip>,
+    );
+    await user.tab();
+    expect(screen.getByRole("button")).toHaveFocus();
+    const portal = document.querySelector(".ig-tooltip-place-top");
+    expect(portal).not.toBeNull();
+  });
+
+  it("portal se desmonta al unhover", async () => {
+    const user = userEvent.setup();
+    render(
+      <div>
+        <Tooltip text="Eliminar">
+          <button>×</button>
+        </Tooltip>
+        <button>otro</button>
+      </div>,
+    );
+    const btn = screen.getByRole("button", { name: /×/i });
+    await user.hover(btn);
+    expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+    await user.unhover(btn);
+    expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+  });
+
+  describe.each(["top", "right", "bottom", "left"] as const)(
+    "placement=%s",
+    (p) => {
+      it(`portal aplica clase ig-tooltip-place-${p} al abrir`, async () => {
+        const user = userEvent.setup();
+        render(
+          <Tooltip text="x" placement={p}>
+            <button>x</button>
+          </Tooltip>,
+        );
+        await user.hover(screen.getByRole("button"));
+        expect(
+          document.querySelector(`.ig-tooltip-place-${p}`),
+        ).not.toBeNull();
+      });
+    },
+  );
+
+  describe.each([
+    ["brand"],
+    ["secondary"],
+    ["success"],
+    ["warning"],
+    ["danger"],
+    ["info"],
+  ] as const)("variant=%s", (v) => {
+    it(`portal aplica clase ig-tooltip-color-${v} al abrir`, async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip text="x" variant={v}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      expect(
+        document.querySelector(`.ig-tooltip-color-${v}`),
+      ).not.toBeNull();
+    });
+  });
+
+  it("forwarda ref al wrapper span", () => {
+    const ref = createRef<HTMLSpanElement>();
+    render(
+      <Tooltip text="x" ref={ref}>
+        <button>x</button>
+      </Tooltip>,
+    );
+    expect(ref.current).toBeInstanceOf(HTMLSpanElement);
+    expect(ref.current).toHaveClass("ig-tooltip-wrapper");
+  });
+
+  it("Escape cierra el tooltip abierto", async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip text="Eliminar">
+        <button>×</button>
+      </Tooltip>,
+    );
+    await user.hover(screen.getByRole("button"));
+    expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+    await user.keyboard("{Escape}");
+    expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+  });
+
+  // Anti-regresión: codex review post-RC1 marcó P1 — el cloneElement
+  // sobreescribía el ref y handlers del child. Verificamos que tras
+  // el fix con useMergeRefs + getReferenceProps(typed.props) ambos se
+  // preservan.
+  it("preserva el ref del child (P1 codex review)", () => {
+    const childRef = createRef<HTMLButtonElement>();
+    render(
+      <Tooltip text="Eliminar">
+        <button ref={childRef}>×</button>
+      </Tooltip>,
+    );
+    // El ref del consumer sigue apuntando al button real.
+    expect(childRef.current).toBeInstanceOf(HTMLButtonElement);
+    expect(childRef.current?.tagName).toBe("BUTTON");
+  });
+
+  it("preserva onMouseEnter / onFocus del child (P1 codex review)", async () => {
+    const user = userEvent.setup();
+    const onMouseEnter = vi.fn();
+    const onFocus = vi.fn();
+    render(
+      <Tooltip text="Eliminar">
+        <button onMouseEnter={onMouseEnter} onFocus={onFocus}>
+          ×
+        </button>
+      </Tooltip>,
+    );
+    const btn = screen.getByRole("button");
+    await user.hover(btn);
+    expect(onMouseEnter).toHaveBeenCalled();
+    btn.focus();
+    expect(onFocus).toHaveBeenCalled();
   });
 });

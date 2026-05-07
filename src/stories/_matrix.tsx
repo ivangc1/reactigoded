@@ -1,3 +1,17 @@
+/**
+ * Layout helpers para stories AllStates / matrices visuales del DS.
+ *
+ * **Antes de añadir una story de catálogo nueva**, lee
+ * `docs/STORY_CATALOG_CONVENTIONS.md` (reglas axe + a11y + plays
+ * verificadas en producción durante beta.19/20).
+ *
+ * Reglas mínimas resumidas:
+ *   - aria-label único por landmark (Sidebar/Navbar/Breadcrumb…).
+ *   - Multi-banner/contentinfo: envolver cada uno en `<section aria-label>`.
+ *   - Inputs sueltos: `aria-label` / `placeholder` o `Label htmlFor`.
+ *   - Use `defaultValue=` (no `value=`) si no hay onChange.
+ *   - `play()`: usa `queryAllByRoleSafe` y `expectAtLeast` de `src/test-utils`.
+ */
 import type { ReactNode } from "react";
 
 const VARIANTS = [

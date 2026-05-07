@@ -36,6 +36,20 @@ npm link reactigoded
 
 `react` y `react-dom` >= 19 son `peerDependencies`.
 
+Desde post-RC1, **`@floating-ui/react` (>= 0.27) también es peer-dep
+requerido** — lo usa internamente `Tooltip`. Si solo importas otros
+componentes la lib funciona sin instalarlo, pero al usar `<Tooltip>`
+sin la dep crashea en runtime. Recomendado instalarlo siempre con
+la lib:
+
+```bash
+npm install reactigoded react react-dom @floating-ui/react
+```
+
+Razón: `@floating-ui/react` ocupa ~17 KB gz; bundlearla duplicaba
+la dep si el consumer ya la tenía vía Radix/Headless UI/otra DS.
+Externalizarla mantiene el bundle de reactigoded en ~14 KB gz.
+
 ## CSS imports
 
 8 entradas. Lo habitual: importa solo `design.css` (+ opcionalmente `fonts.css` si quieres las tipografías Google del DS).

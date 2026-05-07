@@ -5,3 +5,5 @@ export type {
   ButtonSize,
   ButtonAppearance,
 } from "./Button";
+export { IconButton } from "./IconButton";
+export type { IconButtonProps } from "./IconButton";

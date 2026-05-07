@@ -16,6 +16,11 @@ dist/
 dist-ssr/
 *.local
 
+# state.css fragments — autogenerados por scripts/build-state-css-fragments.mjs
+# en cada `npm run build`. NO editar a mano; si cambia el state.css fuente
+# regenera y commitea solo el cambio de origen, no los fragmentos.
+src/styles/state/
+
 # Storybook
 storybook-static/
 

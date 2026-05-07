@@ -55,6 +55,7 @@
     "./styles/fonts.css": "./dist/styles/igoded-fonts.css",
     "./styles/reset.css": "./dist/styles/igoded-reset.css",
     "./styles/state.css": "./dist/styles/igoded-state-css.css",
+    "./styles/state/*.css": "./dist/styles/state/*.css",
     "./styles/all.css": "./dist/styles/index.css",
     "./package.json": "./package.json"
   },
@@ -75,7 +76,7 @@
     "_comment_prepare": "Aplica patches con patch-package SOLO en dev local (npm install desde git checkout). NO se ejecuta cuando un consumer instala reactigoded como dep.",
     "prepare": "patch-package",
     "dev": "vite",
-    "build": "tsc -p tsconfig.build.json && vite build -c vite.lib.config.ts && node scripts/clean-internal-dist.mjs",
+    "build": "node scripts/build-state-css-fragments.mjs && tsc -p tsconfig.build.json && vite build -c vite.lib.config.ts && node scripts/clean-internal-dist.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -85,6 +86,7 @@
     "test:storybook": "vitest run --project storybook",
     "test:contrast": "node scripts/check-component-contrast.mjs",
     "test:scope-leaks": "node scripts/check-css-scope-leaks.mjs --strict",
+    "test:hex-drift": "node scripts/check-hex-drift.mjs --strict",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
@@ -92,7 +94,7 @@
     "_comment_build_storybook": "Genera el artefacto deployable a igoded.es con lang=es aplicado al HTML estático. NO añadir flag --output-dir aquí; el lang fix asume el default storybook-static/. Si Chromatic invoca este script, ver chromatic.config.json (apunta a build-storybook:chromatic, sin lang fix).",
     "build-storybook": "storybook build && node scripts/fix-storybook-static-lang.mjs",
     "build-storybook:chromatic": "storybook build",
-    "verify:unit": "npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run build",
+    "verify:unit": "npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run build",
     "verify:storybook": "npm run test:storybook",
     "verify:size": "size-limit",
     "verify": "npm run verify:unit && npm run verify:storybook && npm run verify:size",
@@ -156,9 +158,34 @@
       "path": "dist/styles/igoded-state-css.css",
       "limit": "800 KB",
       "gzip": true
+    },
+    {
+      "name": "state/hover.css fragmento",
+      "path": "dist/styles/state/hover.css",
+      "limit": "60 KB",
+      "gzip": true
+    },
+    {
+      "name": "state/focus.css fragmento",
+      "path": "dist/styles/state/focus.css",
+      "limit": "80 KB",
+      "gzip": true
+    },
+    {
+      "name": "state/disabled.css fragmento",
+      "path": "dist/styles/state/disabled.css",
+      "limit": "60 KB",
+      "gzip": true
+    },
+    {
+      "name": "state/active.css fragmento",
+      "path": "dist/styles/state/active.css",
+      "limit": "60 KB",
+      "gzip": true
     }
   ],
   "peerDependencies": {
+    "@floating-ui/react": ">=0.27.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0"
   },
@@ -167,6 +194,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@floating-ui/react": "^0.27.19",
     "@size-limit/file": "^12.1.0",
     "@storybook/addon-a11y": "^10.3.6",
     "@storybook/addon-docs": "^10.3.6",

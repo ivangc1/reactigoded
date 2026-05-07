@@ -13,34 +13,92 @@ Cada entrada documenta:
 
 ---
 
-## CSP estricta — script inline en `.storybook/main.ts`
+## Externalizar `@floating-ui/react` como peer-dep ✅ aplicado en post-RC1
+
+**De dónde sale**: post-RC1 sesión, tras añadir Tooltip Floating UI
+(commit `74d41b7`). El step CI `Bundle has no dev warns` falló por
+el `console.error` de `tabbable` (dep transitiva de `@floating-ui/react`)
+que llega al bundle publicado.
+
+**Por qué no se arregla ahora**: la solución del fallo CI fue refinar
+el assertion (alcanzarlo solo a la firma `[reactigoded]`), no
+externalizar la dep. Externalizar es una decisión de empaquetado
+separada con su propio mérito y propios trade-offs.
+
+**Razones legítimas para externalizar (cuando se aborde)**:
+- **Tamaño**: ahorra ~17 KB gz del JS bundle ESM (de 31.74 → ~15 KB).
+- **Deduplicación**: si el consumer ya tiene `@floating-ui/react`
+  en su árbol (Radix, Headless UI, otra DS), la versión bundleada
+  duplica la dep en runtime.
+
+**NO es razón legítima**: "bundle más limpio sin console.error
+foreign". Externalizar NO elimina los console del consumer — solo
+los mueve a su bundle. La higiene de logs se cubre vía el guardrail
+CI con scope a `[reactigoded]`.
+
+**Decisiones a definir cuando se aplique**:
+- Range del peer (`"@floating-ui/react": "^0.27.0"` o el actual).
+- ¿`peerDependenciesMeta` opcional o requerido? **Probablemente
+  requerido** — sin la dep, Tooltip no renderea.
+- Verificar que Storybook propio tenga `@floating-ui/react` en
+  `devDependencies` directas (no solo transitiva vía la lib que
+  consume).
+- Documentar en CHANGELOG como BREAKING CHANGE (consumer debe
+  hacer `npm install @floating-ui/react`).
+- Ventana: post-1.0.0 estable. Pre-1.0.0 todavía aceptable como
+  breaking, pero merece su propio commit/PR aislado.
+
+**Estimación**: 1h (cambio config + actualizar docs + verificar
+Storybook).
+
+**Aplicado en post-RC1** (commit a continuación de cade31e):
+- `package.json`: `@floating-ui/react` movida de `dependencies` a
+  `peerDependencies` con range `>=0.27.0` (requerido, sin
+  `peerDependenciesMeta` opcional). Añadida también a
+  `devDependencies` (`^0.27.19`) para que el dev local + Storybook
+  la tengan resuelta.
+- `vite.lib.config.ts`: añadida a `rollupOptions.external`.
+- `README.md`: instalación documenta el peer obligatorio.
+- size-limit budgets ESM/CJS revertidos a 16/15 KB (era 35/32 KB
+  para acomodar floating-ui bundleada).
+- Verificado local: ESM 31.74 → 14.42 KB gz (−54%), CJS 28.5 →
+  12.89 KB gz (−55%). `console.*` count = 0 (la dep externalizada
+  se llevó el `console.error` de tabbable). `[reactigoded]` count
+  = 0 (DCE de nuestros warns intacto). 20/20 Tooltip tests verde.
+
+---
+
+## CSP estricta — script inline en `.storybook/main.ts` ✅ resuelto en post-RC1
 
 **De dónde sale**: revisión humana de C5 (B-04 + B-05).
 
-**Observación**: el `managerHead` inyecta un script inline que ejecuta
-JS en el `<head>` (lang fix, dedupe, rewrite del title). Si en algún
-momento el sitio quiere CSP estricta con `script-src 'self'` (sin
-`'unsafe-inline'`), este script rompe.
+**Observación**: el `managerHead` inyectaba un script inline que
+ejecutaba JS en el `<head>` (lang fix, dedupe, rewrite del title).
+Si el sitio quería CSP estricta con `script-src 'self'` (sin
+`'unsafe-inline'`), este script rompía.
 
-**Estado tras beta.22**: parcial. La CONSOLIDACIÓN de metas estáticas
-en `manager-head.html` (commit `2ee4ba5`) eliminó la duplicación de
-fuente que era la causa raíz del bug B-05. El script inline sigue
-existiendo en `main.ts` para el lang fix + title rewrite + dedupe
-defensivo. **Sigue siendo bloqueante para CSP-strict**.
+**Solución aplicada**: el script se extrajo a
+`.storybook/static/manager-runtime.js`. `main.ts` configura
+`staticDirs: [{ from: "./static", to: "/static" }]` para que el
+archivo se copie a `storybook-static/static/manager-runtime.js`
+durante el build. `managerHead` ahora solo inyecta
+`<script src="/static/manager-runtime.js" defer></script>` —
+externo, CSP-friendly.
 
-**Por qué no se arregla del todo ahora**: extraer el script a
-`.storybook/manager-head.js` requiere experimentación con
-`staticDirs` o `manager.ts` de Storybook 10, y el verify del build
-sólo es viable en CI Linux (rolldown bug bloquea vitest/storybook
-build local en Windows ARM64). Sin iteración local rápida, el riesgo
-de que un script externo no cargue silenciosamente y rompa el lang
-fix supera el beneficio.
+**Verificado local (post-RC1)** ejecutando `npm run build-storybook`:
+- archivo `storybook-static/static/manager-runtime.js` (2877 B) presente,
+- `index.html` contiene `<script src="/static/manager-runtime.js" defer>`,
+- `[fix-lang] OK — 2 archivo(s) modificado(s)` (lang fix sigue
+  aplicándose post-build),
+- comportamiento de los 3 fixes (lang, dedupe, rewrite) inalterado.
 
-**Acción post-RC1**: extraer el script a `.storybook/manager-head.js`
-(`<script src="..." />`). Empaquetarlo en build de Storybook y
-referenciarlo desde `managerHead`. Verificar en CI Linux que el
-bundle copia el archivo a `storybook-static/` y que el lang fix +
-title rewrite siguen funcionando tras navegación.
+**Caveat documentado**: Storybook upstream sigue inyectando un
+inline `<script>` con `window['FEATURES']` config en
+`index.html`. Eso es intrínseco al runtime de Storybook 10 y
+queda fuera del control del DS — para CSP TOTAL el consumer
+necesita o (a) `script-src 'self' 'unsafe-inline'`, o (b) un
+nonce inyectado vía proxy reverso, o (c) un PR upstream a
+Storybook. **El script DEL DS está externalizado al 100%**.
 
 ---
 
@@ -164,7 +222,7 @@ validación de Iván sobre los OKLCH alternativos visualmente.
 
 ---
 
-## Deploy externo igoded.es desacoplado del repo
+## Deploy externo igoded.es desacoplado del repo ✅ documentado
 
 **Observación**: el deploy a igoded.es se hace fuera del repo (manual o
 cron desde `~/domains/igoded.es/public_html/storybook/` en cPanel
@@ -180,14 +238,17 @@ Hostinger). Si quien deploya invoca un comando distinto a
 - Si quien deploya invoca `storybook build` directo, NO se aplica el
   lang fix y el log no aparece — eso ES la señal para auditar.
 
-**Acción post-RC1**: localizar el script/cron de deploy externo y
-añadirlo a este repo si es posible (workflow GitHub Actions con
-secret de Hostinger), o documentarlo en `docs/DEPLOY.md` con el
-comando exacto a usar.
+**Acción tomada**: documentado en `docs/DEPLOY.md` con (a) contrato
+actual + comando obligatorio, (b) síntomas de regresión silenciosa
+y debug, (c) Opción A workflow GitHub Actions con secret SFTP
+Hostinger, (d) Opción B script versionado `scripts/deploy-storybook.sh`.
+Decisión A vs B se difiere a post-1.0.0 según volumen de deploys
+reales. Iván sigue invocando manualmente con `npm run build-storybook`
+hasta que se elija opción.
 
 ---
 
-## Auditar todos los scripts de CI/build por contexto de invocación
+## Auditar todos los scripts de CI/build por contexto de invocación ✅ aplicado
 
 **Observación**: durante esta sesión se descubrieron 3 fallos de
 "by construction" donde un script asumía contexto de invocación que
@@ -201,18 +262,27 @@ no se sostuvo en CI/Chromatic real:
    pero Chromatic invoca el mismo script con `--output-dir=/tmp/...`
    provocando fallo. Resuelto vía split de scripts + `chromatic.config.json`.
 
-**Acción post-RC1**: cada script de CI/build debe documentar
-explícitamente:
-- Quién lo invoca (un workflow, un npm script, manualmente, un cron).
-- Qué espera del entorno (paths, env vars, archivos previos).
-- Qué hace si esas asunciones fallan (error explícito vs skip).
+**Acción aplicada**: cada script de `scripts/` ahora incluye un
+bloque `─── Contrato de invocación ───` con tres bullets:
+- **Invoker**: workflow / npm script / manual / cron.
+- **Entorno requerido**: paths, devDeps, archivos previos.
+- **Fallback / errores**: comportamiento si las asunciones fallan
+  (exit code, mensaje de error, propagación).
 
-Aplicar a `fix-storybook-static-lang.mjs`, `clean-internal-dist.mjs`,
-y cualquier futuro script que se encadene en `npm run`.
+**Scripts auditados**:
+- `clean-internal-dist.mjs`
+- `fix-storybook-static-lang.mjs`
+- `migrate-tooltip-prefixes.mjs` (one-shot histórico)
+- `strip-orphan-css.mjs` (one-shot histórico)
+- `check-component-contrast.mjs`
+- `check-css-scope-leaks.mjs`
+
+**Convención para nuevos scripts**: cualquier `.mjs` añadido a
+`scripts/` debe incluir el bloque del contrato en su header JSDoc.
 
 ---
 
-## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`)
+## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`) ✅ archivadas en post-RC1
 
 **De dónde sale**: `git status` durante toda la sesión.
 
@@ -221,11 +291,14 @@ y cualquier futuro script que se encadene en `npm run`.
 para tracking interno (BLOQUEOS, SESION-RESUMEN) pero no para el
 repo público.
 
-**Por qué no se arregla ahora**: decisión del autor — no es scope
-RC1.
+**Acción aplicada**: 12 archivos movidos a `~/notes/reactigoded-archive/`
+(fuera del repo). Conservan contenido histórico (release scripts +
+notes de beta.14-18 + BLOQUEOS.md + SESION-RESUMEN*.md). El
+`.gitignore` ya excluye los patrones (`.notes-*`, `.release-*`,
+`BLOQUEOS.md`, `SESION-RESUMEN*.md` desde commit `6b28080`) por si
+en el futuro se vuelven a crear localmente.
 
-**Acción**: el autor decide si añadirlos al `.gitignore` (recomendado
-para `.notes-*` y `.release-*`) o moverlos a `~/notes/` fuera del
-repo.
+**Working tree del repo**: limpio post-archive (cero archivos
+dispersos en cwd).
 
 ---

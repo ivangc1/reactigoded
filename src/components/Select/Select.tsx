@@ -1,6 +1,12 @@
-import type { SelectHTMLAttributes, Ref } from "react";
+import {
+  useCallback,
+  useRef,
+  type Ref,
+  type SelectHTMLAttributes,
+} from "react";
 import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
+import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
 export type SelectState = "default" | "error" | "success";
 
@@ -28,6 +34,11 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
  * intenta reemplazarlo (un combobox custom requeriría un componente
  * separado, fuera del alcance del DS).
  *
+ * **A11y dev warn**: si en desarrollo se monta sin `<Label htmlFor>`,
+ * `aria-label` ni `aria-labelledby`, se emite warn
+ * `[reactigoded] <Select> sin label asociado.` (capa 1.1 debt doc).
+ * Nota: `<select>` no tiene `placeholder`.
+ *
  * @example
  * <Select value={country} onChange={(e) => setCountry(e.target.value)}>
  *   <option value="es">España</option>
@@ -48,10 +59,22 @@ export function Select({
 }: SelectProps) {
   const { "aria-describedby": ariaDescribedByNative, ...selectRest } = rest;
   const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
+
+  const internalRef = useRef<HTMLSelectElement>(null);
+  useA11yWarnInput(internalRef, "Select");
+  const setRefs = useCallback(
+    (el: HTMLSelectElement | null) => {
+      internalRef.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
+
   return (
     <select
       {...selectRest}
-      ref={ref}
+      ref={setRefs}
       className={cn(
         "ig-select",
         state === "error" && "ig-input-error",

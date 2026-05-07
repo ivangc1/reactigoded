@@ -6,7 +6,15 @@
  * Cambio breaking pre-1.0.0. Toca igoded-components.css y, si tuviera,
  * igoded-state-css.css.
  *
- * Uso: `node scripts/migrate-tooltip-prefixes.mjs`
+ * ─── Contrato de invocación ─────────────────────────────────────
+ * • **Invoker**: ÚNICO uso (one-shot). Aplicado en beta.19 commit
+ *   `4ab2e1a` para migrar 42 ocurrencias de tooltip prefixes; el
+ *   script queda en el repo como artefacto histórico/migration log.
+ *   No se vuelve a invocar.
+ * • **Entorno requerido**: PostCSS instalado (devDep);
+ *   `src/styles/igoded-components.css` existe.
+ * • **Fallback / errores**: idempotente (re-ejecutar es no-op tras
+ *   migración exitosa). Si el patch ya está aplicado, no toca el CSS.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
