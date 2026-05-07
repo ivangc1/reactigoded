@@ -100,5 +100,17 @@ export const AllStates: Story = {
     const canvas = within(canvasElement);
     const spinners = canvas.queryAllByRole("status");
     await expect(spinners.length).toBe(30);
+    // Anti-regresión: si el spinner pierde `display: inline-block`
+    // (o equivalente) y queda como inline puro, width/height del CSS
+    // no aplican y el span colapsa a 0×0. El border SÍ se renderea
+    // pero produce una línea vertical fina en lugar del círculo. El
+    // role="status" sigue siendo "visible" para Testing Library, así
+    // que el count anterior NO captura este bug. Verificamos que cada
+    // spinner tiene dimensiones reales > 0.
+    for (const s of spinners) {
+      const rect = s.getBoundingClientRect();
+      await expect(rect.width).toBeGreaterThan(0);
+      await expect(rect.height).toBeGreaterThan(0);
+    }
   },
 };
