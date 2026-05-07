@@ -227,7 +227,7 @@ bloque `─── Contrato de invocación ───` con tres bullets:
 
 ---
 
-## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`)
+## Notas dispersas sin tocar (`.notes-beta15..18.txt`, `.release-beta14..18.sh`, `BLOQUEOS.md`, `SESION-RESUMEN*.md`) ✅ archivadas en post-RC1
 
 **De dónde sale**: `git status` durante toda la sesión.
 
@@ -236,11 +236,14 @@ bloque `─── Contrato de invocación ───` con tres bullets:
 para tracking interno (BLOQUEOS, SESION-RESUMEN) pero no para el
 repo público.
 
-**Por qué no se arregla ahora**: decisión del autor — no es scope
-RC1.
+**Acción aplicada**: 12 archivos movidos a `~/notes/reactigoded-archive/`
+(fuera del repo). Conservan contenido histórico (release scripts +
+notes de beta.14-18 + BLOQUEOS.md + SESION-RESUMEN*.md). El
+`.gitignore` ya excluye los patrones (`.notes-*`, `.release-*`,
+`BLOQUEOS.md`, `SESION-RESUMEN*.md` desde commit `6b28080`) por si
+en el futuro se vuelven a crear localmente.
 
-**Acción**: el autor decide si añadirlos al `.gitignore` (recomendado
-para `.notes-*` y `.release-*`) o moverlos a `~/notes/` fuera del
-repo.
+**Working tree del repo**: limpio post-archive (cero archivos
+dispersos en cwd).
 
 ---
