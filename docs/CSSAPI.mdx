@@ -792,6 +792,51 @@ Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaj
 
 ---
 
+## Reset.css — contexto de fondo
+
+`reset.css` (opt-in) estiliza HTML nativo (`<h1>`, `<p>`, `<a>`,
+`<button>`, `<input>`, `<table>`, …) con tokens del DS. Asume el
+**contexto root** del documento: `<html>` con `bg-base` + `text-body`
+calibrados entre sí en WCAG.
+
+**Heredan `color` del padre sin bg propio**:
+
+- `<h1>`–`<h6>` (color: heading)
+- `<a>` (color: link)
+- `<p>`, `<blockquote>` (color: body / muted)
+
+Si envuelves elementos del reset en un wrapper con `bg` distinto al
+root (`<section style="background: var(--ig-vitreus)">`), el
+contraste puede degradar bajo WCAG sin que axe lo capture (axe
+analiza pares bg/color del MISMO elemento, no `bg` heredado).
+
+**Mitigación**:
+
+- (a) NO usar HTML nativo del reset dentro de wrappers con bg
+  custom; usa componentes del DS que gestionan bg+color juntos
+  (`<Card>`, `<Alert>`, etc.).
+- (b) Re-aplicar `color` apropiado al wrapper si insistes en HTML
+  nativo dentro:
+
+```html
+<section style="background: var(--ig-vitreus); color: var(--ig-text-on-vitreus);">
+  <h2>Título sobre fondo brand</h2>
+  <p>Texto sobre fondo brand</p>
+</section>
+```
+
+- (c) Usar `bg` propio del elemento en lugar de heredado del padre.
+
+`<input>`, `<textarea>`, `<select>`, `<code>`, `<pre>`, `<th>` SÍ
+tienen bg propio (`--ig-input-bg`, `--ig-bg-muted`, `--ig-bg-sunken`)
+y son seguros dentro de cualquier wrapper.
+
+`<button>` desde 1.0.0-beta.5 usa `bg: transparent + color: inherit`
+intencionalmente — el color del botón viene del padre o de la clase
+`ig-btn-*`.
+
+---
+
 ## State CSS — fragmentos por pseudo-class (post-RC1)
 
 `state.css` (~700 KB gzipped) es el archivo monolítico con TODAS las

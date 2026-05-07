@@ -198,6 +198,47 @@ export const Polimorfica: Story = {
   ),
 };
 
+export const FocusVisibleInteractive: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Captura el contraste focus-visible sobre fondos de variant brand activa. Story con `play()` que dispara foco programático para que axe evalúe el ring de focus contra el fondo. Cierra capa 2.2 del debt doc — `focus-visible` sobre Card brand activa era zona ciega de los gates pre-RC1.",
+      },
+    },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: "1rem", maxWidth: 320 }}>
+      <Card
+        interactive
+        role="button"
+        tabIndex={0}
+        variant="brand"
+        appearance="filled"
+        aria-label="Card brand activa"
+        data-testid="card-focus-target"
+      >
+        <CardBody>Foco con Tab para ver el ring</CardBody>
+      </Card>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const el = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="card-focus-target"]',
+    );
+    el?.focus();
+    // Pequeño delay para que el browser pinte el focus ring antes de
+    // que axe lo evalúe.
+    await new Promise((r) => setTimeout(r, 50));
+  },
+};
+
 export const AllStates: Story = {
   parameters: {
     layout: "padded",

@@ -61,6 +61,30 @@ export const Controlado: Story = {
   },
 };
 
+export const FocusVisibleStar: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Captura el contraste focus-visible sobre la estrella activa (filled brand). Story con `play()` que pone foco programático en la estrella checked para que axe evalúe el ring contra el fondo de la estrella rellena. Cierra capa 2.2 del debt doc.",
+      },
+    },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  args: { value: 4, max: 5 },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const star = canvas.getByRole("radio", { name: "4 estrellas" });
+    star.focus();
+    await new Promise((r) => setTimeout(r, 50));
+  },
+};
+
 export const ClickEstrella: Story = {
   args: { value: 0 },
   play: async ({ canvasElement, args }) => {

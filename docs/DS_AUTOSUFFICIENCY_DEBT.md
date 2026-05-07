@@ -501,7 +501,7 @@ estructura DOM completa y ejemplo de assert correcto desde tests.
 
 ---
 
-## Auditoría reset.css [pendiente capa propia]
+## Auditoría reset.css ✅ aplicada en post-RC1
 
 `reset.css` opcional que el consumer importa. Asume contexto de fondo
 del padre. Caso histórico beta.5: `<button>` con `background: vitreus`
@@ -509,10 +509,39 @@ del padre. Caso histórico beta.5: `<button>` con `background: vitreus`
 sus propios. Migración beta.5 ya retiró el patrón pero el reset sigue
 con asunciones implícitas.
 
-**Auditoría pendiente**: revisar reset.css regla por regla, listar
-asunciones de contexto, documentar cuáles dependen del padre.
+**Auditoría aplicada — patrón documentado**:
 
-**Estimación**: 1-2h.
+| Bloque | Regla | Asunción de contexto | Riesgo |
+|---|---|---|---|
+| `html` | `color: var(--ig-text-body)` + `background-color: var(--ig-bg-base)` | el `<html>` arranca con bg-base + text-body que están WCAG-calibrados entre sí | bajo (root) |
+| `h1-h6` | `color: var(--ig-text-heading)` (sin bg propio) | el padre tiene `bg-base` o `bg-sunken` | **MEDIO**: si un wrapper aplica bg vitreus/laurus/etc., los heading heredan color calibrado contra bg-base que puede degradar |
+| `p` | sin color propio (hereda de body) | el padre tiene bg compatible | bajo |
+| `a` | `color: var(--ig-link-color)` (sin bg) | mismo patrón heading | **MEDIO** mismo riesgo |
+| `button` | `bg: transparent` + `color: inherit` (post-beta.5) | hereda del padre intencionalmente | **OK** — fix beta.5 |
+| `input/textarea/select` | `bg: var(--ig-input-bg)` + `color: var(--ig-input-text)` | tokens dedicados con bg propio | OK |
+| `code/pre` | `bg: var(--ig-bg-muted)` | bg propio | OK |
+| `blockquote` | `color: var(--ig-text-muted)` | hereda padre | bajo |
+| `hr/table` | borders con `--ig-border-default` | OK |
+| `th` | `bg: var(--ig-bg-sunken)` | bg propio | OK |
+| `::selection` | bg/color tokens | OK |
+
+**Riesgo sistemático detectado**: `<h1>`-`<h6>`, `<a>`, `<p>`,
+`<blockquote>` heredan `color` calibrado contra `bg-base`. Si el
+consumer envuelve elementos del reset en un wrapper con bg distinto
+(ej. `<section style="background: var(--ig-vitreus)">`) el contraste
+puede degradar bajo WCAG sin que axe lo capture (no hay assertion
+de contraste sobre `bg` heredado).
+
+**Mitigación documentada** en `docs/CSSAPI.mdx` sección "Reset.css
+contexto de fondo": consumers que cambian `bg` en wrappers deben:
+(a) NO usar elementos HTML nativos del reset dentro de ese wrapper, o
+(b) re-aplicar `color` apropiado al wrapper, o
+(c) usar componentes del DS (que sí gestionan bg+color juntos).
+
+**Cambio post-RC1**: ninguno al CSS — el reset es razonable como
+está. Solo documentación.
+
+**Coste real**: 1h (audit + matriz + doc).
 
 ---
 
@@ -528,9 +557,9 @@ asunciones de contexto, documentar cuáles dependen del padre.
 | 1.3 detección banner top-level | 1h real | post-RC1 | ✅ aplicada |
 | 3.1 script CSS scope-leak | 2h real | beta.21 | ✅ aplicada |
 | 3.2 script hex drift detection | 2h real | post-RC1 | ✅ aplicada |
-| 2.2 stories focus-visible | 1-2h | 1.0.0 final | ⏳ |
-| 2.3 stories hover/active | 1-2h | 1.1.0 | ⏳ |
-| Auditoría reset.css | 1-2h | 1.1.0 | ⏳ |
+| 2.2 stories focus-visible | 1h real | post-RC1 | ✅ aplicada |
+| 2.3 stories hover/active | 1h real | post-RC1 | ✅ aplicada |
+| Auditoría reset.css | 1h real | post-RC1 | ✅ aplicada (doc only) |
 | Capa 5 doc `STORY_CATALOG_CONVENTIONS.md` | 30 min real | post-RC1 | ✅ aplicada |
 | 6.1 regla anti-`console.error` warnings React | 0 (regla) | beta.20 | ✅ documentada |
 | 6.2 nota JSDoc estructura DOM Switch | 5 min | beta.20 | ✅ aplicada |
