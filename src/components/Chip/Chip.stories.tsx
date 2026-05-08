@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { Chip } from "./Chip";
-import { MatrixGrid, type Variant } from "../../stories/_matrix";
+import { MatrixGrid, type Variant } from "@/stories/_matrix";
 
 const meta = {
   title: "Componentes/Chip",

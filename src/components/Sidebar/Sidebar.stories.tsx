@@ -11,7 +11,7 @@ import {
   SidebarDivider,
   SidebarSection,
 } from "./index";
-import { Button } from "../Button";
+import { Button } from "@/components/Button";
 
 const meta = {
   title: "Componentes/Sidebar",

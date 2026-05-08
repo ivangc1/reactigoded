@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { Tooltip } from "./Tooltip";
-import { Button } from "../../Button";
+import { Button } from "@/components/Button";
 
 const meta = {
   title: "Componentes/Tooltip",

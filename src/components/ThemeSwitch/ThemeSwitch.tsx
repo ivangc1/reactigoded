@@ -5,9 +5,9 @@ import {
   useSyncExternalStore,
   type Ref,
 } from "react";
-import { Switch, type SwitchProps } from "../Switch";
-import { useControllableState } from "../../hooks/useControllableState";
-import type { Theme } from "../../hooks/useTheme";
+import { Switch, type SwitchProps } from "@/components/Switch";
+import { useControllableState } from "@/hooks/useControllableState";
+import type { Theme } from "@/hooks/useTheme";
 
 export interface ThemeSwitchProps
   extends Omit<SwitchProps, "checked" | "defaultChecked" | "onChange" | "ref"> {
