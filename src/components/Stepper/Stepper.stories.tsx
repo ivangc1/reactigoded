@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 import { Stepper, Step } from "./index";
-import { Button } from "../Button";
+import { Button } from "@/components/Button";
 
 const meta = {
   title: "Componentes/Stepper",

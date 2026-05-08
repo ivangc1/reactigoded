@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn } from "storybook/test";
 import { Radio } from "./Radio";
-import { MatrixGrid, type Variant } from "../../stories/_matrix";
+import { MatrixGrid, type Variant } from "@/stories/_matrix";
 
 const meta = {
   title: "Componentes/Radio",

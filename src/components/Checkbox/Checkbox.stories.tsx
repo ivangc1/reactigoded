@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn } from "storybook/test";
 import { Checkbox } from "./Checkbox";
-import { MatrixGrid, type Variant } from "../../stories/_matrix";
+import { MatrixGrid, type Variant } from "@/stories/_matrix";
 
 const meta = {
   title: "Componentes/Checkbox",

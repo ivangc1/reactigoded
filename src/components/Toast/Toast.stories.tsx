@@ -4,7 +4,7 @@ import { Toast } from "./Toast";
 import { ToastProvider } from "./ToastProvider";
 import { useToast } from "./ToastContext";
 import type { ToastPosition } from "./ToastProvider";
-import { Button } from "../Button";
+import { Button } from "@/components/Button";
 
 const meta = {
   title: "Componentes/Toast",

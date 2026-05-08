@@ -10,7 +10,7 @@ import {
   TableCaption,
   TableFoot,
 } from "./index";
-import { Badge } from "../Badge";
+import { Badge } from "@/components/Badge";
 
 const meta = {
   title: "Componentes/Table",

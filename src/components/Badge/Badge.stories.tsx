@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { Badge } from "./Badge";
-import { MatrixGrid, type Variant } from "../../stories/_matrix";
+import { MatrixGrid, type Variant } from "@/stories/_matrix";
 
 const meta = {
   title: "Componentes/Badge",

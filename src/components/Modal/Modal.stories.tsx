@@ -6,7 +6,7 @@ import { ModalHeader } from "./ModalHeader";
 import { ModalBody } from "./ModalBody";
 import { ModalFooter } from "./ModalFooter";
 import { ModalClose } from "./ModalClose";
-import { Button } from "../Button";
+import { Button } from "@/components/Button";
 
 const meta = {
   title: "Componentes/Modal",

@@ -8,7 +8,7 @@ import {
   CardImage,
   CardDivider,
 } from "./index";
-import { Button } from "../Button";
+import { Button } from "@/components/Button";
 
 // Imagen de demo embebida (data URI SVG, gradiente Vitreus→Axis con un patrón
 // ligero). Sin placehold.co — sin dependencias externas en el catálogo.
