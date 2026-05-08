@@ -94,7 +94,7 @@
     "_comment_build_storybook": "Genera el artefacto deployable a igoded.es con lang=es aplicado al HTML estático. NO añadir flag --output-dir aquí; el lang fix asume el default storybook-static/. Si Chromatic invoca este script, ver chromatic.config.json (apunta a build-storybook:chromatic, sin lang fix).",
     "build-storybook": "storybook build && node scripts/fix-storybook-static-lang.mjs",
     "build-storybook:chromatic": "storybook build",
-    "verify:unit": "npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run build",
+    "verify:unit": "rm -f tsconfig.tsbuildinfo && npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run build",
     "verify:storybook": "npm run test:storybook",
     "verify:size": "size-limit",
     "verify": "npm run verify:unit && npm run verify:storybook && npm run verify:size",
