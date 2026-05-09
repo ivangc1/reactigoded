@@ -10,7 +10,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Wrapper CSS-only que muestra un texto contextual al hover/focus. Para a11y inyecta `aria-describedby` en el child y un `<span role=\"tooltip\">` sr-only.",
+          "Tooltip flotante con `@floating-ui/react`: posiciona el contenedor con `autoUpdate` + middlewares `flip` / `offset` / `shift`, monta en `<FloatingPortal>` y orquesta apertura por hover/focus + dismiss (Esc, outside click) vía `useInteractions`. Para a11y siempre inyecta `aria-describedby` apuntando a un `<span role=\"tooltip\">` sr-only adyacente al trigger — la descripción queda accesible al SR incluso antes de abrir el portal visual.",
       },
     },
   },
