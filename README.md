@@ -4,7 +4,7 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.22` (saneamiento RC1).
+> **Estado**: `1.0.0-beta.22`.
 > Paleta cardinal estable: 7 cardinales con geometría OKLCH dual
 > (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos
 > del tema en ambos modos. El cardinal `info` se llama internamente
@@ -432,11 +432,9 @@ como bloqueante por defecto desde npm 7. El flag baja el conflicto a
 warning y procede.
 
 **No afecta a los consumidores del paquete**: cuando alguien instala
-`reactigoded` como dep, solo se resuelven `peerDependencies` (`react`
-y `react-dom`). Las devDependencies del repo no viajan al consumer.
-
-Tracking: post-RC1 evaluar bump de Storybook o vitest para alinear
-las dos referencias y eliminar el flag.
+`reactigoded` como dep, solo se resuelven `peerDependencies` (`react`,
+`react-dom`, `@floating-ui/react`). Las devDependencies del repo no
+viajan al consumer.
 
 ## Licencia
 
