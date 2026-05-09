@@ -152,7 +152,15 @@ export function Switch({
         {...rest}
         ref={setRefs}
         type="checkbox"
-        role="switch"
+        // H-15 (gate review, WAI-ARIA 1.2): aria-checked="mixed" NO
+        // está admitido en role="switch" — solo en role="checkbox".
+        // Cuando el consumer pasa indeterminate, downgradeamos el
+        // role para cumplir spec sin perder el patrón "switch master
+        // de un grupo" (Switch.stories.tsx > AsToggleMaster). Sin
+        // indeterminate, mantenemos role="switch" canónico.
+        // El visual del thumb centrado lo aplica el CSS desde el
+        // atributo DOM `:indeterminate` independientemente del role.
+        role={indeterminate ? "checkbox" : "switch"}
         aria-checked={indeterminate ? "mixed" : isOn}
         disabled={disabled}
         onChange={handleChange}
