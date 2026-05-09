@@ -387,4 +387,101 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
     expect(completeWrapper?.matches(".ig-step.ig-step-complete")).toBe(false);
     expect(completeDot?.matches(".ig-step.ig-step-complete")).toBe(true);
   });
+
+  // B-05 (gate review): Stepper con `active` fuera de rango clampa al
+  // último step válido en vez de dejar el tablist sin tab stop.
+  describe("active fuera de rango (B-05) — clamp + dev warn", () => {
+    it("active > lastIdx clampa al último step (mantiene tab stop)", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onActive = vi.fn();
+      const { container } = render(
+        <Stepper active={999} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+          <Step label="C" />
+        </Stepper>,
+      );
+      const dots = container.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      const tabIndexes = Array.from(dots).map((d) =>
+        d.getAttribute("tabIndex"),
+      );
+      // El último step recibe tabIndex=0 (clamp), no todos -1.
+      expect(tabIndexes).toEqual(["-1", "-1", "0"]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("clamping a 2"),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("active < 0 clampa a 0 (mantiene tab stop)", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onActive = vi.fn();
+      const { container } = render(
+        <Stepper active={-1} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+        </Stepper>,
+      );
+      const dots = container.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      const tabIndexes = Array.from(dots).map((d) =>
+        d.getAttribute("tabIndex"),
+      );
+      expect(tabIndexes).toEqual(["0", "-1"]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("clamping a 0"),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("active=NaN clampa a 0 (mantiene tab stop)", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onActive = vi.fn();
+      const { container } = render(
+        <Stepper active={Number.NaN} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+        </Stepper>,
+      );
+      const dots = container.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      const tabIndexes = Array.from(dots).map((d) =>
+        d.getAttribute("tabIndex"),
+      );
+      expect(tabIndexes).toEqual(["0", "-1"]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("no es un número finito"),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("active dentro de rango NO emite warn", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onActive = vi.fn();
+      render(
+        <Stepper active={1} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+          <Step label="C" />
+        </Stepper>,
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it("active=0 con stepCount=0 no crashea", () => {
+      const onActive = vi.fn();
+      expect(() =>
+        render(
+          <Stepper active={0} onActiveChange={onActive}>
+            {null}
+          </Stepper>,
+        ),
+      ).not.toThrow();
+    });
+  });
 });
