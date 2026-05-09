@@ -1,4 +1,4 @@
-import { useMemo, type HTMLAttributes, type Ref } from "react";
+import { useId, useMemo, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";
 import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
@@ -45,8 +45,14 @@ export function Sidebar({
   // con el resto del DS (Pagination, Spinner, Stepper, TabList, Rating
   // ya usaban aria-label estándar desde beta.4). Migration: rename
   // ariaLabel → aria-label en el JSX consumidor.
-  const { "aria-label": ariaLabelOverride, ...asideRest } = rest;
+  const { "aria-label": ariaLabelOverride, id: idOverride, ...asideRest } =
+    rest;
   const resolvedAriaLabel = ariaLabelOverride ?? "Navegación lateral";
+  // H-10 (gate review): id estable para que SidebarToggle pueda
+  // referenciar el panel via aria-controls. Respetamos el id del
+  // consumer si lo pasó por rest; si no, generamos uno con useId.
+  const generatedId = useId();
+  const asideId = idOverride ?? generatedId;
   // Capa 1.2 debt doc: warn dev si dos <aside aria-label="..."> con
   // mismo label viven simultáneamente (ej. galería con varios sidebars
   // sin labels únicos).
@@ -58,8 +64,8 @@ export function Sidebar({
   });
 
   const ctxValue = useMemo(
-    () => ({ collapsed, setCollapsed }),
-    [collapsed, setCollapsed],
+    () => ({ collapsed, setCollapsed, asideId }),
+    [collapsed, setCollapsed, asideId],
   );
 
   return (
@@ -67,6 +73,7 @@ export function Sidebar({
       <aside
         {...asideRest}
         ref={ref}
+        id={asideId}
         aria-label={resolvedAriaLabel}
         className={cn(
           "ig-sidebar",

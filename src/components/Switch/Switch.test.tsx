@@ -78,10 +78,42 @@ describe("Switch", () => {
 
   it("indeterminate sigue true tras click si la prop sigue true (sticky)", async () => {
     render(<Switch indeterminate>Mixto</Switch>);
-    const input = screen.getByRole("switch");
+    // H-15: con indeterminate el role downgradea a "checkbox" (WAI-
+    // ARIA 1.2 NO admite aria-checked="mixed" en role="switch").
+    const input = screen.getByRole("checkbox");
     expect(input).toBePartiallyChecked();
     await userEvent.click(input);
     expect(input).toBePartiallyChecked();
+  });
+
+  // H-15 (gate review, WAI-ARIA 1.2): cuando indeterminate=false, el
+  // input lleva role="switch" canónico. Cuando indeterminate=true,
+  // downgradea a role="checkbox" para cumplir spec sin perder el
+  // patrón "switch master de un grupo".
+  describe("H-15 — role + aria-checked vs spec WAI-ARIA 1.2", () => {
+    it("sin indeterminate: role=switch + aria-checked boolean", () => {
+      render(<Switch defaultChecked>x</Switch>);
+      const input = screen.getByRole("switch");
+      expect(input).toBeChecked();
+    });
+
+    it("indeterminate=true: role=checkbox + aria-checked=mixed (NO switch)", () => {
+      render(<Switch indeterminate>x</Switch>);
+      // El role se downgradea para cumplir WAI-ARIA 1.2.
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      const input = screen.getByRole("checkbox");
+      expect(input).toBePartiallyChecked();
+    });
+
+    it("indeterminate alterna entre switch y checkbox sin remontar", () => {
+      const { rerender } = render(<Switch>x</Switch>);
+      expect(screen.getByRole("switch")).toBeInTheDocument();
+      rerender(<Switch indeterminate>x</Switch>);
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      expect(screen.getByRole("checkbox")).toBeInTheDocument();
+      rerender(<Switch>x</Switch>);
+      expect(screen.getByRole("switch")).toBeInTheDocument();
+    });
   });
 
   it("transición controlled → uncontrolled: el wrapper React→DOM mantiene el input nativo", () => {
