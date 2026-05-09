@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { Tooltip } from "./Tooltip";
@@ -129,6 +130,83 @@ export const A11yInteraction: Story = {
     const tooltipNode = canvas.getByRole("tooltip", { hidden: true });
     await expect(tooltipNode.id).toBe(describedBy);
     await expect(tooltipNode).toHaveTextContent("Eliminar elemento");
+  },
+};
+
+export const WithCustomContainer: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Caso del roadmap RC1 (H-04 gate review): Tooltip dentro de un `<dialog>` con `showModal()`. Sin la prop `container` el `<FloatingPortal>` se monta en `document.body` y el tooltip queda detrás del backdrop top-layer del dialog. Pasar el elemento del dialog como `container` ancla el portal al top-layer y el tooltip aparece visible. Patrón canónico para Tooltip en Modal, y blueprint para futuros `<Popover>`/`<HoverCard>` que tendrán la misma prop.",
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="ig-story-frame ig-story-frame--lg">
+        <Story />
+      </div>
+    ),
+  ],
+  render: () => {
+    function DemoDialog() {
+      const dialogRef = useRef<HTMLDialogElement>(null);
+      const [open, setOpen] = useState(false);
+      // Re-render para que el container apunte al dialog real tras el
+      // primer mount (el ref se asigna en el mismo paint).
+      const [, force] = useState(0);
+      useEffect(() => {
+        force(1);
+      }, []);
+      const openDialog = () => {
+        setOpen(true);
+        dialogRef.current?.showModal();
+      };
+      const closeDialog = () => {
+        setOpen(false);
+        dialogRef.current?.close();
+      };
+      return (
+        <>
+          <Button onClick={openDialog}>Abrir dialog</Button>
+          <dialog
+            ref={dialogRef}
+            style={{
+              padding: "2rem",
+              borderRadius: 8,
+              border: "1px solid var(--ig-fundus, #ccc)",
+              background: "var(--ig-fundus, #fff)",
+              color: "var(--ig-cinis-7, #111)",
+            }}
+          >
+            <p>
+              Este Tooltip recibe <code>container={"{dialogRef.current}"}</code>.
+              Su portal se ancla al top-layer del dialog y queda visible.
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <Tooltip
+                text="Visible aunque el dialog cubra body"
+                placement="top"
+                container={dialogRef.current}
+              >
+                <Button>Hover me</Button>
+              </Tooltip>
+              <Button variant="secondary" onClick={closeDialog}>
+                Cerrar
+              </Button>
+            </div>
+            <p
+              aria-hidden
+              style={{ marginTop: "1rem", fontSize: 12, opacity: 0.7 }}
+            >
+              {open ? "(open)" : ""}
+            </p>
+          </dialog>
+        </>
+      );
+    }
+    return <DemoDialog />;
   },
 };
 
