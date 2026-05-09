@@ -408,7 +408,12 @@ const cases: SsrCase[] = [
   {
     name: "Tooltip",
     jsx: () => <Tooltip text="ayuda"><Button>btn</Button></Tooltip>,
-    expects: "ig-tooltip",
+    // H-03 (gate review): no usar "ig-tooltip" sustring — matchea
+    // "ig-tooltip-wrapper" del span exterior. Usar role="tooltip" del
+    // span sr-only que el componente inyecta para el SR. Eso garantiza
+    // que el patrón a11y (aria-describedby → role=tooltip) esté en el
+    // HTML server-rendered, no solo el wrapper visual.
+    expects: 'role="tooltip"',
   },
 ];
 

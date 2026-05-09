@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useTheme } from "./useTheme";
 
@@ -52,20 +52,30 @@ describe("useTheme", () => {
   });
 
   it("setTheme escribe el atributo y propaga el nuevo valor", async () => {
+    // H-11: setTheme escribe data-theme → MutationObserver dispara
+    // en microtask, fuera del act() del user.click. waitFor envuelve
+    // cada intento en act() y consume el rerender del observer sin
+    // generar warning.
     const user = userEvent.setup();
     render(<ThemeProbe />);
     await user.click(screen.getByText("set-light"));
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
-    expect(screen.getByTestId("value")).toHaveTextContent("light");
+    await waitFor(() => {
+      expect(screen.getByTestId("value")).toHaveTextContent("light");
+    });
   });
 
   it("toggleTheme alterna basado en el snapshot vivo del DOM", async () => {
     const user = userEvent.setup();
     render(<ThemeProbe />);
     await user.click(screen.getByText("toggle"));
-    expect(screen.getByTestId("value")).toHaveTextContent("light");
+    await waitFor(() => {
+      expect(screen.getByTestId("value")).toHaveTextContent("light");
+    });
     await user.click(screen.getByText("toggle"));
-    expect(screen.getByTestId("value")).toHaveTextContent("dark");
+    await waitFor(() => {
+      expect(screen.getByTestId("value")).toHaveTextContent("dark");
+    });
   });
 
   it("se sincroniza con cambios externos del atributo (MutationObserver)", async () => {
@@ -103,7 +113,11 @@ describe("useTheme", () => {
     const user = userEvent.setup();
     render(<Twin />);
     await user.click(screen.getByText("a-light"));
-    expect(screen.getByTestId("a")).toHaveTextContent("light");
-    expect(screen.getByTestId("b")).toHaveTextContent("light");
+    // H-11: ambos snapshots se sincronizan vía MutationObserver tras
+    // microtask. waitFor cubre el rerender fuera del act() del click.
+    await waitFor(() => {
+      expect(screen.getByTestId("a")).toHaveTextContent("light");
+      expect(screen.getByTestId("b")).toHaveTextContent("light");
+    });
   });
 });
