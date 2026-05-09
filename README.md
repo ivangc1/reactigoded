@@ -325,12 +325,22 @@ script blocking en `<head>` que aplique `data-theme` antes del paint:
 
 ### SSR / hydration
 
-- Todos los componentes son SSR-safe (no acceden a `window`/`document` durante
-  render; los efectos sí, pero solo en cliente).
-- `<Modal>` no llama `showModal()` en server (el `<dialog>` se queda con
-  `display:none` hasta que el efecto cliente lo abre — sin flash).
-- `<Toast>` se renderiza inline en SSR (no portal) hasta que `document.body`
-  está disponible.
+- Todos los componentes son SSR-safe: `renderToString` no lanza con
+  ningún componente público (verificado en `src/__ssr__.test.tsx`,
+  37 casos sobre los 32 componentes raíz).
+- Componentes que necesitan estado del cliente (ej. `ThemeSwitch`,
+  para sincronizarse con un script anti-flash que ya escribió
+  `data-theme` en `<html>` antes de la hidratación) leen el DOM
+  detrás de guards `typeof document !== "undefined"`. En server caen
+  a defaults sensatos sin crashear; en cliente recuperan el estado
+  real evitando hydration mismatches.
+- `<Modal>` no llama `showModal()` en server (el `<dialog>` se queda
+  con `display:none` hasta que el efecto cliente lo abre — sin
+  flash).
+- `<Toast>` se renderiza inline en SSR (no portal) hasta que
+  `document.body` está disponible.
+- Los effects (`useEffect`, `useLayoutEffect`) corren solo en
+  cliente — comportamiento React estándar.
 
 ## Browserslist
 
