@@ -5,6 +5,7 @@ import {
   isValidElement,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type HTMLAttributes,
   type KeyboardEvent,
@@ -97,6 +98,49 @@ export function Stepper({
 }: StepperProps) {
   const steps = Children.toArray(children).filter(isValidElement);
   const interactive = onActiveChange !== undefined;
+  const stepCount = steps.length;
+
+  // B-05 (gate review): clamp `active` a un índice válido.
+  // Sin esto, valores fuera de rango (active=999, -1, NaN) hacían que
+  // ningún Step recibiera `active=true` → todos `tabIndex=-1` → tablist
+  // sin tab stop → keyboard inaccessible. Patrón Pagination/Slider del
+  // propio DS: cálculo puro + dev warn separado en useEffect.
+  const clampedActive = useMemo(() => {
+    if (stepCount === 0) return 0;
+    const lastIdx = stepCount - 1;
+    if (!Number.isFinite(active)) return 0;
+    if (active < 0) return 0;
+    if (active > lastIdx) return lastIdx;
+    return active;
+  }, [active, stepCount]);
+
+  // Dev warn diferenciado, solo una vez por componente. Patrón Slider:
+  // `import.meta.env.DEV` (Vite, sin Node types) + warnedRef para no
+  // spamear el mismo warn en re-renders. Side effect aislado en
+  // useEffect, no dentro de render/useMemo.
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedRef.current) return;
+    if (stepCount === 0) return;
+    const lastIdx = stepCount - 1;
+    if (!Number.isFinite(active)) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Stepper active=${JSON.stringify(active)}> no es un número finito; usando 0.`,
+      );
+    } else if (active < 0) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Stepper active=${String(active)}> < 0; clamping a 0.`,
+      );
+    } else if (active > lastIdx) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Stepper active=${String(active)}> > ${String(lastIdx)} (último step); clamping a ${String(lastIdx)}.`,
+      );
+    }
+  }, [active, stepCount]);
 
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
   const { "aria-label": ariaLabelOverride, ...divRest } = rest;
@@ -125,21 +169,21 @@ export function Stepper({
       `.ig-step[role="button"][data-step-index="${String(idx)}"]`,
     );
     target?.focus();
-  }, [active]);
+  }, [clampedActive]);
 
   const handleStepKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (!interactive) return;
-      const lastIdx = steps.length - 1;
+      const lastIdx = stepCount - 1;
       let nextIdx = -1;
       switch (event.key) {
         case "ArrowLeft":
         case "ArrowUp":
-          nextIdx = active > 0 ? active - 1 : lastIdx;
+          nextIdx = clampedActive > 0 ? clampedActive - 1 : lastIdx;
           break;
         case "ArrowRight":
         case "ArrowDown":
-          nextIdx = active < lastIdx ? active + 1 : 0;
+          nextIdx = clampedActive < lastIdx ? clampedActive + 1 : 0;
           break;
         case "Home":
           nextIdx = 0;
@@ -156,16 +200,16 @@ export function Stepper({
       focusTargetIdxRef.current = nextIdx;
       onActiveChange(nextIdx);
     },
-    [active, interactive, onActiveChange, steps.length],
+    [clampedActive, interactive, onActiveChange, stepCount],
   );
 
   const handleActivate = useCallback(
     (idx: number) => {
       if (!interactive) return;
-      if (idx === active) return;
+      if (idx === clampedActive) return;
       onActiveChange(idx);
     },
-    [active, interactive, onActiveChange],
+    [clampedActive, interactive, onActiveChange],
   );
 
   // Callback ref que combina rootRef interno (focus management H-25) con
@@ -208,8 +252,8 @@ export function Stepper({
           : {};
         const enriched = cloneElement(step as ReactElement<StepProps>, {
           index: idx + 1,
-          active: idx === active,
-          complete: idx < active,
+          active: idx === clampedActive,
+          complete: idx < clampedActive,
           labeled,
           interactive,
           ...interactiveProps,
@@ -218,11 +262,11 @@ export function Stepper({
         return (
           <Fragment key={idx}>
             {enriched}
-            {idx < steps.length - 1 && (
+            {idx < stepCount - 1 && (
               <span
                 className={cn(
                   "ig-step-line",
-                  idx < active && "ig-step-line-complete",
+                  idx < clampedActive && "ig-step-line-complete",
                 )}
                 aria-hidden="true"
               />

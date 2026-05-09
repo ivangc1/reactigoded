@@ -94,6 +94,8 @@
     "_comment_build_storybook": "Genera el artefacto deployable a igoded.es con lang=es aplicado al HTML estático. NO añadir flag --output-dir aquí; el lang fix asume el default storybook-static/. Si Chromatic invoca este script, ver chromatic.config.json (apunta a build-storybook:chromatic, sin lang fix).",
     "build-storybook": "storybook build && node scripts/fix-storybook-static-lang.mjs",
     "build-storybook:chromatic": "storybook build",
+    "_comment_verify_fast": "Verify rápido para iterar local: ~5 min cold (lint+typecheck+test:unit threads). Bajan ~50s con vitest cache caliente, pero el escenario típico es cold (cambia un componente, vitest reconstruye su grafo). vs ~25-30 min de verify:unit completo (--isolate --pool=forks). Sirve para iterar local; CI sigue corriendo el verify completo tras push y caza estado compartido entre tests / mocks que se filtran / divergencias de typecheck por @types instalados pero no incluidos en compilerOptions.types. Contador CI fallos con verify:fast OK: 1 (B-05 process.env.NODE_ENV — typecheck local pasó por @types/node ambient, CI strict cazó; fix: usar `import.meta.env.DEV` patrón Slider/Pagination del DS).",
+    "verify:fast": "npm run lint && npm run typecheck && npm run test:unit",
     "verify:unit": "rm -f tsconfig.tsbuildinfo && npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run build",
     "verify:storybook": "npm run test:storybook",
     "verify:size": "size-limit",
