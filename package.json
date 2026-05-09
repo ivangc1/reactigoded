@@ -122,37 +122,37 @@
     {
       "name": "design.css meta-importer",
       "path": "dist/styles/igoded-design.css",
-      "limit": "2 KB",
+      "limit": "256 B",
       "gzip": true
     },
     {
       "name": "tokens.css solo (consumer minimal)",
       "path": "dist/styles/igoded-tokens.css",
-      "limit": "30 KB",
+      "limit": "8.5 KB",
       "gzip": true
     },
     {
       "name": "components.css publicado",
       "path": "dist/styles/igoded-components.css",
-      "limit": "75 KB",
+      "limit": "36 KB",
       "gzip": true
     },
     {
       "name": "base.css globales mínimos",
       "path": "dist/styles/igoded-base.css",
-      "limit": "2 KB",
+      "limit": "600 B",
       "gzip": true
     },
     {
       "name": "reset.css HTML nativo opt-in",
       "path": "dist/styles/igoded-reset.css",
-      "limit": "2 KB",
+      "limit": "1.2 KB",
       "gzip": true
     },
     {
       "name": "fonts.css Google Fonts opt-in",
       "path": "dist/styles/igoded-fonts.css",
-      "limit": "1 KB",
+      "limit": "200 B",
       "gzip": true
     },
     {
@@ -164,25 +164,25 @@
     {
       "name": "state/hover.css fragmento",
       "path": "dist/styles/state/hover.css",
-      "limit": "60 KB",
+      "limit": "47 KB",
       "gzip": true
     },
     {
       "name": "state/focus.css fragmento",
       "path": "dist/styles/state/focus.css",
-      "limit": "80 KB",
+      "limit": "70 KB",
       "gzip": true
     },
     {
       "name": "state/disabled.css fragmento",
       "path": "dist/styles/state/disabled.css",
-      "limit": "60 KB",
+      "limit": "47 KB",
       "gzip": true
     },
     {
       "name": "state/active.css fragmento",
       "path": "dist/styles/state/active.css",
-      "limit": "60 KB",
+      "limit": "47 KB",
       "gzip": true
     }
   ],
