@@ -5,6 +5,12 @@ export interface SidebarContextValue {
   collapsed: boolean;
   /** Cambia el estado y dispara `onCollapsedChange`. */
   setCollapsed: (next: boolean) => void;
+  /**
+   * Id del `<aside>` (útil para que `<SidebarToggle>` referencie su
+   * panel via `aria-controls`). Si el consumer pasó `id` al
+   * `<Sidebar>`, ese id se respeta; si no, viene de `useId()`.
+   */
+  asideId: string;
 }
 
 export const SidebarContext = createContext<SidebarContextValue | null>(null);

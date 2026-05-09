@@ -73,6 +73,41 @@ describe("Sidebar — toggle (uncontrolled)", () => {
     expect(aside).not.toHaveClass("ig-sidebar-collapsed");
   });
 
+  // H-10 (gate review): completar par aria-expanded + aria-controls.
+  // El SidebarToggle debe apuntar al <aside> via aria-controls para
+  // que el SR sepa qué panel se expande/colapsa.
+  it("aria-controls del toggle apunta al id del <aside> (H-10)", () => {
+    render(
+      <Sidebar>
+        <SidebarFooter>
+          <SidebarToggle />
+        </SidebarFooter>
+      </Sidebar>,
+    );
+    const aside = screen.getByRole("complementary");
+    const toggle = screen.getByRole("button", { name: /colapsar sidebar/i });
+    const asideId = aside.getAttribute("id");
+    expect(asideId).toBeTruthy();
+    expect(toggle).toHaveAttribute("aria-controls", asideId!);
+  });
+
+  it("respeta id custom del consumer en aria-controls (H-10)", () => {
+    render(
+      <Sidebar id="my-sidebar">
+        <SidebarFooter>
+          <SidebarToggle />
+        </SidebarFooter>
+      </Sidebar>,
+    );
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "id",
+      "my-sidebar",
+    );
+    expect(
+      screen.getByRole("button", { name: /colapsar/i }),
+    ).toHaveAttribute("aria-controls", "my-sidebar");
+  });
+
   it("dispara onCollapsedChange en cada toggle", () => {
     const onChange = vi.fn();
     render(

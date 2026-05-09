@@ -15,8 +15,9 @@ export interface SidebarToggleProps
 
 /**
  * SidebarToggle — botón que alterna el estado colapsado de la `Sidebar`.
- * Aplica `aria-expanded` (true cuando expandida) y un `aria-label` distinto
- * según el estado para que los lectores de pantalla anuncien la acción.
+ * Aplica `aria-expanded` (true cuando expandida), `aria-controls`
+ * apuntando al `<aside>` del Sidebar, y un `aria-label` distinto según
+ * el estado para que los lectores de pantalla anuncien la acción.
  */
 export function SidebarToggle({
   className,
@@ -28,13 +29,18 @@ export function SidebarToggle({
   ref,
   ...rest
 }: SidebarToggleProps) {
-  const { collapsed, setCollapsed } = useSidebar();
+  const { collapsed, setCollapsed, asideId } = useSidebar();
   return (
     <button
       {...rest}
       ref={ref}
       type={type}
       aria-expanded={!collapsed}
+      // H-10 (gate review): completar par aria-expanded + aria-controls.
+      // El consumer del SR descubre qué panel se expande/colapsa al
+      // pulsar el toggle. Patrón ya consistente en DropdownTrigger,
+      // ModalTrigger, AccordionHeader del propio DS.
+      aria-controls={asideId}
       aria-label={collapsed ? expandLabel : collapseLabel}
       className={cn("ig-sidebar-toggle", className)}
       onClick={(e) => {
