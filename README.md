@@ -405,6 +405,13 @@ scripts/
   publican (útiles para "go-to-definition" desde consumer).
 - **`sideEffects: ["**/*.css"]`** — bundlers tree-shake JS pero conservan
   CSS imports.
+- **`console.error` legítimos de `tabbable`** — `tabbable` es dep
+  transitiva de `@floating-ui/react` (vía `Tooltip` y futuros
+  `Popover`/`HoverCard`). Para focus management sobre nodos sin
+  tabIndex válido, emite `console.error` del propio upstream. **No
+  es bug del DS** — viene del ecosistema Floating UI. El gate de CI
+  `bundle-no-dev-warns` filtra solo el prefijo `[reactigoded]` para
+  no confundir esos errors legítimos con regresiones nuestras.
 
 ## Desarrollo
 
