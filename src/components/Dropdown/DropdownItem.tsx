@@ -117,10 +117,29 @@ export function DropdownItem(props: DropdownItemProps) {
         onKeyDown={(e) => {
           onKeyDown?.(e);
           if (e.defaultPrevented) return;
-          // Activación por teclado: Enter en <a> activa nativo, pero Space
-          // no — y para aria-disabled hay que bloquear ambos.
+          // Activación por teclado: aria-disabled bloquea Enter+Space.
           if (isAriaDisabled && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
+            return;
+          }
+          // H-19 (gate review, WAI-ARIA APG menu-button-links):
+          // role="menuitem" debe activarse con Enter Y Space. Para
+          // <a>, Enter dispara click nativo pero Space NO — sintetizar
+          // el click manualmente. El click handler ya cubre aria-disabled,
+          // onClick consumer y close().
+          //
+          // Codex review P2 sobre PR #28: ignorar key auto-repeat.
+          // Mantener Space presionado dispara keydown repetidos; sin
+          // guard, cada repeat sintetiza un click extra. La activación
+          // nativa de <button> ocurre al keyup → un solo click por
+          // pulsación larga. Replicamos esa semántica con e.repeat.
+          // Mantenemos preventDefault en TODOS los repeats para evitar
+          // que el browser haga scroll de la página al presionar
+          // Espacio.
+          if (e.key === " ") {
+            e.preventDefault();
+            if (e.repeat) return;
+            e.currentTarget.click();
             return;
           }
           handleNavKeys(e, menuRef);

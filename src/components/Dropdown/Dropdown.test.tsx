@@ -382,3 +382,99 @@ describe("Dropdown — className merge", () => {
     expect(trigger).toHaveClass("my-trigger");
   });
 });
+
+// H-19 (gate review): WAI-ARIA APG menu-button-links exige que
+// role="menuitem" se active con Space y Enter. Para <a>, Enter
+// dispara click nativo del browser, pero Space NO — antes de este
+// fix, presionar Space en un DropdownItem href no hacía nada.
+describe("DropdownItem — href + Space (H-19, WAI-ARIA APG)", () => {
+  it("Space en <a> menuitem activa onClick (sintético)", () => {
+    const onClick = vi.fn();
+    render(
+      <Dropdown defaultOpen>
+        <DropdownTrigger>Abrir</DropdownTrigger>
+        <DropdownMenu>
+          <DropdownItem href="/perfil" onClick={onClick}>
+            Perfil
+          </DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const item = screen.getByRole("menuitem", { name: /perfil/i });
+    item.focus();
+    fireEvent.keyDown(item, { key: " " });
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Space en <a> menuitem aria-disabled NO activa onClick", () => {
+    const onClick = vi.fn();
+    render(
+      <Dropdown defaultOpen>
+        <DropdownTrigger>Abrir</DropdownTrigger>
+        <DropdownMenu>
+          <DropdownItem href="/perfil" aria-disabled onClick={onClick}>
+            Perfil
+          </DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const item = screen.getByRole("menuitem", { name: /perfil/i });
+    item.focus();
+    fireEvent.keyDown(item, { key: " " });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("Space repetido (auto-repeat) dispara onClick UNA sola vez (codex P2)", () => {
+    // Mantener Space presionado emite keydown con e.repeat=true. El
+    // handler debe sintetizar UN solo click — replicando la semántica
+    // nativa de <button> que activa al keyup, no al keydown. Aplica
+    // también con closeOnSelect=false porque el item no se desmonta y
+    // los repeats siguen llegando al mismo nodo.
+    const onClick = vi.fn();
+    render(
+      <Dropdown defaultOpen closeOnSelect={false}>
+        <DropdownTrigger>Abrir</DropdownTrigger>
+        <DropdownMenu>
+          <DropdownItem href="/perfil" onClick={onClick}>
+            Perfil
+          </DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const item = screen.getByRole("menuitem", { name: /perfil/i });
+    item.focus();
+    // Pulsación larga: 1 keydown inicial + 5 repeats.
+    fireEvent.keyDown(item, { key: " ", repeat: false });
+    for (let i = 0; i < 5; i++) {
+      fireEvent.keyDown(item, { key: " ", repeat: true });
+    }
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Enter en <a> menuitem sigue funcionando (browser nativo, no synth)", () => {
+    // Enter en <a> dispara click nativo por el browser. happy-dom
+    // simula esto vía fireEvent.keyDown solo si añadimos también
+    // fireEvent.click — el test verifica que NUESTRO handler no rompe
+    // ese flujo (no pre-claims el evento).
+    const onClick = vi.fn();
+    render(
+      <Dropdown defaultOpen>
+        <DropdownTrigger>Abrir</DropdownTrigger>
+        <DropdownMenu>
+          <DropdownItem href="/perfil" onClick={onClick}>
+            Perfil
+          </DropdownItem>
+        </DropdownMenu>
+      </Dropdown>,
+    );
+    const item = screen.getByRole("menuitem", { name: /perfil/i });
+    item.focus();
+    // Simulamos Enter: nuestro keydown no llama preventDefault, el
+    // browser activaría click nativo. En happy-dom replicamos con
+    // fireEvent.click (consistente con cómo el resto de tests del
+    // repo verifican activaciones de anchor).
+    fireEvent.keyDown(item, { key: "Enter" });
+    fireEvent.click(item);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
