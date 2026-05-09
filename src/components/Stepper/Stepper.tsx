@@ -103,36 +103,43 @@ export function Stepper({
   // B-05 (gate review): clamp `active` a un índice válido.
   // Sin esto, valores fuera de rango (active=999, -1, NaN) hacían que
   // ningún Step recibiera `active=true` → todos `tabIndex=-1` → tablist
-  // sin tab stop → keyboard inaccessible. Patrón Pagination del propio
-  // DS: clamp + dev warn + sigue funcional.
+  // sin tab stop → keyboard inaccessible. Patrón Pagination/Slider del
+  // propio DS: cálculo puro + dev warn separado en useEffect.
   const clampedActive = useMemo(() => {
     if (stepCount === 0) return 0;
     const lastIdx = stepCount - 1;
-    if (!Number.isFinite(active)) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          `[reactigoded] Stepper: active="${String(active)}" no es un número finito; usando 0.`,
-        );
-      }
-      return 0;
-    }
-    if (active < 0) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          `[reactigoded] Stepper: active=${String(active)} < 0; clamping a 0.`,
-        );
-      }
-      return 0;
-    }
-    if (active > lastIdx) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          `[reactigoded] Stepper: active=${String(active)} > ${String(lastIdx)} (último step); clamping a ${String(lastIdx)}.`,
-        );
-      }
-      return lastIdx;
-    }
+    if (!Number.isFinite(active)) return 0;
+    if (active < 0) return 0;
+    if (active > lastIdx) return lastIdx;
     return active;
+  }, [active, stepCount]);
+
+  // Dev warn diferenciado, solo una vez por componente. Patrón Slider:
+  // `import.meta.env.DEV` (Vite, sin Node types) + warnedRef para no
+  // spamear el mismo warn en re-renders. Side effect aislado en
+  // useEffect, no dentro de render/useMemo.
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedRef.current) return;
+    if (stepCount === 0) return;
+    const lastIdx = stepCount - 1;
+    if (!Number.isFinite(active)) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Stepper active=${JSON.stringify(active)}> no es un número finito; usando 0.`,
+      );
+    } else if (active < 0) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Stepper active=${String(active)}> < 0; clamping a 0.`,
+      );
+    } else if (active > lastIdx) {
+      warnedRef.current = true;
+      console.warn(
+        `[reactigoded] <Stepper active=${String(active)}> > ${String(lastIdx)} (último step); clamping a ${String(lastIdx)}.`,
+      );
+    }
   }, [active, stepCount]);
 
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
