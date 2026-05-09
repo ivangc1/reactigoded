@@ -4,7 +4,7 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.22` (saneamiento RC1).
+> **Estado**: `1.0.0-beta.22`.
 > Paleta cardinal estable: 7 cardinales con geometría OKLCH dual
 > (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos
 > del tema en ambos modos. El cardinal `info` se llama internamente
@@ -36,15 +36,19 @@ npm link reactigoded
 
 `react` y `react-dom` >= 19 son `peerDependencies`.
 
-Desde post-RC1, **`@floating-ui/react` (>= 0.27) también es peer-dep
-requerido** — lo usa internamente `Tooltip`. Si solo importas otros
-componentes la lib funciona sin instalarlo, pero al usar `<Tooltip>`
-sin la dep crashea en runtime. Recomendado instalarlo siempre con
-la lib:
+**`@floating-ui/react` (^0.27) es peer-dep requerido** — lo usa
+internamente `Tooltip` (y futuros `Popover`, `HoverCard`, etc.).
+Instálalo **siempre** junto a la librería:
 
 ```bash
 npm install reactigoded react react-dom @floating-ui/react
 ```
+
+Aunque el tree-shaking elimina `Tooltip` + `@floating-ui/react`
+del bundle final si no los importas, el peer-dep no satisfecho
+rompe la resolución de módulos del bundler **antes** de que el
+tree-shake ocurra. No es opcional para el install, solo para el
+bundle.
 
 Razón: `@floating-ui/react` ocupa ~17 KB gz; bundlearla duplicaba
 la dep si el consumer ya la tenía vía Radix/Headless UI/otra DS.
@@ -321,12 +325,22 @@ script blocking en `<head>` que aplique `data-theme` antes del paint:
 
 ### SSR / hydration
 
-- Todos los componentes son SSR-safe (no acceden a `window`/`document` durante
-  render; los efectos sí, pero solo en cliente).
-- `<Modal>` no llama `showModal()` en server (el `<dialog>` se queda con
-  `display:none` hasta que el efecto cliente lo abre — sin flash).
-- `<Toast>` se renderiza inline en SSR (no portal) hasta que `document.body`
-  está disponible.
+- Todos los componentes son SSR-safe: `renderToString` no lanza con
+  ningún componente público (verificado en `src/__ssr__.test.tsx`,
+  37 casos sobre los 32 componentes raíz).
+- Componentes que necesitan estado del cliente (ej. `ThemeSwitch`,
+  para sincronizarse con un script anti-flash que ya escribió
+  `data-theme` en `<html>` antes de la hidratación) leen el DOM
+  detrás de guards `typeof document !== "undefined"`. En server caen
+  a defaults sensatos sin crashear; en cliente recuperan el estado
+  real evitando hydration mismatches.
+- `<Modal>` no llama `showModal()` en server (el `<dialog>` se queda
+  con `display:none` hasta que el efecto cliente lo abre — sin
+  flash).
+- `<Toast>` se renderiza inline en SSR (no portal) hasta que
+  `document.body` está disponible.
+- Los effects (`useEffect`, `useLayoutEffect`) corren solo en
+  cliente — comportamiento React estándar.
 
 ## Browserslist
 
@@ -391,6 +405,13 @@ scripts/
   publican (útiles para "go-to-definition" desde consumer).
 - **`sideEffects: ["**/*.css"]`** — bundlers tree-shake JS pero conservan
   CSS imports.
+- **`console.error` legítimos de `tabbable`** — `tabbable` es dep
+  transitiva de `@floating-ui/react` (vía `Tooltip` y futuros
+  `Popover`/`HoverCard`). Para focus management sobre nodos sin
+  tabIndex válido, emite `console.error` del propio upstream. **No
+  es bug del DS** — viene del ecosistema Floating UI. El gate de CI
+  `bundle-no-dev-warns` filtra solo el prefijo `[reactigoded]` para
+  no confundir esos errors legítimos con regresiones nuestras.
 
 ## Desarrollo
 
@@ -411,11 +432,9 @@ como bloqueante por defecto desde npm 7. El flag baja el conflicto a
 warning y procede.
 
 **No afecta a los consumidores del paquete**: cuando alguien instala
-`reactigoded` como dep, solo se resuelven `peerDependencies` (`react`
-y `react-dom`). Las devDependencies del repo no viajan al consumer.
-
-Tracking: post-RC1 evaluar bump de Storybook o vitest para alinear
-las dos referencias y eliminar el flag.
+`reactigoded` como dep, solo se resuelven `peerDependencies` (`react`,
+`react-dom`, `@floating-ui/react`). Las devDependencies del repo no
+viajan al consumer.
 
 ## Licencia
 
