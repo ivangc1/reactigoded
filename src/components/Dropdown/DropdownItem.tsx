@@ -127,8 +127,18 @@ export function DropdownItem(props: DropdownItemProps) {
           // <a>, Enter dispara click nativo pero Space NO — sintetizar
           // el click manualmente. El click handler ya cubre aria-disabled,
           // onClick consumer y close().
+          //
+          // Codex review P2 sobre PR #28: ignorar key auto-repeat.
+          // Mantener Space presionado dispara keydown repetidos; sin
+          // guard, cada repeat sintetiza un click extra. La activación
+          // nativa de <button> ocurre al keyup → un solo click por
+          // pulsación larga. Replicamos esa semántica con e.repeat.
+          // Mantenemos preventDefault en TODOS los repeats para evitar
+          // que el browser haga scroll de la página al presionar
+          // Espacio.
           if (e.key === " ") {
             e.preventDefault();
+            if (e.repeat) return;
             e.currentTarget.click();
             return;
           }
