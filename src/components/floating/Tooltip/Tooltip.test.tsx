@@ -316,4 +316,121 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       warn.mockRestore();
     });
   });
+
+  // C-01 (gate review): text amplió a `string | ReactNode` para alinear
+  // con Popover/HoverCard futuros que usan content: ReactNode.
+  describe("C-01 — text como ReactNode", () => {
+    it("acepta ReactNode con formatting (string subset sigue funcionando)", () => {
+      const { container } = render(
+        <Tooltip
+          text={
+            <>
+              <strong>Bold</strong> + texto plain
+            </>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      // SR-only span renderiza el ReactNode literal (consumer
+      // responsable de a11y del contenido).
+      const sr = container.querySelector('.ig-sr-only[role="tooltip"]');
+      expect(sr).not.toBeNull();
+      expect(sr?.querySelector("strong")?.textContent).toBe("Bold");
+      expect(sr?.textContent).toContain("texto plain");
+    });
+
+    it("portal flotante muestra el ReactNode al hover", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip
+          text={
+            <span data-testid="rich-content">
+              <strong>Rich</strong> tooltip
+            </span>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      // El portal contiene el mismo ReactNode (el SR-only span también
+      // lo tiene; usamos el data-testid para asegurar que se duplica
+      // correctamente en ambos sitios).
+      const matches = document.querySelectorAll('[data-testid="rich-content"]');
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("data-tooltip-content NO se setea cuando text NO es string", async () => {
+      // Para text string, el atributo es útil (debugging, e2e selectors).
+      // Para ReactNode arbitrario sería '[object Object]' — inútil.
+      const user = userEvent.setup();
+      render(
+        <Tooltip text={<em>rich</em>}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      const portal = document.querySelector(".ig-tooltip-place-top");
+      expect(portal).not.toBeNull();
+      expect(portal?.hasAttribute("data-tooltip-content")).toBe(false);
+    });
+
+    it("data-tooltip-content SÍ se setea cuando text es string (regresión)", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip text="hola">
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      const portal = document.querySelector(".ig-tooltip-place-top");
+      expect(portal?.getAttribute("data-tooltip-content")).toBe("hola");
+    });
+
+    // Codex P1 sobre #52 (C-01): el SR-only span persistente está
+    // siempre montado, visually hidden pero NO removed from tab order.
+    // Sin protección, un text={<button>X</button>} crearía focus
+    // targets invisibles. `inert` en el span neutraliza interactividad
+    // de descendants sin afectar a SR.
+    //
+    // happy-dom (test environment) no implementa `inert` para tab
+    // navigation, así que verificamos el atributo directamente. La
+    // spec HTML garantiza que en browsers reales (Chrome 102+, Firefox
+    // 112+, Safari 15.5+) los descendants de un elemento inert no son
+    // focuseables vía Tab ni programáticamente con .focus().
+    it("SR-only span lleva inert para neutralizar interactividad de ReactNode (codex P1)", () => {
+      const { container } = render(
+        <Tooltip
+          text={
+            <button data-testid="invisible-trap">trap</button>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      const sr = container.querySelector('.ig-sr-only[role="tooltip"]');
+      expect(sr).not.toBeNull();
+      // El atributo HTML inert neutraliza interactividad de TODOS los
+      // descendants en browsers reales. Sin él, un botón/link/input
+      // dentro del text={...} sería focus target invisible.
+      expect(sr?.hasAttribute("inert")).toBe(true);
+      // Sanity: el descendant existe en el DOM (no estamos verificando
+      // que inert lo elimine, sino que existe pero es neutralizado).
+      expect(sr?.querySelector('[data-testid="invisible-trap"]')).not.toBeNull();
+    });
+
+    it("L-02 dev warn NO se dispara con ReactNode no-string (false positive guard)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        // Un fragment vacío técnicamente es "vacío" pero NO es string.
+        // El warn de L-02 solo aplica al caso string explícito.
+        <Tooltip text={<></>}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
 });

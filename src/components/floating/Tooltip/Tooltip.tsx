@@ -7,6 +7,7 @@ import {
   type HTMLAttributes,
   type HTMLProps,
   type ReactElement,
+  type ReactNode,
   type Ref,
 } from "react";
 import {
@@ -35,8 +36,27 @@ export type TooltipVariant =
   | "info";
 
 export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
-  /** Texto del tooltip. */
-  text: string;
+  /**
+   * Contenido del tooltip. Acepta `string` (recomendado para a11y) o
+   * `ReactNode` para casos con formatting (negrita, links, fragmentos).
+   *
+   * **A11y — preferir string**: el SR-only `<span role="tooltip">` que
+   * contiene este valor es el referente de `aria-describedby` del child.
+   * Los SR (NVDA, VoiceOver, JAWS) leen el contenido del elemento. Con
+   * `string` el comportamiento está garantizado. Con `ReactNode`
+   * (`<strong>`, `<a>`, fragments) los SR pueden saltar nodos o leer
+   * en orden inesperado dependiendo del rol semántico — el consumer
+   * es responsable de que el contenido sea announce-friendly.
+   *
+   * Si necesitas formatting rich con interacción (links clickables,
+   * botones), considera `Popover` (1.1.0+) en lugar de Tooltip.
+   *
+   * C-01 (gate review): pre-RC1 era `string` puro. Ampliado a
+   * `string | ReactNode` para alinear con `Popover.content` y
+   * `HoverCard.content` futuros (evitar dos APIs hermanas con tipos
+   * incompatibles para conceptos similares).
+   */
+  text: string | ReactNode;
   /** Posición preferida relativa al child. Por defecto `"top"`. */
   placement?: TooltipPlacement;
   /** Color del tooltip. */
@@ -154,13 +174,17 @@ export function Tooltip({
   // whitespace. Es prop requerida (TS no permite undefined) pero el
   // consumer puede pasar "" o " " accidentalmente — el SR no lee
   // nada y el portal visual queda vacío. El warn explícito ayuda a
-  // detectarlo antes de QA. Patrón Slider/Pagination: useEffect +
-  // warnedRef + import.meta.env.DEV.
+  // detectarlo antes de QA.
+  //
+  // C-01: text amplió a `string | ReactNode`. El warn solo aplica al
+  // caso string (ReactNode arbitrario puede ser un fragmento
+  // condicional legítimamente vacío en algún branch — no warneamos
+  // false positives para ese caso).
   const warnedTextRef = useRef(false);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (warnedTextRef.current) return;
-    if (text.trim() === "") {
+    if (typeof text === "string" && text.trim() === "") {
       warnedTextRef.current = true;
       console.warn(
         `[reactigoded] <Tooltip text=${JSON.stringify(text)}> está vacío o es solo whitespace; el SR no anuncia nada y el tooltip visual queda vacío.`,
@@ -242,8 +266,20 @@ export function Tooltip({
       {child}
       {/* SR-only: siempre presente, con id estable para aria-describedby
           incluso cuando el portal no está montado. Garantiza que SR
-          tienen acceso al texto sin depender del estado de hover. */}
-      <span id={tooltipId} role="tooltip" className="ig-sr-only">
+          tienen acceso al texto sin depender del estado de hover.
+
+          Codex P1 sobre #52 (C-01): `inert` neutraliza interactividad
+          de descendientes cuando text es ReactNode con `<a>`/`<button>`
+          /`<input>`. Sin esto, el span está visually hidden (.ig-sr-only)
+          pero NO removed from tab order — los descendants serían focus
+          targets invisibles. `inert` evita el agujero a11y pero deja al
+          SR leer el contenido (inert no afecta accessible name/description). */}
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className="ig-sr-only"
+        inert
+      >
         {text}
       </span>
       {isOpen && (
@@ -269,7 +305,14 @@ export function Tooltip({
               `ig-tooltip-place-${placement}`,
               variant && `ig-tooltip-color-${variant}`,
             )}
-            data-tooltip-content={text}
+            // C-01: data-tooltip-content solo es útil cuando text es
+            // serializable como atributo HTML (string). Para ReactNode
+            // arbitrario el atributo se serializaría como
+            // "[object Object]", inútil y ruidoso en DOM inspector.
+            // Spread condicional respeta exactOptionalPropertyTypes.
+            {...(typeof text === "string"
+              ? { "data-tooltip-content": text }
+              : {})}
             {...getFloatingProps()}
           >
             {text}
