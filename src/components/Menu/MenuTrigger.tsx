@@ -1,20 +1,20 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
-import { useOptionsMenu } from "./OptionsMenuContext";
-import { NAVIGABLE_ITEM_SELECTOR } from "./optionsMenuSelectors";
+import { useMenu } from "./MenuContext";
+import { NAVIGABLE_ITEM_SELECTOR } from "./menuSelectors";
 
-export interface OptionsMenuTriggerProps
+export interface MenuTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   ref?: Ref<HTMLButtonElement>;
 }
 
 /**
- * OptionsMenuTrigger — botón que abre/cierra el menú.
+ * MenuTrigger — botón que abre/cierra el menú.
  *
  * Click toggleea. ↓/Enter/Space abren y enfocan el primer item; ↑ abre y
  * enfoca el último. Aplica `aria-haspopup="menu"` y `aria-expanded`.
  */
-export function OptionsMenuTrigger({
+export function MenuTrigger({
   className,
   children,
   type = "button",
@@ -22,9 +22,9 @@ export function OptionsMenuTrigger({
   onKeyDown,
   ref,
   ...rest
-}: OptionsMenuTriggerProps) {
+}: MenuTriggerProps) {
   const { open, setOpen, triggerId, menuId, triggerRef, menuRef } =
-    useOptionsMenu();
+    useMenu();
 
   const handleRef = (node: HTMLButtonElement | null) => {
     triggerRef.current = node;
@@ -67,7 +67,7 @@ export function OptionsMenuTrigger({
       aria-haspopup="menu"
       aria-expanded={open}
       aria-controls={menuId}
-      className={cn("ig-options-menu-trigger", className)}
+      className={cn("ig-menu-trigger", className)}
       onClick={(e) => {
         onClick?.(e);
         if (!e.defaultPrevented) setOpen(!open);

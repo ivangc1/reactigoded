@@ -14,7 +14,7 @@
  * Astro, Remix server-rendering, Solid/Qwik con React islands, etc.
  *
  * Test estilo `it.each` con composiciones mínimas. Para componentes
- * compound (Card, OptionsMenu, Tabs, Accordion, Modal, Stepper, Toast,
+ * compound (Card, Menu, Tabs, Accordion, Modal, Stepper, Toast,
  * Sidebar, Navbar, Input compound, Table, Timeline) se usa la
  * estructura mínima documentada en su JSDoc/storybook.
  *
@@ -44,10 +44,10 @@ import {
   Checkbox,
   Chip,
   Divider,
-  OptionsMenu,
-  OptionsMenuItem,
-  OptionsMenuContent,
-  OptionsMenuTrigger,
+  Menu,
+  MenuItem,
+  MenuContent,
+  MenuTrigger,
   ErrorText,
   Helper,
   IconButton,
@@ -201,18 +201,18 @@ const cases: SsrCase[] = [
     expects: "ig-divider",
   },
   {
-    name: "OptionsMenu (compound)",
+    name: "Menu (compound)",
     jsx: () => (
-      <OptionsMenu>
-        <OptionsMenuTrigger>
+      <Menu>
+        <MenuTrigger>
           <Button>menu</Button>
-        </OptionsMenuTrigger>
-        <OptionsMenuContent>
-          <OptionsMenuItem>uno</OptionsMenuItem>
-        </OptionsMenuContent>
-      </OptionsMenu>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>uno</MenuItem>
+        </MenuContent>
+      </Menu>
     ),
-    expects: "ig-options-menu",
+    expects: "ig-menu",
   },
   {
     name: "Input",

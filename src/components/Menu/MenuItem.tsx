@@ -6,8 +6,8 @@ import type {
   Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { useOptionsMenu } from "./OptionsMenuContext";
-import { NAVIGABLE_ITEM_SELECTOR } from "./optionsMenuSelectors";
+import { useMenu } from "./MenuContext";
+import { NAVIGABLE_ITEM_SELECTOR } from "./menuSelectors";
 
 interface CommonProps {
   /** Marca el item como acción destructiva (color malum). */
@@ -28,7 +28,7 @@ type AnchorItemProps = CommonProps &
     ref?: Ref<HTMLAnchorElement>;
   };
 
-export type OptionsMenuItemProps = ButtonItemProps | AnchorItemProps;
+export type MenuItemProps = ButtonItemProps | AnchorItemProps;
 
 function handleNavKeys(
   e: KeyboardEvent<HTMLElement>,
@@ -59,10 +59,10 @@ function handleNavKeys(
 }
 
 /**
- * OptionsMenuItem — entrada del menú con `role="menuitem"`.
+ * MenuItem — entrada del menú con `role="menuitem"`.
  *
  * Si recibe `href` renderiza un `<a>`, si no un `<button>`. Cierra el menu
- * al activarse cuando `OptionsMenu.closeOnSelect` está activo (por defecto).
+ * al activarse cuando `Menu.closeOnSelect` está activo (por defecto).
  * Soporta navegación con ↑/↓/Home/End entre los items hermanos.
  *
  * **Roving tabindex consistente desde 1.0.0-beta.3**: tanto buttons como
@@ -70,8 +70,8 @@ function handleNavKeys(
  * documento; el foco entra al menú vía el trigger). Items con
  * `aria-disabled="true"` se saltan en la nav por flechas Y bloquean clicks.
  */
-export function OptionsMenuItem(props: OptionsMenuItemProps) {
-  const { setOpen, triggerRef, menuRef, closeOnSelect } = useOptionsMenu();
+export function MenuItem(props: MenuItemProps) {
+  const { setOpen, triggerRef, menuRef, closeOnSelect } = useMenu();
 
   const close = () => {
     if (!closeOnSelect) return;
@@ -101,9 +101,9 @@ export function OptionsMenuItem(props: OptionsMenuItemProps) {
         role="menuitem"
         tabIndex={-1}
         className={cn(
-          "ig-options-menu-item",
-          danger && "ig-options-menu-item-danger",
-          active && "ig-options-menu-item-active",
+          "ig-menu-item",
+          danger && "ig-menu-item-danger",
+          active && "ig-menu-item-active",
           className,
         )}
         onClick={(e: MouseEvent<HTMLAnchorElement>) => {
@@ -167,9 +167,9 @@ export function OptionsMenuItem(props: OptionsMenuItemProps) {
       role="menuitem"
       tabIndex={-1}
       className={cn(
-        "ig-options-menu-item",
-        danger && "ig-options-menu-item-danger",
-        active && "ig-options-menu-item-active",
+        "ig-menu-item",
+        danger && "ig-menu-item-danger",
+        active && "ig-menu-item-active",
         className,
       )}
       onClick={(e: MouseEvent<HTMLButtonElement>) => {

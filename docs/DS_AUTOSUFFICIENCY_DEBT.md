@@ -179,7 +179,7 @@ isControlled
 - Slider (`readOnly` futuro si se añade) — preventivo.
 - Switch (no tiene readOnly hoy, pero algunos consumers lo usan
   como display-only via `disabled`; revisar si pasa el warn).
-- Resto (Tabs, Accordion, Modal, Toast, OptionsMenu, Pagination,
+- Resto (Tabs, Accordion, Modal, Toast, Menu, Pagination,
   Stepper, ThemeSwitch, Input compound): no tienen modo
   display-only legítimo, deberían disparar el warn correctamente.
 
@@ -246,7 +246,7 @@ Stories dedicadas disparando focus + axe lo capturarían.
 
 ### 2.3 Estados hover/active sub-perceptibles
 
-Tabs items, OptionsMenu items con fondo muy claro y texto poco contrastante
+Tabs items, Menu items con fondo muy claro y texto poco contrastante
 en hover. Stories con `play()` que dispara hover via `userEvent.hover()`.
 
 **Estimación**: 1-2h.
@@ -299,7 +299,7 @@ accidentalmente wrappers anidados.
    Modo soft solo warn.
 
 **Run inicial beta.21**: 420 clases modificadoras candidatas, 6
-allowlisted (Step labeled, Sidebar/OptionsMenu link-vs-button modes,
+allowlisted (Step labeled, Sidebar/Menu link-vs-button modes,
 Divider variants, Navbar brand slot), 0 riesgos nuevos.
 
 **Limitaciones documentadas** (en JSDoc del script):

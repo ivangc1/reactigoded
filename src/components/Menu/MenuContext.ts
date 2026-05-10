@@ -1,6 +1,6 @@
 import { createContext, useContext, type RefObject } from "react";
 
-export interface OptionsMenuContextValue {
+export interface MenuContextValue {
   /** Si el menú está visible. */
   open: boolean;
   /** Cambia visibilidad y dispara `onOpenChange`. */
@@ -17,33 +17,33 @@ export interface OptionsMenuContextValue {
   closeOnSelect: boolean;
 }
 
-export const OptionsMenuContext = createContext<OptionsMenuContextValue | null>(null);
+export const MenuContext = createContext<MenuContextValue | null>(null);
 
 /**
- * Hook que expone el contexto de un `<OptionsMenu>` (open, setOpen, ids para
+ * Hook que expone el contexto de un `<Menu>` (open, setOpen, ids para
  * `aria-controls`/`aria-labelledby`, refs al trigger/menu, closeOnSelect).
- * Lo usan internamente `OptionsMenuTrigger`, `OptionsMenuContent` y `OptionsMenuItem`.
+ * Lo usan internamente `MenuTrigger`, `MenuContent` y `MenuItem`.
  * También útil si construyes tu propio item custom o quieres cerrar el
  * dropdown desde código en respuesta a algún evento externo.
  *
  * @example
  * function CustomItem() {
- *   const { setOpen } = useOptionsMenu();
+ *   const { setOpen } = useMenu();
  *   const router = useRouter();
  *   return (
- *     <OptionsMenuItem onClick={() => { router.push("/perfil"); setOpen(false); }}>
+ *     <MenuItem onClick={() => { router.push("/perfil"); setOpen(false); }}>
  *       Ir a perfil
- *     </OptionsMenuItem>
+ *     </MenuItem>
  *   );
  * }
  *
- * @throws Error si se usa fuera de `<OptionsMenu>`.
+ * @throws Error si se usa fuera de `<Menu>`.
  */
-export function useOptionsMenu(): OptionsMenuContextValue {
-  const ctx = useContext(OptionsMenuContext);
+export function useMenu(): MenuContextValue {
+  const ctx = useContext(MenuContext);
   if (!ctx) {
     throw new Error(
-      "Componentes OptionsMenuTrigger/OptionsMenuContent/OptionsMenuItem deben usarse dentro de <OptionsMenu>",
+      "Componentes MenuTrigger/MenuContent/MenuItem deben usarse dentro de <Menu>",
     );
   }
   return ctx;

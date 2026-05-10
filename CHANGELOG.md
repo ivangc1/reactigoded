@@ -9,6 +9,32 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Breaking
 
+- **`OptionsMenu` → `Menu` + 5 subcomponentes renombrados (B-01 redefinido)**:
+  alineación con la industria. 5 de 7 librerías top (MUI, Mantine, Ark UI,
+  HeadlessUI, Chakra) usan el nombre canónico `Menu`. B-01 original (rename
+  `Dropdown` → `OptionsMenu` pre-RC1) liberaba el nombre `Dropdown` para una
+  migración FUI futura; la decisión 2026-05-10 unifica directamente a `Menu`.
+
+  | Antes | Después | Notas |
+  |---|---|---|
+  | `OptionsMenu` | `Menu` | core |
+  | `OptionsMenuTrigger` | `MenuTrigger` | core |
+  | `OptionsMenuContent` | `MenuContent` | core |
+  | `OptionsMenuItem` | `MenuItem` | core |
+  | `OptionsMenuDivider` | `MenuSeparator` | rol ARIA correcto `separator` |
+  | `OptionsMenuHeader` | `MenuLabel` | label de sección dentro del menu |
+
+  CSS coordinado:
+  - `.ig-options-menu-*` → `.ig-menu-*`
+  - `.ig-options-menu-divider-*` → `.ig-menu-separator-*`
+  - `.ig-options-menu-header-*` → `.ig-menu-label-*`
+
+  Migración:
+  ```diff
+  - import { OptionsMenu, OptionsMenuTrigger, OptionsMenuItem } from "reactigoded";
+  + import { Menu, MenuTrigger, MenuItem } from "reactigoded";
+  ```
+
 - **`Tooltip` Slot pattern (D-01 / M-05 / B-03 / H-01)**: el componente
   ya **no envuelve al child en `<span class="ig-tooltip-wrapper">`**.
   El render emite el child clonado + un `<span class="ig-sr-only"

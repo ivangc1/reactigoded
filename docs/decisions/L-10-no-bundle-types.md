@@ -83,13 +83,13 @@ Los 3 documentados explícitamente en README + src/index.ts como API público.
 ```
 AccordionContextValue           ← pareja tipada de useAccordion
 AccordionItemContextValue       ← pareja tipada de useAccordionItem
-OptionsMenuContextValue            ← pareja tipada de useOptionsMenu
+MenuContextValue            ← pareja tipada de useMenu
 SidebarContextValue             ← pareja tipada de useSidebar
 TabsContextValue                ← pareja tipada de useTabs
 ToastContextValue               ← pareja tipada de useToast
 useAccordion          [C-04]    ← gate review backlog
 useAccordionItem      [C-04]
-useOptionsMenu           [C-04]
+useMenu           [C-04]
 useSidebar            [C-04]
 useTabs               [C-04]
 useToast              [C-04]
@@ -129,7 +129,7 @@ import type { ButtonProps, CardProps } from "reactigoded";
 
 ```tsx
 // test-negative-check.tsx — debe FALLAR
-import {} from "reactigoded/dist/components/OptionsMenu/optionsMenuSelectors";
+import {} from "reactigoded/dist/components/Menu/menuSelectors";
 import {} from "reactigoded/components/Button/Button";
 import {} from "reactigoded/dist/utils/cn";
 import {} from "reactigoded/hooks/useTheme";
@@ -138,7 +138,7 @@ import {} from "reactigoded/hooks/useTheme";
 ✅ **Falla con TS2307** en los 4 imports:
 
 ```
-test-negative-check.tsx(3,16): error TS2307: Cannot find module 'reactigoded/dist/components/OptionsMenu/optionsMenuSelectors' or its corresponding type declarations.
+test-negative-check.tsx(3,16): error TS2307: Cannot find module 'reactigoded/dist/components/Menu/menuSelectors' or its corresponding type declarations.
 test-negative-check.tsx(4,16): error TS2307: Cannot find module 'reactigoded/components/Button/Button' or its corresponding type declarations.
 test-negative-check.tsx(5,16): error TS2307: Cannot find module 'reactigoded/dist/utils/cn' or its corresponding type declarations.
 test-negative-check.tsx(6,16): error TS2307: Cannot find module 'reactigoded/hooks/useTheme' or its corresponding type declarations.

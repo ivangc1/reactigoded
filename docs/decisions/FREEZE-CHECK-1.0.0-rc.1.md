@@ -27,16 +27,16 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 | | |
 |---|---|
 | **Estado actual** | 32 directorios en `src/components/` (`Accordion`, `Alert`, ..., `Toast`, `floating/Tooltip`). Listado verificado. |
-| **Bloqueado por** | **B-01** (pending): "Renombrar OptionsMenu/NativeSelect para evitar colisión con roadmap floating/" |
+| **Bloqueado por** | **B-01** (pending): "Renombrar Menu/NativeSelect para evitar colisión con roadmap floating/" |
 | **Confirmación** | ⏸ **Bloqueado** |
-| **Notas** | Si B-01 decide renombrar `OptionsMenu` → `MenuList` (o similar) y `NativeSelect` → `SelectField`, los nombres cambian. Confirmar tras cerrar B-01. |
+| **Notas** | Si B-01 decide renombrar `Menu` → `MenuList` (o similar) y `NativeSelect` → `SelectField`, los nombres cambian. Confirmar tras cerrar B-01. |
 
 ### 2. Naming de los 42 compound children y wrappers públicos
 
 | | |
 |---|---|
-| **Estado actual** | Sub-componentes documentados: `AccordionItem/Header/Content`, `CardBody/Header/Footer/Image/Divider`, `ModalHeader/Body/Footer/Close`, `Tab/TabList/TabPanel`, `TabsContent`, `Sidebar*` (7), `Navbar*` (5), `Table*` (7), `BreadcrumbItem`, `AvatarGroup`, `IconButton`, `InputAddon/InputGroup`, `ErrorText/Helper/Label`, `Skeleton/SkeletonContainer`, `Step/Stepper`, `TimelineItem`, `ToastProvider`, `OptionsMenu*` (5). |
-| **Bloqueado por** | Parcialmente B-01 si afecta naming OptionsMenu/NativeSelect compound. |
+| **Estado actual** | Sub-componentes documentados: `AccordionItem/Header/Content`, `CardBody/Header/Footer/Image/Divider`, `ModalHeader/Body/Footer/Close`, `Tab/TabList/TabPanel`, `TabsContent`, `Sidebar*` (7), `Navbar*` (5), `Table*` (7), `BreadcrumbItem`, `AvatarGroup`, `IconButton`, `InputAddon/InputGroup`, `ErrorText/Helper/Label`, `Skeleton/SkeletonContainer`, `Step/Stepper`, `TimelineItem`, `ToastProvider`, `Menu*` (5). |
+| **Bloqueado por** | Parcialmente B-01 si afecta naming Menu/NativeSelect compound. |
 | **Confirmación** | ⚠ **Requiere input** |
 | **Notas** | El recuento exacto del review (42) no coincide 1:1 con mi inventario. Iván debería verificar el listado completo en `src/components/index.ts` + sub-barrels. Sin re-naming pendiente, el set actual es freezable. |
 
@@ -44,7 +44,7 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 
 | | |
 |---|---|
-| **Estado actual** | Barrel root `src/index.ts` exporta: `useTheme`, `useControllableState`, `cn`. Sub-barrels exportan `useAccordion`, `useAccordionItem`, `useOptionsMenu`, `useSidebar`, `useTabs`, `useToast` + sus 6 ContextValues paired. |
+| **Estado actual** | Barrel root `src/index.ts` exporta: `useTheme`, `useControllableState`, `cn`. Sub-barrels exportan `useAccordion`, `useAccordionItem`, `useMenu`, `useSidebar`, `useTabs`, `useToast` + sus 6 ContextValues paired. |
 | **Bloqueado por** | **B-04** (pending): "Resolver inconsistencia hooks públicos (README vs src/index.ts vs dist)". C-04 cerrado como dup de B-04. |
 | **Confirmación** | ⏸ **Bloqueado** |
 | **Notas** | Tras B-04 el set queda definido. Probable resolución: solo `useTheme` + `useControllableState` + `cn` permanecen públicos; los `useFoo` se retiran de los barrels. Ver `docs/decisions/L-10-no-bundle-types.md` § Coupling con C-04. |

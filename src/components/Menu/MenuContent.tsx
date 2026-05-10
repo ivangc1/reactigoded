@@ -1,22 +1,22 @@
 import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
-import { useOptionsMenu } from "./OptionsMenuContext";
+import { useMenu } from "./MenuContext";
 
-export interface OptionsMenuContentProps extends HTMLAttributes<HTMLDivElement> {
+export interface MenuContentProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
 /**
- * OptionsMenuContent — contenedor con `role="menu"` para los items.
- * Su visibilidad la controla el CSS de `.ig-options-menu.ig-options-menu-open`.
+ * MenuContent — contenedor con `role="menu"` para los items.
+ * Su visibilidad la controla el CSS de `.ig-menu.ig-menu-open`.
  */
-export function OptionsMenuContent({
+export function MenuContent({
   className,
   children,
   ref,
   ...rest
-}: OptionsMenuContentProps) {
-  const { menuId, triggerId, menuRef } = useOptionsMenu();
+}: MenuContentProps) {
+  const { menuId, triggerId, menuRef } = useMenu();
 
   const handleRef = (node: HTMLDivElement | null) => {
     menuRef.current = node;
@@ -31,7 +31,7 @@ export function OptionsMenuContent({
       id={menuId}
       role="menu"
       aria-labelledby={triggerId}
-      className={cn("ig-options-menu-content", className)}
+      className={cn("ig-menu-content", className)}
     >
       {children}
     </div>

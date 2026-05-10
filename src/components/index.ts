@@ -15,7 +15,7 @@ export * from "./Card";
 export * from "./Checkbox";
 export * from "./Chip";
 export * from "./Divider";
-export * from "./OptionsMenu";
+export * from "./Menu";
 export * from "./Input";
 export * from "./Modal";
 export * from "./Navbar";

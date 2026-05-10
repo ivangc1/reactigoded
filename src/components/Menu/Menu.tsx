@@ -8,12 +8,12 @@ import {
 } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";
-import { OptionsMenuContext } from "./OptionsMenuContext";
+import { MenuContext } from "./MenuContext";
 
-export type OptionsMenuAlign = "left" | "right";
-export type OptionsMenuDirection = "down" | "up";
+export type MenuAlign = "left" | "right";
+export type MenuDirection = "down" | "up";
 
-export interface OptionsMenuProps extends HTMLAttributes<HTMLDivElement> {
+export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   /** Estado abierto (modo controlado). Si se omite, el componente gestiona su propio estado. */
   open?: boolean;
   /** Estado inicial (modo no controlado). Por defecto `false`. */
@@ -21,35 +21,35 @@ export interface OptionsMenuProps extends HTMLAttributes<HTMLDivElement> {
   /** Callback al abrir/cerrar. Disparado en ambos modos. */
   onOpenChange?: (open: boolean) => void;
   /** Alineación horizontal del menu. Por defecto `"left"`. */
-  placement?: OptionsMenuAlign;
+  placement?: MenuAlign;
   /** Hacia dónde abre verticalmente. Por defecto `"down"`. */
-  direction?: OptionsMenuDirection;
-  /** Si los `OptionsMenuItem` cierran el menu al activarse. Por defecto `true`. */
+  direction?: MenuDirection;
+  /** Si los `MenuItem` cierran el menu al activarse. Por defecto `true`. */
   closeOnSelect?: boolean;
   ref?: Ref<HTMLDivElement>;
 }
 
 /**
- * OptionsMenu — menú desplegable accesible.
+ * Menu — menú desplegable accesible.
  *
- * Compón con `OptionsMenuTrigger`, `OptionsMenuContent`, `OptionsMenuItem`,
- * `OptionsMenuDivider`, `OptionsMenuHeader`. Cierra con ESC y al hacer click fuera;
+ * Compón con `MenuTrigger`, `MenuContent`, `MenuItem`,
+ * `MenuSeparator`, `MenuLabel`. Cierra con ESC y al hacer click fuera;
  * soporta navegación con ↑/↓/Home/End/Enter/Espacio siguiendo el patrón
  * WAI-ARIA menu button.
  *
  * Modo controlado: pasa `open` + `onOpenChange`. Modo no controlado: omite `open`.
  *
  * @example
- * <OptionsMenu>
- *   <OptionsMenuTrigger>Acciones ▼</OptionsMenuTrigger>
- *   <OptionsMenuContent>
- *     <OptionsMenuItem onClick={editar}>Editar</OptionsMenuItem>
- *     <OptionsMenuDivider />
- *     <OptionsMenuItem danger onClick={borrar}>Eliminar</OptionsMenuItem>
- *   </OptionsMenuContent>
- * </OptionsMenu>
+ * <Menu>
+ *   <MenuTrigger>Acciones ▼</MenuTrigger>
+ *   <MenuContent>
+ *     <MenuItem onClick={editar}>Editar</MenuItem>
+ *     <MenuSeparator />
+ *     <MenuItem danger onClick={borrar}>Eliminar</MenuItem>
+ *   </MenuContent>
+ * </Menu>
  */
-export function OptionsMenu({
+export function Menu({
   open: openProp,
   defaultOpen = false,
   onOpenChange,
@@ -60,7 +60,7 @@ export function OptionsMenu({
   children,
   ref,
   ...rest
-}: OptionsMenuProps) {
+}: MenuProps) {
   const reactId = useId();
   const triggerId = `${reactId}-trigger`;
   const menuId = `${reactId}-menu`;
@@ -124,20 +124,20 @@ export function OptionsMenu({
   );
 
   return (
-    <OptionsMenuContext.Provider value={ctxValue}>
+    <MenuContext.Provider value={ctxValue}>
       <div
         ref={handleRef}
         className={cn(
-          "ig-options-menu",
-          placement === "right" && "ig-options-menu-right",
-          direction === "up" && "ig-options-menu-up",
-          open && "ig-options-menu-open",
+          "ig-menu",
+          placement === "right" && "ig-menu-right",
+          direction === "up" && "ig-menu-up",
+          open && "ig-menu-open",
           className,
         )}
         {...rest}
       >
         {children}
       </div>
-    </OptionsMenuContext.Provider>
+    </MenuContext.Provider>
   );
 }
