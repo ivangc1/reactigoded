@@ -362,3 +362,59 @@ describe("Tabs — AllStates regression", () => {
     expect(container.querySelector(".ig-tabs-vertical")).not.toBeNull();
   });
 });
+
+// Codex P2 sobre commit antiguo: auto-select del primer Tab corría
+// en useEffect (post-paint), causando flash visual y transient
+// state sin tab stop. Movido a useIsoLayoutEffect (pre-paint
+// cliente). Test verifica que el primer render YA tiene el primer
+// Tab seleccionado, sin frame intermedio sin tab activo.
+describe("Tabs — auto-select pre-paint (codex P2)", () => {
+  it("uncontrolled sin defaultValue: primer Tab activo en el primer render (no flash)", async () => {
+    const { Tab } = await import("./Tab");
+    const { TabList } = await import("./TabList");
+    const { TabPanel } = await import("./TabPanel");
+    const { Tabs } = await import("./Tabs");
+    render(
+      <Tabs>
+        <TabList>
+          <Tab value="a">A</Tab>
+          <Tab value="b">B</Tab>
+        </TabList>
+        <TabPanel value="a">contenido A</TabPanel>
+        <TabPanel value="b">contenido B</TabPanel>
+      </Tabs>,
+    );
+    // En el primer paint observable (síncrono tras render),
+    // useIsoLayoutEffect ya ejecutó el auto-select. El primer Tab
+    // tiene aria-selected=true SIN re-render visible al user.
+    const firstTab = screen.getByRole("tab", { name: "A" });
+    expect(firstTab).toHaveAttribute("aria-selected", "true");
+    // El panel correspondiente está montado y visible.
+    expect(screen.getByText("contenido A")).toBeInTheDocument();
+  });
+
+  it("uncontrolled con defaultValue: NO dispara auto-select (consumer eligió)", async () => {
+    const { Tab } = await import("./Tab");
+    const { TabList } = await import("./TabList");
+    const { TabPanel } = await import("./TabPanel");
+    const { Tabs } = await import("./Tabs");
+    render(
+      <Tabs defaultValue="b">
+        <TabList>
+          <Tab value="a">A</Tab>
+          <Tab value="b">B</Tab>
+        </TabList>
+        <TabPanel value="a">contenido A</TabPanel>
+        <TabPanel value="b">contenido B</TabPanel>
+      </Tabs>,
+    );
+    expect(screen.getByRole("tab", { name: "A" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByRole("tab", { name: "B" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+});
