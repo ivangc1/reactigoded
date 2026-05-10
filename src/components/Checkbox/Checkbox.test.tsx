@@ -95,4 +95,22 @@ describe("Checkbox — AllStates regression", () => {
       expect(container.querySelector(`.ig-checkbox-${v}`)).not.toBeNull();
     }
   });
+
+  // H-05 (gate review): describedBy alineado con Input/Select/Textarea.
+  it("describedBy aplica aria-describedby + concatena con nativo", () => {
+    render(
+      <Checkbox
+        aria-describedby="native-id"
+        describedBy={["helper-1", "error-1"]}
+      >
+        x
+      </Checkbox>,
+    );
+    const input = screen.getByRole("checkbox");
+    // Patrón Input.tsx: nativo primero, prop después.
+    expect(input).toHaveAttribute(
+      "aria-describedby",
+      "native-id helper-1 error-1",
+    );
+  });
 });

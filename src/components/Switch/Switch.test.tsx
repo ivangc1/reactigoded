@@ -178,4 +178,21 @@ describe("Switch — AllStates regression", () => {
       expect(container.querySelector(`.ig-switch-${v}`)).not.toBeNull();
     }
   });
+
+  // H-05 (gate review): describedBy alineado con Input/Select/Textarea.
+  it("describedBy aplica aria-describedby + concatena con nativo", () => {
+    render(
+      <Switch
+        aria-describedby="native-id"
+        describedBy={["helper-1", "error-1"]}
+      >
+        x
+      </Switch>,
+    );
+    const input = screen.getByRole("switch");
+    expect(input).toHaveAttribute(
+      "aria-describedby",
+      "native-id helper-1 error-1",
+    );
+  });
 });

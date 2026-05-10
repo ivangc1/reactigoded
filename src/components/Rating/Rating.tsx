@@ -1,6 +1,7 @@
 import type { HTMLAttributes, Ref, KeyboardEvent } from "react";
 import { useState } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useControllableState } from "@/hooks/useControllableState";
 
 export type RatingSize = "sm" | "md" | "lg" | "xl";
@@ -19,6 +20,14 @@ export interface RatingProps
   size?: RatingSize;
   /** Callback al elegir un valor. */
   onValueChange?: (value: number) => void;
+  /**
+   * Ids extra para `aria-describedby` del radiogroup. Pasar string para
+   * un único id o array para varios. Se concatenan con cualquier
+   * `aria-describedby` que el consumer pase por rest. Patrón canónico
+   * del DS para enlazar `Helper` / `ErrorText` / live-regions con
+   * tecnologías asistivas.
+   */
+  describedBy?: string | string[];
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -56,12 +65,21 @@ export function Rating({
   readOnly = false,
   size = "md",
   onValueChange,
+  describedBy,
   className,
   ref,
   ...rest
 }: RatingProps) {
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
-  const { "aria-label": ariaLabelOverride, ...divRest } = rest;
+  const {
+    "aria-label": ariaLabelOverride,
+    "aria-describedby": ariaDescribedByNative,
+    ...divRest
+  } = rest;
+  const describedByValue = mergeDescribedBy(
+    ariaDescribedByNative,
+    describedBy,
+  );
   // `defaultValue` viene del consumer y puede ser cualquier número. Lo
   // clampamos a [0, max] al inicializar (0 = "ninguna estrella seleccionada").
   const safeMax = Math.max(1, Math.floor(max));
@@ -149,6 +167,7 @@ export function Rating({
       ref={ref}
       role="radiogroup"
       aria-label={ariaLabelOverride ?? "Puntuación"}
+      aria-describedby={describedByValue}
       aria-readonly={readOnly || undefined}
       className={cn(
         "ig-rating",
