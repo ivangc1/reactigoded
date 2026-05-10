@@ -1,6 +1,8 @@
 import {
   cloneElement,
+  useEffect,
   useId,
+  useRef,
   useState,
   type HTMLAttributes,
   type HTMLProps,
@@ -96,6 +98,27 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
  * elemento del portal en lugar del wrapper. Si tenías reglas CSS
  * dirigidas al wrapper `.ig-tooltip` para layout, revisa el cambio.
  *
+ * **Caveat — Tooltip sobre `<button disabled>` en Firefox** (L-03
+ * gate review): Firefox NO dispara `mouseenter` / `pointerenter` /
+ * `focus` sobre `<button disabled>` (Chrome/Safari sí). El SR-only
+ * span con `aria-describedby` sigue funcionando para lectores de
+ * pantalla, pero el portal visual no aparece al hover. Workaround
+ * canónico: envolver el botón en un `<span>` y aplicar
+ * `pointer-events: none` al botón disabled (el span recibe los
+ * eventos):
+ *
+ * ```tsx
+ * <Tooltip text="Acción no disponible">
+ *   <span style={{ display: "inline-block" }}>
+ *     <Button disabled style={{ pointerEvents: "none" }}>X</Button>
+ *   </span>
+ * </Tooltip>
+ * ```
+ *
+ * El DS no aplica este wrapper automáticamente para no introducir un
+ * elemento extra silencioso que rompa block-level layouts del
+ * consumer (ver M-05).
+ *
  * @example
  * <Tooltip text="Eliminar" placement="top">
  *   <Button icon aria-label="Eliminar">×</Button>
@@ -121,6 +144,25 @@ export function Tooltip({
   ...rest
 }: TooltipProps) {
   const tooltipId = useId();
+
+  // L-02 (gate review): dev warn cuando `text` es empty / solo
+  // whitespace. Es prop requerida (TS no permite undefined) pero el
+  // consumer puede pasar "" o " " accidentalmente — el SR no lee
+  // nada y el portal visual queda vacío. El warn explícito ayuda a
+  // detectarlo antes de QA. Patrón Slider/Pagination: useEffect +
+  // warnedRef + import.meta.env.DEV.
+  const warnedTextRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedTextRef.current) return;
+    if (text.trim() === "") {
+      warnedTextRef.current = true;
+      console.warn(
+        `[reactigoded] <Tooltip text=${JSON.stringify(text)}> está vacío o es solo whitespace; el SR no anuncia nada y el tooltip visual queda vacío.`,
+      );
+    }
+  }, [text]);
+
   const [isOpen, setIsOpen] = useState(false);
 
   const { refs, floatingStyles, context } = useFloating({
