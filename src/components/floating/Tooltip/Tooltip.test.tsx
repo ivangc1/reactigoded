@@ -247,4 +247,44 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       expect(document.body.contains(portal)).toBe(true);
     });
   });
+
+  // L-02 (gate review): dev warn cuando `text` es empty/whitespace.
+  describe("L-02 — text empty dev warn", () => {
+    it("warn en dev cuando text=\"\"", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Tooltip text="">
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("vacío o es solo whitespace"),
+      );
+      warn.mockRestore();
+    });
+
+    it("warn en dev cuando text es solo whitespace", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Tooltip text="   ">
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("vacío o es solo whitespace"),
+      );
+      warn.mockRestore();
+    });
+
+    it("NO warn cuando text es válido", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Tooltip text="Tooltip válido">
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
 });

@@ -1,6 +1,8 @@
 import {
   cloneElement,
+  useEffect,
   useId,
+  useRef,
   useState,
   type HTMLAttributes,
   type HTMLProps,
@@ -142,6 +144,25 @@ export function Tooltip({
   ...rest
 }: TooltipProps) {
   const tooltipId = useId();
+
+  // L-02 (gate review): dev warn cuando `text` es empty / solo
+  // whitespace. Es prop requerida (TS no permite undefined) pero el
+  // consumer puede pasar "" o " " accidentalmente — el SR no lee
+  // nada y el portal visual queda vacío. El warn explícito ayuda a
+  // detectarlo antes de QA. Patrón Slider/Pagination: useEffect +
+  // warnedRef + import.meta.env.DEV.
+  const warnedTextRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedTextRef.current) return;
+    if (text.trim() === "") {
+      warnedTextRef.current = true;
+      console.warn(
+        `[reactigoded] <Tooltip text=${JSON.stringify(text)}> está vacío o es solo whitespace; el SR no anuncia nada y el tooltip visual queda vacío.`,
+      );
+    }
+  }, [text]);
+
   const [isOpen, setIsOpen] = useState(false);
 
   const { refs, floatingStyles, context } = useFloating({
