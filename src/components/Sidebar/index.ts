@@ -14,5 +14,5 @@ export { SidebarDivider } from "./SidebarDivider";
 export type { SidebarDividerProps } from "./SidebarDivider";
 export { SidebarSection } from "./SidebarSection";
 export type { SidebarSectionProps } from "./SidebarSection";
-export { useSidebar } from "./SidebarContext";
-export type { SidebarContextValue } from "./SidebarContext";
+// B-04 (RC1): useSidebar y SidebarContextValue retirados del API
+// público. Acceso interno solo desde sub-componentes vía import directo.

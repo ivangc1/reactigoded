@@ -8,5 +8,5 @@ export { TabPanel } from "./TabPanel";
 export type { TabPanelProps } from "./TabPanel";
 export { TabsContent } from "./TabsContent";
 export type { TabsContentProps } from "./TabsContent";
-export { useTabs } from "./TabsContext";
-export type { TabsContextValue } from "./TabsContext";
+// B-04 (RC1): useTabs y TabsContextValue retirados del API público.
+// Acceso interno solo desde sub-componentes vía import directo.
