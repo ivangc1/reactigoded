@@ -182,7 +182,7 @@ function isDerivedOptions<T>(
  *   value: themeProp,
  *   derive: () => stored ?? defaultTheme ?? "dark",
  *   setDerivedValue: (next) => writeStoredTheme(storageKey, next),
- *   onChange: onThemeChange,
+ *   onChange: onValueChange,
  * });
  */
 export function useControllableState<T>(

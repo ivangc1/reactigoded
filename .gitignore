@@ -54,6 +54,7 @@ coverage/
 # SESION-RESUMEN*.md. El autor decide si moverlos fuera del repo.
 .notes-*
 .release-*
+.pr-body-*.md
 BLOQUEOS.md
 SESION-RESUMEN*.md
 

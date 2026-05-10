@@ -5,14 +5,20 @@ import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useControllableState } from "@/hooks/useControllableState";
 
 export interface SliderProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
   /** Mostrar el valor actual junto al slider. */
   showValue?: boolean;
   /** Formateador opcional para el valor visible y para `aria-valuetext`. */
   formatValue?: (value: number) => string;
   /**
-   * Callback con el valor numérico decodificado (alternativa al `onChange`
-   * nativo que recibe el `ChangeEvent`). Útil cuando solo necesitas el número.
+   * Callback con el valor numérico decodificado.
+   *
+   * B-02 / H-17 (RC1): pre-RC1 Slider exponía `onChange` (ChangeEvent
+   * nativo) Y `onValueChange` (number). Ambos en paralelo confundían al
+   * consumer (¿cuál uso?). RC1 estandariza con el resto del DS: queda
+   * solo `onValueChange<number>`. Si necesitas el ChangeEvent nativo
+   * por algún motivo (analytics del DOM event, e.g.), añade un wrapper
+   * `<input type="range" onChange={...}>` manual.
    */
   onValueChange?: (value: number) => void;
   /**
@@ -51,7 +57,6 @@ export function Slider({
   showValue = false,
   formatValue,
   className,
-  onChange,
   onValueChange,
   describedBy,
   ref,
@@ -193,10 +198,9 @@ export function Slider({
       {...domValueProp}
       onChange={(e) => {
         const next = Number(e.target.value);
-        // setInternal dispara onValueChange vía el hook (onChange).
-        // El onChange nativo (ChangeEvent) se llama por separado.
+        // setInternal dispara onValueChange vía el hook.
+        // B-02/H-17 (RC1): onChange pass-through eliminado.
         setInternal(next);
-        onChange?.(e);
       }}
     />
   );

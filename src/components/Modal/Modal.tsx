@@ -17,7 +17,18 @@ export interface ModalProps
   extends Omit<DialogHTMLAttributes<HTMLDialogElement>, "open"> {
   /** Estado controlado: si está abierto. */
   open: boolean;
-  /** Se dispara cuando el dialog se cierra (ESC, backdrop, .close()). */
+  /**
+   * Callback cuando el modal cambia de estado (cierra o abre). Recibe el
+   * nuevo valor de `open` como argumento. Patrón canónico estandarizado
+   * en B-02 con el resto del DS.
+   *
+   * En 1.0.0-rc.1 solo dispara con `open=false` (eventos `cancel`/`close`
+   * del `<dialog>`). El consumer es quien controla `open=true` desde
+   * fuera. Si en el futuro Modal añade triggers internos para abrirse,
+   * `onOpenChange` también disparará con `true` (additive sin breaking).
+   */
+  onOpenChange?: (open: boolean) => void;
+  /** @deprecated B-02: usa `onOpenChange`. Eliminado en 2.0. */
   onClose?: () => void;
   /** Tamaño del modal. Por defecto `"md"`. */
   size?: ModalSize;
@@ -53,7 +64,9 @@ export interface ModalProps
  */
 export function Modal({
   open,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- Modal acepta el alias deprecated por backwards compat (warn dev al consumer abajo).
   onClose,
+  onOpenChange,
   size = "md",
   backdrop = "default",
   closeOnBackdrop = true,
@@ -66,6 +79,30 @@ export function Modal({
 }: ModalProps) {
   const innerRef = useRef<HTMLDialogElement>(null);
   const [headerId, setHeaderId] = useState<string | null>(null);
+
+  // B-02 (RC1): dev-warn cuando se usa el alias deprecated `onClose`.
+  // Eliminar en 2.0. Una vez por instancia.
+  const warnedOnCloseRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedOnCloseRef.current) return;
+    if (onClose !== undefined && onOpenChange === undefined) {
+      warnedOnCloseRef.current = true;
+      console.warn(
+        "[reactigoded] <Modal onClose>: prop deprecated en 1.0.0-rc.1. " +
+          "Usa onOpenChange={(open) => ...} para alinear con el resto " +
+          "del DS (B-02). onClose seguirá funcionando en 1.x; eliminado " +
+          "en 2.0.",
+      );
+    }
+  }, [onClose, onOpenChange]);
+
+  // Trigger ambos callbacks en el cierre. onClose si está; onOpenChange
+  // siempre que esté. Consumer típicamente migra usando solo el nuevo.
+  const fireClose = useCallback(() => {
+    onClose?.();
+    onOpenChange?.(false);
+  }, [onClose, onOpenChange]);
   // Flag para distinguir cierres programáticos (consumer cambió `open` a
   // false) de cierres user-driven (ESC, click fuera, .close() manual).
   // Sin esto, dialog.close() en el effect dispara el evento `close` del
@@ -152,13 +189,13 @@ export function Modal({
             closingFromSyncRef.current = false;
             return;
           }
-          onClose?.();
+          fireClose();
         }}
         onClick={(e) => {
           if (!closeOnBackdrop) return;
           // El click en el backdrop tiene como target el propio <dialog>,
           // no sus hijos (el contenido).
-          if (e.target === e.currentTarget) onClose?.();
+          if (e.target === e.currentTarget) fireClose();
         }}
       >
         {children}

@@ -16,12 +16,12 @@ export interface ThemeSwitchProps
   /** Tema inicial (modo no controlado). Si se omite, se intenta leer storage. */
   defaultTheme?: Theme;
   /** Callback al cambiar de tema. */
-  onThemeChange?: (theme: Theme) => void;
+  onValueChange?: (theme: Theme) => void;
   /** Clave de localStorage donde se persiste el tema. `null` desactiva la persistencia. */
   storageKey?: string | null;
   /**
    * Atributo donde se aplica el tema. Por defecto `data-theme` en `<html>`.
-   * Pasar `null` para no aplicar el tema al DOM (sólo dispara onThemeChange).
+   * Pasar `null` para no aplicar el tema al DOM (sólo dispara onValueChange).
    */
   attribute?: string | null;
   /**
@@ -73,7 +73,7 @@ function useStoredTheme(storageKey: string | null): Theme | null {
  * SSR-safe: en el servidor renderiza el tema por defecto y en el cliente
  * hidrata el valor desde `localStorage` (vía `useSyncExternalStore`). Persiste
  * en `localStorage` bajo `storageKey` (default `"theme"`) y aplica el atributo
- * `data-theme` a `<html>`. Soporta controlled (`theme` + `onThemeChange`) o
+ * `data-theme` a `<html>`. Soporta controlled (`theme` + `onValueChange`) o
  * uncontrolled (`defaultTheme`).
  *
  * Si la app necesita evitar el flash de tema incorrecto durante hidratación,
@@ -82,12 +82,12 @@ function useStoredTheme(storageKey: string | null): Theme | null {
  * @example
  * <ThemeSwitch />
  * <ThemeSwitch defaultTheme="dark" label={(t) => t === "dark" ? "🌙" : "☀️"} />
- * <ThemeSwitch theme={theme} onThemeChange={setTheme} storageKey={null} />
+ * <ThemeSwitch theme={theme} onValueChange={setTheme} storageKey={null} />
  */
 export function ThemeSwitch({
   theme: themeProp,
   defaultTheme,
-  onThemeChange,
+  onValueChange,
   storageKey = DEFAULT_STORAGE_KEY,
   attribute = "data-theme",
   label,
@@ -118,7 +118,7 @@ export function ThemeSwitch({
       return defaultTheme ?? "dark";
     },
     setDerivedValue: setOverride,
-    onChange: onThemeChange,
+    onChange: onValueChange,
   });
 
   // Aplica `data-theme` al DOM y persiste storage. Bail-out

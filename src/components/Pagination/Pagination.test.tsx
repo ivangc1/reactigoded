@@ -7,7 +7,7 @@ import { Pagination } from "./Pagination";
 describe("Pagination", () => {
   it("renderiza nav con aria-label y todas las páginas si total <= 7", () => {
     render(
-      <Pagination currentPage={3} totalPages={5} onPageChange={() => undefined} />,
+      <Pagination currentPage={3} totalPages={5} onValueChange={() => undefined} />,
     );
     expect(screen.getByRole("navigation", { name: "Paginación" })).toBeInTheDocument();
     [1, 2, 3, 4, 5].forEach((n) => {
@@ -19,30 +19,30 @@ describe("Pagination", () => {
 
   it("marca la página activa con aria-current y clase activa", () => {
     render(
-      <Pagination currentPage={2} totalPages={5} onPageChange={() => undefined} />,
+      <Pagination currentPage={2} totalPages={5} onValueChange={() => undefined} />,
     );
     const active = screen.getByRole("button", { name: "Página 2" });
     expect(active).toHaveAttribute("aria-current", "page");
     expect(active).toHaveClass("ig-pagination-active");
   });
 
-  it("dispara onPageChange al pulsar otra página", async () => {
+  it("dispara onValueChange al pulsar otra página", async () => {
     const user = userEvent.setup();
     const fn = vi.fn();
-    render(<Pagination currentPage={1} totalPages={5} onPageChange={fn} />);
+    render(<Pagination currentPage={1} totalPages={5} onValueChange={fn} />);
     await user.click(screen.getByRole("button", { name: "Página 3" }));
     expect(fn).toHaveBeenCalledWith(3);
   });
 
   it("anterior deshabilitado en página 1, siguiente en última", () => {
     const { rerender } = render(
-      <Pagination currentPage={1} totalPages={3} onPageChange={() => undefined} />,
+      <Pagination currentPage={1} totalPages={3} onValueChange={() => undefined} />,
     );
     expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Siguiente" })).toBeEnabled();
 
     rerender(
-      <Pagination currentPage={3} totalPages={3} onPageChange={() => undefined} />,
+      <Pagination currentPage={3} totalPages={3} onValueChange={() => undefined} />,
     );
     expect(screen.getByRole("button", { name: "Anterior" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
@@ -50,7 +50,7 @@ describe("Pagination", () => {
 
   it("muestra elipsis cuando totalPages es grande", () => {
     render(
-      <Pagination currentPage={5} totalPages={20} onPageChange={() => undefined} />,
+      <Pagination currentPage={5} totalPages={20} onValueChange={() => undefined} />,
     );
     const ellipses = screen.getAllByText("…");
     expect(ellipses.length).toBeGreaterThanOrEqual(1);
@@ -68,7 +68,7 @@ describe("Pagination", () => {
       <Pagination
         currentPage={1}
         totalPages={3}
-        onPageChange={() => undefined}
+        onValueChange={() => undefined}
         variant="brand"
         data-testid="p"
       />,
@@ -83,7 +83,7 @@ describe("Pagination", () => {
         ref={ref}
         currentPage={1}
         totalPages={3}
-        onPageChange={() => undefined}
+        onValueChange={() => undefined}
       />,
     );
     expect(ref.current?.tagName).toBe("NAV");
@@ -94,7 +94,7 @@ describe("Pagination", () => {
       <Pagination
         currentPage={2}
         totalPages={3}
-        onPageChange={() => undefined}
+        onValueChange={() => undefined}
         prevLabel={<span data-testid="prev-icon">‹</span>}
         nextLabel={<span data-testid="next-icon">›</span>}
         prevAriaLabel="Previous page"
@@ -116,7 +116,7 @@ describe("Pagination", () => {
       <Pagination
         currentPage={2}
         totalPages={3}
-        onPageChange={() => undefined}
+        onValueChange={() => undefined}
         prevLabel={<span>‹</span>}
         nextLabel={<span>›</span>}
       />,
@@ -133,7 +133,7 @@ describe("Pagination", () => {
 describe("Pagination — clamp de inputs fuera de rango", () => {
   it("clamp currentPage > totalPages al máximo", () => {
     render(
-      <Pagination currentPage={99} totalPages={5} onPageChange={() => {}} />,
+      <Pagination currentPage={99} totalPages={5} onValueChange={() => {}} />,
     );
     expect(
       screen.getByRole("button", { name: "Página 5" }),
@@ -142,7 +142,7 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
 
   it("clamp currentPage < 1 al mínimo", () => {
     render(
-      <Pagination currentPage={-3} totalPages={5} onPageChange={() => {}} />,
+      <Pagination currentPage={-3} totalPages={5} onValueChange={() => {}} />,
     );
     expect(
       screen.getByRole("button", { name: "Página 1" }),
@@ -151,7 +151,7 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
 
   it("clamp totalPages < 1 no crashea y renderiza al menos una página", () => {
     render(
-      <Pagination currentPage={1} totalPages={0} onPageChange={() => {}} />,
+      <Pagination currentPage={1} totalPages={0} onValueChange={() => {}} />,
     );
     expect(
       screen.getByRole("button", { name: "Página 1" }),
@@ -163,7 +163,7 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
       <Pagination
         currentPage={Number.NaN}
         totalPages={Number.NaN}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />,
     );
     expect(
@@ -177,7 +177,7 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
         currentPage={5}
         totalPages={10}
         siblingCount={-3}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />,
     );
     // Sin siblings: 1, …, 5, …, 10 (al menos primera, current y última).
@@ -194,17 +194,17 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
 
   it("anterior/siguiente usan safeCurrent (no el currentPage crudo)", async () => {
     const user = userEvent.setup();
-    const onPageChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
       <Pagination
         currentPage={99}
         totalPages={5}
-        onPageChange={onPageChange}
+        onValueChange={onValueChange}
       />,
     );
     // currentPage clamped a 5; anterior debe ir a 4, no a 98.
     await user.click(screen.getByRole("button", { name: "Anterior" }));
-    expect(onPageChange).toHaveBeenCalledWith(4);
+    expect(onValueChange).toHaveBeenCalledWith(4);
   });
 
   // ─── Uncontrolled (beta.20) ───────────────────────────────────
@@ -229,18 +229,18 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
-  it("uncontrolled: onPageChange (opcional) recibe el nuevo page como side-effect", async () => {
+  it("uncontrolled: onValueChange (opcional) recibe el nuevo page como side-effect", async () => {
     const user = userEvent.setup();
-    const onPageChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
       <Pagination
         totalPages={5}
         defaultPage={1}
-        onPageChange={onPageChange}
+        onValueChange={onValueChange}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
-    expect(onPageChange).toHaveBeenCalledWith(2);
+    expect(onValueChange).toHaveBeenCalledWith(2);
     // Y el state interno avanzó solo (no hace falta rerender):
     expect(
       screen.getByRole("button", { name: "Página 2" }),
@@ -249,16 +249,16 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
 
   it("controlled: setPage interno NO actualiza el visible si el consumer no rerendera", async () => {
     const user = userEvent.setup();
-    const onPageChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
       <Pagination
         currentPage={2}
         totalPages={5}
-        onPageChange={onPageChange}
+        onValueChange={onValueChange}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
-    expect(onPageChange).toHaveBeenCalledWith(3);
+    expect(onValueChange).toHaveBeenCalledWith(3);
     // currentPage sigue siendo 2 hasta que el consumer rerendere
     expect(
       screen.getByRole("button", { name: "Página 2" }),
@@ -269,7 +269,7 @@ describe("Pagination — clamp de inputs fuera de rango", () => {
 describe("Pagination — uncontrolled state sync (B-18)", () => {
   // En uncontrolled, si totalPages baja por debajo del page interno
   // el componente debe sincronizar el state al clamped current,
-  // y NO debe disparar onPageChange (sync silencioso). Cuando totalPages
+  // y NO debe disparar onValueChange (sync silencioso). Cuando totalPages
   // sube de nuevo, NO debe "saltar" al valor viejo (3 ≠ 5).
   it("sincroniza state interno cuando totalPages baja por debajo del current", () => {
     const { rerender } = render(<Pagination totalPages={10} defaultPage={5} />);
@@ -294,15 +294,15 @@ describe("Pagination — uncontrolled state sync (B-18)", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
-  it("NO llama a onPageChange durante el silent sync", () => {
-    const onPageChange = vi.fn();
+  it("NO llama a onValueChange durante el silent sync", () => {
+    const onValueChange = vi.fn();
     const { rerender } = render(
-      <Pagination totalPages={10} defaultPage={5} onPageChange={onPageChange} />,
+      <Pagination totalPages={10} defaultPage={5} onValueChange={onValueChange} />,
     );
     rerender(
-      <Pagination totalPages={3} defaultPage={5} onPageChange={onPageChange} />,
+      <Pagination totalPages={3} defaultPage={5} onValueChange={onValueChange} />,
     );
-    expect(onPageChange).not.toHaveBeenCalled();
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 
   // L-12 (gate review): getPageLabel para i18n. Default ES "Página N",

@@ -362,9 +362,9 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 ```
 
 > **API React controlled + uncontrolled**: `currentPage` y
-> `onPageChange` son opcionales. Pasa `currentPage`+`onPageChange`
+> `onValueChange` son opcionales. Pasa `currentPage`+`onValueChange`
 > para controlled, o `defaultPage` (default 1) para uncontrolled
-> (el componente maneja state interno; `onPageChange` opcional como
+> (el componente maneja state interno; `onValueChange` opcional como
 > side-effect). Patrón consistente con Tabs / Accordion / Dropdown.
 
 ---
@@ -535,10 +535,10 @@ Usa el contrato del `Input` para estados:
 | Slots | `.ig-step-item` · `.ig-step-label` |
 | Connector | `.ig-step-line` · `.ig-step-line-complete` |
 
-> **Modo interactive**: cuando el componente recibe `onActiveChange`,
+> **Modo interactive**: cuando el componente recibe `onValueChange`,
 > cada `.ig-step` añade `.ig-step-interactive` y se vuelve focuseable
 > (`role="button"` + roving tabIndex). Soporta ArrowLeft/Right/Up/Down
-> + Home/End + Enter/Space. Sin `onActiveChange` el Stepper es
+> + Home/End + Enter/Space. Sin `onValueChange` el Stepper es
 > presentational (no focus, no keyboard).
 
 ```html

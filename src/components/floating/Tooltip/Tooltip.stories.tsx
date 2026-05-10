@@ -255,7 +255,7 @@ export const TooltipDentroDeModal: Story = {
           <Modal
             ref={dialogRef}
             open={open}
-            onClose={() => {
+            onOpenChange={() => {
               setOpen(false);
             }}
             size="md"

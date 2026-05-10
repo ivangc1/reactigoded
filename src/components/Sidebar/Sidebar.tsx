@@ -10,7 +10,7 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
   /** Estado inicial (modo no controlado). Por defecto `false`. */
   defaultCollapsed?: boolean;
   /** Callback al cambiar collapsed. */
-  onCollapsedChange?: (collapsed: boolean) => void;
+  onValueChange?: (collapsed: boolean) => void;
   ref?: Ref<HTMLElement>;
 }
 
@@ -34,7 +34,7 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
 export function Sidebar({
   collapsed: collapsedProp,
   defaultCollapsed = false,
-  onCollapsedChange,
+  onValueChange,
   className,
   children,
   ref,
@@ -60,7 +60,7 @@ export function Sidebar({
   const { value: collapsed, setValue: setCollapsed } = useControllableState<boolean>({
     value: collapsedProp,
     defaultValue: defaultCollapsed,
-    onChange: onCollapsedChange,
+    onChange: onValueChange,
   });
 
   const ctxValue = useMemo(

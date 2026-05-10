@@ -237,7 +237,7 @@ const cases: SsrCase[] = [
   {
     name: "Modal (open=false)",
     jsx: () => (
-      <Modal open={false} onClose={() => {}}>
+      <Modal open={false} onOpenChange={() => {}}>
         <ModalHeader title="x" />
         <ModalBody>cuerpo</ModalBody>
         <ModalFooter>pie</ModalFooter>

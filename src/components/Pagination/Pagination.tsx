@@ -16,7 +16,7 @@ export interface PaginationProps
   /**
    * Página actual (1-based) en modo **controlled**. Si se pasa, el
    * consumer es responsable de actualizar la prop en respuesta a
-   * `onPageChange`. Si se omite, el componente arranca en `defaultPage`
+   * `onValueChange`. Si se omite, el componente arranca en `defaultPage`
    * y maneja el state internamente.
    */
   currentPage?: number;
@@ -34,7 +34,7 @@ export interface PaginationProps
    * componente actualiza su state interno) y útil para reaccionar al
    * cambio (fetch de datos, sync con URL, etc.).
    */
-  onPageChange?: (page: number) => void;
+  onValueChange?: (page: number) => void;
   /** Color de la página activa. */
   variant?: PaginationVariant;
   /**
@@ -105,19 +105,19 @@ function buildPages(
  * elipsis cuando hay muchas) y botón "siguiente". La página activa lleva
  * `aria-current="page"`. Cada página tiene `aria-label="Página N"`.
  *
- * Soporta **controlled** (`currentPage` + `onPageChange`) y **uncontrolled**
- * (`defaultPage`, opcional `onPageChange` para reaccionar). Idéntico
+ * Soporta **controlled** (`currentPage` + `onValueChange`) y **uncontrolled**
+ * (`defaultPage`, opcional `onValueChange` para reaccionar). Idéntico
  * patrón a otros componentes con state del DS (Tabs, Accordion, etc.).
  *
  * @example
  * // Uncontrolled — el componente maneja el state internamente
- * <Pagination totalPages={20} defaultPage={1} onPageChange={fetchPage} />
+ * <Pagination totalPages={20} defaultPage={1} onValueChange={fetchPage} />
  *
  * // Controlled — el consumer mantiene currentPage
  * <Pagination
  *   totalPages={20}
  *   currentPage={page}
- *   onPageChange={setPage}
+ *   onValueChange={setPage}
  * />
  */
 export function Pagination({
@@ -125,7 +125,7 @@ export function Pagination({
   defaultPage = 1,
   totalPages,
   siblingCount = 1,
-  onPageChange,
+  onValueChange,
   variant,
   prevLabel = "Anterior",
   nextLabel = "Siguiente",
@@ -154,11 +154,11 @@ export function Pagination({
 
   // beta.20: Pagination soporta controlled + uncontrolled vía
   // useControllableState. En uncontrolled, el state interno arranca en
-  // defaultPage y onPageChange (si existe) actúa como side-effect.
+  // defaultPage y onValueChange (si existe) actúa como side-effect.
   const { value: page, setValue: setPage } = useControllableState<number>({
     value: currentPage,
     defaultValue: defaultPage,
-    onChange: onPageChange,
+    onChange: onValueChange,
   });
 
   // Clamps: el componente jamás debe renderizar páginas fuera de rango
@@ -178,7 +178,7 @@ export function Pagination({
   // page interno fuera de rango (ej: estabas en página 5, totalPages
   // baja a 3 → debes quedarte en 3, no volver a 5 si vuelve a subir).
   // Solo aplica en uncontrolled — en controlled el consumer decide.
-  // silent: true para NO disparar onPageChange en este sync interno
+  // silent: true para NO disparar onValueChange en este sync interno
   // (sería ruido para el consumer; el clamp es decisión del componente,
   // no acción del usuario).
   useEffect(() => {

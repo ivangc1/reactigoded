@@ -75,51 +75,51 @@ describe("Modal", () => {
     closeSpy.mockRestore();
   });
 
-  it("dispara onClose cuando el dialog emite el evento close", () => {
-    const onClose = vi.fn();
+  it("dispara onOpenChange cuando el dialog emite el evento close", () => {
+    const onOpenChange = vi.fn();
     render(
-      <Modal open onClose={onClose} data-testid="m">
+      <Modal open onOpenChange={onOpenChange} data-testid="m">
         <ModalBody>x</ModalBody>
       </Modal>,
     );
     fireEvent(screen.getByTestId("m"), new Event("close"));
-    expect(onClose).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledOnce();
   });
 
-  it("dispara onClose al click en el backdrop (target === dialog)", () => {
-    const onClose = vi.fn();
+  it("dispara onOpenChange al click en el backdrop (target === dialog)", () => {
+    const onOpenChange = vi.fn();
     render(
-      <Modal open onClose={onClose} data-testid="m">
+      <Modal open onOpenChange={onOpenChange} data-testid="m">
         <ModalBody>contenido</ModalBody>
       </Modal>,
     );
     const dialog = screen.getByTestId("m");
     fireEvent.click(dialog); // click sobre el propio dialog (backdrop)
-    expect(onClose).toHaveBeenCalledOnce();
+    expect(onOpenChange).toHaveBeenCalledOnce();
   });
 
-  it("no dispara onClose al click dentro del contenido", () => {
-    const onClose = vi.fn();
+  it("no dispara onOpenChange al click dentro del contenido", () => {
+    const onOpenChange = vi.fn();
     render(
-      <Modal open onClose={onClose}>
+      <Modal open onOpenChange={onOpenChange}>
         <ModalBody>
           <button>dentro</button>
         </ModalBody>
       </Modal>,
     );
     fireEvent.click(screen.getByRole("button", { name: /dentro/i }));
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it("closeOnBackdrop=false ignora click en el backdrop", () => {
-    const onClose = vi.fn();
+    const onOpenChange = vi.fn();
     render(
-      <Modal open onClose={onClose} closeOnBackdrop={false} data-testid="m">
+      <Modal open onOpenChange={onOpenChange} closeOnBackdrop={false} data-testid="m">
         <ModalBody>x</ModalBody>
       </Modal>,
     );
     fireEvent.click(screen.getByTestId("m"));
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it("closeOnEsc=false bloquea el evento cancel", () => {

@@ -50,7 +50,7 @@ durante el ciclo. **Última pre-release antes de `1.0.0-rc.1`**.
   vía rest (gana sobre `label`).
 - **`Pagination` uncontrolled state sync** [B-18]: cuando `totalPages`
   baja por debajo del page interno, el componente sincroniza `page`
-  al clamped current con `silent: true` (no dispara `onPageChange`).
+  al clamped current con `silent: true` (no dispara `onValueChange`).
   Cuando `totalPages` vuelve a subir, NO "salta" al page viejo.
 - **`Tabs` controlled inválido — fallback tab stop** [H-26]: cuando
   `value` no matchea ningún Tab montado, el primer Tab registrado
@@ -228,14 +228,14 @@ JS ESM bajó de 14.91 KB (beta.21) a 13.96 KB tras añadir
   elemento subyacente se tipan automáticamente. Story `Polimorfica`
   añadida.
 - **`Pagination`**: modo **uncontrolled** vía `useControllableState`.
-  `currentPage` y `onPageChange` ahora opcionales; `defaultPage`
+  `currentPage` y `onValueChange` ahora opcionales; `defaultPage`
   (default 1) inicializa el state interno. Patrón consistente con
   Tabs / Accordion / Dropdown / etc. Story `Uncontrolled` añadida.
-- **`Stepper`**: modo **interactive** opt-in con `onActiveChange`.
+- **`Stepper`**: modo **interactive** opt-in con `onValueChange`.
   Cuando se pasa el callback, cada step se vuelve focuseable
   (`role="button"` + roving tabIndex) y soporta keyboard nav
   completo: ArrowLeft/Right/Up/Down, Home/End, Enter/Space. Sin
-  `onActiveChange` permanece presentational (backwards compatible).
+  `onValueChange` permanece presentational (backwards compatible).
   Nueva clase `.ig-step-interactive`. `aria-label="Paso N"` en
   cada dot interactivo.
 - **`Progress`**: props `loadingLabel` (default `"Cargando"`) y
@@ -268,7 +268,7 @@ JS ESM bajó de 14.91 KB (beta.21) a 13.96 KB tras añadir
   con input nativo (Rating, Slider, Switch).
 
 ### Changed
-- **`Pagination`**: `currentPage` y `onPageChange` pasaron de
+- **`Pagination`**: `currentPage` y `onValueChange` pasaron de
   required a opcionales. Cambio API público pre-1.0.0 (sin
   breaking productivo). Consumers que ya pasaban ambos siguen
   funcionando idénticamente.

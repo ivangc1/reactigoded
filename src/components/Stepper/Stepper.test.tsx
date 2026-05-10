@@ -120,7 +120,7 @@ describe("Stepper", () => {
 });
 
 describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
-  it("sin onActiveChange los dots NO son focuseables (presentational)", () => {
+  it("sin onValueChange los dots NO son focuseables (presentational)", () => {
     const { container } = render(
       <Stepper active={1}>
         <Step />
@@ -135,9 +135,9 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     }
   });
 
-  it("con onActiveChange cada dot es role=button con roving tabIndex", () => {
+  it("con onValueChange cada dot es role=button con roving tabIndex", () => {
     const { container } = render(
-      <Stepper active={1} onActiveChange={() => {}}>
+      <Stepper active={1} onValueChange={() => {}}>
         <Step />
         <Step />
         <Step />
@@ -154,9 +154,9 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
 
   it("ArrowRight avanza al siguiente step", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={0} onActiveChange={onActiveChange}>
+      <Stepper active={0} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -165,14 +165,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[0]?.focus();
     await user.keyboard("{ArrowRight}");
-    expect(onActiveChange).toHaveBeenCalledWith(1);
+    expect(onValueChange).toHaveBeenCalledWith(1);
   });
 
   it("ArrowLeft retrocede al anterior", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={2} onActiveChange={onActiveChange}>
+      <Stepper active={2} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -181,14 +181,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[2]?.focus();
     await user.keyboard("{ArrowLeft}");
-    expect(onActiveChange).toHaveBeenCalledWith(1);
+    expect(onValueChange).toHaveBeenCalledWith(1);
   });
 
   it("ArrowRight en último step wrappea al primero", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={2} onActiveChange={onActiveChange}>
+      <Stepper active={2} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -197,14 +197,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[2]?.focus();
     await user.keyboard("{ArrowRight}");
-    expect(onActiveChange).toHaveBeenCalledWith(0);
+    expect(onValueChange).toHaveBeenCalledWith(0);
   });
 
   it("ArrowLeft en primer step wrappea al último", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={0} onActiveChange={onActiveChange}>
+      <Stepper active={0} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -213,14 +213,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[0]?.focus();
     await user.keyboard("{ArrowLeft}");
-    expect(onActiveChange).toHaveBeenCalledWith(2);
+    expect(onValueChange).toHaveBeenCalledWith(2);
   });
 
   it("Home va al primer step", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={2} onActiveChange={onActiveChange}>
+      <Stepper active={2} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -230,14 +230,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[2]?.focus();
     await user.keyboard("{Home}");
-    expect(onActiveChange).toHaveBeenCalledWith(0);
+    expect(onValueChange).toHaveBeenCalledWith(0);
   });
 
   it("End va al último step", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={0} onActiveChange={onActiveChange}>
+      <Stepper active={0} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -247,14 +247,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[0]?.focus();
     await user.keyboard("{End}");
-    expect(onActiveChange).toHaveBeenCalledWith(3);
+    expect(onValueChange).toHaveBeenCalledWith(3);
   });
 
   it("Enter activa el step focuseado (vía click semantics)", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={0} onActiveChange={onActiveChange}>
+      <Stepper active={0} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -265,14 +265,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     // foco en otro hacemos focus manual (simula que el usuario navegó).
     dots[2]?.focus();
     await user.keyboard("{Enter}");
-    expect(onActiveChange).toHaveBeenCalledWith(2);
+    expect(onValueChange).toHaveBeenCalledWith(2);
   });
 
   it("Space activa el step focuseado", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={0} onActiveChange={onActiveChange}>
+      <Stepper active={0} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -281,14 +281,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     const dots = screen.getAllByRole("button");
     dots[1]?.focus();
     await user.keyboard(" ");
-    expect(onActiveChange).toHaveBeenCalledWith(1);
+    expect(onValueChange).toHaveBeenCalledWith(1);
   });
 
-  it("click en dot dispara onActiveChange con su índice 0-based", async () => {
+  it("click en dot dispara onValueChange con su índice 0-based", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={0} onActiveChange={onActiveChange}>
+      <Stepper active={0} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -296,14 +296,14 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     );
     const dots = screen.getAllByRole("button");
     if (dots[2]) await user.click(dots[2]);
-    expect(onActiveChange).toHaveBeenCalledWith(2);
+    expect(onValueChange).toHaveBeenCalledWith(2);
   });
 
-  it("click en el dot active NO dispara onActiveChange (no-op)", async () => {
+  it("click en el dot active NO dispara onValueChange (no-op)", async () => {
     const user = userEvent.setup();
-    const onActiveChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <Stepper active={1} onActiveChange={onActiveChange}>
+      <Stepper active={1} onValueChange={onValueChange}>
         <Step />
         <Step />
         <Step />
@@ -311,12 +311,12 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     );
     const dots = screen.getAllByRole("button");
     if (dots[1]) await user.click(dots[1]);
-    expect(onActiveChange).not.toHaveBeenCalled();
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 
   it("aria-label del dot interactivo es 'Paso N'", () => {
     render(
-      <Stepper active={0} onActiveChange={() => {}}>
+      <Stepper active={0} onValueChange={() => {}}>
         <Step />
         <Step />
       </Stepper>,
@@ -326,7 +326,7 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
   });
 
   // H-25 (beta.22): focus management sin setTimeout. Tras un ArrowRight
-  // que dispara onActiveChange, cuando el consumer aplica el cambio
+  // que dispara onValueChange, cuando el consumer aplica el cambio
   // (rerender con active+1), el effect post-commit debe focusear el
   // nuevo dot. Sin la prop active actualizándose, el effect no
   // dispara — es el contrato del componente: el focus salta solo
@@ -336,7 +336,7 @@ describe("Stepper — modo interactive (keyboard nav, beta.20)", () => {
     function Wrapper() {
       const [active, setActive] = useState(0);
       return (
-        <Stepper active={active} onActiveChange={setActive}>
+        <Stepper active={active} onValueChange={setActive}>
           <Step />
           <Step />
           <Step />
@@ -395,7 +395,7 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const onActive = vi.fn();
       const { container } = render(
-        <Stepper active={999} onActiveChange={onActive}>
+        <Stepper active={999} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
           <Step label="C" />
@@ -419,7 +419,7 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const onActive = vi.fn();
       const { container } = render(
-        <Stepper active={-1} onActiveChange={onActive}>
+        <Stepper active={-1} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
         </Stepper>,
@@ -441,7 +441,7 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const onActive = vi.fn();
       const { container } = render(
-        <Stepper active={Number.NaN} onActiveChange={onActive}>
+        <Stepper active={Number.NaN} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
         </Stepper>,
@@ -463,7 +463,7 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const onActive = vi.fn();
       render(
-        <Stepper active={1} onActiveChange={onActive}>
+        <Stepper active={1} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
           <Step label="C" />
@@ -477,7 +477,7 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       const onActive = vi.fn();
       expect(() =>
         render(
-          <Stepper active={0} onActiveChange={onActive}>
+          <Stepper active={0} onValueChange={onActive}>
             {null}
           </Stepper>,
         ),
@@ -487,18 +487,18 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
 
   // Codex P2 sobre commit antiguo del Stepper: arrow nav debe
   // computar desde el step que TIENE FOCUS, no desde `active`. Si el
-  // parent rechaza `onActiveChange` (wizard que valida, async, etc.),
+  // parent rechaza `onValueChange` (wizard que valida, async, etc.),
   // el user keyboard quedaba atrapado pulsando arrows y recibiendo
   // siempre el mismo destination active±1.
   describe("arrow nav usa focused step, no active prop (codex P2)", () => {
-    it("ArrowRight desde focused N, active=0 (parent rechaza) → onActiveChange(N+1)", () => {
+    it("ArrowRight desde focused N, active=0 (parent rechaza) → onValueChange(N+1)", () => {
       const onActive = vi.fn();
       const { container } = render(
         // active=0 simula el caso post-rejection: parent NO actualiza
         // pese a que el handler intentó moverse. User tabula al step
         // 1 manualmente y pulsa ArrowRight — el handler debería
         // computar desde 1, no desde 0.
-        <Stepper active={0} onActiveChange={onActive}>
+        <Stepper active={0} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
           <Step label="C" />
@@ -517,10 +517,10 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       expect(onActive).toHaveBeenLastCalledWith(2);
     });
 
-    it("ArrowLeft desde focused N, active=último (parent rechaza wrap) → onActiveChange(N-1)", () => {
+    it("ArrowLeft desde focused N, active=último (parent rechaza wrap) → onValueChange(N-1)", () => {
       const onActive = vi.fn();
       const { container } = render(
-        <Stepper active={2} onActiveChange={onActive}>
+        <Stepper active={2} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
           <Step label="C" />
@@ -540,7 +540,7 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
     it("Home / End siguen siendo absolutos (no dependen del focused)", () => {
       const onActive = vi.fn();
       const { container } = render(
-        <Stepper active={1} onActiveChange={onActive}>
+        <Stepper active={1} onValueChange={onActive}>
           <Step label="A" />
           <Step label="B" />
           <Step label="C" />
