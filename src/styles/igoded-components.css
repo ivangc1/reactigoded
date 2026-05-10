@@ -5507,14 +5507,14 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
 
   /* Inputs y formularios */
   .ig-input,
-  .ig-select,
+  .ig-native-select,
   .ig-textarea {
     border-width: 2px;
     border-color: currentColor;
   }
 
   .ig-input:focus,
-  .ig-select:focus,
+  .ig-native-select:focus,
   .ig-textarea:focus {
     outline: 3px solid currentColor;
     outline-offset: 2px;
@@ -5574,8 +5574,8 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     border: 2px solid currentColor;
   }
 
-  /* Dropdown */
-  .ig-dropdown-menu {
+  /* OptionsMenu */
+  .ig-options-menu-content {
     border: 2px solid currentColor;
   }
 
@@ -5618,7 +5618,7 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
   /* Inputs — Field/FieldText (más específico que Canvas, axe-core lo
      valida mejor para form controls). */
   .ig-input,
-  .ig-select,
+  .ig-native-select,
   .ig-textarea {
     border: 2px solid currentColor;
     background-color: Field;
@@ -5626,14 +5626,14 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
   }
 
   .ig-input:focus,
-  .ig-select:focus,
+  .ig-native-select:focus,
   .ig-textarea:focus {
     outline: 3px solid Highlight;
     outline-offset: 2px;
   }
 
   .ig-input:disabled,
-  .ig-select:disabled,
+  .ig-native-select:disabled,
   .ig-textarea:disabled {
     border-color: GrayText;
     color: GrayText;
@@ -5729,13 +5729,13 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     background: Canvas;
   }
 
-  /* Dropdown */
-  .ig-dropdown-menu {
+  /* OptionsMenu */
+  .ig-options-menu-content {
     border: 2px solid currentColor;
     background: Canvas;
   }
 
-  .ig-dropdown-item:hover {
+  .ig-options-menu-item:hover {
     background: Highlight;
     color: HighlightText;
   }
@@ -6177,7 +6177,7 @@ QUÉ ES: Estilos para campos de formulario.
 COMPONENTES:
 - ig-input: campo de texto, email, password, etc.
 - ig-textarea: área de texto multilínea
-- ig-select: selector desplegable
+- ig-native-select: selector desplegable
 - ig-label: etiqueta para campos
 - ig-helper: texto de ayuda debajo del campo
 - ig-error: mensaje de error
@@ -6382,31 +6382,31 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
 
 /* Estados de validación para textarea/select: las reglas .ig-input-error
    y .ig-input-success están definidas ANTES de .ig-textarea, .ig-textarea-auto
-   y .ig-select, así que el border de cada uno (mismo specificity 0,1,0)
+   y .ig-native-select, así que el border de cada uno (mismo specificity 0,1,0)
    las sobrescribía por orden. Reglas con doble clase (0,2,0) para que
    ganen sin depender del orden de declaración. */
 .ig-textarea.ig-input-error,
 .ig-textarea-auto.ig-input-error,
-.ig-select.ig-input-error {
+.ig-native-select.ig-input-error {
   border-color: var(--ig-input-border-invalid);
 }
 
 .ig-textarea.ig-input-error:focus,
 .ig-textarea-auto.ig-input-error:focus,
-.ig-select.ig-input-error:focus {
+.ig-native-select.ig-input-error:focus {
   border-color: var(--ig-input-border-invalid);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-malum) 30%, transparent);
 }
 
 .ig-textarea.ig-input-success,
 .ig-textarea-auto.ig-input-success,
-.ig-select.ig-input-success {
+.ig-native-select.ig-input-success {
   border-color: var(--ig-input-border-valid);
 }
 
 .ig-textarea.ig-input-success:focus,
 .ig-textarea-auto.ig-input-success:focus,
-.ig-select.ig-input-success:focus {
+.ig-native-select.ig-input-success:focus {
   border-color: var(--ig-input-border-valid);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-laurus) 30%, transparent);
 }
@@ -6415,8 +6415,8 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
 .ig-field-sizing-content { field-sizing: content; }
 .ig-field-sizing-fixed { field-sizing: fixed; }
 
-/* Select */
-.ig-select {
+/* NativeSelect */
+.ig-native-select {
   display: block;
   width: 100%;
   padding: var(--ig-space-2) var(--ig-space-3);
@@ -6437,13 +6437,13 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
   transition: var(--ig-transition-fast);
 }
 
-.ig-select:focus {
+.ig-native-select:focus {
   outline: none;
   border-color: var(--ig-input-border-focus);
   box-shadow: var(--ig-input-ring);
 }
 
-.ig-select:disabled {
+.ig-native-select:disabled {
   background-color: var(--ig-input-bg-disabled);
   color: var(--ig-input-text-disabled);
   cursor: not-allowed;
@@ -8279,33 +8279,33 @@ Solo se muestran cuando el usuario las necesita.
 
 DIFERENCIA CON TOOLTIP:
 - Tooltip: hover, solo muestra información
-- Dropdown: click, permite seleccionar opciones
+- OptionsMenu: click, permite seleccionar opciones
 
 ESTRUCTURA:
-<div class="ig-dropdown">
-  <button class="ig-dropdown-trigger">Opciones ▼</button>
-  <div class="ig-dropdown-menu">
-    <a class="ig-dropdown-item" href="#">Editar</a>
-    <a class="ig-dropdown-item" href="#">Duplicar</a>
-    <div class="ig-dropdown-divider"></div>
-    <a class="ig-dropdown-item ig-dropdown-item-danger" href="#">Eliminar</a>
+<div class="ig-options-menu">
+  <button class="ig-options-menu-trigger">Opciones ▼</button>
+  <div class="ig-options-menu-content">
+    <a class="ig-options-menu-item" href="#">Editar</a>
+    <a class="ig-options-menu-item" href="#">Duplicar</a>
+    <div class="ig-options-menu-divider"></div>
+    <a class="ig-options-menu-item ig-options-menu-item-danger" href="#">Eliminar</a>
   </div>
 </div>
 
 CÓMO USAR:
-1. Contenedor ig-dropdown con position: relative
-2. Trigger (botón) con ig-dropdown-trigger
-3. Menú con ig-dropdown-menu (hidden por defecto)
-4. Items con ig-dropdown-item
+1. Contenedor ig-options-menu con position: relative
+2. Trigger (botón) con ig-options-menu-trigger
+3. Menú con ig-options-menu-content (hidden por defecto)
+4. Items con ig-options-menu-item
 5. JS para toggle clase 'open' en el contenedor (o usa :focus-within)
 
 POSICIONES:
-- ig-dropdown-right: alineado a la derecha
-- ig-dropdown-up: abre hacia arriba
+- ig-options-menu-right: alineado a la derecha
+- ig-options-menu-up: abre hacia arriba
 
 ESTADOS:
-- ig-dropdown-item-active: item actualmente seleccionado
-- ig-dropdown-item-danger: acciones destructivas (eliminar, etc.)
+- ig-options-menu-item-active: item actualmente seleccionado
+- ig-options-menu-item-danger: acciones destructivas (eliminar, etc.)
 
 CUÁNDO USAR:
 - Menús de acciones (•••)
@@ -8314,16 +8314,16 @@ CUÁNDO USAR:
 - Cualquier lista de acciones contextual
 */
 
-.ig-dropdown {
+.ig-options-menu {
   position: relative;
   display: inline-block;
 }
 
-.ig-dropdown-trigger {
+.ig-options-menu-trigger {
   cursor: pointer;
 }
 
-.ig-dropdown-menu {
+.ig-options-menu-content {
   position: absolute;
   top: 100%;
   left: 0;
@@ -8331,22 +8331,22 @@ CUÁNDO USAR:
   min-width: 180px;
   padding: var(--ig-space-1);
   margin-top: var(--ig-space-1);
-  background-color: var(--ig-dropdown-bg);
-  border: 1px solid var(--ig-dropdown-border);
-  border-radius: var(--ig-dropdown-radius);
-  box-shadow: var(--ig-dropdown-shadow);
+  background-color: var(--ig-options-menu-bg);
+  border: 1px solid var(--ig-options-menu-border);
+  border-radius: var(--ig-options-menu-radius);
+  box-shadow: var(--ig-options-menu-shadow);
   opacity: 0;
   visibility: hidden;
   transform: translateY(calc(-1 * var(--ig-space-2)));
   transition: var(--ig-transition-fast);
 }
 
-.ig-dropdown-right .ig-dropdown-menu {
+.ig-options-menu-right .ig-options-menu-content {
   left: auto;
   right: 0;
 }
 
-.ig-dropdown-up .ig-dropdown-menu {
+.ig-options-menu-up .ig-options-menu-content {
   top: auto;
   bottom: 100%;
   margin-top: 0;
@@ -8355,14 +8355,14 @@ CUÁNDO USAR:
 }
 
 /* Mostrar con clase o focus-within */
-.ig-dropdown.ig-dropdown-open .ig-dropdown-menu,
-.ig-dropdown:focus-within .ig-dropdown-menu {
+.ig-options-menu.ig-options-menu-open .ig-options-menu-content,
+.ig-options-menu:focus-within .ig-options-menu-content {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
 }
 
-.ig-dropdown-item {
+.ig-options-menu-item {
   display: flex;
   align-items: center;
   gap: var(--ig-space-2);
@@ -8375,34 +8375,34 @@ CUÁNDO USAR:
   transition: var(--ig-transition-fast);
 }
 
-.ig-dropdown-item:hover {
-  background-color: var(--ig-dropdown-item-hover);
+.ig-options-menu-item:hover {
+  background-color: var(--ig-options-menu-item-hover);
   color: var(--ig-text-heading);
 }
 
 /* Estado activo (item seleccionado) */
-.ig-dropdown-item-active,
-.ig-dropdown-item.active {
+.ig-options-menu-item-active,
+.ig-options-menu-item.active {
   background-color: color-mix(in srgb, var(--ig-axis) 15%, transparent);
   color: var(--ig-axis);
 }
 
-.ig-dropdown-item-danger {
+.ig-options-menu-item-danger {
   color: var(--ig-malum);
 }
 
-.ig-dropdown-item-danger:hover {
+.ig-options-menu-item-danger:hover {
   background-color: color-mix(in srgb, var(--ig-malum) 10%, transparent);
   color: var(--ig-malum);
 }
 
-.ig-dropdown-divider {
+.ig-options-menu-divider {
   height: 1px;
   margin: var(--ig-space-1) 0;
   background-color: var(--ig-border-subtle);
 }
 
-.ig-dropdown-header {
+.ig-options-menu-header {
   padding: var(--ig-space-2) var(--ig-space-3);
   font-size: var(--ig-text-xs);
   font-weight: var(--ig-fw-semibold);
@@ -9882,7 +9882,7 @@ Controla cómo responde el elemento al modo de alto contraste de Windows.
   nav,
   .ig-btn,
   .ig-dialog,
-  .ig-dropdown-menu,
+  .ig-options-menu-content,
   .ig-sidebar,
   .ig-navbar,
   .ig-toast,

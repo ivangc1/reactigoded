@@ -192,13 +192,13 @@ function Page() {
 | **Acciones** | `Button`, `Chip`, `Pagination` |
 | **Display** | `Avatar`, `AvatarGroup`, `Badge`, `Card` (+`CardHeader`/`Body`/`Footer`/`Image`/`Divider`), `Divider`, `Skeleton`, `Spinner`, `Timeline`+`TimelineItem` |
 | **Feedback** | `Alert`, `Progress`, `Toast`+`ToastProvider`+`useToast`, `Tooltip` |
-| **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `Select`, `Slider`, `Switch`, `Textarea`, `ThemeSwitch` |
-| **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `Dropdown`+`DropdownTrigger`+`DropdownMenu`+`DropdownItem`+`DropdownDivider`+`DropdownHeader`, `Modal`+`ModalHeader`+`ModalBody`+`ModalFooter`+`ModalClose`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabList`+`Tab`+`TabPanel`+`TabsContent` |
+| **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `NativeSelect`, `Slider`, `Switch`, `Textarea`, `ThemeSwitch` |
+| **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `OptionsMenu`+`OptionsMenuTrigger`+`OptionsMenuContent`+`OptionsMenuItem`+`OptionsMenuDivider`+`OptionsMenuHeader`, `Modal`+`ModalHeader`+`ModalBody`+`ModalFooter`+`ModalClose`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabList`+`Tab`+`TabPanel`+`TabsContent` |
 
 Hooks públicos: `useTheme`, `useToast`, `useControllableState`.
 
 > **B-04 (RC1)**: los context hooks `useAccordion`, `useAccordionItem`,
-> `useDropdown`, `useSidebar`, `useTabs` quedaron retirados del API
+> `useOptionsMenu`, `useSidebar`, `useTabs` quedaron retirados del API
 > público pre-RC1. Su shape estaba acoplada a internals del compound
 > y exponerlos como públicos firmaría una API que bloquearía refactor
 > a Floating UI post-RC1 (ver `docs/decisions/C-03-dropdown-hand-rolled-defer.md`).
@@ -230,8 +230,8 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 | `Checkbox`              | `.ig-checkbox`            | variants color, sizes                                                                   |
 | `Chip`                  | `.ig-chip`                | variants color, `-close`                                                                |
 | `Divider`               | `.ig-divider`             | variants color, `-vertical`, `-dashed`, `-with-text`                                    |
-| `Dropdown`              | `.ig-dropdown`            | `-trigger`, `-menu`, `-item`, `-divider`, `-header`, `-open`                            |
-| `Input` / `Textarea` / `Select` | `.ig-input` · `.ig-textarea` · `.ig-select` | `-error`, `-success`, `-addon`, `-group`, `-textarea-auto`, `-select-auto` |
+| `OptionsMenu`              | `.ig-options-menu`            | `-trigger`, `-menu`, `-item`, `-divider`, `-header`, `-open`                            |
+| `Input` / `Textarea` / `NativeSelect` | `.ig-input` · `.ig-textarea` · `.ig-native-select` | `-error`, `-success`, `-addon`, `-group`, `-textarea-auto`, `-select-auto` |
 | `Modal`                 | `.ig-dialog` *(<dialog> nativo)* | `-header`, `-body`, `-footer`, `-close`, sizes `-sm`…`-xl`/`-full`, `-backdrop-blur`/`-dark`/`-light`/`-no-backdrop`, `-show`, `-loading` |
 | `Navbar`                | `.ig-navbar`              | `-brand`, `-nav`, `-actions`, `-link`, `-menu-button`, `-sticky`/`-fixed`               |
 | `Pagination`            | `.ig-pagination`          | variants color, `-active`                                                               |
@@ -259,7 +259,7 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 
 ### Controlled vs. uncontrolled
 
-Componentes con estado (`Accordion`, `Alert`, `Dropdown`, `Sidebar`,
+Componentes con estado (`Accordion`, `Alert`, `OptionsMenu`, `Sidebar`,
 `Slider`, `Switch`, `Tabs`, `ThemeSwitch`, `Rating`) soportan ambos modos:
 
 ```tsx

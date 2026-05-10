@@ -104,7 +104,7 @@ html {
     border: 2px solid currentColor;
   }
 
-  .ig-input, .ig-select, .ig-textarea {
+  .ig-input, .ig-native-select, .ig-textarea {
     border: 1px solid currentColor;
   }
 

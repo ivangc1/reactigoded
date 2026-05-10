@@ -230,7 +230,7 @@ JS ESM bajó de 14.91 KB (beta.21) a 13.96 KB tras añadir
 - **`Pagination`**: modo **uncontrolled** vía `useControllableState`.
   `currentPage` y `onValueChange` ahora opcionales; `defaultPage`
   (default 1) inicializa el state interno. Patrón consistente con
-  Tabs / Accordion / Dropdown / etc. Story `Uncontrolled` añadida.
+  Tabs / Accordion / OptionsMenu / etc. Story `Uncontrolled` añadida.
 - **`Stepper`**: modo **interactive** opt-in con `onValueChange`.
   Cuando se pasa el callback, cada step se vuelve focuseable
   (`role="button"` + roving tabIndex) y soporta keyboard nav
@@ -245,8 +245,8 @@ JS ESM bajó de 14.91 KB (beta.21) a 13.96 KB tras añadir
 - **`AllStates` matrix Ola 2 (16 componentes)**: stories
   `chromatic.modes light+dark` para Alert, Radio, Rating, Slider,
   Stepper, Pagination, Tooltip, Timeline, Accordion, Sidebar,
-  Navbar, ThemeSwitch, Toast, Dropdown, Modal, Input compound,
-  Table, Textarea, Select. Cobertura visual completa en Chromatic
+  Navbar, ThemeSwitch, Toast, OptionsMenu, Modal, Input compound,
+  Table, Textarea, NativeSelect. Cobertura visual completa en Chromatic
   bajo dual-mode.
 - **`useControllableState` derive mode**: `ThemeSwitch` migrado
   a `useControllableState({ derive, setDerivedValue, ... })`.
@@ -336,8 +336,8 @@ del límite (89%) — es natural por el growth de utilities pseudo-class.
     `ig-tooltip-color-{...}`
   Solo afecta a consumers vanilla con clases hardcoded; React API
   intacta. Migración automática vía `scripts/migrate-tooltip-prefixes.mjs`.
-- **Dropdown**: clase de estado abierto migrada de `.open` a
-  `.ig-dropdown-open` para respetar la convención de namespace `ig-*`.
+- **OptionsMenu**: clase de estado abierto migrada de `.open` a
+  `.ig-options-menu-open` para respetar la convención de namespace `ig-*`.
 - **Stepper**: prop `defaultActive` eliminada (era engañosa — el
   componente nunca fue uncontrolled). Migración:
   `<Stepper defaultActive={X}>` → `<Stepper active={X}>`. Si necesitas
@@ -353,9 +353,9 @@ del límite (89%) — es natural por el growth de utilities pseudo-class.
   | `<Navbar sticky fixed>` | (TS error, antes silencioso) |
 
 ### Fixed
-- **Dropdown**: keyboard open salta items con `aria-disabled="true"`
+- **OptionsMenu**: keyboard open salta items con `aria-disabled="true"`
   desde el trigger (fix incompleto del bug original que solo cubría
-  `DropdownItem`). Selector compartido en `dropdownSelectors.ts`.
+  `OptionsMenuItem`). Selector compartido en `optionsMenuSelectors.ts`.
 - **Tabs**: sin `value`/`defaultValue` selecciona el PRIMER tab
   registrado, no el último. El auto-select usa `setSelectedRaw` con
   `{ silent: true }` — ya no dispara `onValueChange`.
@@ -394,7 +394,7 @@ del límite (89%) — es natural por el growth de utilities pseudo-class.
 - **`useControllableState<T>`** hook centralizado para patrón
   controlled/uncontrolled, con setter `silent` opt-in. **9
   componentes migrados**: Switch, Sidebar, Slider, Rating, Accordion
-  (single + multiple), Alert, Dropdown, Tabs. 9 tests del hook
+  (single + multiple), Alert, OptionsMenu, Tabs. 9 tests del hook
   (incluyendo `setValue` con `{ silent: true }` para auto-selects y
   rehidratación de fuentes externas no-de-usuario).
 - **AllStates Ola 1** — 14 stories matrix con `chromatic.modes`
@@ -416,7 +416,7 @@ del límite (89%) — es natural por el growth de utilities pseudo-class.
   `malum-rutilus` DARK 0.0706).
 - **`check-component-contrast.mjs --print-perceptual-table`** modo
   debug para regenerar tabla del SKILL.
-- **Tests añadidos** (no exhaustivo): Dropdown aria-disabled (×2),
+- **Tests añadidos** (no exhaustivo): OptionsMenu aria-disabled (×2),
   Tabs auto-select silent (×4), Pagination clamps (×6),
   Pagination prev/nextAriaLabel (×2), Progress guards (×6),
   Card tabIndex (×3), Rating aria-readonly (×2),
@@ -562,14 +562,14 @@ del límite (89%) — es natural por el growth de utilities pseudo-class.
 ## [1.0.0-beta.17] — 2026-05-03
 
 ### Fixed
-- **Textarea / Select estados `error` y `success` invisibles**: las
+- **Textarea / NativeSelect estados `error` y `success` invisibles**: las
   reglas `.ig-input-error` / `.ig-input-success` (línea 6227) estaban
-  declaradas ANTES de `.ig-textarea`, `.ig-textarea-auto` y `.ig-select`
+  declaradas ANTES de `.ig-textarea`, `.ig-textarea-auto` y `.ig-native-select`
   (líneas 6306, 6343, 6376), todas con la misma especificidad 0,1,0.
   Las reglas posteriores definían `border-color` y pisaban al estado de
   validación. Resultado: pasar `state="error"` o `state="success"` no
   cambiaba el borde del componente. Fix: reglas con doble clase (0,2,0)
-  para `.ig-textarea.ig-input-error`, `.ig-select.ig-input-error`, etc.
+  para `.ig-textarea.ig-input-error`, `.ig-native-select.ig-input-error`, etc.
   Input no estaba afectado porque `.ig-input` se declara antes de las
   reglas de estado.
 
@@ -872,7 +872,7 @@ borrados, no llegaron a publicarse) más los fixes finales sobre
 - Bloque `@media (forced-colors: active)` quirúrgico en
   `igoded-components.css` para estados `*-active`/`*-selected` (Tabs,
   Pagination, Stepper, Chip, Sidebar, Navbar) → `Highlight`/`HighlightText`,
-  e inputs (`.ig-input`, `.ig-select`, `.ig-textarea`) → `Field`/`FieldText`.
+  e inputs (`.ig-input`, `.ig-native-select`, `.ig-textarea`) → `Field`/`FieldText`.
   Complementa el mapeo semántico de `igoded-tokens.css` sin duplicarlo.
 - Wrapper canvas de Storybook movido de inline-style a clase
   `.ig-story-canvas` en `.storybook/preview-head.html`.
@@ -996,7 +996,7 @@ defaultValue inválido).
   `variant` → cardinal con los 7 colores nuevos (incluye `cyaneus`).
   Documentación de override por consumer + ratios WCAG AA.
 - **JSDoc `@example` en hooks públicos**: `useTheme`, `useToast`,
-  `useTabs`, `useAccordion`, `useAccordionItem`, `useDropdown`,
+  `useTabs`, `useAccordion`, `useAccordionItem`, `useOptionsMenu`,
   `useSidebar`. Mejora autocompletado en LSP del consumer.
 - **Test SSR-hydration ThemeSwitch**: `localStorage.theme="light"` gana
   al default `dark` y NO se sobreescribe en el primer effect.
@@ -1057,7 +1057,7 @@ Pasada agresiva pre-`1.0.0`: a11y real, SSR-safe, naming/types fix y un
 nuevo color cardinal para diferenciar `info` de `secondary`.
 
 ### Fixed (a11y / regression)
-- **Input/Select/Textarea**: `aria-describedby` que el consumer pasara vía
+- **Input/NativeSelect/Textarea**: `aria-describedby` que el consumer pasara vía
   `{...rest}` se sobreescribía a `undefined` cuando no se pasaba la prop
   `describedBy`. La propia story `FormularioCompleto` estaba rota.
   Solucionado con un nuevo helper `mergeDescribedBy(native, prop)` que
@@ -1069,7 +1069,7 @@ nuevo color cardinal para diferenciar `info` de `secondary`.
   servidor renderizaba inline y el primer paint cliente ya pintaba portal.
   Ahora arranca inline (idéntico al server) y conmuta al portal en el
   primer `useEffect` post-mount.
-- **Dropdown a11y**: el selector de navegación excluye también
+- **OptionsMenu a11y**: el selector de navegación excluye también
   `[aria-disabled="true"]` (anchors no tienen `disabled` HTML); items
   aria-disabled bloquean activación por click y por Enter/Space; **button**
   menuitem ahora también tiene `tabIndex={-1}` (antes anchor sí lo tenía
@@ -1104,7 +1104,7 @@ nuevo color cardinal para diferenciar `info` de `secondary`.
   eran visualmente idénticos; ahora son colores distintos. Verificado
   WCAG AA en light y dark.
 - **`mergeDescribedBy` helper** en `src/utils/`. Tests propios + integrados
-  en Input/Select/Textarea.
+  en Input/NativeSelect/Textarea.
 - **Tabs `register` API** en `TabsContext` para auto-selección del primer
   Tab.
 - **Modal `closingFromSyncRef`** flag interno.
@@ -1112,7 +1112,7 @@ nuevo color cardinal para diferenciar `info` de `secondary`.
   estricto. El `test:unit` por defecto sigue con `isolate=false` por el
   workaround WSL.
 - **4 stories interactivas con `play`**: `Input/TypeInteraction`,
-  `Select/ChangeInteraction`, `Slider/KeyboardInteraction`,
+  `NativeSelect/ChangeInteraction`, `Slider/KeyboardInteraction`,
   `Stepper/Interactivo` (ahora con play que verifica `aria-current`).
 
 ### Changed
@@ -1267,7 +1267,7 @@ de la API pública antes del `1.0.0`.
   feather-style (consistencia visual entre SO/navegadores).
 - **Storybook propFilter** excluye HTML attributes heredados
   (HTMLAttributes, AriaAttributes, DOMAttributes,
-  {Button,Input,Textarea,Select,Anchor}HTMLAttributes) — Controls panel
+  {Button,Input,Textarea,NativeSelect,Anchor}HTMLAttributes) — Controls panel
   muestra solo props del propio package.
 - **Glass Navbar story**: gradiente Tailwind genérico
   (#4f46e5/#ec4899/#f59e0b) → gradientes con tokens
@@ -1300,17 +1300,17 @@ auditorías profundas previas a `1.0.0`.
 - 32 componentes React 19 + TypeScript estricto, con tests unit
   (happy-dom) + Storybook tests (Chromium real + axe-a11y) + 16 stories
   con `play` (interaction tests).
-- Compound components: `Accordion`, `Card`, `Dropdown`, `Input`, `Modal`,
+- Compound components: `Accordion`, `Card`, `OptionsMenu`, `Input`, `Modal`,
   `Navbar`, `Sidebar`, `Stepper`, `Table`, `Tabs`, `Timeline`, `Toast`.
 - Hooks públicos: `useTheme`, `useToast`, `useAccordion`,
-  `useAccordionItem`, `useDropdown`, `useSidebar`, `useTabs`.
-- API controlled+uncontrolled en `Accordion`, `Alert`, `Dropdown`,
+  `useAccordionItem`, `useOptionsMenu`, `useSidebar`, `useTabs`.
+- API controlled+uncontrolled en `Accordion`, `Alert`, `OptionsMenu`,
   `Sidebar`, `Slider`, `Switch`, `Tabs`, `ThemeSwitch`, `Rating`.
 - `Modal.loading` (aplica `ig-dialog-loading` + `aria-busy`).
 - `Badge.dot` (modo punto sin texto, con `role="img"` automático).
 - `Button.appearance="solid"|"outline"|"ghost"` combinable con variant
   color (12 clases CSS antes huérfanas ahora expuestas).
-- `Input/Select/Textarea.describedBy` (string|string[]) — auto-`aria-describedby`.
+- `Input/NativeSelect/Textarea.describedBy` (string|string[]) — auto-`aria-describedby`.
 - `Slider.onValueChange(v:number)` — alternativa al `onChange` nativo.
 - `Slider aria-valuetext` automático cuando hay `formatValue`.
 - `Modal.aria-labelledby` automático vía `ModalContext`+`ModalHeader`.
@@ -1323,7 +1323,7 @@ auditorías profundas previas a `1.0.0`.
 - `browserslist` declarado en package.json.
 - Stories `play` (interaction) en 16 componentes interactivos.
 - Tests "fuera de provider" para los 5 hooks de context.
-- Tests de cleanup en unmount: Dropdown limpia listeners globales,
+- Tests de cleanup en unmount: OptionsMenu limpia listeners globales,
   ToastProvider limpia timers.
 - Tests de transición controlled↔uncontrolled (warning de React).
 - `scripts/strip-orphan-css.mjs` — limpia con postcss utilities
@@ -1344,9 +1344,9 @@ auditorías profundas previas a `1.0.0`.
 - `tsconfig.json#exactOptionalPropertyTypes: true`.
 - Sección CSS "78b. DIALOG" renombrada a "78. DIALOG / MODAL" (la 78
   legacy se eliminó).
-- `Tabs`, `Sidebar`, `Dropdown`, `Modal`, `Accordion`, `ToastProvider`
+- `Tabs`, `Sidebar`, `OptionsMenu`, `Modal`, `Accordion`, `ToastProvider`
   con `Provider value` memoizado (`useMemo`+`useCallback`).
-- `Dropdown.setOpen` ahora `useCallback` con deps correctas (era stale
+- `OptionsMenu.setOpen` ahora `useCallback` con deps correctas (era stale
   closure cuando `onOpenChange` cambiaba entre renders).
 - `Button.disabled || loading` (antes `??`, permitía que `disabled={false}`
   anulara `loading={true}`).
@@ -1367,7 +1367,7 @@ auditorías profundas previas a `1.0.0`.
   `AvatarImage`).
 
 ### Fixed
-- 4 missings de barrel export: `useDropdown`+`DropdownContextValue`,
+- 4 missings de barrel export: `useOptionsMenu`+`OptionsMenuContextValue`,
   `useTabs`+`TabsContextValue`, `SidebarContextValue`,
   `ToastContextValue`, `ModalContextValue`.
 - Colisión de `Theme` (definido en dos sitios) — ahora única fuente en

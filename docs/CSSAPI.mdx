@@ -237,27 +237,27 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 
 ---
 
-### Dropdown (compound)
+### OptionsMenu (compound)
 
 | Categoría | Clases |
 |---|---|
-| Wrapper | `.ig-dropdown` |
-| Trigger | `.ig-dropdown-trigger` (sobre `<button>`) |
-| Menu | `.ig-dropdown-menu` (`role="menu"`) |
-| Item | `.ig-dropdown-item` (`role="menuitem"`) · `.ig-dropdown-item-active` · `.ig-dropdown-item-danger` |
-| Slots | `.ig-dropdown-header` · `.ig-dropdown-divider` |
-| Estado | `.ig-dropdown-open` (en wrapper) |
-| Posición | `.ig-dropdown-right` · `.ig-dropdown-up` |
+| Wrapper | `.ig-options-menu` |
+| Trigger | `.ig-options-menu-trigger` (sobre `<button>`) |
+| Menu | `.ig-options-menu-content` (`role="menu"`) |
+| Item | `.ig-options-menu-item` (`role="menuitem"`) · `.ig-options-menu-item-active` · `.ig-options-menu-item-danger` |
+| Slots | `.ig-options-menu-header` · `.ig-options-menu-divider` |
+| Estado | `.ig-options-menu-open` (en wrapper) |
+| Posición | `.ig-options-menu-right` · `.ig-options-menu-up` |
 
 ```html
-<div class="ig-dropdown ig-dropdown-open">
-  <button class="ig-dropdown-trigger" aria-expanded="true">Acciones</button>
-  <div class="ig-dropdown-menu" role="menu">
-    <div class="ig-dropdown-header">Cuenta</div>
-    <button class="ig-dropdown-item" role="menuitem">Perfil</button>
-    <button class="ig-dropdown-item ig-dropdown-item-active" role="menuitem">Ajustes</button>
-    <hr class="ig-dropdown-divider" />
-    <button class="ig-dropdown-item ig-dropdown-item-danger" role="menuitem">Cerrar sesión</button>
+<div class="ig-options-menu ig-options-menu-open">
+  <button class="ig-options-menu-trigger" aria-expanded="true">Acciones</button>
+  <div class="ig-options-menu-content" role="menu">
+    <div class="ig-options-menu-header">Cuenta</div>
+    <button class="ig-options-menu-item" role="menuitem">Perfil</button>
+    <button class="ig-options-menu-item ig-options-menu-item-active" role="menuitem">Ajustes</button>
+    <hr class="ig-options-menu-divider" />
+    <button class="ig-options-menu-item ig-options-menu-item-danger" role="menuitem">Cerrar sesión</button>
   </div>
 </div>
 ```
@@ -365,7 +365,7 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 > `onValueChange` son opcionales. Pasa `currentPage`+`onValueChange`
 > para controlled, o `defaultPage` (default 1) para uncontrolled
 > (el componente maneja state interno; `onValueChange` opcional como
-> side-effect). Patrón consistente con Tabs / Accordion / Dropdown.
+> side-effect). Patrón consistente con Tabs / Accordion / OptionsMenu.
 
 ---
 
@@ -429,22 +429,22 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 
 ---
 
-### Select
+### NativeSelect
 
 Usa el contrato del `Input` para estados:
 
 | Categoría | Clases |
 |---|---|
-| Wrapper | `.ig-select` (sobre `<select>`) |
+| Wrapper | `.ig-native-select` (sobre `<select>`) |
 | States | `.ig-input-error` · `.ig-input-success` |
 
 ```html
-<select class="ig-select">
+<select class="ig-native-select">
   <option value="">Selecciona…</option>
   <option value="es">España</option>
   <option value="mx">México</option>
 </select>
-<select class="ig-select ig-input-error" aria-invalid="true">…</select>
+<select class="ig-native-select ig-input-error" aria-invalid="true">…</select>
 ```
 
 ---
@@ -787,7 +787,7 @@ Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaj
 ## Notas finales
 
 - Los slots compound (`-header`, `-body`, `-footer`, etc.) están pensados para reflejar la jerarquía semántica nativa del HTML; no son obligatorios si construyes un layout custom encima.
-- Los componentes con múltiples sub-clases (Sidebar, Card, Modal, Dropdown, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
+- Los componentes con múltiples sub-clases (Sidebar, Card, Modal, OptionsMenu, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
 - Estados del navegador (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador automáticamente cuando los elementos son interactivos. La librería utility-pseudo (`state.css`, opt-in) permite forzar estados desde HTML estático sin depender del estado real del DOM.
 
 ---

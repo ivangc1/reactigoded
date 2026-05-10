@@ -38,7 +38,7 @@ export function SidebarToggle({
       aria-expanded={!collapsed}
       // H-10 (gate review): completar par aria-expanded + aria-controls.
       // El consumer del SR descubre qué panel se expande/colapsa al
-      // pulsar el toggle. Patrón ya consistente en DropdownTrigger,
+      // pulsar el toggle. Patrón ya consistente en OptionsMenuTrigger,
       // ModalTrigger, AccordionHeader del propio DS.
       aria-controls={asideId}
       aria-label={collapsed ? expandLabel : collapseLabel}

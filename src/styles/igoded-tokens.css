@@ -2315,11 +2315,11 @@ Ejemplo: --ig-alert-padding o --ig-tooltip-bg.
   --ig-navbar-shadow: var(--ig-shadow-sm);
 
   /* === DROPDOWN === */
-  --ig-dropdown-bg: var(--ig-bg-elevated);
-  --ig-dropdown-border: var(--ig-border-subtle);
-  --ig-dropdown-radius: var(--ig-rounded-lg);
-  --ig-dropdown-shadow: var(--ig-shadow-lg);
-  --ig-dropdown-item-hover: var(--ig-bg-muted);
+  --ig-options-menu-bg: var(--ig-bg-elevated);
+  --ig-options-menu-border: var(--ig-border-subtle);
+  --ig-options-menu-radius: var(--ig-rounded-lg);
+  --ig-options-menu-shadow: var(--ig-shadow-lg);
+  --ig-options-menu-item-hover: var(--ig-bg-muted);
 
   /* === TIMELINE === */
   --ig-timeline-line: var(--ig-border-subtle);
