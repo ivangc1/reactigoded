@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRef, useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Stepper, Step } from "./index";
 
@@ -482,6 +482,78 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
           </Stepper>,
         ),
       ).not.toThrow();
+    });
+  });
+
+  // Codex P2 sobre commit antiguo del Stepper: arrow nav debe
+  // computar desde el step que TIENE FOCUS, no desde `active`. Si el
+  // parent rechaza `onActiveChange` (wizard que valida, async, etc.),
+  // el user keyboard quedaba atrapado pulsando arrows y recibiendo
+  // siempre el mismo destination active±1.
+  describe("arrow nav usa focused step, no active prop (codex P2)", () => {
+    it("ArrowRight desde focused N, active=0 (parent rechaza) → onActiveChange(N+1)", () => {
+      const onActive = vi.fn();
+      const { container } = render(
+        // active=0 simula el caso post-rejection: parent NO actualiza
+        // pese a que el handler intentó moverse. User tabula al step
+        // 1 manualmente y pulsa ArrowRight — el handler debería
+        // computar desde 1, no desde 0.
+        <Stepper active={0} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+          <Step label="C" />
+        </Stepper>,
+      );
+      const dots = container.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      expect(dots).toHaveLength(3);
+      // El user mueve focus al step 1 manualmente (Tab + ArrowRight
+      // previo que fue rejected, etc.).
+      dots[1]!.focus();
+      fireEvent.keyDown(dots[1]!, { key: "ArrowRight" });
+      // Antes del fix: nextIdx = clampedActive(0) + 1 = 1 → callback
+      // con el MISMO destino, user atrapado. Ahora: focused(1) + 1 = 2.
+      expect(onActive).toHaveBeenLastCalledWith(2);
+    });
+
+    it("ArrowLeft desde focused N, active=último (parent rechaza wrap) → onActiveChange(N-1)", () => {
+      const onActive = vi.fn();
+      const { container } = render(
+        <Stepper active={2} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+          <Step label="C" />
+        </Stepper>,
+      );
+      const dots = container.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      // Focus al step 0; active sigue 2.
+      dots[0]!.focus();
+      fireEvent.keyDown(dots[0]!, { key: "ArrowLeft" });
+      // Antes: clampedActive(2) - 1 = 1 (perspectiva incorrecta).
+      // Ahora: focused(0) - 1 = wrap a lastIdx = 2.
+      expect(onActive).toHaveBeenLastCalledWith(2);
+    });
+
+    it("Home / End siguen siendo absolutos (no dependen del focused)", () => {
+      const onActive = vi.fn();
+      const { container } = render(
+        <Stepper active={1} onActiveChange={onActive}>
+          <Step label="A" />
+          <Step label="B" />
+          <Step label="C" />
+        </Stepper>,
+      );
+      const dots = container.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      dots[2]!.focus();
+      fireEvent.keyDown(dots[2]!, { key: "Home" });
+      expect(onActive).toHaveBeenLastCalledWith(0);
+      fireEvent.keyDown(dots[0]!, { key: "End" });
+      expect(onActive).toHaveBeenLastCalledWith(2);
     });
   });
 });
