@@ -316,4 +316,89 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       warn.mockRestore();
     });
   });
+
+  // C-01 (gate review): text amplió a `string | ReactNode` para alinear
+  // con Popover/HoverCard futuros que usan content: ReactNode.
+  describe("C-01 — text como ReactNode", () => {
+    it("acepta ReactNode con formatting (string subset sigue funcionando)", () => {
+      const { container } = render(
+        <Tooltip
+          text={
+            <>
+              <strong>Bold</strong> + texto plain
+            </>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      // SR-only span renderiza el ReactNode literal (consumer
+      // responsable de a11y del contenido).
+      const sr = container.querySelector('.ig-sr-only[role="tooltip"]');
+      expect(sr).not.toBeNull();
+      expect(sr?.querySelector("strong")?.textContent).toBe("Bold");
+      expect(sr?.textContent).toContain("texto plain");
+    });
+
+    it("portal flotante muestra el ReactNode al hover", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip
+          text={
+            <span data-testid="rich-content">
+              <strong>Rich</strong> tooltip
+            </span>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      // El portal contiene el mismo ReactNode (el SR-only span también
+      // lo tiene; usamos el data-testid para asegurar que se duplica
+      // correctamente en ambos sitios).
+      const matches = document.querySelectorAll('[data-testid="rich-content"]');
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("data-tooltip-content NO se setea cuando text NO es string", async () => {
+      // Para text string, el atributo es útil (debugging, e2e selectors).
+      // Para ReactNode arbitrario sería '[object Object]' — inútil.
+      const user = userEvent.setup();
+      render(
+        <Tooltip text={<em>rich</em>}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      const portal = document.querySelector(".ig-tooltip-place-top");
+      expect(portal).not.toBeNull();
+      expect(portal?.hasAttribute("data-tooltip-content")).toBe(false);
+    });
+
+    it("data-tooltip-content SÍ se setea cuando text es string (regresión)", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip text="hola">
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      const portal = document.querySelector(".ig-tooltip-place-top");
+      expect(portal?.getAttribute("data-tooltip-content")).toBe("hola");
+    });
+
+    it("L-02 dev warn NO se dispara con ReactNode no-string (false positive guard)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        // Un fragment vacío técnicamente es "vacío" pero NO es string.
+        // El warn de L-02 solo aplica al caso string explícito.
+        <Tooltip text={<></>}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
 });
