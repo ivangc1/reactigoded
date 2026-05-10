@@ -84,7 +84,9 @@ import {
   Switch,
   Table,
   TableBody,
+  TableCaption,
   TableCell,
+  TableFoot,
   TableHead,
   TableHeaderCell,
   TableRow,
@@ -92,6 +94,7 @@ import {
   TabList,
   TabPanel,
   Tabs,
+  TabsContent,
   Textarea,
   ThemeSwitch,
   Timeline,
@@ -359,6 +362,41 @@ const cases: SsrCase[] = [
     ),
     expects: "ig-table",
   },
+  // L-09 (gate review): casos SSR específicos para subcomponentes
+  // del compound que no quedaban verificados por el caso "Table
+  // (compound)" base.
+  {
+    name: "TableCaption (top)",
+    jsx: () => (
+      <Table>
+        <TableCaption side="top">Resumen del trimestre</TableCaption>
+        <TableBody>
+          <TableRow>
+            <TableCell>val</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    ),
+    expects: "ig-caption-top",
+  },
+  {
+    name: "TableFoot (tfoot tag)",
+    jsx: () => (
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell>val</TableCell>
+          </TableRow>
+        </TableBody>
+        <TableFoot>
+          <TableRow>
+            <TableCell>Total</TableCell>
+          </TableRow>
+        </TableFoot>
+      </Table>
+    ),
+    expects: "<tfoot>",
+  },
   {
     name: "Tabs (compound)",
     jsx: () => (
@@ -370,6 +408,23 @@ const cases: SsrCase[] = [
       </Tabs>
     ),
     expects: "ig-tabs",
+  },
+  // L-09 (gate review): TabsContent es wrapper opcional para spacing/CSS
+  // alrededor de los TabPanel. SSR independiente para verificar que
+  // emite la clase ig-tabs-content y soporta server-rendering.
+  {
+    name: "TabsContent (wrapper)",
+    jsx: () => (
+      <Tabs defaultValue="a">
+        <TabList>
+          <Tab value="a">A</Tab>
+        </TabList>
+        <TabsContent>
+          <TabPanel value="a">contenido</TabPanel>
+        </TabsContent>
+      </Tabs>
+    ),
+    expects: "ig-tabs-content",
   },
   {
     name: "Textarea",
