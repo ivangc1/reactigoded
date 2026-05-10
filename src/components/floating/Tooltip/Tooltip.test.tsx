@@ -207,4 +207,44 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     btn.focus();
     expect(onFocus).toHaveBeenCalled();
   });
+
+  // H-04 (gate review): Tooltip-en-Modal queda invisible si el portal
+  // se monta en body (default) porque el dialog top-layer queda
+  // encima. La prop `container` permite anclar el portal a otro nodo.
+  describe("container prop (H-04)", () => {
+    it("monta el portal dentro del HTMLElement pasado como container", async () => {
+      const user = userEvent.setup();
+      const customRoot = document.createElement("div");
+      customRoot.id = "custom-tooltip-root";
+      document.body.appendChild(customRoot);
+
+      render(
+        <Tooltip text="ayuda" container={customRoot}>
+          <button>X</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button", { name: "X" }));
+      // El portal flotante (.ig-tooltip) debe vivir DENTRO de customRoot,
+      // no en document.body directamente.
+      const portal = customRoot.querySelector(".ig-tooltip");
+      expect(portal).not.toBeNull();
+      expect(customRoot.contains(portal)).toBe(true);
+
+      document.body.removeChild(customRoot);
+    });
+
+    it("sin container, el portal va a body (comportamiento anterior intacto)", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip text="ayuda">
+          <button>X</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button", { name: "X" }));
+      const portal = document.querySelector(".ig-tooltip");
+      expect(portal).not.toBeNull();
+      // El portal cuelga del body (default de FloatingPortal).
+      expect(document.body.contains(portal)).toBe(true);
+    });
+  });
 });

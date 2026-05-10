@@ -19,6 +19,24 @@ npx vitest run --project unit || { echo "TESTS FAIL"; exit 1; }
 `tail -N` queda permitido SOLO para inspección humana después de un
 fallo, nunca como gate de CI ni dentro de cadenas `&&`/`;`.
 
+**NUNCA pipear `scripts/verify-cold.sh` (ni `npm run lint`/etc.) a
+`tail`/`head`/`grep` sin `set -o pipefail`**. El pipe enmascara el
+exit code del script — el shell que lo invoca recibe exit del último
+comando del pipe (`tail` siempre exit 0). El script ya imprime el
+output esencial vía sus propios `||` checks; truncar la salida
+derrota el propósito del script.
+
+Patrón correcto para invocarlo desde un harness/wrapper:
+
+```bash
+bash scripts/verify-cold.sh                              # todo
+bash scripts/verify-cold.sh src/components/Foo           # path concreto
+
+# Si necesitas truncar output, pipefail explícito:
+set -o pipefail
+bash scripts/verify-cold.sh ... 2>&1 | tail -30
+```
+
 Para iterar en una task, ejecutar `bash scripts/verify-cold.sh`. El
 script reproduce el mismo patrón con tests del componente afectado o
 de toda la suite según se invoque.

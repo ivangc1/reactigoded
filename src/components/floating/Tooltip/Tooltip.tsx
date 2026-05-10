@@ -1,12 +1,10 @@
 import {
   cloneElement,
-  isValidElement,
   useId,
   useState,
   type HTMLAttributes,
   type HTMLProps,
   type ReactElement,
-  type ReactNode,
   type Ref,
 } from "react";
 import {
@@ -41,12 +39,35 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
   placement?: TooltipPlacement;
   /** Color del tooltip. */
   variant?: TooltipVariant;
-  /** Elemento envuelto (típicamente un `<button>` o `<a>`). */
-  children: ReactNode;
+  /**
+   * Elemento envuelto (típicamente un `<button>` o `<a>`). Debe ser
+   * un único `ReactElement` HTML — no string, fragment, array ni
+   * `ReactNode` arbitrario. El componente inyecta refs / handlers /
+   * `aria-describedby` vía `cloneElement`, lo que requiere un nodo
+   * elemento concreto.
+   *
+   * H-18 (gate review): el tipo previo `ReactNode` permitía
+   * `<Tooltip text="x">texto</Tooltip>` o arrays/fragments en
+   * tiempo de tipos, pero el control no quedaba asociado al SR.
+   * `ReactElement<HTMLProps<HTMLElement>>` rechaza ese caso en
+   * compile-time.
+   */
+  children: ReactElement<HTMLProps<HTMLElement>>;
   /** Delay en ms antes de mostrar al hover. Por defecto `0`. */
   openDelay?: number;
   /** Delay en ms antes de ocultar al desactivar. Por defecto `0`. */
   closeDelay?: number;
+  /**
+   * Contenedor donde se monta el portal del tooltip. Por defecto
+   * `document.body`. Útil cuando el tooltip vive dentro de un
+   * `<Modal>` con `<dialog>.showModal()` (top-layer): pasar el
+   * elemento del dialog para que el tooltip aparezca por encima del
+   * backdrop. También aplica para CSS containment / shadow roots / etc.
+   *
+   * Acepta `HTMLElement` directo o un `RefObject` (Floating UI
+   * resuelve ambos).
+   */
+  container?: HTMLElement | React.RefObject<HTMLElement | null> | null;
   ref?: Ref<HTMLSpanElement>;
 }
 
@@ -95,6 +116,7 @@ export function Tooltip({
   className,
   openDelay = 0,
   closeDelay = 0,
+  container,
   ref,
   ...rest
 }: TooltipProps) {
@@ -127,58 +149,37 @@ export function Tooltip({
     dismiss,
   ]);
 
-  // Preservar el `ref` del child (consumer puede tener uno para
-  // foco programático, mediciones, analytics, etc.) mergeándolo con
-  // `refs.setReference` de Floating UI vía `useMergeRefs`. Si el
-  // child no tiene ref, el merge funciona igual (Floating UI
-  // tolera null en el array). Hook fuera del `if` por la regla de
-  // hooks (orden estable entre renders).
-  // Cast única del child a `ReactElement<HTMLProps<HTMLElement>>` para
-  // alinear su firma con la que `getReferenceProps` y Floating UI
-  // esperan. El consumer puede pasar cualquier elemento HTML
-  // (`<button>`, `<a>`, `<span>`); `HTMLProps<HTMLElement>` cubre los
-  // shape comunes (handlers, ref) sin perder ayuda TS dentro del
-  // bloque (autocompleta `aria-describedby`, `onClick`, etc.).
-  const typedChild = isValidElement(children)
-    ? (children as ReactElement<HTMLProps<HTMLElement>>)
-    : null;
-
-  // Preservar el ref del child (consumer puede tener uno para foco
+  // Preservar el `ref` del child (consumer puede tener uno para foco
   // programático, mediciones, analytics, etc.) mergeándolo con
   // `refs.setReference` de Floating UI vía `useMergeRefs`. Si el
   // child no tiene ref, el merge funciona igual (Floating UI tolera
-  // null en el array). Hook fuera del `if` por la regla de hooks
-  // (orden estable entre renders).
-  const childRef = typedChild?.props.ref ?? null;
+  // null en el array).
+  //
+  // H-18 (gate review): `children` ahora es `ReactElement<HTMLProps<
+  // HTMLElement>>` por contrato de tipos, así que el cast a-mano y el
+  // guard runtime `isValidElement` desaparecen — TS los garantiza
+  // en compile-time. Consumer JS sin TS verá un crash inmediato si
+  // pasa string/array/fragment al cloneElement, lo cual es señal
+  // clara mejor que el warn silencioso anterior.
+  const childRef = children.props.ref ?? null;
   const referenceRef = useMergeRefs([refs.setReference, childRef]);
 
   // Inyectar handlers/refs de Floating UI MERGEADOS con los del child:
-  // - `getReferenceProps(typedChild.props)` pasa los props existentes,
+  // - `getReferenceProps(children.props)` pasa los props existentes,
   //   así Floating UI fusiona `onMouseEnter`/`onFocus`/`onBlur`/etc.
   //   del consumer con sus propios listeners en lugar de pisarlos.
   // - `referenceRef` (mergeado arriba) preserva cualquier ref del
   //   consumer en lugar de sobreescribirlo.
   // - `aria-describedby` al final para que NO sea pisado (apunta al
   //   sr-only span persistente, no al portal).
-  let child: ReactNode = children;
-  if (typedChild) {
-    const existing = typedChild.props["aria-describedby"];
-    const combined = existing ? `${existing} ${tooltipId}` : tooltipId;
-    const referenceProps = getReferenceProps(typedChild.props);
-    child = cloneElement(typedChild, {
-      ...referenceProps,
-      ref: referenceRef,
-      "aria-describedby": combined,
-    });
-  } else if (
-    import.meta.env.DEV &&
-    children !== null &&
-    children !== undefined
-  ) {
-    console.warn(
-      "[reactigoded] <Tooltip> requiere un único elemento React como child para inyectar aria-describedby + refs de Floating UI. Recibió un node no-elemento; el tooltip se renderizará pero el control no quedará asociado para SR.",
-    );
-  }
+  const existing = children.props["aria-describedby"];
+  const combined = existing ? `${existing} ${tooltipId}` : tooltipId;
+  const referenceProps = getReferenceProps(children.props);
+  const child = cloneElement(children, {
+    ...referenceProps,
+    ref: referenceRef,
+    "aria-describedby": combined,
+  });
 
   return (
     <span
@@ -194,7 +195,20 @@ export function Tooltip({
         {text}
       </span>
       {isOpen && (
-        <FloatingPortal>
+        // H-04 (gate review): `root` permite anclar el portal a otro
+        // contenedor que no sea `document.body`. Caso típico: Tooltip
+        // dentro de un Modal (<dialog>.showModal() crea top-layer); sin
+        // root, el portal va a body y queda detrás del backdrop. Con
+        // root={dialogElement}, el tooltip vive dentro del dialog y
+        // hereda el top-layer.
+        //
+        // Spread condicional (NO `root={container ?? null}`):
+        //   - exactOptionalPropertyTypes prohíbe `undefined` explícito.
+        //   - `root={null}` Floating UI lo trata internamente como
+        //     "no montar el portal" (verificado: 15 tests rotos en
+        //     verify-cold con esa firma). Solo OMITIR la prop activa
+        //     el default (body).
+        <FloatingPortal {...(container ? { root: container } : {})}>
           <span
             ref={refs.setFloating}
             style={floatingStyles}
