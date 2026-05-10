@@ -31,28 +31,28 @@
       "theme": "light",
       "deltaE_at_decision": 0.0951,
       "decision_date": "2026-05-10",
-      "justification": "Eje fresco azul-cobalto (secondary vs info). No existe `.ig-gradient-secondary-info` ni `.ig-gradient-info-secondary` entre los gradients bicolor del DS y ningún `.tsx`/`.stories.tsx` aplica las dos variants en propiedades adyacentes (background+color, background+border, textos contiguos). Verificado por grep en src/components/ el 2026-05-10. Allowlistado en LIGHT por simetría con la decisión DARK (entry de arriba) — el riesgo de confusión perceptual sigue siendo teórico porque el DS no los junta deliberadamente."
+      "justification": "No usado adyacente en ningún componente del DS ni expuesto vía utility class. No existe `.ig-gradient-secondary-info` ni `.ig-gradient-info-secondary` en igoded-components.css. Verificado por grep en src/components/ el 2026-05-10. ΔE 0.0951 vs threshold 0.10 — slack informativo cerca del límite, no riesgo real de contraste."
     },
     {
       "pair": "kobalium-vitreus",
       "theme": "light",
       "deltaE_at_decision": 0.0962,
       "decision_date": "2026-05-10",
-      "justification": "Par info-brand. No existe `.ig-gradient-brand-info`/`.ig-gradient-info-brand` en igoded-components.css y el grep de src/components/ no devuelve adyacencia (background+color, background+border, textos contiguos) verificado el 2026-05-10. Patrones de uso típicamente disjuntos: brand actúa como anchor visual de identidad (logo, CTAs primarios) e info aparece como callout dentro de bloques de texto/Alert."
+      "justification": "No usado adyacente en ningún componente del DS ni expuesto vía utility class. No existe `.ig-gradient-brand-info`/`.ig-gradient-info-brand` en igoded-components.css. Verificado por grep en src/components/ el 2026-05-10. ΔE 0.0962 vs threshold 0.10 — slack informativo cerca del límite, no riesgo real de contraste."
     },
     {
       "pair": "malum-rutilus",
       "theme": "light",
       "deltaE_at_decision": 0.0943,
       "decision_date": "2026-05-10",
-      "justification": "Eje cardinal cálido compartido (warning+danger, rojo-granate vs cobre). `.ig-gradient-warning-danger` existe como utility class opt-in para el consumer pero ningún `.tsx` ni `.stories.tsx` del DS la aplica internamente; grep de src/components/ no devuelve uso adyacente (background+color, background+border, textos contiguos) verificado el 2026-05-10. Diferenciación semántica refuerza la distinción (iconografía propia: warning ⚠ vs danger ✕ en Alert/Toast)."
+      "justification": "Par usado únicamente por la utility class `.ig-gradient-warning-danger` (igoded-components.css), opt-in para el consumer. La cercanía perceptual ES el efecto deseado del gradient — transición suave entre estados semánticos warning→danger (escalado de severidad). No se usa adyacente como background+border ni text+background en ningún componente; grep de src/components/ verificado el 2026-05-10. ΔE 0.0943 vs threshold 0.10 — comportamiento esperado de gradient bicolor."
     },
     {
       "pair": "axis-malum",
       "theme": "dark",
       "deltaE_at_decision": 0.0929,
       "decision_date": "2026-05-10",
-      "justification": "Par secondary+danger en dark. `.ig-gradient-secondary-danger` existe como utility class opt-in para el consumer pero ningún `.tsx` ni `.stories.tsx` del DS la aplica internamente; grep de src/components/ no devuelve uso adyacente (background+color, background+border, textos contiguos) verificado el 2026-05-10. Diferenciados por rol semántico (secondary es neutral, danger lleva iconografía dedicada en patrones Alert/Toast)."
+      "justification": "Par usado únicamente por la utility class `.ig-gradient-secondary-danger` (igoded-components.css), opt-in para el consumer. La cercanía perceptual ES el efecto deseado del gradient — transición suave entre estados semánticos secondary→danger (escalado neutral→crítico). No se usa adyacente como background+border ni text+background en ningún componente; grep de src/components/ verificado el 2026-05-10. ΔE 0.0929 vs threshold 0.10 — comportamiento esperado de gradient bicolor."
     }
   ]
 }
