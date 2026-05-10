@@ -266,8 +266,20 @@ export function Tooltip({
       {child}
       {/* SR-only: siempre presente, con id estable para aria-describedby
           incluso cuando el portal no está montado. Garantiza que SR
-          tienen acceso al texto sin depender del estado de hover. */}
-      <span id={tooltipId} role="tooltip" className="ig-sr-only">
+          tienen acceso al texto sin depender del estado de hover.
+
+          Codex P1 sobre #52 (C-01): `inert` neutraliza interactividad
+          de descendientes cuando text es ReactNode con `<a>`/`<button>`
+          /`<input>`. Sin esto, el span está visually hidden (.ig-sr-only)
+          pero NO removed from tab order — los descendants serían focus
+          targets invisibles. `inert` evita el agujero a11y pero deja al
+          SR leer el contenido (inert no afecta accessible name/description). */}
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className="ig-sr-only"
+        inert
+      >
         {text}
       </span>
       {isOpen && (

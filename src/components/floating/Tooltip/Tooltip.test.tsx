@@ -388,6 +388,38 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       expect(portal?.getAttribute("data-tooltip-content")).toBe("hola");
     });
 
+    // Codex P1 sobre #52 (C-01): el SR-only span persistente está
+    // siempre montado, visually hidden pero NO removed from tab order.
+    // Sin protección, un text={<button>X</button>} crearía focus
+    // targets invisibles. `inert` en el span neutraliza interactividad
+    // de descendants sin afectar a SR.
+    //
+    // happy-dom (test environment) no implementa `inert` para tab
+    // navigation, así que verificamos el atributo directamente. La
+    // spec HTML garantiza que en browsers reales (Chrome 102+, Firefox
+    // 112+, Safari 15.5+) los descendants de un elemento inert no son
+    // focuseables vía Tab ni programáticamente con .focus().
+    it("SR-only span lleva inert para neutralizar interactividad de ReactNode (codex P1)", () => {
+      const { container } = render(
+        <Tooltip
+          text={
+            <button data-testid="invisible-trap">trap</button>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      const sr = container.querySelector('.ig-sr-only[role="tooltip"]');
+      expect(sr).not.toBeNull();
+      // El atributo HTML inert neutraliza interactividad de TODOS los
+      // descendants en browsers reales. Sin él, un botón/link/input
+      // dentro del text={...} sería focus target invisible.
+      expect(sr?.hasAttribute("inert")).toBe(true);
+      // Sanity: el descendant existe en el DOM (no estamos verificando
+      // que inert lo elimine, sino que existe pero es neutralizado).
+      expect(sr?.querySelector('[data-testid="invisible-trap"]')).not.toBeNull();
+    });
+
     it("L-02 dev warn NO se dispara con ReactNode no-string (false positive guard)", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       render(
