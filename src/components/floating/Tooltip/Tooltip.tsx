@@ -96,6 +96,27 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
  * elemento del portal en lugar del wrapper. Si tenías reglas CSS
  * dirigidas al wrapper `.ig-tooltip` para layout, revisa el cambio.
  *
+ * **Caveat — Tooltip sobre `<button disabled>` en Firefox** (L-03
+ * gate review): Firefox NO dispara `mouseenter` / `pointerenter` /
+ * `focus` sobre `<button disabled>` (Chrome/Safari sí). El SR-only
+ * span con `aria-describedby` sigue funcionando para lectores de
+ * pantalla, pero el portal visual no aparece al hover. Workaround
+ * canónico: envolver el botón en un `<span>` y aplicar
+ * `pointer-events: none` al botón disabled (el span recibe los
+ * eventos):
+ *
+ * ```tsx
+ * <Tooltip text="Acción no disponible">
+ *   <span style={{ display: "inline-block" }}>
+ *     <Button disabled style={{ pointerEvents: "none" }}>X</Button>
+ *   </span>
+ * </Tooltip>
+ * ```
+ *
+ * El DS no aplica este wrapper automáticamente para no introducir un
+ * elemento extra silencioso que rompa block-level layouts del
+ * consumer (ver M-05).
+ *
  * @example
  * <Tooltip text="Eliminar" placement="top">
  *   <Button icon aria-label="Eliminar">×</Button>
