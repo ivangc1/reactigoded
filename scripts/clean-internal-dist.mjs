@@ -13,6 +13,9 @@
  *   - dist/utils/env.*         (helper interno isDev())
  *   - dist/utils/mergeDescribedBy.*  (helper interno a11y)
  *   - dist/utils/useIsoLayoutEffect.* (helper interno SSR-safe)
+ *   - dist/utils/useA11yWarnInput.* (helper interno a11y, capa 1.1)
+ *   - dist/utils/useLandmarkRegistry.* (helper interno a11y, capa 1.2)
+ *   - dist/utils/useTopLevelLandmarkCheck.* (helper interno a11y, capa 1.3)
  *   - dist/utils/*.test.*      (por si alguno se cuela)
  *
  * Lo que sí publicamos de dist/utils/: solo `cn.{js,d.ts,...}` que
@@ -76,9 +79,19 @@ rmDir("test-utils");
 rmDir("stories");
 
 // Files internos en dist/utils/ — sólo cn.* es público.
+//
+// L-08 (gate review): los 3 hooks de a11y warn-only quedaban
+// accesibles vía subpath import aunque no estaban en `exports`
+// field del package.json. Son implementation details de capa 1
+// del DS auto-suficiente — el consumer no debe consumirlos
+// directamente. Se eliminan post-build para que el tarball NO los
+// publique.
 const INTERNAL_UTILS_PREFIXES = [
   "mergeDescribedBy.",
   "useIsoLayoutEffect.",
+  "useA11yWarnInput.",
+  "useLandmarkRegistry.",
+  "useTopLevelLandmarkCheck.",
 ];
 rmFilesByPrefix("utils", INTERNAL_UTILS_PREFIXES);
 
