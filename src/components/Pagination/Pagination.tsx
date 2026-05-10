@@ -58,6 +58,13 @@ export interface PaginationProps
    * `nextLabel` es string se usa éste, en otro caso "Página siguiente".
    */
   nextAriaLabel?: string;
+  /**
+   * Genera el `aria-label` de cada botón de página. Por defecto
+   * `(p) => "Página N"` en español. Útil para i18n: pasar
+   * `(p) => \`Page ${p}\`` para inglés, `(p) => \`Seite ${p}\`` para
+   * alemán, etc. (L-12 gate review).
+   */
+  getPageLabel?: (page: number) => string;
   ref?: Ref<HTMLElement>;
 }
 
@@ -124,6 +131,7 @@ export function Pagination({
   nextLabel = "Siguiente",
   prevAriaLabel,
   nextAriaLabel,
+  getPageLabel = (p) => `Página ${String(p)}`,
   className,
   ref,
   ...rest
@@ -254,7 +262,7 @@ export function Pagination({
               isActive && "ig-pagination-active",
             )}
             aria-current={isActive ? "page" : undefined}
-            aria-label={`Página ${String(p)}`}
+            aria-label={getPageLabel(p)}
             onClick={() => {
               if (!isActive) goTo(p);
             }}
