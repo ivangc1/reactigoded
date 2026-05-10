@@ -845,6 +845,49 @@ utility-pseudo (`hover`, `focus`, `active`, `disabled`, `focus-within`,
 pseudo-class para que consumers que solo usen un subset puedan
 importar **únicamente lo que necesiten**.
 
+### Cuándo usar `state.css` (H-07 RC1)
+
+**Caso de uso intencionado**:
+
+- **HTML estático utility-first sin React**: micro-apps, landing
+  pages, demos one-off, prototipos rápidos, dashboards estáticos.
+  El consumer escribe HTML directamente y aplica clases como
+  `hover:ig-bg-axis`, `focus:ig-outline-2`, `peer-checked:ig-text-laurus`.
+  Sin build pipeline, sin Tailwind, sin React.
+- **Apps React + Tailwind donde Tailwind no cubre algún pseudo-class
+  exótico** (`peer-checked`, `group-hover` con CSS-only). Importar
+  solo el fragmento necesario evita 700 KB.
+
+**Caso de NO uso**:
+
+- Apps React medianas/grandes que ya usan los componentes del DS:
+  los componentes traen sus propios estados de hover/focus/disabled
+  por dentro. No necesitas `state.css`.
+- Apps con Tailwind ya configurado: usa Tailwind utilities
+  directamente. `state.css` y Tailwind utility-pseudo se solapan en
+  funcionalidad.
+
+**Story canónica**: `Cookbook/CSS-Only HTML Prototyping` (Storybook).
+Demuestra `hover:`, `focus:`, `disabled:`, `peer-checked:`, `group-hover:`
+funcionando en HTML estático sin React.
+
+**Patrón de import recomendado** — granular vs bundle:
+
+```ts
+// Granular (50 KB gz cada uno):
+import "reactigoded/styles/state/hover.css";
+import "reactigoded/styles/state/focus-visible.css";
+
+// Bundle completo (700 KB gz, solo si usas la mayoría):
+import "reactigoded/styles/state.css";
+```
+
+Ver `docs/decisions/H-07-state-css-and-future.md` para el plan
+post-RC1 (paquete separado o Tailwind preset según demand real).
+
+---
+
+
 ```ts
 // Antes (todo o nada):
 import "reactigoded/styles/state.css"; // ~700 KB gzipped
