@@ -2627,8 +2627,20 @@ EJEMPLOS:
 .ig-gradient-brand-danger { background: linear-gradient(135deg, var(--ig-vitreus), var(--ig-malum)); }
 .ig-gradient-secondary-success { background: linear-gradient(135deg, var(--ig-axis), var(--ig-laurus)); }
 .ig-gradient-secondary-warning { background: linear-gradient(135deg, var(--ig-axis), var(--ig-rutilus)); }
+/*
+ * L-04: cercanía perceptual deliberada (axis↔malum, ΔE ≈ 0.093 dark).
+ * Allowlistado en scripts/perceptual-allowlist.json. El gradient busca
+ * transición suave secondary→danger (escalado neutral→crítico); un ΔE
+ * alto rompería la lectura semántica del gradient bicolor.
+ */
 .ig-gradient-secondary-danger { background: linear-gradient(135deg, var(--ig-axis), var(--ig-malum)); }
 .ig-gradient-success-warning { background: linear-gradient(135deg, var(--ig-laurus), var(--ig-rutilus)); }
+/*
+ * L-04: cercanía perceptual deliberada (rutilus↔malum, ΔE ≈ 0.094 light).
+ * Allowlistado en scripts/perceptual-allowlist.json. El gradient busca
+ * transición suave warning→danger (escalado de severidad); un ΔE alto
+ * rompería la lectura semántica del gradient bicolor.
+ */
 .ig-gradient-warning-danger { background: linear-gradient(135deg, var(--ig-rutilus), var(--ig-malum)); }
 
 /* Texto bicolor */
