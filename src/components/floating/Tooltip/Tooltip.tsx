@@ -90,7 +90,12 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
  *   contiene el `text`. Los lectores de pantalla siempre tienen
  *   acceso al texto (incluso cuando el portal no está montado).
  * - El portal flotante usa `role="tooltip"` (gestionado por `useRole`).
- * - `useDismiss` cierra con Escape o click fuera (estándar APG).
+ * - `useDismiss` cierra con Escape. `outsidePress` desactivado: un
+ *   tooltip hover/focus-only no puede dejarse "abierto" por error —
+ *   sale del hover/focus ya cierra. Sin esto, FUI montaría un listener
+ *   global de pointerdown sobre `document` mientras open, ruido sin
+ *   beneficio. Si en el futuro hay un Tooltip click-trigger (poco
+ *   probable; usa Popover para eso), reabrir como prop opt-in.
  *
  * **Migración desde CSS-only (pre-1.0.0-rc.1)**: la API pública
  * (props text/placement/variant) NO cambia. Las clases
@@ -178,7 +183,12 @@ export function Tooltip({
     delay: { open: openDelay, close: closeDelay },
   });
   const focus = useFocus(context);
-  const dismiss = useDismiss(context);
+  // L-01: Tooltip es hover/focus-only. `outsidePress: false` evita
+  // que FUI monte un listener global de pointerdown en document
+  // mientras open — sin beneficio porque el cierre ya lo manejan
+  // useHover/useFocus al perder hover o blur. Escape sí queda
+  // habilitado (estándar APG: `Escape` cierra cualquier popup).
+  const dismiss = useDismiss(context, { outsidePress: false });
   // No usamos `useRole` porque añade un `aria-describedby` dinámico al
   // referencia (apuntando al floating element) que se sobreescribiría
   // con el nuestro al `cloneElement`. Nuestra estrategia a11y es:
