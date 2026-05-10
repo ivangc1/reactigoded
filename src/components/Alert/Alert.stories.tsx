@@ -99,7 +99,9 @@ export const DismissInteraction: Story = {
     await expect(canvas.getByText(/vuelve a intentarlo/i)).toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: /cerrar/i }));
     await expect(args.onClose).toHaveBeenCalled();
-    await expect(canvas.queryByText(/vuelve a intentarlo/i)).toBeNull();
+    await expect(
+      canvas.queryByText(/vuelve a intentarlo/i),
+    ).not.toBeInTheDocument();
   },
 };
 
