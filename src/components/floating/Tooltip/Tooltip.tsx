@@ -263,8 +263,17 @@ export function Tooltip({
   //
   // H-01 (RC1): con FloatingTreeRoot, `Escape` se propaga en cascada
   // por el árbol — cierra el tooltip y también ancestros (Popover,
-  // Modal) que estén registrados como nodos.
-  const dismiss = useDismiss(context, { outsidePress: false });
+  // Modal) que estén registrados como nodos. `bubbles.escapeKey: true`
+  // es REQUERIDO para activar la propagación — sin él, `useDismiss`
+  // no emite el evento `dismiss` al tree y el cascade efectivamente
+  // no funciona (el tooltip se cierra pero los ancestros NO se
+  // enteran). Codex P1 review sobre PR #62 detectó el bug en revisión.
+  // `bubbles.outsidePress` es irrelevante aquí porque outsidePress
+  // está deshabilitado entero.
+  const dismiss = useDismiss(context, {
+    outsidePress: false,
+    bubbles: { escapeKey: true },
+  });
   // No usamos `useRole` porque añade un `aria-describedby` dinámico al
   // referencia (apuntando al floating element) que se sobreescribiría
   // con el nuestro al `cloneElement`. Nuestra estrategia a11y es:

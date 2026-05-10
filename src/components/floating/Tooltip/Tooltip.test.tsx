@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef } from "react";
+import { createRef, useState, type ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  FloatingNode,
+  useDismiss,
+  useFloating,
+  useFloatingNodeId,
+} from "@floating-ui/react";
 import { Tooltip } from "./Tooltip";
 import { FloatingTreeRoot } from "../primitives/FloatingTreeRoot";
 
@@ -515,6 +521,63 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       const id = btn.getAttribute("aria-describedby") ?? "";
       expect(id).toBeTruthy();
       expect(document.getElementById(id)).toHaveTextContent("describelo");
+    });
+
+    // Codex P1 review (PR #62): el claim de cascade dismiss requiere
+    // que `useDismiss` propague el evento por el tree. FUI lo controla
+    // con `bubbles: { escapeKey: true }`. Sin la prop explícita el
+    // bubble NO ocurre y la integración con FloatingTreeRoot no aporta
+    // cascade. Este test monta un ancestor sintético (otro float con
+    // `useFloating` + `useDismiss` registrado como FloatingNode padre
+    // del Tooltip) y verifica que cuando se presiona Escape sobre el
+    // Tooltip, el ancestor también recibe `onOpenChange(false)` en
+    // cascada — comportamiento que rompería sin `bubbles.escapeKey`.
+    it("Escape en Tooltip cierra ancestor floating en cascada (H-01)", async () => {
+      const onAncestorClose = vi.fn();
+
+      function SyntheticAncestor({ children }: { children: ReactNode }) {
+        const [open, setOpen] = useState(true);
+        const nodeId = useFloatingNodeId();
+        const { context } = useFloating({
+          // exactOptionalPropertyTypes: useFloatingNodeId() es
+          // `string | undefined`; spread condicional para no pasar
+          // undefined explícito (consistente con Tooltip.tsx).
+          ...(nodeId !== undefined ? { nodeId } : {}),
+          open,
+          onOpenChange: (next) => {
+            setOpen(next);
+            if (!next) onAncestorClose();
+          },
+        });
+        useDismiss(context, {
+          outsidePress: false,
+          bubbles: { escapeKey: true },
+        });
+        // `nodeId` aquí está garantizado por estar dentro de
+        // <FloatingTreeRoot>; non-null assertion para satisfacer
+        // FloatingNode.id que requiere string.
+        return <FloatingNode id={nodeId ?? ""}>{children}</FloatingNode>;
+      }
+
+      const user = userEvent.setup();
+      render(
+        <FloatingTreeRoot>
+          <SyntheticAncestor>
+            <Tooltip text="anidado">
+              <button>btn</button>
+            </Tooltip>
+          </SyntheticAncestor>
+        </FloatingTreeRoot>,
+      );
+
+      await user.hover(screen.getByRole("button"));
+      expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+      await user.keyboard("{Escape}");
+      // Tooltip se cierra.
+      expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+      // Ancestor también se cerró en cascada (recibió bubble dismiss
+      // por estar registrado como FloatingNode padre del Tooltip).
+      expect(onAncestorClose).toHaveBeenCalled();
     });
   });
 });
