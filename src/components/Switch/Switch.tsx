@@ -9,7 +9,10 @@ import {
 import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
-import { useControllableState } from "@/hooks/useControllableState";
+import {
+  SUPPRESS_NO_HANDLER_WARN,
+  useControllableState,
+} from "@/hooks/useControllableState";
 
 export type SwitchVariant =
   | "brand"
@@ -99,7 +102,8 @@ export function Switch({
     // (ChangeEvent<HTMLInputElement>) tampoco mapea directamente al
     // onChange del hook (que recibe boolean), así que delegar al
     // local es la opción correcta.
-    __suppressNoHandlerWarn: true,
+    // C-07: Symbol-keyed (era `__suppressNoHandlerWarn` string-keyed).
+    [SUPPRESS_NO_HANDLER_WARN]: true,
   });
 
   // Dev-only warning: controlled sin handler. El consumer pasa `checked`

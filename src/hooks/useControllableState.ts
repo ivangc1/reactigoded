@@ -1,7 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
-export interface UseControllableStateBaseOptions<T> {
+/**
+ * Escape hatch interno para suprimir el dev warn de "controlled sin
+ * onChange" en componentes con modo display-only legítimo (Rating con
+ * `readOnly`, patterns similares).
+ *
+ * **Por qué Symbol (no string como en pre-RC1)**: la versión anterior
+ * usaba un campo `__suppressNoHandlerWarn?: boolean` con key string.
+ * `stripInternal` eliminaba el campo del `.d.ts` (TS error consumer-
+ * side) PERO el bundle JS contenía el string literal 3× — un consumer
+ * con `// @ts-expect-error` podía pasar `{ __suppressNoHandlerWarn:
+ * true }` runtime y suprimir el warn arbitrariamente. Vector real
+ * documentado en gate review § VI C-07.
+ *
+ * Symbol cierra el agujero: aunque el bundle contenga el Symbol como
+ * código, el consumer NO puede recrearlo desde fuera —
+ * `Symbol("foo") !== Symbol("foo")`. Y como este Symbol NO se re-
+ * exporta desde `src/index.ts` (barrel root), no es accesible vía la
+ * API pública del paquete. La única forma de pasarlo es importándolo
+ * desde el módulo del hook, y los `exports` field de `package.json`
+ * bloquea subpath imports a internals (verificado L-10).
+ *
+ * `Symbol(...)` (no `Symbol.for(...)`): único per realm, no registrable
+ * en el global Symbol registry — cierra también el vector de un
+ * consumer que intente `Symbol.for("reactigoded.suppressNoHandlerWarn")`
+ * desde su código.
+ *
+ * @internal
+ */
+export const SUPPRESS_NO_HANDLER_WARN: unique symbol = Symbol(
+  "reactigoded.suppressNoHandlerWarn",
+);
+
+export type UseControllableStateBaseOptions<T> = {
   /**
    * Valor controlado. Si está definido (≠ undefined), el componente es
    * controlled — el valor externo manda y `setValue` solo dispara
@@ -10,18 +42,12 @@ export interface UseControllableStateBaseOptions<T> {
   value?: T | undefined;
   /** Callback al cambiar el valor. Disparado en ambos modos. */
   onChange?: ((value: T) => void) | undefined;
+} & {
   /**
-   * Escape hatch interno (NO documentado en API pública). Suprime el
-   * dev warn cuando un componente está en modo controlled (`value`
-   * definido) sin `onChange`. Usado por componentes con un modo
-   * legítimo de "value sin onChange" (Rating con `readOnly`,
-   * display-only patterns) para no acoplar el hook a la prop específica
-   * del componente. Para uso interno del DS — los consumers no deberían
-   * pasar este flag.
-   * @internal
+   * @internal — Symbol-keyed escape hatch. Ver `SUPPRESS_NO_HANDLER_WARN`.
    */
-  __suppressNoHandlerWarn?: boolean;
-}
+  [SUPPRESS_NO_HANDLER_WARN]?: boolean;
+};
 
 export interface UseControllableStateInternalOptions<T>
   extends UseControllableStateBaseOptions<T> {
@@ -210,23 +236,20 @@ export function useControllableState<T>(
   }, []);
 
   // Dev-only warn: controlled (`value` definido) sin `onChange` y sin
-  // el escape hatch `__suppressNoHandlerWarn` = UI bloqueada al input
+  // el escape hatch SUPPRESS_NO_HANDLER_WARN = UI bloqueada al input
   // del usuario. Una vez por instancia. En useEffect (no during render)
   // por la regla react-hooks/refs.
   //
-  // El flag interno `__suppressNoHandlerWarn` lo activan los
-  // componentes con modo display-only legítimo (Rating con `readOnly`)
-  // para no disparar el warn donde el patrón es intencional.
-  // beta.21: re-aplicado tras revert en beta.20 con Option E.
+  // C-07 (gate review): migrado de string-keyed (`__suppressNoHandlerWarn`)
+  // a Symbol-keyed. El Symbol no se re-exporta desde el barrel root
+  // (`src/index.ts`), por lo que un consumer con `// @ts-expect-error`
+  // ya no puede recrearlo runtime ni accederlo vía API pública.
+  const suppress = options[SUPPRESS_NO_HANDLER_WARN] === true;
   const warnedControlledNoHandlerRef = useRef(false);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (warnedControlledNoHandlerRef.current) return;
-    if (
-      isControlled &&
-      options.onChange === undefined &&
-      options.__suppressNoHandlerWarn !== true
-    ) {
+    if (isControlled && options.onChange === undefined && !suppress) {
       warnedControlledNoHandlerRef.current = true;
       console.warn(
         "[useControllableState] componente controlled (value definido) sin " +
@@ -235,7 +258,7 @@ export function useControllableState<T>(
           "controlar el valor.",
       );
     }
-  }, [isControlled, options.onChange, options.__suppressNoHandlerWarn]);
+  }, [isControlled, options.onChange, suppress]);
 
   return { value, setValue, isControlled };
 }

@@ -2,7 +2,10 @@ import type { HTMLAttributes, Ref, KeyboardEvent } from "react";
 import { useState } from "react";
 import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
-import { useControllableState } from "@/hooks/useControllableState";
+import {
+  SUPPRESS_NO_HANDLER_WARN,
+  useControllableState,
+} from "@/hooks/useControllableState";
 
 export type RatingSize = "sm" | "md" | "lg" | "xl";
 
@@ -91,7 +94,8 @@ export function Rating({
     // Suprime el warn dev del hook cuando Rating está en modo display-only
     // legítimo (`readOnly`). El consumer pasa value=N intencionalmente
     // sin handler — no es UI bloqueada, es una representación visual.
-    __suppressNoHandlerWarn: readOnly,
+    // C-07: Symbol-keyed (era `__suppressNoHandlerWarn` string-keyed).
+    [SUPPRESS_NO_HANDLER_WARN]: readOnly,
   });
   // Si el consumer pasa value=10 con max=5, en vez de romper la a11y
   // (focusableValue=10 → ningún radio matchea → tablist sin tab stop) lo
