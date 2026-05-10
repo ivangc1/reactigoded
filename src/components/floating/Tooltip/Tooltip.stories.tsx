@@ -355,11 +355,14 @@ export const AllStates: Story = {
     </div>
   ),
   play: async ({ canvasElement }) => {
-    // Post-RC1: Tooltip migró a Floating UI. El elemento `.ig-tooltip`
-    // visual vive en portal y solo monta al hover. Para snapshot
-    // estático verificamos los wrappers persistentes (uno por
-    // instancia) en lugar de los tooltips abiertos.
-    const wrappers = canvasElement.querySelectorAll(".ig-tooltip-wrapper");
-    await expect(wrappers.length).toBeGreaterThanOrEqual(10);
+    // RC1 (D-01 / M-05 / B-03): Tooltip ya no envuelve en wrapper span.
+    // El elemento `.ig-tooltip` visual vive en portal y solo monta al
+    // hover. Para snapshot estático verificamos los sr-only spans
+    // persistentes con role="tooltip" — uno por instancia — que son el
+    // referente estable de aria-describedby.
+    const srOnlies = canvasElement.querySelectorAll(
+      '.ig-sr-only[role="tooltip"]',
+    );
+    await expect(srOnlies.length).toBeGreaterThanOrEqual(10);
   },
 };

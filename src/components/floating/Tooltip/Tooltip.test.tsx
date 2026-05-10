@@ -1,8 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef } from "react";
+import { createRef, useState, type ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  FloatingNode,
+  useDismiss,
+  useFloating,
+  useFloatingNodeId,
+} from "@floating-ui/react";
 import { Tooltip } from "./Tooltip";
+import { FloatingTreeRoot } from "../primitives/FloatingTreeRoot";
 
 describe("Tooltip — Floating UI (post-RC1)", () => {
   it("renderiza el child y el span SR-only role=tooltip persistente", () => {
@@ -150,15 +157,25 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     });
   });
 
-  it("forwarda ref al wrapper span", () => {
-    const ref = createRef<HTMLSpanElement>();
+  // D-01 / M-05 (RC1): Slot pattern. El Tooltip ya no renderiza un
+  // wrapper `<span class="ig-tooltip-wrapper">` propio — devuelve el
+  // child clonado + un sr-only span sibling + el portal. El test
+  // anterior verificaba ese wrapper; ahora verificamos que NO existe.
+  it("Slot pattern: no renderiza wrapper span sobre el child (D-01/M-05)", () => {
     render(
-      <Tooltip text="x" ref={ref}>
-        <button>x</button>
-      </Tooltip>,
+      <div data-testid="parent">
+        <Tooltip text="x">
+          <button data-testid="anchor">x</button>
+        </Tooltip>
+      </div>,
     );
-    expect(ref.current).toBeInstanceOf(HTMLSpanElement);
-    expect(ref.current).toHaveClass("ig-tooltip-wrapper");
+    const parent = screen.getByTestId("parent");
+    const anchor = screen.getByTestId("anchor");
+    // El child es hijo directo del padre del Tooltip (no de un wrapper
+    // intermedio inyectado por el DS).
+    expect(anchor.parentElement).toBe(parent);
+    // No hay ningún elemento con la clase legacy.
+    expect(parent.querySelector(".ig-tooltip-wrapper")).toBeNull();
   });
 
   it("Escape cierra el tooltip abierto", async () => {
@@ -457,6 +474,110 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       );
       expect(warn).not.toHaveBeenCalled();
       warn.mockRestore();
+    });
+  });
+
+  // H-01 / B-03 (RC1): cascade dismiss vía FloatingTreeRoot. El
+  // Tooltip se registra como nodo del FloatingTree (`useFloatingNode`
+  // → `useFloatingNodeId`) y el portal se envuelve en `<FloatingNode>`.
+  describe("H-01 / B-03 — FloatingTreeRoot integration", () => {
+    it("funciona stand-alone sin FloatingTreeRoot (no rompe)", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip text="solo">
+          <button>btn</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+      await user.keyboard("{Escape}");
+      expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+    });
+
+    it("funciona dentro de FloatingTreeRoot (cierra con Escape)", async () => {
+      const user = userEvent.setup();
+      render(
+        <FloatingTreeRoot>
+          <Tooltip text="con tree">
+            <button>btn</button>
+          </Tooltip>
+        </FloatingTreeRoot>,
+      );
+      await user.hover(screen.getByRole("button"));
+      expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+      await user.keyboard("{Escape}");
+      expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+    });
+
+    it("aria-describedby sigue conectando al sr-only span dentro de tree", () => {
+      render(
+        <FloatingTreeRoot>
+          <Tooltip text="describelo">
+            <button>btn</button>
+          </Tooltip>
+        </FloatingTreeRoot>,
+      );
+      const btn = screen.getByRole("button");
+      const id = btn.getAttribute("aria-describedby") ?? "";
+      expect(id).toBeTruthy();
+      expect(document.getElementById(id)).toHaveTextContent("describelo");
+    });
+
+    // Codex P1 review (PR #62): el claim de cascade dismiss requiere
+    // que `useDismiss` propague el evento por el tree. FUI lo controla
+    // con `bubbles: { escapeKey: true }`. Sin la prop explícita el
+    // bubble NO ocurre y la integración con FloatingTreeRoot no aporta
+    // cascade. Este test monta un ancestor sintético (otro float con
+    // `useFloating` + `useDismiss` registrado como FloatingNode padre
+    // del Tooltip) y verifica que cuando se presiona Escape sobre el
+    // Tooltip, el ancestor también recibe `onOpenChange(false)` en
+    // cascada — comportamiento que rompería sin `bubbles.escapeKey`.
+    it("Escape en Tooltip cierra ancestor floating en cascada (H-01)", async () => {
+      const onAncestorClose = vi.fn();
+
+      function SyntheticAncestor({ children }: { children: ReactNode }) {
+        const [open, setOpen] = useState(true);
+        const nodeId = useFloatingNodeId();
+        const { context } = useFloating({
+          // exactOptionalPropertyTypes: useFloatingNodeId() es
+          // `string | undefined`; spread condicional para no pasar
+          // undefined explícito (consistente con Tooltip.tsx).
+          ...(nodeId !== undefined ? { nodeId } : {}),
+          open,
+          onOpenChange: (next) => {
+            setOpen(next);
+            if (!next) onAncestorClose();
+          },
+        });
+        useDismiss(context, {
+          outsidePress: false,
+          bubbles: { escapeKey: true },
+        });
+        // `nodeId` aquí está garantizado por estar dentro de
+        // <FloatingTreeRoot>; non-null assertion para satisfacer
+        // FloatingNode.id que requiere string.
+        return <FloatingNode id={nodeId ?? ""}>{children}</FloatingNode>;
+      }
+
+      const user = userEvent.setup();
+      render(
+        <FloatingTreeRoot>
+          <SyntheticAncestor>
+            <Tooltip text="anidado">
+              <button>btn</button>
+            </Tooltip>
+          </SyntheticAncestor>
+        </FloatingTreeRoot>,
+      );
+
+      await user.hover(screen.getByRole("button"));
+      expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+      await user.keyboard("{Escape}");
+      // Tooltip se cierra.
+      expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+      // Ancestor también se cerró en cascada (recibió bubble dismiss
+      // por estar registrado como FloatingNode padre del Tooltip).
+      expect(onAncestorClose).toHaveBeenCalled();
     });
   });
 });

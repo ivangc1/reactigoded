@@ -7857,20 +7857,23 @@ Usan @floating-ui/react para positioning robusto: portal-out, flip,
 shift, autoUpdate (escapa overflow:hidden, viewport-aware, reactivo a
 scroll/resize).
 
-ESTRUCTURA (React):
+ESTRUCTURA (React, RC1 — D-01 / M-05 / B-03):
 <Tooltip text="Eliminar" placement="top" variant="brand">
   <button>×</button>
 </Tooltip>
 
-emite:
-  <span class="ig-tooltip-wrapper">
-    <button aria-describedby="...">×</button>
-    <span id="..." role="tooltip" class="ig-sr-only">Eliminar</span>
-  </span>
+emite (Slot pattern, sin wrapper):
+  <button aria-describedby="...">×</button>
+  <span id="..." role="tooltip" class="ig-sr-only" inert>Eliminar</span>
   <!-- en portal cuando isOpen -->
-  <span class="ig-tooltip ig-tooltip-place-top ig-tooltip-color-brand">
+  <span class="ig-tooltip ig-tooltip-place-top ig-tooltip-color-brand" inert>
     Eliminar
   </span>
+
+NOTA — breaking RC1: pre-RC1 el Tooltip envolvía todo en un
+`<span class="ig-tooltip-wrapper" style="display:contents">`. Esa
+clase ya NO se emite. Si tenías reglas dirigidas al wrapper, deben
+trasladarse al child directo o a un wrapper manual del consumer.
 
 POSICIONES (preferida; Floating UI puede flipear si no cabe):
 - ig-tooltip-place-top (default)
@@ -7887,10 +7890,11 @@ si en el futuro queremos animaciones direccionales o
 transform-origin por dirección, se usan estas clases.
 */
 
-/* Wrapper invisible: agrupa child + sr-only sin afectar layout. */
-.ig-tooltip-wrapper {
-  display: contents;
-}
+/* RC1 (D-01 / M-05): la clase `.ig-tooltip-wrapper` y su regla
+   `display: contents` desaparecen. El Tooltip ya no envuelve al child
+   en un span — Slot pattern. Si tu CSS apuntaba a esta clase, ya no
+   tiene target.
+*/
 
 /* Tooltip flotante en portal. Position lo controla Floating UI vía
    style inline; aquí solo styling visual. */

@@ -4,13 +4,12 @@ import {
   useId,
   useRef,
   useState,
-  type HTMLAttributes,
   type HTMLProps,
   type ReactElement,
   type ReactNode,
-  type Ref,
 } from "react";
 import {
+  FloatingNode,
   FloatingPortal,
   autoUpdate,
   flip,
@@ -24,6 +23,7 @@ import {
   useMergeRefs,
 } from "@floating-ui/react";
 import { cn } from "@/utils/cn";
+import { useFloatingNode } from "../primitives/useFloatingNode";
 
 export type TooltipPlacement = "top" | "bottom" | "left" | "right";
 
@@ -35,7 +35,7 @@ export type TooltipVariant =
   | "danger"
   | "info";
 
-export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
+export interface TooltipProps {
   /**
    * Contenido del tooltip. Acepta `string` (recomendado para a11y) o
    * `ReactNode` para casos con formatting (negrita, links, fragmentos).
@@ -73,6 +73,13 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
    * tiempo de tipos, pero el control no quedaba asociado al SR.
    * `ReactElement<HTMLProps<HTMLElement>>` rechaza ese caso en
    * compile-time.
+   *
+   * D-01 / M-05 (gate review, RC1): el child se renderiza directo
+   * (Slot pattern) — no envuelto en un `<span>`. Tooltip era pre-RC1
+   * un wrapper `<span class="ig-tooltip-wrapper">` que rompía
+   * block-level layouts y obligaba a CSS extra. La eliminación es
+   * **breaking** (consumer con reglas dirigidas a `.ig-tooltip-wrapper`
+   * pierden el target) y se refleja en CHANGELOG.
    */
   children: ReactElement<HTMLProps<HTMLElement>>;
   /** Delay en ms antes de mostrar al hover. Por defecto `0`. */
@@ -112,7 +119,6 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
    * resuelve ambos).
    */
   container?: HTMLElement | React.RefObject<HTMLElement | null> | null;
-  ref?: Ref<HTMLSpanElement>;
 }
 
 /**
@@ -139,11 +145,23 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
  *   beneficio. Si en el futuro hay un Tooltip click-trigger (poco
  *   probable; usa Popover para eso), reabrir como prop opt-in.
  *
+ * **D-01 / M-05 / B-03 / H-01 (RC1)**: refactor a Slot pattern +
+ * primitives layer. El Tooltip ya **no renderiza wrapper span**:
+ * devuelve el child clonado + un sr-only span sibling + el portal.
+ * Esto cierra:
+ *   - **D-01 / M-05**: rompía block-level layouts del consumer porque
+ *     todo se envolvía en `<span class="ig-tooltip-wrapper">`.
+ *   - **H-01 / B-03**: cascade dismiss vía `<FloatingTreeRoot>` +
+ *     `useFloatingNode()` + `<FloatingNode>`. Sin tree, sigue
+ *     funcionando independiente.
+ *
  * **Migración desde CSS-only (pre-1.0.0-rc.1)**: la API pública
  * (props text/placement/variant) NO cambia. Las clases
  * `ig-tooltip-place-*` y `ig-tooltip-color-*` ahora se aplican al
  * elemento del portal en lugar del wrapper. Si tenías reglas CSS
- * dirigidas al wrapper `.ig-tooltip` para layout, revisa el cambio.
+ * dirigidas al wrapper `.ig-tooltip-wrapper` o ref / className en el
+ * `<Tooltip>`, ese wrapper ya no existe: aplica los estilos directo
+ * al child o envuélvelo manualmente.
  *
  * **Caveat — Tooltip sobre `<button disabled>` en Firefox** (L-03
  * gate review): Firefox NO dispara `mouseenter` / `pointerenter` /
@@ -162,9 +180,8 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
  * </Tooltip>
  * ```
  *
- * El DS no aplica este wrapper automáticamente para no introducir un
- * elemento extra silencioso que rompa block-level layouts del
- * consumer (ver M-05).
+ * El DS no aplica este wrapper automáticamente (Slot pattern: cero
+ * elementos extras silenciosos).
  *
  * @example
  * <Tooltip text="Eliminar" placement="top">
@@ -177,20 +194,25 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
  *     <Button>Hover</Button>
  *   </Tooltip>
  * </div>
+ *
+ * @example // cascade dismiss con FloatingTreeRoot
+ * <FloatingTreeRoot>
+ *   <Popover content={<Tooltip text="..."><Button>Y</Button></Tooltip>}>
+ *     <Button>X</Button>
+ *   </Popover>
+ * </FloatingTreeRoot>
  */
 export function Tooltip({
   text,
   placement = "top",
   variant,
   children,
-  className,
   openDelay = 0,
   closeDelay = 0,
   container,
-  ref,
-  ...rest
 }: TooltipProps) {
   const tooltipId = useId();
+  const { nodeId } = useFloatingNode();
 
   // L-02 (gate review): dev warn cuando `text` es empty / solo
   // whitespace. Es prop requerida (TS no permite undefined) pero el
@@ -217,6 +239,10 @@ export function Tooltip({
   const [isOpen, setIsOpen] = useState(false);
 
   const { refs, floatingStyles, context } = useFloating({
+    // Spread condicional: `useFloatingNodeId` devuelve `string | undefined`
+    // y `exactOptionalPropertyTypes: true` prohíbe pasar `undefined`
+    // explícito a un `nodeId?: string`. Si no hay tree, omitimos la prop.
+    ...(nodeId !== undefined ? { nodeId } : {}),
     open: isOpen,
     onOpenChange: setIsOpen,
     placement,
@@ -234,7 +260,20 @@ export function Tooltip({
   // mientras open — sin beneficio porque el cierre ya lo manejan
   // useHover/useFocus al perder hover o blur. Escape sí queda
   // habilitado (estándar APG: `Escape` cierra cualquier popup).
-  const dismiss = useDismiss(context, { outsidePress: false });
+  //
+  // H-01 (RC1): con FloatingTreeRoot, `Escape` se propaga en cascada
+  // por el árbol — cierra el tooltip y también ancestros (Popover,
+  // Modal) que estén registrados como nodos. `bubbles.escapeKey: true`
+  // es REQUERIDO para activar la propagación — sin él, `useDismiss`
+  // no emite el evento `dismiss` al tree y el cascade efectivamente
+  // no funciona (el tooltip se cierra pero los ancestros NO se
+  // enteran). Codex P1 review sobre PR #62 detectó el bug en revisión.
+  // `bubbles.outsidePress` es irrelevante aquí porque outsidePress
+  // está deshabilitado entero.
+  const dismiss = useDismiss(context, {
+    outsidePress: false,
+    bubbles: { escapeKey: true },
+  });
   // No usamos `useRole` porque añade un `aria-describedby` dinámico al
   // referencia (apuntando al floating element) que se sobreescribiría
   // con el nuestro al `cloneElement`. Nuestra estrategia a11y es:
@@ -279,78 +318,71 @@ export function Tooltip({
     "aria-describedby": combined,
   });
 
-  return (
-    <span
-      ref={ref}
-      className={cn("ig-tooltip-wrapper", className)}
-      {...rest}
-    >
-      {child}
-      {/* SR-only: siempre presente, con id estable para aria-describedby
-          incluso cuando el portal no está montado. Garantiza que SR
-          tienen acceso al texto sin depender del estado de hover.
-
-          Codex P1 sobre #52 (C-01): `inert` neutraliza interactividad
-          de descendientes cuando text es ReactNode con `<a>`/`<button>`
-          /`<input>`. Sin esto, el span está visually hidden (.ig-sr-only)
-          pero NO removed from tab order — los descendants serían focus
-          targets invisibles. `inert` evita el agujero a11y pero deja al
-          SR leer el contenido (inert no afecta accessible name/description). */}
+  // D-01 / M-05 (RC1): Slot pattern. Devolvemos un Fragment con:
+  //   1. El child clonado (anchor del tooltip).
+  //   2. SR-only span sibling con id estable y `inert` — referente
+  //      permanente de aria-describedby. SSR-friendly (no portal).
+  //   3. Portal flotante condicional (solo cuando isOpen).
+  //
+  // Sin `<span ig-tooltip-wrapper>` envolviendo: el child mantiene su
+  // contexto de layout original (block/inline/grid/etc) sin que el
+  // DS introduzca un inline-element silencioso.
+  //
+  // H-01 / B-03 (RC1): `<FloatingNode id={nodeId}>` envuelve el portal
+  // para registrar este float en el FloatingTree (cascade dismiss).
+  // Si no hay FloatingTreeRoot ancestor, `nodeId` es `undefined` y
+  // omitimos `<FloatingNode>` — el portal funciona igual independiente.
+  //
+  // H-04 (gate review): `container` permite anclar el portal a otro
+  // contenedor que no sea `document.body`. Caso típico: Tooltip
+  // dentro de un Modal (<dialog>.showModal() crea top-layer); sin
+  // root, el portal va a body y queda detrás del backdrop. Spread
+  // condicional (NO `root={container ?? null}`): exactOptionalPropertyTypes
+  // prohíbe `undefined` explícito y `root={null}` FUI lo trata como
+  // "no montar el portal" (verificado: 15 tests rotos con esa firma).
+  // Solo OMITIR la prop activa el default (body).
+  //
+  // C-01 extendido (codex P1 follow-up): `inert` en el portal flotante
+  // neutraliza interactividad si `text` es ReactNode con `<button>`/`<a>`.
+  // Tooltip es decoración visual; nunca debe ser tab target. Para
+  // contenido interactivo usar Popover.
+  //
+  // C-01: `data-tooltip-content` solo se setea cuando text es string
+  // (serializable como atributo HTML). Para ReactNode el atributo
+  // sería '[object Object]', inútil. Spread condicional respeta
+  // exactOptionalPropertyTypes.
+  const portal = isOpen && (
+    <FloatingPortal {...(container ? { root: container } : {})}>
       <span
-        id={tooltipId}
-        role="tooltip"
-        className="ig-sr-only"
+        ref={refs.setFloating}
+        style={floatingStyles}
+        className={cn(
+          "ig-tooltip",
+          `ig-tooltip-place-${placement}`,
+          variant && `ig-tooltip-color-${variant}`,
+        )}
         inert
+        {...(typeof text === "string"
+          ? { "data-tooltip-content": text }
+          : {})}
+        {...getFloatingProps()}
       >
         {text}
       </span>
-      {isOpen && (
-        // H-04 (gate review): `root` permite anclar el portal a otro
-        // contenedor que no sea `document.body`. Caso típico: Tooltip
-        // dentro de un Modal (<dialog>.showModal() crea top-layer); sin
-        // root, el portal va a body y queda detrás del backdrop. Con
-        // root={dialogElement}, el tooltip vive dentro del dialog y
-        // hereda el top-layer.
-        //
-        // Spread condicional (NO `root={container ?? null}`):
-        //   - exactOptionalPropertyTypes prohíbe `undefined` explícito.
-        //   - `root={null}` Floating UI lo trata internamente como
-        //     "no montar el portal" (verificado: 15 tests rotos en
-        //     verify-cold con esa firma). Solo OMITIR la prop activa
-        //     el default (body).
-        <FloatingPortal {...(container ? { root: container } : {})}>
-          <span
-            ref={refs.setFloating}
-            style={floatingStyles}
-            className={cn(
-              "ig-tooltip",
-              `ig-tooltip-place-${placement}`,
-              variant && `ig-tooltip-color-${variant}`,
-            )}
-            // C-01 extendido (codex P1 follow-up): el portal flotante
-            // también lleva `inert`. Tooltip es decoración visual por
-            // diseño (no es interactivo — para contenido interactivo
-            // usar Popover). Si text es ReactNode con `<button>`/`<a>`,
-            // los descendants serían tab targets visibles que rompen
-            // el flujo de teclado del documento sin que el consumer lo
-            // espere. `inert` los neutraliza visualmente igual que en
-            // el SR-only span persistente. El usuario nunca debe poder
-            // tabbear dentro de un tooltip.
-            inert
-            // C-01: data-tooltip-content solo es útil cuando text es
-            // serializable como atributo HTML (string). Para ReactNode
-            // arbitrario el atributo se serializaría como
-            // "[object Object]", inútil y ruidoso en DOM inspector.
-            // Spread condicional respeta exactOptionalPropertyTypes.
-            {...(typeof text === "string"
-              ? { "data-tooltip-content": text }
-              : {})}
-            {...getFloatingProps()}
-          >
-            {text}
-          </span>
-        </FloatingPortal>
+    </FloatingPortal>
+  );
+
+  return (
+    <>
+      {child}
+      <span id={tooltipId} role="tooltip" className="ig-sr-only" inert>
+        {text}
+      </span>
+      {nodeId === undefined ? (
+        portal
+      ) : (
+        <FloatingNode id={nodeId}>{portal}</FloatingNode>
       )}
-    </span>
+    </>
   );
 }
