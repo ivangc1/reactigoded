@@ -121,6 +121,12 @@ export function Progress({
     >
       <div
         className="ig-progress-bar"
+        // M-08 (RC1): inline style necesario porque `width` depende
+        // de `value` runtime (0-100%), no es expressable como clase
+        // estática. Consumer con CSP estricto sin `'unsafe-inline'`
+        // debe aceptar `style-src 'self' 'unsafe-inline'` o usar
+        // CSS-in-JS con nonce. Excepción legítima documentada en
+        // gate review § IV.3 M-08.
         style={indeterminate ? undefined : { width: `${String(percent)}%` }}
       />
     </div>

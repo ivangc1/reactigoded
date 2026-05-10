@@ -7,6 +7,23 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Notas operativas
+
+- **Sin publicación a npm pre-RC1** (M-03 / cf. `docs/RC1_DECISIONS.md`
+  § "Actualización 2026-05-06: pausa operativa"). Pre-RC1 el paquete
+  se consume vía `git clone` + `npm link`. Iván decidió pausar
+  `npm publish --tag beta` de `1.0.0-beta.22` hasta tener capacidad
+  operativa para sostener el mantenimiento (issues, PRs de consumers,
+  semver discipline). El branch `rc1-gate-fixes` ya cerró los 18
+  Blockers + 8 Highs del gate review; la calidad del código no
+  requiere publicación inmediata para ser real.
+- **Tag git `v1.0.0-rc.1`** se creará tras la sesión de FREEZE-CHECK
+  para trazabilidad histórica del repo, **sin acompañar de
+  `npm publish`** mientras la pausa siga vigente.
+- **Reactivación de la publicación** seguirá el procedimiento
+  documentado en `docs/RC1_DECISIONS.md`: bumpear versión, revertir
+  commit B-01-followup (banner del README), `npm publish --tag rc`.
+
 ## [1.0.0-beta.22] — 2026-05-06 (saneamiento RC1)
 
 Cierra los 18 Blockers + 8 Highs del audit RC1
