@@ -1,4 +1,5 @@
 import type { HTMLAttributes, Ref } from "react";
+import { useState } from "react";
 import { cn } from "@/utils/cn";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
@@ -29,13 +30,27 @@ interface AvatarBase extends HTMLAttributes<HTMLDivElement> {
 interface AvatarImage extends AvatarBase {
   src: string;
   alt: string;
-  initials?: never;
+  /**
+   * Fallback opcional de iniciales si la imagen falla al cargar
+   * (M-10 gate review). Si la `<img>` dispara `error`, se renderizan
+   * estas iniciales en su lugar y se preserva la a11y. Sin `initials`
+   * el avatar queda vacío al fallar — el consumer es responsable de
+   * dar fallback explícito.
+   */
+  initials?: string;
+  /**
+   * Estrategia de carga del `<img>`. Por defecto `"lazy"` para no
+   * bloquear el LCP cuando el avatar está fuera del viewport (M-10).
+   * Pasa `"eager"` si el avatar es above-the-fold y crítico para LCP.
+   */
+  loading?: "lazy" | "eager";
 }
 
 interface AvatarInitials extends AvatarBase {
   src?: never;
   alt?: never;
   initials: string;
+  loading?: never;
 }
 
 export type AvatarProps = AvatarImage | AvatarInitials;
@@ -45,6 +60,18 @@ export type AvatarProps = AvatarImage | AvatarInitials;
  *
  * Pasa `src` + `alt` para imagen, o `initials` para fallback de texto.
  * `status` añade un punto de estado (`online`, `offline`, `busy`, `away`).
+ *
+ * **M-10 (gate review)**: si pasas `src` Y `initials`, las iniciales
+ * actúan como fallback automático cuando la imagen falla a cargar
+ * (`onError` del `<img>`). Por defecto las imágenes cargan con
+ * `loading="lazy"`; pasa `loading="eager"` para avatares
+ * above-the-fold críticos para LCP.
+ *
+ * @example // imagen con fallback automático a iniciales
+ * <Avatar src="/avatar.jpg" alt="Iván" initials="IV" />
+ *
+ * @example // solo iniciales
+ * <Avatar initials="IV" />
  */
 export function Avatar(props: AvatarProps) {
   const {
@@ -57,14 +84,29 @@ export function Avatar(props: AvatarProps) {
     src,
     alt,
     initials,
+    loading = "lazy",
     "aria-label": ariaLabel,
     ...divProps
   } = props as AvatarBase & {
     src?: string;
     alt?: string;
     initials?: string;
+    loading?: "lazy" | "eager";
     "aria-label"?: string;
   };
+
+  // M-10: track del estado de carga de la <img>. Si dispara `error` y
+  // hay `initials`, mostramos las iniciales en lugar de un avatar
+  // roto (icon de imagen rota del browser). El estado se resetea
+  // cada vez que cambia `src` (consumer-driven). Sin `initials` no
+  // hay nada que mostrar — la <img> se queda con su placeholder roto
+  // del browser, decisión del consumer.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showInitials =
+    !src || imgFailed
+      ? Boolean(initials)
+      : false;
+  const showImg = src && !imgFailed;
 
   return (
     <div
@@ -79,11 +121,17 @@ export function Avatar(props: AvatarProps) {
       aria-label={ariaLabel}
       {...divProps}
     >
-      {src ? (
-        <img src={src} alt={alt} />
-      ) : initials ? (
-        <span aria-hidden="true">{initials}</span>
-      ) : null}
+      {showImg && (
+        <img
+          src={src}
+          alt={alt}
+          loading={loading}
+          onError={() => {
+            setImgFailed(true);
+          }}
+        />
+      )}
+      {showInitials && <span aria-hidden="true">{initials}</span>}
       {status && (
         <span
           role="img"
