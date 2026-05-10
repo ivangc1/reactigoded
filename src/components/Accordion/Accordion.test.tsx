@@ -7,9 +7,13 @@ import {
   AccordionItem,
   AccordionHeader,
   AccordionContent,
+} from "./index";
+// B-04 (RC1): useAccordion + useAccordionItem retirados del barrel.
+// Tests acceden vía path interno directo.
+import {
   useAccordion,
   useAccordionItem,
-} from "./index";
+} from "./AccordionContext";
 
 type SingleAccordionTestProps = {
   defaultValue?: string | null;

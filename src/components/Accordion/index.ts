@@ -6,8 +6,8 @@ export { AccordionHeader } from "./AccordionHeader";
 export type { AccordionHeaderProps } from "./AccordionHeader";
 export { AccordionContent } from "./AccordionContent";
 export type { AccordionContentProps } from "./AccordionContent";
-export { useAccordion, useAccordionItem } from "./AccordionContext";
-export type {
-  AccordionContextValue,
-  AccordionItemContextValue,
-} from "./AccordionContext";
+// B-04 (RC1): useAccordion, useAccordionItem y sus ContextValues
+// retirados del API público. Su shape está acoplada a internals del
+// compound; exponerlos firmaría una API que bloquearía refactor.
+// Acceso interno solo desde sub-componentes vía import directo:
+//   `import { useAccordion } from "./AccordionContext"`

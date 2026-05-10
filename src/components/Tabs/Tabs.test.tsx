@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Tabs, TabList, Tab, TabPanel, useTabs } from "./index";
+import { Tabs, TabList, Tab, TabPanel } from "./index";
+// B-04 (RC1): useTabs retirado del barrel. Test accede vía path interno.
+import { useTabs } from "./TabsContext";
 
 function basicTabs(props?: Partial<React.ComponentProps<typeof Tabs>>) {
   return (

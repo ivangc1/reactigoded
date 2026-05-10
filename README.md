@@ -195,8 +195,15 @@ function Page() {
 | **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `Select`, `Slider`, `Switch`, `Textarea`, `ThemeSwitch` |
 | **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `Dropdown`+`DropdownTrigger`+`DropdownMenu`+`DropdownItem`+`DropdownDivider`+`DropdownHeader`, `Modal`+`ModalHeader`+`ModalBody`+`ModalFooter`+`ModalClose`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabList`+`Tab`+`TabPanel`+`TabsContent` |
 
-Hooks públicos: `useTheme`, `useToast`, `useAccordion`, `useAccordionItem`,
-`useDropdown`, `useSidebar`, `useTabs`.
+Hooks públicos: `useTheme`, `useToast`, `useControllableState`.
+
+> **B-04 (RC1)**: los context hooks `useAccordion`, `useAccordionItem`,
+> `useDropdown`, `useSidebar`, `useTabs` quedaron retirados del API
+> público pre-RC1. Su shape estaba acoplada a internals del compound
+> y exponerlos como públicos firmaría una API que bloquearía refactor
+> a Floating UI post-RC1 (ver `docs/decisions/C-03-dropdown-hand-rolled-defer.md`).
+> Si necesitas leer el state interno de uno de estos compounds desde
+> un componente custom, abre un issue con el caso de uso.
 
 ## API CSS pública
 

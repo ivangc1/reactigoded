@@ -14,5 +14,5 @@ export { DropdownDivider } from "./DropdownDivider";
 export type { DropdownDividerProps } from "./DropdownDivider";
 export { DropdownHeader } from "./DropdownHeader";
 export type { DropdownHeaderProps } from "./DropdownHeader";
-export { useDropdown } from "./DropdownContext";
-export type { DropdownContextValue } from "./DropdownContext";
+// B-04 (RC1): useDropdown y DropdownContextValue retirados del API
+// público. Acceso interno solo desde sub-componentes vía import directo.
