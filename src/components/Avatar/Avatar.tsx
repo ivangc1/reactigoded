@@ -97,11 +97,23 @@ export function Avatar(props: AvatarProps) {
 
   // M-10: track del estado de carga de la <img>. Si dispara `error` y
   // hay `initials`, mostramos las iniciales en lugar de un avatar
-  // roto (icon de imagen rota del browser). El estado se resetea
-  // cada vez que cambia `src` (consumer-driven). Sin `initials` no
-  // hay nada que mostrar — la <img> se queda con su placeholder roto
-  // del browser, decisión del consumer.
+  // roto (icon de imagen rota del browser). Sin `initials` no hay
+  // nada que mostrar — la <img> queda desmontada, decisión del
+  // consumer.
+  //
+  // Codex P1 sobre PR #36: el flag `imgFailed` debe resetearse
+  // cuando cambia `src` (regresión para avatars dinámicos: TableRow
+  // reusada con distintos usuarios, retry tras network fail). Patrón
+  // canónico React docs "Resetting all state when a prop changes":
+  // tracking del prop previo en state + reset durante render. NO
+  // useEffect (regla `react-hooks/set-state-in-effect` lo prohíbe).
+  // https://react.dev/learn/you-might-not-need-an-effect#resetting-all-state-when-a-prop-changes
   const [imgFailed, setImgFailed] = useState(false);
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
+    setImgFailed(false);
+  }
   const showInitials =
     !src || imgFailed
       ? Boolean(initials)

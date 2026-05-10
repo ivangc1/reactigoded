@@ -74,6 +74,30 @@ describe("Avatar", () => {
       // El contenedor sigue montado, simplemente vacío.
       expect(screen.getByTestId("a")).toBeInTheDocument();
     });
+
+    // Codex P1 sobre PR #36: imgFailed se resetea cuando cambia src.
+    // Sin esto, una imagen rota dejaba el slot bloqueado para siempre
+    // (regresión en avatars dinámicos: TableRow reusada con distintos
+    // usuarios, retry tras network fail).
+    it("cambiar src tras error reintenta la imagen (codex P1)", () => {
+      const { rerender } = render(
+        <Avatar src="/broken.png" alt="J" initials="JD" />,
+      );
+      // Trigger error → muestra initials.
+      fireEvent.error(screen.getByAltText("J"));
+      expect(screen.queryByAltText("J")).not.toBeInTheDocument();
+      expect(screen.getByText("JD")).toBeInTheDocument();
+      // Cambiar a una src nueva: el componente debe reintentar la
+      // carga (img montada otra vez), no quedarse pegado en initials.
+      rerender(<Avatar src="/valid.png" alt="K" initials="KL" />);
+      const newImg = screen.getByAltText("K");
+      expect(newImg).toBeInTheDocument();
+      expect(newImg).toHaveAttribute("src", "/valid.png");
+      // Las initials previas ya no se muestran (la nueva imagen aún
+      // no ha fallado).
+      expect(screen.queryByText("JD")).not.toBeInTheDocument();
+      expect(screen.queryByText("KL")).not.toBeInTheDocument();
+    });
   });
 });
 
