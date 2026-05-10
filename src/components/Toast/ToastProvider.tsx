@@ -36,6 +36,30 @@ export interface ToastProviderProps {
    * para renderizar inline (útil en SSR o en tests sin portal).
    */
   container?: HTMLElement | null;
+  /**
+   * Número máximo de toasts visibles a la vez. Cuando se excede, el más
+   * antiguo se desmonta automáticamente (FIFO eviction) y se dispara su
+   * `onDismiss`. Por defecto sin límite (M-11 gate review). Útil para
+   * evitar spam visual en bucles de errores de red, validación masiva,
+   * etc.
+   */
+  maxToasts?: number;
+  /**
+   * Función opcional que extrae una clave de identidad del toast. Si la
+   * clave de un toast nuevo coincide con una en cola, el nuevo se ignora
+   * y `toast()` devuelve el id del existente (M-11 gate review).
+   *
+   * Por defecto sin dedupe (cada llamada crea un toast nuevo). Patrón
+   * típico:
+   *
+   * ```tsx
+   * <ToastProvider dedupeBy={(t) => `${t.variant}:${t.title}`}>
+   * ```
+   *
+   * Aplica solo en el momento de la inserción — toasts ya en cola no se
+   * fusionan retroactivamente si `dedupeBy` cambia.
+   */
+  dedupeBy?: (toast: ToastOptions) => string;
   children?: ReactNode;
 }
 
@@ -48,6 +72,8 @@ export function ToastProvider({
   position = "top-right",
   defaultDuration = 5000,
   container,
+  maxToasts,
+  dedupeBy,
   children,
 }: ToastProviderProps) {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
@@ -56,6 +82,15 @@ export function ToastProvider({
   );
   const idPrefix = useId();
   const seqRef = useRef(0);
+  // M-11: snapshot del state para que `toast()` (callback estable que
+  // cambia solo si props relevantes cambian) pueda hacer dedupe lookup
+  // sin re-suscribirse a cada cambio de `toasts`. Sincronizado en
+  // useEffect (ref-write, no setState — fuera del scope de la regla
+  // react-hooks/set-state-in-effect).
+  const toastsRef = useRef<ToastEntry[]>([]);
+  useEffect(() => {
+    toastsRef.current = toasts;
+  }, [toasts]);
 
   const dismiss = useCallback((id: string) => {
     const timer = timersRef.current.get(id);
@@ -81,10 +116,42 @@ export function ToastProvider({
 
   const toast = useCallback(
     (options: ToastOptions) => {
+      // M-11 dedupe: si una entrada con la misma clave ya está en cola,
+      // ignora el nuevo y devuelve el id del existente. Snapshot via
+      // toastsRef.current — race condition en mismo tick es tolerable
+      // (peor caso: duplicado entra, no crash).
+      if (dedupeBy) {
+        const newKey = dedupeBy(options);
+        const existing = toastsRef.current.find(
+          (t) => dedupeBy(t) === newKey,
+        );
+        if (existing) return existing.id;
+      }
+
       seqRef.current += 1;
       const id = `${idPrefix}-${String(seqRef.current)}`;
       const entry: ToastEntry = { id, ...options };
-      setToasts((prev) => [...prev, entry]);
+
+      setToasts((prev) => {
+        const next = [...prev, entry];
+        // M-11 maxToasts: cuando se excede, FIFO eviction — drop el más
+        // antiguo. Dispatch onDismiss del dropped + clear de su timer
+        // para no leakear setTimeout pendientes.
+        if (maxToasts !== undefined && next.length > maxToasts) {
+          const dropCount = next.length - maxToasts;
+          const dropped = next.slice(0, dropCount);
+          dropped.forEach((t) => {
+            const timer = timersRef.current.get(t.id);
+            if (timer) {
+              clearTimeout(timer);
+              timersRef.current.delete(t.id);
+            }
+            t.onDismiss?.();
+          });
+          return next.slice(dropCount);
+        }
+        return next;
+      });
 
       const duration = options.duration ?? defaultDuration;
       if (duration > 0) {
@@ -93,7 +160,7 @@ export function ToastProvider({
       }
       return id;
     },
-    [defaultDuration, dismiss, idPrefix],
+    [defaultDuration, dismiss, idPrefix, maxToasts, dedupeBy],
   );
 
   // Limpieza de timers al desmontar.
