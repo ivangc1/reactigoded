@@ -175,15 +175,34 @@ export function Stepper({
     (event: KeyboardEvent<HTMLElement>) => {
       if (!interactive) return;
       const lastIdx = stepCount - 1;
+      // Codex P2 sobre PR antiguo: el cómputo de nextIdx debe partir
+      // del step que TIENE FOCUS, no del `clampedActive` (la prop que
+      // el consumer maneja). Cuando focus y active divergen — el
+      // parent rechaza onActiveChange por validación, lo aplica
+      // async, o el user mueve focus con Tab manualmente sin que
+      // active cambie — usar `clampedActive` deja al user atrapado:
+      // pulsar arrow desde un step distinto del active devuelve
+      // active±1 y termina llamando `onActiveChange` con el mismo
+      // destino una y otra vez.
+      //
+      // El index 0-based se lee desde `data-step-index` que Step.tsx
+      // inyecta en cada dot interactive. Si el atributo no existe o
+      // no parsea (defensivo, no debería pasar en interactive mode),
+      // caemos a `clampedActive` como fallback.
+      const datasetIdx = Number(event.currentTarget.dataset["stepIndex"]);
+      const fromIdx =
+        Number.isInteger(datasetIdx) && datasetIdx >= 0 && datasetIdx <= lastIdx
+          ? datasetIdx
+          : clampedActive;
       let nextIdx = -1;
       switch (event.key) {
         case "ArrowLeft":
         case "ArrowUp":
-          nextIdx = clampedActive > 0 ? clampedActive - 1 : lastIdx;
+          nextIdx = fromIdx > 0 ? fromIdx - 1 : lastIdx;
           break;
         case "ArrowRight":
         case "ArrowDown":
-          nextIdx = clampedActive < lastIdx ? clampedActive + 1 : 0;
+          nextIdx = fromIdx < lastIdx ? fromIdx + 1 : 0;
           break;
         case "Home":
           nextIdx = 0;
