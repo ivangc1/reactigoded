@@ -67,6 +67,41 @@ export interface ToastProviderProps {
  * ToastProvider — pone `useToast()` a disposición y renderiza la cola de
  * toasts en un portal fixed con la posición elegida. Cada toast se
  * auto-dismisea a los `duration` ms (o `defaultDuration` del provider).
+ *
+ * **Patrón canónico (single-instance global)**: un solo provider en la
+ * raíz de la app, una sola posición, una sola cola. Patrón recomendado
+ * para el 95% de los casos:
+ *
+ * ```tsx
+ * <ToastProvider position="top-right">
+ *   <Routes />
+ * </ToastProvider>
+ * ```
+ *
+ * **Multi-instance (workaround C-06 gate review)**: si necesitas emitir
+ * a posiciones distintas según el sub-árbol (ej: errores críticos en
+ * `bottom-center`, notificaciones en `top-right`), anida providers con
+ * scopes geográficos. `useToast()` siempre se conecta al ancestro
+ * `ToastProvider` más cercano vía Context — el provider más interno
+ * sobreescribe al externo dentro de su sub-árbol.
+ *
+ * ```tsx
+ * <ToastProvider position="top-right">             // Notifications scope
+ *   <Routes>
+ *     <Route path="/critical-flow" element={
+ *       <ToastProvider position="bottom-center">   // Errors scope
+ *         <CriticalFlow />
+ *       </ToastProvider>
+ *     } />
+ *   </Routes>
+ * </ToastProvider>
+ * ```
+ *
+ * Limitación conocida: dentro de un sub-árbol gana un solo provider.
+ * Para mezclar tipos (errores + notificaciones) en el mismo sub-árbol
+ * hay que refactorizar el layout. API con `scope` nombrado evaluada
+ * para 1.1.0+ si emerge demanda real. Ver
+ * `docs/decisions/C-06-toast-multi-instance.md`.
  */
 export function ToastProvider({
   position = "top-right",
