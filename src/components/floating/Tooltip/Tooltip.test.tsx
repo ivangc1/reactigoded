@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Tooltip } from "./Tooltip";
 
@@ -172,6 +172,35 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
     await user.keyboard("{Escape}");
     expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
+  });
+
+  // L-01: tooltip hover/focus-only no debe cerrar al hacer pointerdown
+  // fuera (outsidePress=false). FUI por defecto monta un listener global
+  // de pointerdown sobre el document; con outsidePress=false ese listener
+  // no se monta y el tooltip persiste mientras el trigger sigue activo.
+  it("pointerdown fuera NO cierra el tooltip mientras hover/focus persiste (L-01)", async () => {
+    const user = userEvent.setup();
+    render(
+      <div>
+        <Tooltip text="Eliminar">
+          <button>×</button>
+        </Tooltip>
+        <div data-testid="outside" style={{ width: 100, height: 100 }}>
+          fuera
+        </div>
+      </div>,
+    );
+    await user.tab();
+    expect(screen.getByRole("button")).toHaveFocus();
+    expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
+    // fireEvent (no userEvent.pointer) para disparar pointerdown SIN mover
+    // el mouse físicamente y sin tocar el focus del button. Con
+    // outsidePress=true, FUI capturaría este pointerdown global y cerraría
+    // el tooltip; con outsidePress=false el tooltip persiste.
+    fireEvent.pointerDown(screen.getByTestId("outside"));
+    fireEvent.mouseDown(screen.getByTestId("outside"));
+    expect(screen.getByRole("button")).toHaveFocus();
+    expect(document.querySelector(".ig-tooltip-place-top")).not.toBeNull();
   });
 
   // Anti-regresión: codex review post-RC1 marcó P1 — el cloneElement
