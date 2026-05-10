@@ -9,6 +9,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 import { useControllableState } from "@/hooks/useControllableState";
 import { TabsContext } from "./TabsContext";
 
@@ -125,8 +126,17 @@ export function Tabs({
   // Caso (a): auto-select inmediato del primer Tab montado cuando el
   // consumer no pasa value/defaultValue. Silent: NO dispara
   // onValueChange — el auto-select no es acción del usuario.
+  //
+  // Codex P2 sobre commit antiguo: este auto-select corría en
+  // `useEffect` (post-paint). En render inicial sin defaultValue,
+  // el primer frame pintaba con `selected === ""` (sin tab activo,
+  // sin tab stop, sin panel content) y el segundo frame ya tenía el
+  // primer Tab seleccionado — flash visual y transient state
+  // inaccesible. `useIsoLayoutEffect` ejecuta el efecto pre-paint
+  // en cliente (no-op síncrono en SSR), eliminando el flash sin
+  // romper SSR-safety.
   const didAutoSelectRef = useRef(false);
-  useEffect(() => {
+  useIsoLayoutEffect(() => {
     if (didAutoSelectRef.current) return;
     if (isControlled) return;
     if (selected !== "") return;
