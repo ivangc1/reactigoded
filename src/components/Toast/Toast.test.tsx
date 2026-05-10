@@ -50,6 +50,30 @@ describe("Toast — primitivo", () => {
     expect(container.querySelector(".ig-toast-icon")).toBeNull();
   });
 
+  // L-06: defaults consistentes — pre-fix warning/info eran ASCII plain
+  // ("!" y "i") mientras los demás eran Unicode. Este test cubre los 6
+  // variants no-neutral y verifica que ninguno cae a un char [0-9A-Za-z!]
+  // (regression guard contra reintroducir defaults estilo letra).
+  it.each([
+    ["success", "✓"],
+    ["warning", "⚠︎"],
+    ["danger", "✕"],
+    ["info", "ℹ︎"],
+    ["brand", "★"],
+    ["secondary", "•"],
+  ] as const)(
+    "default icon variant=%s es '%s' (Unicode no-ASCII) [L-06]",
+    (variant, expected) => {
+      const { container } = render(<Toast variant={variant} title="x" />);
+      const iconEl = container.querySelector(".ig-toast-icon");
+      expect(iconEl?.textContent).toBe(expected);
+      // Regression guard: ningún default cae a ASCII basic (letras/símbolos
+      // del flow text). Sin esto, alguien podría re-introducir 'i'/'!' por
+      // simplicidad y romper la consistencia visual sin que un test lo cace.
+      expect(iconEl?.textContent).not.toMatch(/^[ -~]+$/);
+    },
+  );
+
   it("neutral variant no muestra icono salvo override explícito", () => {
     const { container, rerender } = render(<Toast title="ok" />);
     expect(container.querySelector(".ig-toast-icon")).toBeNull();

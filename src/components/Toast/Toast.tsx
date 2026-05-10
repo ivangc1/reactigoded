@@ -10,11 +10,19 @@ export type ToastVariant =
   | "brand"
   | "secondary";
 
+// L-06: defaults unificados a símbolos Unicode con peso visual similar.
+// Pre-fix: 4 eran Unicode (✓ ✕ ★ •) y 2 eran ASCII plain ('!' e 'i') —
+// renderizados como letras del flow text en lugar de iconos.
+//
+// Variation Selector text (︎) en warning/info: fuerza render glifo
+// monocromático en sistemas que por defecto los pintarían como emoji
+// color (iOS Safari, Chrome con segoe-ui-emoji). Sin VS-15, "⚠" puede
+// salir como triángulo amarillo grande contraste contra el resto.
 const DEFAULT_ICONS: Record<Exclude<ToastVariant, "neutral">, string> = {
   success: "✓",
-  warning: "!",
+  warning: "⚠︎",
   danger: "✕",
-  info: "i",
+  info: "ℹ︎",
   brand: "★",
   secondary: "•",
 };
