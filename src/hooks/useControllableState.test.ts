@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { useControllableState } from "./useControllableState";
+import {
+  SUPPRESS_NO_HANDLER_WARN,
+  useControllableState,
+} from "./useControllableState";
 
 describe("useControllableState", () => {
   it("uncontrolled: defaultValue inicial", () => {
@@ -343,7 +346,7 @@ describe("useControllableState", () => {
 
   // ─── Dev warn: controlled sin onChange (Option E, beta.21) ───
   describe("dev warn: controlled sin onChange", () => {
-    it("avisa cuando isControlled && !onChange && !__suppressNoHandlerWarn", () => {
+    it("avisa cuando isControlled && !onChange && !SUPPRESS_NO_HANDLER_WARN", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       renderHook(() => useControllableState({ value: "x" }));
       expect(warn).toHaveBeenCalledOnce();
@@ -369,15 +372,38 @@ describe("useControllableState", () => {
       warn.mockRestore();
     });
 
-    it("NO avisa con __suppressNoHandlerWarn=true (escape hatch)", () => {
+    it("NO avisa con SUPPRESS_NO_HANDLER_WARN Symbol=true (escape hatch)", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       renderHook(() =>
         useControllableState({
           value: "x",
-          __suppressNoHandlerWarn: true,
+          [SUPPRESS_NO_HANDLER_WARN]: true,
         }),
       );
       expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    // C-07: regresión guard — un consumer NO puede suprimir el warn
+    // intentando recrear el Symbol desde fuera. `Symbol(...)` y
+    // `Symbol.for(...)` con la misma description producen Symbols
+    // distintos al SUPPRESS_NO_HANDLER_WARN exportado por el módulo.
+    it("Symbol recreado por el consumer NO suprime el warn (regression C-07)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const fakeSymbol = Symbol("reactigoded.suppressNoHandlerWarn");
+      const fakeRegistrySymbol = Symbol.for("reactigoded.suppressNoHandlerWarn");
+      // El consumer intenta inyectar la propiedad con un Symbol fake.
+      // El warn debe dispararse igual porque el hook compara contra el
+      // Symbol REAL exportado del módulo, no contra cualquier Symbol con
+      // misma description.
+      renderHook(() =>
+        useControllableState({
+          value: "x",
+          [fakeSymbol]: true,
+          [fakeRegistrySymbol]: true,
+        } as Parameters<typeof useControllableState>[0]),
+      );
+      expect(warn).toHaveBeenCalledOnce();
       warn.mockRestore();
     });
 
