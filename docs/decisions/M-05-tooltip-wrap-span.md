@@ -1,49 +1,62 @@
 # M-05 — Tooltip envuelve siempre en `<span>`
 
 **Fecha**: 2026-05-10
-**Estado**: status quo + doc limitation, refactor a Slot diferido a 1.1+
+**Estado**: ✅ **IMPLEMENTADO en RC1** (re-clasificado de "status quo + Slot diferido a 1.1+")
 **Origen**: gate review § IV.3 línea 1114
 
 ## Contexto
 
-`<Tooltip>` envuelve su `children` en un `<span class="ig-tooltip-wrapper">` para gestionar refs, listeners, y `aria-describedby` vía `cloneElement`. El span añade un nodo `inline` que **rompe block-level layouts** del consumer:
+`<Tooltip>` envolvía su `children` en un `<span class="ig-tooltip-wrapper">` para gestionar refs, listeners, y `aria-describedby` vía `cloneElement`. El span añadía un nodo `inline` que **rompía block-level layouts** del consumer:
 
 ```tsx
 <Tooltip text="…">
-  <div style={{ display: "block" }}>...</div>  // queda dentro de un span inline
+  <div style={{ display: "block" }}>...</div>  // quedaba dentro de un span inline
 </Tooltip>
 ```
 
-## Decisión
+## Decisión final (2026-05-10)
 
-**Mantener wrap en RC1**. Documentar la limitación en JSDoc del prop `children`. Refactor a Slot pattern (Radix-style) diferido a 1.1+.
+**Implementar pre-RC1** vía Slot pattern (D-01). El wrapper `<span class="ig-tooltip-wrapper">` se elimina. El sr-only span persistente queda como sibling del child clonado en un Fragment.
 
-## Por qué NO eliminar wrap pre-RC1 (opción C inicialmente considerada)
+Resultado: el child mantiene su contexto de layout original sin nodo `inline` silencioso.
 
-Discutido en sesión: yo voté C (eliminar wrap, requerir `display:inline-block` del child) por ser pre-RC1 el momento óptimo de breaking. Iván vetó: el riesgo de cambio comportamental sin breaking explícito y la decisión arquitectónica del Slot pattern (que afecta a Tooltip + futuros Popover/HoverCard) merece tratarse en bloque, no en pieza suelta.
+## Por qué adelantarlo (cambio respecto al plan inicial)
 
-## Plan post-RC1 (1.1+)
+Iván vetó originalmente eliminar el wrap pre-RC1 ("decisión arquitectónica del Slot pattern merece tratarse en bloque, no en pieza suelta"). El 2026-05-10 cambió de criterio: cerrar TODOS los deferrals factibles pre-RC1 en lugar de exponerlos a major bump 2.0.
 
-Refactor coordinado a Slot pattern:
-- Tooltip absorbe el ref + handlers del child sin envolver.
-- `ig-tooltip-wrapper` se deprecia con CHANGELOG explícito.
-- API pública (`text`, `placement`, `variant`, `container`) no cambia.
+El bloque coordinado (B-03 primitives + H-01 FloatingTree + D-01 Slot + M-05 wrap) se ejecuta en un único PR.
 
-Asociado a:
-- D-01 (refactor Tooltip a Slot): cerrado como done en este doc.
-- B-03 (floating/primitives layer): el Slot vive en la capa primitives compartida.
-- M-01 (polymorphic `as`): patrón análogo, decidible en bloque.
+## Implementación efectiva
 
-## Documentación al consumer
+```tsx
+// Antes (pre-RC1):
+return (
+  <span className="ig-tooltip-wrapper">
+    {child}
+    <span id="..." role="tooltip" className="ig-sr-only">{text}</span>
+    {isOpen && <FloatingPortal>...</FloatingPortal>}
+  </span>
+);
 
-JSDoc del prop `children` del Tooltip ya menciona la limitación implícitamente (caveat L-03 sobre `<button disabled>`). Sin nota específica sobre block-level. **TODO opcional pre-RC1**: añadir frase explícita "no envolver elementos `display: block`" en el JSDoc — ver si vale la pena dado que el patrón Slot llega en 1.1.
+// Ahora (RC1, Slot pattern):
+return (
+  <>
+    {child}
+    <span id="..." role="tooltip" className="ig-sr-only" inert>{text}</span>
+    <FloatingNode id={nodeId}>
+      {isOpen && <FloatingPortal>...</FloatingPortal>}
+    </FloatingNode>
+  </>
+);
+```
 
-## Reapertura
+## Asociado a
 
-Reabrir si:
-- ≥3 consumers reportan el bug del wrap rompiendo layouts.
-- Decisión interna de adelantar el Slot pattern a 1.0.x.
+- **D-01** (Slot refactor): ✅ implementado pre-RC1.
+- **B-03** (primitives layer): ✅ implementado pre-RC1, base de este refactor.
+- **H-01** (FloatingTree): ✅ implementado en el mismo bundle.
+- **M-01** (polymorphic `as`): independiente; sigue diferido a 2.0.
 
-## Cierra parcialmente
+## Cierra
 
-- **M-05** (MEDIUM del gate review § IV.3)
+- **M-05** (MEDIUM del gate review § IV.3): ✅ implementado pre-RC1.

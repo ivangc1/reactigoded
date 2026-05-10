@@ -7,6 +7,56 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Breaking
+
+- **`Tooltip` Slot pattern (D-01 / M-05 / B-03 / H-01)**: el componente
+  ya **no envuelve al child en `<span class="ig-tooltip-wrapper">`**.
+  El render emite el child clonado + un `<span class="ig-sr-only"
+  role="tooltip" inert>` sibling + el portal flotante. La API pública
+  de props (`text`, `placement`, `variant`, `openDelay`, `closeDelay`,
+  `container`) no cambia, **pero**:
+
+  - **CSS público**: la clase `.ig-tooltip-wrapper` ya no se emite. Si
+    tenías reglas CSS dirigidas al wrapper (layout, espaciado), aplica
+    los estilos al child directamente o envuélvelo manualmente en tu
+    propio span/div.
+  - **Tipos de `TooltipProps`**: dejan de extender
+    `HTMLAttributes<HTMLSpanElement>`. `className`, `ref` y
+    `...rest` HTML props del wrapper desaparecen del tipo. Si pasabas
+    `<Tooltip className="..." ref={spanRef}>`, el TS error es
+    intencional — esos props no tenían destino fiable post-Slot.
+  - **Layout**: si el child es block-level (e.g. `<div>`, `<table>`),
+    ahora respeta el flujo natural (antes, el wrapper `display:
+    contents` lo neutralizaba pero introducía un nodo silencioso).
+
+  Razón: el wrapper rompía block-level layouts del consumer y obligaba
+  a CSS extra para corregirlo. M-05 y D-01 lo señalaban; en RC1 se
+  cierran.
+
+### Añadido
+
+- **`FloatingTreeRoot` y `useFloatingNode`** (B-03 / H-01): nueva capa
+  `floating/primitives/` con un wrapper opt-in (`<FloatingTreeRoot>`)
+  que habilita cascade dismiss entre `Tooltip` y futuros floats
+  (`Popover`, `HoverCard`, `Dropdown` FUI 1.x+) cuando se anidan. Sin
+  el root, los floats funcionan independientes (sin regresión).
+
+  ```tsx
+  import { FloatingTreeRoot } from "reactigoded";
+
+  function App() {
+    return (
+      <FloatingTreeRoot>
+        <RouterProvider router={router} />
+      </FloatingTreeRoot>
+    );
+  }
+  ```
+
+  El hook `useFloatingNode()` devuelve `{ nodeId, parentId }` para que
+  componentes flotantes del DS se registren en el árbol activo.
+  `Tooltip` ya lo consume internamente.
+
 ### Notas operativas
 
 - **Sin publicación a npm pre-RC1** (M-03 / cf. `docs/RC1_DECISIONS.md`

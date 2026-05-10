@@ -463,11 +463,12 @@ const cases: SsrCase[] = [
   {
     name: "Tooltip",
     jsx: () => <Tooltip text="ayuda"><Button>btn</Button></Tooltip>,
-    // H-03 (gate review): no usar "ig-tooltip" sustring — matchea
-    // "ig-tooltip-wrapper" del span exterior. Usar role="tooltip" del
-    // span sr-only que el componente inyecta para el SR. Eso garantiza
-    // que el patrón a11y (aria-describedby → role=tooltip) esté en el
-    // HTML server-rendered, no solo el wrapper visual.
+    // H-03 (gate review): no usar "ig-tooltip" sustring — antes
+    // matcheaba "ig-tooltip-wrapper" (eliminado en RC1 con D-01/M-05).
+    // Usar role="tooltip" del span sr-only persistente que el
+    // componente sigue inyectando para el SR. Eso garantiza que el
+    // patrón a11y (aria-describedby → role=tooltip) está en el HTML
+    // server-rendered.
     expects: 'role="tooltip"',
   },
 ];

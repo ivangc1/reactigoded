@@ -36,4 +36,5 @@ export * from "./Textarea";
 export * from "./ThemeSwitch";
 export * from "./Timeline";
 export * from "./Toast";
+export * from "./floating/primitives";
 export * from "./floating/Tooltip";
