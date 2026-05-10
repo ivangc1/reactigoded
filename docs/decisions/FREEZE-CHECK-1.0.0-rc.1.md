@@ -212,7 +212,7 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 
 | Estado | Count | Items |
 |---|---:|---|
-| ✅ **Confirmable hoy** | 8 | 6, 7, 10, 11, 13, 16, 17, 18, bonus 1 |
+| ✅ **Confirmable hoy** | 9 | 6, 7, 10, 11, 13, 16, 17, 18, bonus 1 |
 | ⏸ **Bloqueado por task pending** | 5 | 1 (B-01), 3 (B-04), 4 (B-02), 12 (H-09), 15 (M-02) |
 | ⚠ **Requiere input de Iván** | 6 | 2, 5, 8, 9, 14, bonus 2 |
 
