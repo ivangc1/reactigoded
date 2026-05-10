@@ -304,4 +304,44 @@ describe("Pagination — uncontrolled state sync (B-18)", () => {
     );
     expect(onPageChange).not.toHaveBeenCalled();
   });
+
+  // L-12 (gate review): getPageLabel para i18n. Default ES "Página N",
+  // override por consumer.
+  describe("L-12 — getPageLabel i18n", () => {
+    it("default usa ES 'Página N'", () => {
+      render(<Pagination totalPages={3} defaultPage={1} />);
+      expect(
+        screen.getByRole("button", { name: "Página 1" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Página 2" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Página 3" }),
+      ).toBeInTheDocument();
+    });
+
+    it("getPageLabel custom override aplica a todos los botones de página", () => {
+      render(
+        <Pagination
+          totalPages={3}
+          defaultPage={1}
+          getPageLabel={(p) => `Page ${String(p)}`}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Page 1" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Page 2" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Page 3" }),
+      ).toBeInTheDocument();
+      // Default ES NO aparece.
+      expect(
+        screen.queryByRole("button", { name: "Página 1" }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
