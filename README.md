@@ -265,8 +265,8 @@ const [tab, setTab] = useState("perfil");
 ```
 
 `Modal` es **controlled-only** (siempre necesita `open`+`onClose`).
-`Pagination` soporta tanto controlled (`currentPage`+`onPageChange`) como
-uncontrolled (`defaultPage`, `onPageChange` opcional) desde 1.0.0-beta.20.
+`Pagination` soporta tanto controlled (`currentPage`+`onValueChange`) como
+uncontrolled (`defaultPage`, `onValueChange` opcional) desde 1.0.0-beta.20.
 
 ### Tema light/dark
 

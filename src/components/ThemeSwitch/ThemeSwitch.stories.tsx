@@ -11,7 +11,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Toggle de tema light/dark construido sobre `Switch`. Aplica `data-theme=\"light|dark\"` al `<html>` y persiste en `localStorage` bajo `\"theme\"` por defecto. SSR-safe (no toca DOM/storage durante el primer render). Soporta modo controlado (`theme`+`onThemeChange`) o uncontrolled (`defaultTheme`).",
+          "Toggle de tema light/dark construido sobre `Switch`. Aplica `data-theme=\"light|dark\"` al `<html>` y persiste en `localStorage` bajo `\"theme\"` por defecto. SSR-safe (no toca DOM/storage durante el primer render). Soporta modo controlado (`theme`+`onValueChange`) o uncontrolled (`defaultTheme`).",
       },
     },
   },
@@ -47,7 +47,7 @@ export const Controlado: Story = {
   parameters: {
     docs: {
       description: {
-        story: "Modo controlado con `theme` y `onThemeChange`.",
+        story: "Modo controlado con `theme` y `onValueChange`.",
       },
     },
   },
@@ -58,7 +58,7 @@ export const Controlado: Story = {
         <div className="ig-story-stack ig-story-stack--full">
           <ThemeSwitch
             theme={theme}
-            onThemeChange={setTheme}
+            onValueChange={setTheme}
             storageKey={null}
             attribute={null}
           />

@@ -49,7 +49,7 @@ export const PorDefecto: Story = {
     return (
       <>
         <Button onClick={() => { setOpen(true); }}>Abrir modal</Button>
-        <Modal {...args} open={open} onClose={() => { setOpen(false); }}>
+        <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
           <ModalHeader>
             <h2>Confirmar acción</h2>
             <ModalClose onClick={() => { setOpen(false); }} />
@@ -87,7 +87,7 @@ export const Sizes: Story = {
         </div>
         <Modal
           open={size !== null}
-          onClose={() => { setSize(null); }}
+          onOpenChange={() => { setSize(null); }}
           size={size ?? "md"}
         >
           <ModalHeader>
@@ -110,7 +110,7 @@ export const BackdropBlur: Story = {
     return (
       <>
         <Button onClick={() => { setOpen(true); }}>Modal con backdrop blur</Button>
-        <Modal {...args} open={open} onClose={() => { setOpen(false); }}>
+        <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
           <ModalHeader>
             <h2>Backdrop con blur</h2>
             <ModalClose onClick={() => { setOpen(false); }} />
@@ -149,7 +149,7 @@ export const Loading: Story = {
         <Modal
           open={open}
           loading={loading}
-          onClose={() => {
+          onOpenChange={() => {
             setOpen(false);
           }}
         >
@@ -194,7 +194,7 @@ export const NoCloseOnBackdrop: Story = {
     return (
       <>
         <Button onClick={() => { setOpen(true); }}>Modal "obligatorio"</Button>
-        <Modal {...args} open={open} onClose={() => { setOpen(false); }}>
+        <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
           <ModalHeader>
             <h2>Confirmación obligatoria</h2>
           </ModalHeader>
@@ -228,7 +228,7 @@ export const OpenInteraction: Story = {
       return (
         <>
           <Button onClick={() => { setOpen(true); }}>Abrir</Button>
-          <Modal {...args} open={open} onClose={() => { setOpen(false); }}>
+          <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
             <ModalHeader>
               <h2>Diálogo de prueba</h2>
             </ModalHeader>

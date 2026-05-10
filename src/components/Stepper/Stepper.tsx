@@ -26,7 +26,7 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
    * "uncontrolled" — si pasas un valor inicial sin actualizarlo, el
    * stepper queda congelado para siempre.
    *
-   * Cuando se pasa `onActiveChange`, el Stepper se vuelve **interactive**
+   * Cuando se pasa `onValueChange`, el Stepper se vuelve **interactive**
    * (focus + keyboard nav). Sigue siendo el consumer quien aplica el
    * cambio actualizando esta prop.
    */
@@ -45,7 +45,7 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
    * decide si lo aplica (puede rechazar saltos hacia adelante en un
    * wizard, p.ej.).
    */
-  onActiveChange?: (next: number) => void;
+  onValueChange?: (next: number) => void;
   /** Si true, usa el layout con labels debajo (`ig-stepper-labeled`). */
   labeled?: boolean;
   /** Una lista de `Step`. */
@@ -64,7 +64,7 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
  * Pasa los `Step`s como children — el Stepper inyecta `index`/`active`/`complete`
  * a cada uno automáticamente.
  *
- * **Modo interactive** (cuando `onActiveChange` está definido):
+ * **Modo interactive** (cuando `onValueChange` está definido):
  * cada step es focuseable con roving tabIndex y soporta teclado completo
  * (ArrowKey, Home/End, Enter/Space). Patrón inspirado en WAI-ARIA APG
  * Tabs adaptado a stepper. El consumer es quien finalmente aplica el
@@ -81,7 +81,7 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
  * @example
  * // Interactive (teclado completo)
  * const [step, setStep] = useState(0);
- * <Stepper active={step} onActiveChange={setStep} labeled>
+ * <Stepper active={step} onValueChange={setStep} labeled>
  *   <Step label="Datos" />
  *   <Step label="Pago" />
  *   <Step label="Confirmar" />
@@ -89,7 +89,7 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
  */
 export function Stepper({
   active,
-  onActiveChange,
+  onValueChange,
   labeled = false,
   className,
   children,
@@ -97,7 +97,7 @@ export function Stepper({
   ...rest
 }: StepperProps) {
   const steps = Children.toArray(children).filter(isValidElement);
-  const interactive = onActiveChange !== undefined;
+  const interactive = onValueChange !== undefined;
   const stepCount = steps.length;
 
   // B-05 (gate review): clamp `active` a un índice válido.
@@ -151,7 +151,7 @@ export function Stepper({
   //   focusear post-commit. Se setea en el handler de teclado y se
   //   limpia en el effect.
   // El effect dispara cuando cambia `active` (la prop la mueve el
-  // consumer tras `onActiveChange`), garantizando que el focus ocurre
+  // consumer tras `onValueChange`), garantizando que el focus ocurre
   // DESPUÉS del rerender que actualizó los `tabIndex` roving.
   const rootRef = useRef<HTMLDivElement>(null);
   const focusTargetIdxRef = useRef<number | null>(null);
@@ -178,11 +178,11 @@ export function Stepper({
       // Codex P2 sobre PR antiguo: el cómputo de nextIdx debe partir
       // del step que TIENE FOCUS, no del `clampedActive` (la prop que
       // el consumer maneja). Cuando focus y active divergen — el
-      // parent rechaza onActiveChange por validación, lo aplica
+      // parent rechaza onValueChange por validación, lo aplica
       // async, o el user mueve focus con Tab manualmente sin que
       // active cambie — usar `clampedActive` deja al user atrapado:
       // pulsar arrow desde un step distinto del active devuelve
-      // active±1 y termina llamando `onActiveChange` con el mismo
+      // active±1 y termina llamando `onValueChange` con el mismo
       // destino una y otra vez.
       //
       // El index 0-based se lee desde `data-step-index` que Step.tsx
@@ -217,18 +217,18 @@ export function Stepper({
       // Marca intent de focus; el effect post-commit lo aplicará
       // cuando React termine de actualizar los tabIndex roving.
       focusTargetIdxRef.current = nextIdx;
-      onActiveChange(nextIdx);
+      onValueChange(nextIdx);
     },
-    [clampedActive, interactive, onActiveChange, stepCount],
+    [clampedActive, interactive, onValueChange, stepCount],
   );
 
   const handleActivate = useCallback(
     (idx: number) => {
       if (!interactive) return;
       if (idx === clampedActive) return;
-      onActiveChange(idx);
+      onValueChange(idx);
     },
-    [clampedActive, interactive, onActiveChange],
+    [clampedActive, interactive, onValueChange],
   );
 
   // Callback ref que combina rootRef interno (focus management H-25) con

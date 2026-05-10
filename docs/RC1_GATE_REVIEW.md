@@ -486,10 +486,10 @@ El wildcard firma como pública la disponibilidad individual de los
   | `Accordion multiple` | `value: string[]` | `onValueChange` | string[] |
   | `Slider` | `value: number` | `onValueChange` + `onChange` | number + ChangeEvent |
   | `Rating` | `value: number` | `onValueChange` | number |
-  | `Pagination` | `currentPage: number` | **`onPageChange`** | number |
-  | `Stepper` | `active: number` | **`onActiveChange`** | number |
-  | `Sidebar` | `collapsed: boolean` | **`onCollapsedChange`** | boolean |
-  | `ThemeSwitch` | `theme: Theme` | **`onThemeChange`** | Theme |
+  | `Pagination` | `currentPage: number` | **`onValueChange`** | number |
+  | `Stepper` | `active: number` | **`onValueChange`** | number |
+  | `Sidebar` | `collapsed: boolean` | **`onValueChange`** | boolean |
+  | `ThemeSwitch` | `theme: Theme` | **`onValueChange`** | Theme |
   | `Dropdown` | `open: boolean` | `onOpenChange` | boolean |
   | `Modal` | `open: boolean` | **`onClose`** (no payload) | — |
   | `Switch`/`Checkbox`/`Radio` | `checked: boolean` | `onChange` (nativo) | ChangeEvent |
@@ -656,7 +656,7 @@ El wildcard firma como pública la disponibilidad individual de los
 - **Reproducción** (test ad-hoc ejecutado):
   ```tsx
   render(
-    <Stepper active={999} onActiveChange={onActive}>
+    <Stepper active={999} onValueChange={onActive}>
       <Step label="A" /><Step label="B" /><Step label="C" />
     </Stepper>,
   );
@@ -1609,7 +1609,7 @@ describe("Stepper active fuera de rango — B-05", () => {
   it("active=999 — ningún step queda con tabIndex=0", () => {
     const onActive = vi.fn();
     const { container } = render(
-      <Stepper active={999} onActiveChange={onActive}>
+      <Stepper active={999} onValueChange={onActive}>
         <Step label="A" /><Step label="B" /><Step label="C" />
       </Stepper>,
     );

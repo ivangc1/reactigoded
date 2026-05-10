@@ -35,7 +35,7 @@ const meta = {
     currentPage: 3,
     totalPages: 10,
     siblingCount: 1,
-    onPageChange: fn(),
+    onValueChange: fn(),
   },
 } satisfies Meta<typeof Pagination>;
 
@@ -64,7 +64,7 @@ export const Interactiva: Story = {
         <Pagination
           currentPage={page}
           totalPages={15}
-          onPageChange={setPage}
+          onValueChange={setPage}
           variant="brand"
         />
       );
@@ -78,7 +78,7 @@ export const Uncontrolled: Story = {
     docs: {
       description: {
         story:
-          "Modo **uncontrolled**: el componente maneja su propio state interno arrancando en `defaultPage`. Pasa `onPageChange` (opcional) para reaccionar (fetch, sync URL, analytics). Patrón consistente con Tabs/Accordion/Dropdown del DS.",
+          "Modo **uncontrolled**: el componente maneja su propio state interno arrancando en `defaultPage`. Pasa `onValueChange` (opcional) para reaccionar (fetch, sync URL, analytics). Patrón consistente con Tabs/Accordion/Dropdown del DS.",
       },
     },
   },
@@ -97,10 +97,10 @@ export const PageClickInteraction: Story = {
     await expect(active).toHaveAccessibleName(/3/);
     // Click en página 4 (sibling visible con currentPage=3 y siblingCount=1).
     await userEvent.click(canvas.getByRole("button", { name: /página 4/i }));
-    await expect(args.onPageChange).toHaveBeenCalledWith(4);
+    await expect(args.onValueChange).toHaveBeenCalledWith(4);
     // Click en "Siguiente" (avanza a 4).
     await userEvent.click(canvas.getByRole("button", { name: /siguiente/i }));
-    await expect(args.onPageChange).toHaveBeenCalledWith(4);
+    await expect(args.onValueChange).toHaveBeenCalledWith(4);
   },
 };
 
@@ -122,32 +122,32 @@ export const AllStates: Story = {
         aria-label="Paginación corta"
         currentPage={1}
         totalPages={3}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />
       <Pagination
         aria-label="Paginación larga con ellipsis"
         currentPage={6}
         totalPages={20}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />
       <Pagination
         aria-label="Paginación primera página"
         currentPage={1}
         totalPages={10}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />
       <Pagination
         aria-label="Paginación última página"
         currentPage={10}
         totalPages={10}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />
       <Pagination
         aria-label="Paginación brand"
         variant="brand"
         currentPage={3}
         totalPages={7}
-        onPageChange={() => {}}
+        onValueChange={() => {}}
       />
     </div>
   ),

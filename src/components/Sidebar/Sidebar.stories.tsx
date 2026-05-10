@@ -141,7 +141,7 @@ export const Controlado: Story = {
     docs: {
       description: {
         story:
-          "Modo controlado: la app gestiona `collapsed` y reacciona a `onCollapsedChange`. Permite forzar el estado desde fuera (p.ej. al cambiar de página).",
+          "Modo controlado: la app gestiona `collapsed` y reacciona a `onValueChange`. Permite forzar el estado desde fuera (p.ej. al cambiar de página).",
       },
     },
   },
@@ -150,7 +150,7 @@ export const Controlado: Story = {
       const [collapsed, setCollapsed] = useState(false);
       return (
         <div className="ig-story-shell">
-          <Sidebar collapsed={collapsed} onCollapsedChange={setCollapsed}>
+          <Sidebar collapsed={collapsed} onValueChange={setCollapsed}>
             <Demo />
           </Sidebar>
           <main className="ig-story-shell__main">

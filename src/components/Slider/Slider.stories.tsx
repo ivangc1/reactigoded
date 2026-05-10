@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, within } from "storybook/test";
 
-// Nota: el `args.onChange` (vi.fn) tampoco es viable para verificar input
+// Nota: el `args.onValueChange` (vi.fn) tampoco es viable para verificar input
 // nativo bajo Playwright headless porque React filtra eventos sintéticos
 // no provenientes de su own listener. Dejamos solo smoke render + a11y.
 import { Slider } from "./Slider";
@@ -24,7 +24,7 @@ const meta = {
     step: { control: "number" },
     showValue: { control: "boolean" },
     disabled: { control: "boolean" },
-    onChange: { action: "change" },
+    onValueChange: { action: "change" },
   },
   args: {
     "aria-label": "Volumen",
@@ -32,7 +32,7 @@ const meta = {
     max: 100,
     step: 1,
     defaultValue: 30,
-    onChange: fn(),
+    onValueChange: fn(),
   },
 } satisfies Meta<typeof Slider>;
 
@@ -84,7 +84,7 @@ export const OnValueChange: Story = {
     docs: {
       description: {
         story:
-          "`onValueChange(v: number)` recibe el valor decodificado (alternativa al `onChange` nativo que recibe el `ChangeEvent`). `formatValue` además se aplica a `aria-valuetext` para que los lectores de pantalla anuncien el formato (`50%` en vez de `50`).",
+          "`onValueChange(v: number)` recibe el valor decodificado (alternativa al `onValueChange` nativo que recibe el `ChangeEvent`). `formatValue` además se aplica a `aria-valuetext` para que los lectores de pantalla anuncien el formato (`50%` en vez de `50`).",
       },
     },
   },

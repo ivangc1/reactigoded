@@ -27,19 +27,19 @@ describe("Slider", () => {
     expect(screen.getByText("70%")).toBeInTheDocument();
   });
 
-  it("dispara onChange y actualiza el valor visible no-controlado", () => {
-    const onChange = vi.fn();
+  it("dispara onValueChange y actualiza el valor visible no-controlado", () => {
+    const onValueChange = vi.fn();
     render(
       <Slider
         aria-label="vol"
         showValue
         defaultValue={10}
-        onChange={onChange}
+        onValueChange={onValueChange}
       />,
     );
     const el = screen.getByLabelText("vol");
     fireEvent.change(el, { target: { value: "85" } });
-    expect(onChange).toHaveBeenCalled();
+    expect(onValueChange).toHaveBeenCalled();
     expect(screen.getByText("85")).toBeInTheDocument();
   });
 
@@ -77,13 +77,13 @@ describe("Slider", () => {
     // resultaba flaky según orden. El comportamiento importante para el
     // consumer es que el input nativo refleje el value externo tras la
     // transición; el warning de React es side-effect de React, no del DS.
-    const onChange = vi.fn();
+    const onValueChange = vi.fn();
     const { rerender } = render(
       <Slider aria-label="v" defaultValue={20} />,
     );
     expect(screen.getByLabelText<HTMLInputElement>("v").value).toBe("20");
 
-    rerender(<Slider aria-label="v" value={50} onChange={onChange} />);
+    rerender(<Slider aria-label="v" value={50} onValueChange={onValueChange} />);
     expect(screen.getByLabelText<HTMLInputElement>("v").value).toBe("50");
   });
 
@@ -92,9 +92,9 @@ describe("Slider", () => {
     // contrato abstracto del hook lo cubre useControllableState.test.ts;
     // aquí solo verificamos que el componente sigue vivo y rendereando
     // un input válido tras la transición.
-    const onChange = vi.fn();
+    const onValueChange = vi.fn();
     const { rerender } = render(
-      <Slider aria-label="v" value={50} onChange={onChange} />,
+      <Slider aria-label="v" value={50} onValueChange={onValueChange} />,
     );
     const input = screen.getByLabelText<HTMLInputElement>("v");
     expect(input.value).toBe("50");
