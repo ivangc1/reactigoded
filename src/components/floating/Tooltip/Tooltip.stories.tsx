@@ -3,6 +3,13 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { Tooltip } from "./Tooltip";
 import { Button } from "@/components/Button";
+import {
+  Modal,
+  ModalBody,
+  ModalClose,
+  ModalFooter,
+  ModalHeader,
+} from "@/components/Modal";
 
 const meta = {
   title: "Componentes/Tooltip",
@@ -207,6 +214,98 @@ export const WithCustomContainer: Story = {
       );
     }
     return <DemoDialog />;
+  },
+};
+
+export const TooltipDentroDeModal: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Patrón canónico documentado en `docs/decisions/C-02-modal-tooltip-portal.md`: cuando un `<Tooltip>` vive dentro de un `<Modal>`, el consumer DEBE pasar `container={dialogRef}` para que el portal del tooltip se ancle al top-layer del dialog. Sin esto, el portal va a `document.body` y el tooltip queda *detrás* del backdrop, invisible. Decisión consciente RC1: mantenemos esto manual para preservar la opción de migrar a context interno post-RC1 sin breaking change. Ver C-02 para criterios de re-evaluación.",
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="ig-story-frame ig-story-frame--lg">
+        <Story />
+      </div>
+    ),
+  ],
+  render: () => {
+    function DemoModal() {
+      const dialogRef = useRef<HTMLDialogElement>(null);
+      const [open, setOpen] = useState(false);
+      // Re-render para que `container` apunte al dialog real tras
+      // el primer mount (el ref se asigna en el mismo paint).
+      const [, force] = useState(0);
+      useEffect(() => {
+        if (open) force((n) => n + 1);
+      }, [open]);
+      return (
+        <>
+          <Button
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            Abrir Modal
+          </Button>
+          <Modal
+            ref={dialogRef}
+            open={open}
+            onClose={() => {
+              setOpen(false);
+            }}
+            size="md"
+          >
+            <ModalHeader>
+              Confirmar acción
+              <ModalClose
+                onClick={() => {
+                  setOpen(false);
+                }}
+              />
+            </ModalHeader>
+            <ModalBody>
+              <p>
+                El Tooltip de abajo recibe{" "}
+                <code>{"container={dialogRef.current}"}</code>. Su
+                portal se monta dentro del top-layer del{" "}
+                <code>{"<dialog>"}</code> y aparece visible por encima
+                del backdrop. Hover o focus en el botón.
+              </p>
+              <Tooltip
+                text="Esta acción no se puede deshacer"
+                placement="top"
+                container={dialogRef.current}
+              >
+                <Button variant="danger">Eliminar permanente</Button>
+              </Tooltip>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setOpen(false);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => {
+                  setOpen(false);
+                }}
+              >
+                Aceptar
+              </Button>
+            </ModalFooter>
+          </Modal>
+        </>
+      );
+    }
+    return <DemoModal />;
   },
 };
 
