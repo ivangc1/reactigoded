@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { Avatar } from "./Avatar";
 import { AvatarGroup } from "./AvatarGroup";
 
@@ -38,6 +38,66 @@ describe("Avatar", () => {
     const el = screen.getByTestId("a");
     expect(el).toHaveAttribute("role", "img");
     expect(el).toHaveAttribute("aria-label", "Avatar de Jane");
+  });
+
+  // M-10 (gate review): img con loading="lazy" por defecto + fallback
+  // automático a initials cuando la imagen falla a cargar.
+  describe("M-10 — onError fallback + loading lazy", () => {
+    it("img recibe loading=\"lazy\" por defecto", () => {
+      render(<Avatar src="/u.png" alt="J" />);
+      expect(screen.getByAltText("J")).toHaveAttribute("loading", "lazy");
+    });
+
+    it("loading=\"eager\" override para avatares above-the-fold", () => {
+      render(<Avatar src="/u.png" alt="J" loading="eager" />);
+      expect(screen.getByAltText("J")).toHaveAttribute("loading", "eager");
+    });
+
+    it("error de carga + initials fallback → muestra initials", () => {
+      render(<Avatar src="/broken.png" alt="J" initials="JD" />);
+      // Antes del error: img montada, no hay initials.
+      const img = screen.getByAltText("J");
+      expect(img).toBeInTheDocument();
+      expect(screen.queryByText("JD")).not.toBeInTheDocument();
+      // Simular fallo de carga.
+      fireEvent.error(img);
+      // Tras el error: img desmontada, initials montadas.
+      expect(screen.queryByAltText("J")).not.toBeInTheDocument();
+      expect(screen.getByText("JD")).toBeInTheDocument();
+    });
+
+    it("error de carga sin initials → quedan vacío (no crash)", () => {
+      render(<Avatar src="/broken.png" alt="J" data-testid="a" />);
+      const img = screen.getByAltText("J");
+      fireEvent.error(img);
+      expect(screen.queryByAltText("J")).not.toBeInTheDocument();
+      // El contenedor sigue montado, simplemente vacío.
+      expect(screen.getByTestId("a")).toBeInTheDocument();
+    });
+
+    // Codex P1 sobre PR #36: imgFailed se resetea cuando cambia src.
+    // Sin esto, una imagen rota dejaba el slot bloqueado para siempre
+    // (regresión en avatars dinámicos: TableRow reusada con distintos
+    // usuarios, retry tras network fail).
+    it("cambiar src tras error reintenta la imagen (codex P1)", () => {
+      const { rerender } = render(
+        <Avatar src="/broken.png" alt="J" initials="JD" />,
+      );
+      // Trigger error → muestra initials.
+      fireEvent.error(screen.getByAltText("J"));
+      expect(screen.queryByAltText("J")).not.toBeInTheDocument();
+      expect(screen.getByText("JD")).toBeInTheDocument();
+      // Cambiar a una src nueva: el componente debe reintentar la
+      // carga (img montada otra vez), no quedarse pegado en initials.
+      rerender(<Avatar src="/valid.png" alt="K" initials="KL" />);
+      const newImg = screen.getByAltText("K");
+      expect(newImg).toBeInTheDocument();
+      expect(newImg).toHaveAttribute("src", "/valid.png");
+      // Las initials previas ya no se muestran (la nueva imagen aún
+      // no ha fallado).
+      expect(screen.queryByText("JD")).not.toBeInTheDocument();
+      expect(screen.queryByText("KL")).not.toBeInTheDocument();
+    });
   });
 });
 
