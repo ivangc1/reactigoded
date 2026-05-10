@@ -14,7 +14,7 @@
  */
 import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
-import dts from "vite-plugin-dts";
+import dts, { type PluginOptions as DtsPluginOptions } from "vite-plugin-dts";
 import { transform as esbuildTransform } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -90,14 +90,22 @@ function copyDesignSystemStyles(): PluginOption {
   };
 }
 
+// L-10: tipar la config del plugin con `satisfies` para que TS rechace
+// opciones inválidas (en lugar de aceptarlas y dejarlas sin efecto).
+// Histórico: probé `rollupTypes: true` (nombre v4 antiguo) y vite-plugin-dts
+// v5 lo aceptó silenciosamente sin colapsar los .d.ts — el flag correcto
+// en v5 es `bundleTypes`. Sin `satisfies`, este tipo de typo se descubre
+// solo inspeccionando dist tras el build, no en typecheck.
+const dtsOptions = {
+  tsconfigPath: "./tsconfig.build.json",
+  insertTypesEntry: true,
+  copyDtsFiles: true,
+} satisfies DtsPluginOptions;
+
 export default defineConfig({
   plugins: [
     react(),
-    dts({
-      tsconfigPath: "./tsconfig.build.json",
-      insertTypesEntry: true,
-      copyDtsFiles: true,
-    }),
+    dts(dtsOptions),
     copyDesignSystemStyles(),
   ],
   resolve: {
