@@ -91,7 +91,16 @@ export default defineConfig([
   },
   {
     ...jestDom.configs["flat/recommended"],
-    files: ["**/*.{test,spec}.{ts,tsx}"],
+    // T-105: incluido `**/*.stories.tsx` porque 34/35 stories usan
+    // jest-dom matchers (`toHaveAttribute`, `toBeInTheDocument`, etc) en
+    // `play` functions vía `@storybook/test`. Sin esta ampliación las
+    // stories podían usar `toHaveAttribute("aria-disabled", "true")`
+    // donde existe el matcher idiomático `toBeDisabled()` y el linter
+    // no avisaba — divergencia de estilo entre tests y stories.
+    // testing-library NO se amplía: las stories no son tests RTL y
+    // varias reglas (await-async-events, prefer-screen-queries) tienen
+    // intent contradictorio con el patrón Storybook `within(canvasElement)`.
+    files: ["**/*.{test,spec}.{ts,tsx}", "**/*.stories.tsx"],
   },
   {
     files: ["**/*.{test,spec}.{ts,tsx}"],
