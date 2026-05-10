@@ -82,44 +82,52 @@ export function ToastProvider({
   );
   const idPrefix = useId();
   const seqRef = useRef(0);
-  // M-11: snapshot del state para que `toast()` (callback estable que
-  // cambia solo si props relevantes cambian) pueda hacer dedupe lookup
-  // sin re-suscribirse a cada cambio de `toasts`. Sincronizado en
-  // useEffect (ref-write, no setState — fuera del scope de la regla
-  // react-hooks/set-state-in-effect).
+  // M-11: snapshot del state para dedupe lookup síncrono. Se ACTUALIZA
+  // DENTRO DE CADA SETTER (toast / dismiss / dismissAll), NO en
+  // useEffect — eso eliminaría la stale window que codex P1 detectó:
+  // tras `dismiss(id); toast(sameKey)` en el mismo tick, el ref está
+  // fresco porque dismiss lo actualizó síncronamente.
   const toastsRef = useRef<ToastEntry[]>([]);
-  useEffect(() => {
-    toastsRef.current = toasts;
-  }, [toasts]);
 
+  // M-11: side effects (ref update, onDismiss dispatch, clearTimeout)
+  // ocurren FUERA del setter para que (a) sean síncronos respecto al
+  // próximo `toast()` lookup en el mismo handler — codex P1: tras
+  // `dismiss(id); toast(sameKey)`, toastsRef ya refleja el dismiss; y
+  // (b) en strict mode dev (que double-invoca setters) los efectos no
+  // se duplican. `setToasts(value)` directo (no callback) recibe el
+  // next computado fuera; React coalesce el batch correctamente.
   const dismiss = useCallback((id: string) => {
     const timer = timersRef.current.get(id);
     if (timer) {
       clearTimeout(timer);
       timersRef.current.delete(id);
     }
-    setToasts((prev) => {
-      const found = prev.find((t) => t.id === id);
-      found?.onDismiss?.();
-      return prev.filter((t) => t.id !== id);
-    });
+    const found = toastsRef.current.find((t) => t.id === id);
+    if (!found) return;
+    const next = toastsRef.current.filter((t) => t.id !== id);
+    toastsRef.current = next;
+    found.onDismiss?.();
+    setToasts(next);
   }, []);
 
   const dismissAll = useCallback(() => {
     timersRef.current.forEach((t) => { clearTimeout(t); });
     timersRef.current.clear();
-    setToasts((prev) => {
-      prev.forEach((t) => t.onDismiss?.());
-      return [];
-    });
+    const all = toastsRef.current;
+    toastsRef.current = [];
+    all.forEach((t) => t.onDismiss?.());
+    setToasts([]);
   }, []);
 
   const toast = useCallback(
     (options: ToastOptions) => {
-      // M-11 dedupe: si una entrada con la misma clave ya está en cola,
-      // ignora el nuevo y devuelve el id del existente. Snapshot via
-      // toastsRef.current — race condition en mismo tick es tolerable
-      // (peor caso: duplicado entra, no crash).
+      // M-11 dedupe: lookup síncrono contra toastsRef (actualizado
+      // sync en cada setter). Codex P1 sobre PR #38 detectó la stale
+      // window cuando toastsRef se sincronizaba en useEffect — tras
+      // `dismiss(id); toast(sameKey)` en mismo tick, la ref aún tenía
+      // la entry removida. Fix: dismiss/dismissAll/toast actualizan
+      // toastsRef.current dentro de su setter functional, garantizando
+      // que el siguiente lookup ve el state real.
       if (dedupeBy) {
         const newKey = dedupeBy(options);
         const existing = toastsRef.current.find(
@@ -132,26 +140,24 @@ export function ToastProvider({
       const id = `${idPrefix}-${String(seqRef.current)}`;
       const entry: ToastEntry = { id, ...options };
 
-      setToasts((prev) => {
-        const next = [...prev, entry];
-        // M-11 maxToasts: cuando se excede, FIFO eviction — drop el más
-        // antiguo. Dispatch onDismiss del dropped + clear de su timer
-        // para no leakear setTimeout pendientes.
-        if (maxToasts !== undefined && next.length > maxToasts) {
-          const dropCount = next.length - maxToasts;
-          const dropped = next.slice(0, dropCount);
-          dropped.forEach((t) => {
-            const timer = timersRef.current.get(t.id);
-            if (timer) {
-              clearTimeout(timer);
-              timersRef.current.delete(t.id);
-            }
-            t.onDismiss?.();
-          });
-          return next.slice(dropCount);
-        }
-        return next;
-      });
+      // Compute next FUERA del setter (mismo razonamiento que dismiss):
+      // sync update de toastsRef + side effects sin doble-invoke.
+      let next = [...toastsRef.current, entry];
+      if (maxToasts !== undefined && next.length > maxToasts) {
+        const dropCount = next.length - maxToasts;
+        const dropped = next.slice(0, dropCount);
+        dropped.forEach((t) => {
+          const timer = timersRef.current.get(t.id);
+          if (timer) {
+            clearTimeout(timer);
+            timersRef.current.delete(t.id);
+          }
+          t.onDismiss?.();
+        });
+        next = next.slice(dropCount);
+      }
+      toastsRef.current = next;
+      setToasts(next);
 
       const duration = options.duration ?? defaultDuration;
       if (duration > 0) {

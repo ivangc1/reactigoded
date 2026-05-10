@@ -309,6 +309,51 @@ describe("ToastProvider — M-11 maxToasts + dedupeBy", () => {
     expect(firstId).toBeTruthy();
   });
 
+  // Codex P1 sobre PR #38: si el consumer hace `dismiss(id) +
+  // toast(sameKey)` en el mismo tick, el toast nuevo DEBE insertarse
+  // (no dedupe-skip contra una entry recién removida).
+  it("dedupeBy: insert tras dismiss(sameKey) en mismo tick (codex P1)", () => {
+    let firstId = "";
+    let secondId = "";
+    function ReplaceTrigger() {
+      const { toast, dismiss } = useToast();
+      return (
+        <>
+          <button
+            onClick={() => {
+              firstId = toast({ title: "Welcome" });
+            }}
+          >
+            first
+          </button>
+          <button
+            onClick={() => {
+              dismiss(firstId);
+              secondId = toast({ title: "Welcome" });
+            }}
+          >
+            replace
+          </button>
+        </>
+      );
+    }
+    render(
+      <ToastProvider
+        container={null}
+        dedupeBy={(t) => (typeof t.title === "string" ? t.title : "")}
+      >
+        <ReplaceTrigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "first" }));
+    fireEvent.click(screen.getByRole("button", { name: "replace" }));
+    // Debe haber un toast "Welcome" visible (el nuevo, no el original).
+    expect(screen.getAllByText("Welcome")).toHaveLength(1);
+    // El segundo id NO debe ser el del primero (no fue dedupe-skip).
+    expect(secondId).not.toBe(firstId);
+    expect(secondId).toBeTruthy();
+  });
+
   it("dedupeBy: claves distintas no se fusionan", () => {
     function VariedTrigger() {
       const { toast } = useToast();
