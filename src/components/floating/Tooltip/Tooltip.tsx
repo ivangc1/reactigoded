@@ -81,10 +81,32 @@ export interface TooltipProps extends HTMLAttributes<HTMLSpanElement> {
   closeDelay?: number;
   /**
    * Contenedor donde se monta el portal del tooltip. Por defecto
-   * `document.body`. Útil cuando el tooltip vive dentro de un
-   * `<Modal>` con `<dialog>.showModal()` (top-layer): pasar el
-   * elemento del dialog para que el tooltip aparezca por encima del
-   * backdrop. También aplica para CSS containment / shadow roots / etc.
+   * `document.body`. También aplica para CSS containment / shadow roots.
+   *
+   * **Caso típico — Tooltip dentro de Modal**: `<Modal>` usa
+   * `<dialog>.showModal()` que crea un top-layer del browser. Si el
+   * portal del tooltip queda en `document.body`, aparece *detrás* del
+   * backdrop del dialog (invisible al usuario). Pasar el ref del
+   * dialog como container hace que el portal viva dentro del top-layer
+   * y se renderice por encima del backdrop.
+   *
+   * Patrón canónico (decisión C-02 documentada en
+   * `docs/decisions/C-02-modal-tooltip-portal.md`):
+   *
+   * ```tsx
+   * function MiPantalla() {
+   *   const dialogRef = useRef<HTMLDialogElement>(null);
+   *   return (
+   *     <Modal ref={dialogRef} open onClose={...}>
+   *       <ModalBody>
+   *         <Tooltip text="Eliminar" container={dialogRef}>
+   *           <Button>×</Button>
+   *         </Tooltip>
+   *       </ModalBody>
+   *     </Modal>
+   *   );
+   * }
+   * ```
    *
    * Acepta `HTMLElement` directo o un `RefObject` (Floating UI
    * resuelve ambos).
