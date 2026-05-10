@@ -62,7 +62,7 @@ export function Slider({
         : NaN;
   const initial = Number.isFinite(parsedDefault) ? parsedDefault : safeMin;
   // `value` puede ser number|string|readonly number[] del tipo HTMLInput.
-  // Solo entra en controlled si es number/string finito; el array
+  // Solo entra en controlled si es number/string parseable; el array
   // (no soportado por type="range") cae a uncontrolled y se warn-ea
   // abajo.
   const controlledNum =
@@ -71,10 +71,24 @@ export function Slider({
       : typeof value === "string" && value.length > 0
         ? Number(value)
         : undefined;
+
+  // H-16 (gate review): value no-finite (NaN, parsing fallido) ANTES
+  // hacía passControlled=undefined → componente caía a uncontrolled
+  // SILENCIOSAMENTE pese a que el consumer pasaba `value`. Bug de
+  // contrato: el consumer espera que el slider siga su state, no que
+  // se quede pegado en su último valor uncontrolled.
+  //
+  // Patrón Pagination del propio DS: clamp + warn + permanecer
+  // funcional (controlled). Si value es no-finite, clampamos a
+  // `safeMin` y MANTENEMOS controlled — el consumer ve el slider
+  // pegado en min y el dev-warn explica por qué. Nunca cambia de
+  // modo silenciosamente.
   const passControlled =
-    controlledNum !== undefined && Number.isFinite(controlledNum)
-      ? controlledNum
-      : undefined;
+    controlledNum === undefined
+      ? undefined
+      : Number.isFinite(controlledNum)
+        ? controlledNum
+        : safeMin;
   const { value: internal, setValue: setInternal, isControlled } =
     useControllableState<number>({
       value: passControlled,
@@ -108,18 +122,16 @@ export function Slider({
         `[reactigoded] <Slider defaultValue=${JSON.stringify(defaultValue)}> no es un número finito; arrancando en min=${String(safeMin)}.`,
       );
     } else if (
-      // H-27: value controlado no-finito. Diferencia con defaultValue:
-      // aquí el slider entra en uncontrolled (passControlled=undefined)
-      // y el consumer probablemente no nota el bug hasta que el slider
-      // "deja de seguir" su state. Avisamos para que pase un number
-      // válido o use defaultValue.
+      // H-16: value controlado no-finito. ANTES dejaba el componente
+      // en uncontrolled silencioso; AHORA clampa a safeMin y mantiene
+      // controlled (patrón Pagination). El warn explica el clamp.
       value !== undefined &&
       controlledNum !== undefined &&
       !Number.isFinite(controlledNum)
     ) {
       warnedRef.current = true;
       console.warn(
-        `[reactigoded] <Slider value=${JSON.stringify(value)}> no es un número finito; el slider opera en modo uncontrolled. Pasa un number válido o usa defaultValue.`,
+        `[reactigoded] <Slider value=${JSON.stringify(value)}> no es un número finito; clampando a min=${String(safeMin)} y manteniendo el modo controlled. Pasa un number válido para que el slider siga tu state correctamente.`,
       );
     }
   }, [defaultValue, parsedDefault, safeMin, value, controlledNum]);
@@ -136,16 +148,22 @@ export function Slider({
   // de 1.0.0-beta.4, un defaultValue/value array se reenviaba al DOM y
   // generaba "[object Array]" como string. Ahora filtramos: solo number o
   // string, ignoramos array.
+  //
+  // H-16: si controlled con value no-finite, el browser HTML5 clampa
+  // automáticamente al middle del range (50% por defecto), descartando
+  // nuestro clamp a safeMin. Forzamos el DOM a `current` (internal
+  // clamped) para que el slider visual respete el contrato del DS, no
+  // el comportamiento del browser.
   const isPlain = (v: unknown): v is number | string =>
     typeof v === "number" || typeof v === "string";
   const domValueProp =
-    isControlled && isPlain(value)
+    isControlled && isPlain(value) && Number.isFinite(controlledNum)
       ? { value }
-      : !isControlled && isPlain(defaultValue)
-        ? { defaultValue }
-        : !isControlled
-          ? { defaultValue: String(initial) }
-          : { value: String(current) };
+      : isControlled
+        ? { value: String(current) }
+        : isPlain(defaultValue)
+          ? { defaultValue }
+          : { defaultValue: String(initial) };
 
   const slider = (
     <input

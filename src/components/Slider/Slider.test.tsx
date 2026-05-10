@@ -128,4 +128,65 @@ describe("Slider", () => {
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  // H-16 (gate review): value no-finito ANTES dejaba el slider en
+  // modo uncontrolled silencioso (passControlled=undefined). AHORA
+  // clampa a safeMin y mantiene controlled — patrón Pagination.
+  describe("H-16 — value no-finito clampa + mantiene controlled", () => {
+    it("value=NaN clampa a min y el input refleja min, no el último uncontrolled", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Slider
+          aria-label="v"
+          min={5}
+          max={100}
+          value={Number.NaN}
+          onValueChange={() => undefined}
+        />,
+      );
+      const input = screen.getByLabelText<HTMLInputElement>("v");
+      // El DOM refleja el clamp a min (5), no NaN ni undefined.
+      expect(input.value).toBe("5");
+      // El warn explica el clamp.
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("clampando a min=5"),
+      );
+      warn.mockRestore();
+    });
+
+    it("value=NaN sigue controlled tras re-render con value válido", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { rerender } = render(
+        <Slider
+          aria-label="v"
+          value={Number.NaN}
+          onValueChange={() => undefined}
+        />,
+      );
+      const input = screen.getByLabelText<HTMLInputElement>("v");
+      expect(input.value).toBe("0");
+      // Re-render con value válido: el componente sigue controlled y
+      // refleja el nuevo valor (NO se queda en el clamp anterior).
+      rerender(
+        <Slider
+          aria-label="v"
+          value={42}
+          onValueChange={() => undefined}
+        />,
+      );
+      expect(input.value).toBe("42");
+      warn.mockRestore();
+    });
+
+    it('value="abc" (string no parseable) clampa a min sin caer a uncontrolled', () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Slider aria-label="v" value="abc" onValueChange={() => undefined} />,
+      );
+      const input = screen.getByLabelText<HTMLInputElement>("v");
+      expect(input.value).toBe("0");
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
 });
