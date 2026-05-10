@@ -202,6 +202,183 @@ describe("ToastProvider — cola y portal", () => {
   });
 });
 
+// M-11 (gate review): maxToasts FIFO eviction + dedupeBy.
+describe("ToastProvider — M-11 maxToasts + dedupeBy", () => {
+  // Buttons con prefijo 'btn-' para no colisionar con title del toast.
+  function MultiTrigger() {
+    const { toast } = useToast();
+    return (
+      <>
+        <button onClick={() => toast({ title: "title-A" })}>btn-A</button>
+        <button onClick={() => toast({ title: "title-B" })}>btn-B</button>
+        <button onClick={() => toast({ title: "title-C" })}>btn-C</button>
+      </>
+    );
+  }
+
+  it("maxToasts={2}: tras 3 toast() solo 2 visibles, FIFO drop", () => {
+    render(
+      <ToastProvider container={null} maxToasts={2}>
+        <MultiTrigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "btn-A" }));
+    fireEvent.click(screen.getByRole("button", { name: "btn-B" }));
+    fireEvent.click(screen.getByRole("button", { name: "btn-C" }));
+    // title-A debe haberse desmontado (FIFO), title-B y title-C visibles.
+    expect(screen.queryByText("title-A")).not.toBeInTheDocument();
+    expect(screen.getByText("title-B")).toBeInTheDocument();
+    expect(screen.getByText("title-C")).toBeInTheDocument();
+  });
+
+  it("maxToasts dispara onDismiss del toast dropeado", () => {
+    const onDismissA = vi.fn();
+    function CustomTrigger() {
+      const { toast } = useToast();
+      return (
+        <>
+          <button
+            onClick={() =>
+              toast({ title: "title-A", onDismiss: onDismissA, duration: 0 })
+            }
+          >
+            btn-A
+          </button>
+          <button onClick={() => toast({ title: "title-B", duration: 0 })}>
+            btn-B
+          </button>
+        </>
+      );
+    }
+    render(
+      <ToastProvider container={null} maxToasts={1}>
+        <CustomTrigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "btn-A" }));
+    expect(onDismissA).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "btn-B" }));
+    // title-A fue evictado por maxToasts=1 → onDismiss disparado.
+    expect(onDismissA).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("title-A")).not.toBeInTheDocument();
+    expect(screen.getByText("title-B")).toBeInTheDocument();
+  });
+
+  it("dedupeBy: segundo toast con misma key se ignora, devuelve id existente", () => {
+    let firstId = "";
+    let secondId = "";
+    function DedupeTrigger() {
+      const { toast } = useToast();
+      return (
+        <>
+          <button
+            onClick={() => {
+              firstId = toast({ title: "Save", variant: "success" });
+            }}
+          >
+            first
+          </button>
+          <button
+            onClick={() => {
+              secondId = toast({ title: "Save", variant: "success" });
+            }}
+          >
+            second
+          </button>
+        </>
+      );
+    }
+    render(
+      <ToastProvider
+        container={null}
+        dedupeBy={(t) =>
+          // En los tests usamos title:string. ReactNode genérico no es
+          // safe para template-stringificar, así que type-narrow.
+          `${t.variant ?? ""}:${typeof t.title === "string" ? t.title : ""}`
+        }
+      >
+        <DedupeTrigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "first" }));
+    fireEvent.click(screen.getByRole("button", { name: "second" }));
+    // Solo un toast visible.
+    expect(screen.getAllByText("Save")).toHaveLength(1);
+    // Y secondId === firstId (no hubo nueva inserción, devolvió existing).
+    expect(secondId).toBe(firstId);
+    expect(firstId).toBeTruthy();
+  });
+
+  // Codex P1 sobre PR #38: si el consumer hace `dismiss(id) +
+  // toast(sameKey)` en el mismo tick, el toast nuevo DEBE insertarse
+  // (no dedupe-skip contra una entry recién removida).
+  it("dedupeBy: insert tras dismiss(sameKey) en mismo tick (codex P1)", () => {
+    let firstId = "";
+    let secondId = "";
+    function ReplaceTrigger() {
+      const { toast, dismiss } = useToast();
+      return (
+        <>
+          <button
+            onClick={() => {
+              firstId = toast({ title: "Welcome" });
+            }}
+          >
+            first
+          </button>
+          <button
+            onClick={() => {
+              dismiss(firstId);
+              secondId = toast({ title: "Welcome" });
+            }}
+          >
+            replace
+          </button>
+        </>
+      );
+    }
+    render(
+      <ToastProvider
+        container={null}
+        dedupeBy={(t) => (typeof t.title === "string" ? t.title : "")}
+      >
+        <ReplaceTrigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "first" }));
+    fireEvent.click(screen.getByRole("button", { name: "replace" }));
+    // Debe haber un toast "Welcome" visible (el nuevo, no el original).
+    expect(screen.getAllByText("Welcome")).toHaveLength(1);
+    // El segundo id NO debe ser el del primero (no fue dedupe-skip).
+    expect(secondId).not.toBe(firstId);
+    expect(secondId).toBeTruthy();
+  });
+
+  it("dedupeBy: claves distintas no se fusionan", () => {
+    function VariedTrigger() {
+      const { toast } = useToast();
+      return (
+        <>
+          <button onClick={() => toast({ title: "A" })}>btn-a</button>
+          <button onClick={() => toast({ title: "B" })}>btn-b</button>
+        </>
+      );
+    }
+    render(
+      <ToastProvider
+        container={null}
+        dedupeBy={(t) => (typeof t.title === "string" ? t.title : "")}
+      >
+        <VariedTrigger />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "btn-a" }));
+    fireEvent.click(screen.getByRole("button", { name: "btn-b" }));
+    expect(screen.getByText("A")).toBeInTheDocument();
+    expect(screen.getByText("B")).toBeInTheDocument();
+  });
+});
+
 describe("ToastProvider — cleanup", () => {
   it("desmontar el provider limpia los timers pendientes", () => {
     vi.useFakeTimers();
