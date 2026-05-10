@@ -7,6 +7,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 import { useControllableState } from "@/hooks/useControllableState";
 
@@ -33,6 +34,13 @@ export interface SwitchProps
    * on y otros off (desde 1.0.0-beta.8).
    */
   indeterminate?: boolean;
+  /**
+   * Ids extra para `aria-describedby`. Pasar string para un único id o
+   * array para varios. Se concatenan con cualquier `aria-describedby`
+   * que el consumer pase por rest. Patrón canónico del DS para enlazar
+   * `Helper` / `ErrorText` / live-regions con tecnologías asistivas.
+   */
+  describedBy?: string | string[];
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -72,9 +80,15 @@ export function Switch({
   checked,
   defaultChecked,
   indeterminate,
+  describedBy,
   onChange,
   ...rest
 }: SwitchProps) {
+  const { "aria-describedby": ariaDescribedByNative, ...inputRest } = rest;
+  const describedByValue = mergeDescribedBy(
+    ariaDescribedByNative,
+    describedBy,
+  );
   const { value: isOn, setValue: setIsOn, isControlled } = useControllableState<boolean>({
     value: checked,
     defaultValue: defaultChecked === true,
@@ -149,7 +163,7 @@ export function Switch({
       data-disabled={disabled ? "true" : undefined}
     >
       <input
-        {...rest}
+        {...inputRest}
         ref={setRefs}
         type="checkbox"
         // H-15 (gate review, WAI-ARIA 1.2): aria-checked="mixed" NO
@@ -162,6 +176,7 @@ export function Switch({
         // atributo DOM `:indeterminate` independientemente del role.
         role={indeterminate ? "checkbox" : "switch"}
         aria-checked={indeterminate ? "mixed" : isOn}
+        aria-describedby={describedByValue}
         disabled={disabled}
         onChange={handleChange}
         {...(isControlled ? { checked } : { defaultChecked })}

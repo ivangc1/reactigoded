@@ -1,6 +1,7 @@
 import type { InputHTMLAttributes, Ref } from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useControllableState } from "@/hooks/useControllableState";
 
 export interface SliderProps
@@ -14,6 +15,13 @@ export interface SliderProps
    * nativo que recibe el `ChangeEvent`). Útil cuando solo necesitas el número.
    */
   onValueChange?: (value: number) => void;
+  /**
+   * Ids extra para `aria-describedby`. Pasar string para un único id o
+   * array para varios. Se concatenan con cualquier `aria-describedby`
+   * que el consumer pase por rest. Patrón canónico del DS para enlazar
+   * `Helper` / `ErrorText` / live-regions con tecnologías asistivas.
+   */
+  describedBy?: string | string[];
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -45,9 +53,15 @@ export function Slider({
   className,
   onChange,
   onValueChange,
+  describedBy,
   ref,
   ...rest
 }: SliderProps) {
+  const { "aria-describedby": ariaDescribedByNative, ...inputRest } = rest;
+  const describedByValue = mergeDescribedBy(
+    ariaDescribedByNative,
+    describedBy,
+  );
   // `defaultValue` puede llegar como string ("60") o readonly array (que el
   // <input> nativo no soporta para type="range"). Normalizamos a número
   // finito; si no se puede, caemos a `min`. Antes de 1.0.0-beta.3 un
@@ -167,7 +181,7 @@ export function Slider({
 
   const slider = (
     <input
-      {...rest}
+      {...inputRest}
       ref={ref}
       type="range"
       className={cn("ig-slider", className)}
@@ -175,6 +189,7 @@ export function Slider({
       max={max}
       step={step}
       aria-valuetext={formatValue ? display : undefined}
+      aria-describedby={describedByValue}
       {...domValueProp}
       onChange={(e) => {
         const next = Number(e.target.value);

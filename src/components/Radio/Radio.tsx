@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 
 export type RadioVariant =
   | "brand"
@@ -15,6 +16,13 @@ export interface RadioProps
   variant?: RadioVariant;
   /** Etiqueta visible junto al radio. */
   children?: React.ReactNode;
+  /**
+   * Ids extra para `aria-describedby`. Pasar string para un único id o
+   * array para varios. Se concatenan con cualquier `aria-describedby`
+   * que el consumer pase por rest. Patrón canónico del DS para enlazar
+   * `Helper` / `ErrorText` / live-regions con tecnologías asistivas.
+   */
+  describedBy?: string | string[];
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -33,14 +41,26 @@ export function Radio({
   children,
   ref,
   disabled,
+  describedBy,
   ...rest
 }: RadioProps) {
+  const { "aria-describedby": ariaDescribedByNative, ...inputRest } = rest;
+  const describedByValue = mergeDescribedBy(
+    ariaDescribedByNative,
+    describedBy,
+  );
   return (
     <label
       className={cn("ig-radio", `ig-radio-${variant}`, className)}
       data-disabled={disabled ? "true" : undefined}
     >
-      <input ref={ref} type="radio" disabled={disabled} {...rest} />
+      <input
+        {...inputRest}
+        ref={ref}
+        type="radio"
+        disabled={disabled}
+        aria-describedby={describedByValue}
+      />
       <span className="ig-radio-mark" aria-hidden="true" />
       {children !== undefined && <span>{children}</span>}
     </label>

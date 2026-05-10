@@ -7,6 +7,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 
 export type CheckboxVariant =
@@ -34,6 +35,18 @@ export interface CheckboxProps
    * tú la sincronización con los hijos cuyo estado lo justifique.
    */
   indeterminate?: boolean;
+  /**
+   * Ids extra para `aria-describedby`. Pasar string para un único id o
+   * array para varios. Se concatenan con cualquier `aria-describedby`
+   * que el consumer pase por rest. Patrón canónico del DS para enlazar
+   * `Helper` / `ErrorText` / live-regions con tecnologías asistivas.
+   *
+   * @example
+   * const helperId = useId();
+   * <Checkbox describedBy={helperId}>Acepto</Checkbox>
+   * <Helper id={helperId}>Solo email; no spam.</Helper>
+   */
+  describedBy?: string | string[];
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -58,9 +71,15 @@ export function Checkbox({
   ref,
   disabled,
   indeterminate,
+  describedBy,
   onChange,
   ...rest
 }: CheckboxProps) {
+  const { "aria-describedby": ariaDescribedByNative, ...inputRest } = rest;
+  const describedByValue = mergeDescribedBy(
+    ariaDescribedByNative,
+    describedBy,
+  );
   const internalRef = useRef<HTMLInputElement>(null);
 
   // setRefs estabilizado con useCallback — alineado con el patrón
@@ -124,11 +143,12 @@ export function Checkbox({
       data-disabled={disabled ? "true" : undefined}
     >
       <input
+        {...inputRest}
+        ref={setRefs}
         type="checkbox"
         disabled={disabled}
-        {...rest}
-        ref={setRefs}
         aria-checked={indeterminate ? "mixed" : undefined}
+        aria-describedby={describedByValue}
         onChange={handleChange}
       />
       <span className="ig-checkbox-mark" aria-hidden="true" />

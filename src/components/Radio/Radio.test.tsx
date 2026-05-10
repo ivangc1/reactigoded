@@ -85,4 +85,23 @@ describe("Radio", () => {
     await userEvent.click(screen.getByRole("radio"));
     expect(onChange).toHaveBeenCalledOnce();
   });
+
+  // H-05 (gate review): describedBy alineado con Input/Select/Textarea.
+  it("describedBy aplica aria-describedby + concatena con nativo", () => {
+    render(
+      <Radio
+        name="g"
+        value="a"
+        aria-describedby="native-id"
+        describedBy={["helper-1", "error-1"]}
+      >
+        A
+      </Radio>,
+    );
+    const input = screen.getByRole("radio");
+    expect(input).toHaveAttribute(
+      "aria-describedby",
+      "native-id helper-1 error-1",
+    );
+  });
 });
