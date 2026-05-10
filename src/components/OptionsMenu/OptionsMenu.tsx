@@ -8,12 +8,12 @@ import {
 } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";
-import { DropdownContext } from "./DropdownContext";
+import { OptionsMenuContext } from "./OptionsMenuContext";
 
-export type DropdownPlacement = "left" | "right";
-export type DropdownDirection = "down" | "up";
+export type OptionsMenuAlign = "left" | "right";
+export type OptionsMenuDirection = "down" | "up";
 
-export interface DropdownProps extends HTMLAttributes<HTMLDivElement> {
+export interface OptionsMenuProps extends HTMLAttributes<HTMLDivElement> {
   /** Estado abierto (modo controlado). Si se omite, el componente gestiona su propio estado. */
   open?: boolean;
   /** Estado inicial (modo no controlado). Por defecto `false`. */
@@ -21,35 +21,35 @@ export interface DropdownProps extends HTMLAttributes<HTMLDivElement> {
   /** Callback al abrir/cerrar. Disparado en ambos modos. */
   onOpenChange?: (open: boolean) => void;
   /** Alineación horizontal del menu. Por defecto `"left"`. */
-  placement?: DropdownPlacement;
+  placement?: OptionsMenuAlign;
   /** Hacia dónde abre verticalmente. Por defecto `"down"`. */
-  direction?: DropdownDirection;
-  /** Si los `DropdownItem` cierran el menu al activarse. Por defecto `true`. */
+  direction?: OptionsMenuDirection;
+  /** Si los `OptionsMenuItem` cierran el menu al activarse. Por defecto `true`. */
   closeOnSelect?: boolean;
   ref?: Ref<HTMLDivElement>;
 }
 
 /**
- * Dropdown — menú desplegable accesible.
+ * OptionsMenu — menú desplegable accesible.
  *
- * Compón con `DropdownTrigger`, `DropdownMenu`, `DropdownItem`,
- * `DropdownDivider`, `DropdownHeader`. Cierra con ESC y al hacer click fuera;
+ * Compón con `OptionsMenuTrigger`, `OptionsMenuContent`, `OptionsMenuItem`,
+ * `OptionsMenuDivider`, `OptionsMenuHeader`. Cierra con ESC y al hacer click fuera;
  * soporta navegación con ↑/↓/Home/End/Enter/Espacio siguiendo el patrón
  * WAI-ARIA menu button.
  *
  * Modo controlado: pasa `open` + `onOpenChange`. Modo no controlado: omite `open`.
  *
  * @example
- * <Dropdown>
- *   <DropdownTrigger>Acciones ▼</DropdownTrigger>
- *   <DropdownMenu>
- *     <DropdownItem onClick={editar}>Editar</DropdownItem>
- *     <DropdownDivider />
- *     <DropdownItem danger onClick={borrar}>Eliminar</DropdownItem>
- *   </DropdownMenu>
- * </Dropdown>
+ * <OptionsMenu>
+ *   <OptionsMenuTrigger>Acciones ▼</OptionsMenuTrigger>
+ *   <OptionsMenuContent>
+ *     <OptionsMenuItem onClick={editar}>Editar</OptionsMenuItem>
+ *     <OptionsMenuDivider />
+ *     <OptionsMenuItem danger onClick={borrar}>Eliminar</OptionsMenuItem>
+ *   </OptionsMenuContent>
+ * </OptionsMenu>
  */
-export function Dropdown({
+export function OptionsMenu({
   open: openProp,
   defaultOpen = false,
   onOpenChange,
@@ -60,7 +60,7 @@ export function Dropdown({
   children,
   ref,
   ...rest
-}: DropdownProps) {
+}: OptionsMenuProps) {
   const reactId = useId();
   const triggerId = `${reactId}-trigger`;
   const menuId = `${reactId}-menu`;
@@ -124,20 +124,20 @@ export function Dropdown({
   );
 
   return (
-    <DropdownContext.Provider value={ctxValue}>
+    <OptionsMenuContext.Provider value={ctxValue}>
       <div
         ref={handleRef}
         className={cn(
-          "ig-dropdown",
-          placement === "right" && "ig-dropdown-right",
-          direction === "up" && "ig-dropdown-up",
-          open && "ig-dropdown-open",
+          "ig-options-menu",
+          placement === "right" && "ig-options-menu-right",
+          direction === "up" && "ig-options-menu-up",
+          open && "ig-options-menu-open",
           className,
         )}
         {...rest}
       >
         {children}
       </div>
-    </DropdownContext.Provider>
+    </OptionsMenuContext.Provider>
   );
 }

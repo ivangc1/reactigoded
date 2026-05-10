@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { Select } from "./Select";
+import { NativeSelect } from "./NativeSelect";
 
 const meta = {
-  title: "Componentes/Select",
-  component: Select,
+  title: "Componentes/NativeSelect",
+  component: NativeSelect,
   parameters: {
     docs: {
       description: {
@@ -31,7 +31,7 @@ const meta = {
       </>
     ),
   },
-} satisfies Meta<typeof Select>;
+} satisfies Meta<typeof NativeSelect>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -73,36 +73,36 @@ export const AllStates: Story = {
       },
     },
   },
-  // Cada Select con aria-label único (axe rule label).
+  // Cada NativeSelect con aria-label único (axe rule label).
   render: () => (
     <div style={{ display: "grid", gap: "1rem", maxWidth: 320 }}>
-      <Select aria-label="Select default">
+      <NativeSelect aria-label="NativeSelect default">
         <option value="">Selecciona…</option>
         <option value="a">Opción A</option>
         <option value="b">Opción B</option>
-      </Select>
-      <Select aria-label="Select preselect" defaultValue="b">
+      </NativeSelect>
+      <NativeSelect aria-label="NativeSelect preselect" defaultValue="b">
         <option value="a">A</option>
         <option value="b">B preselect</option>
         <option value="c">C</option>
-      </Select>
-      <Select aria-label="Select error" state="error">
+      </NativeSelect>
+      <NativeSelect aria-label="NativeSelect error" state="error">
         <option value="">Error state</option>
         <option value="a">A</option>
-      </Select>
-      <Select aria-label="Select success" state="success" defaultValue="ok">
+      </NativeSelect>
+      <NativeSelect aria-label="NativeSelect success" state="success" defaultValue="ok">
         <option value="ok">Success</option>
-      </Select>
-      <Select aria-label="Select disabled" disabled>
+      </NativeSelect>
+      <NativeSelect aria-label="NativeSelect disabled" disabled>
         <option value="">Disabled</option>
-      </Select>
-      <Select aria-label="Select opciones largas">
+      </NativeSelect>
+      <NativeSelect aria-label="NativeSelect opciones largas">
         <option value="">— seleccione —</option>
         <option value="x">
           Opción larga que puede desbordar visualmente el contenedor
         </option>
         <option value="y">Opción corta</option>
-      </Select>
+      </NativeSelect>
     </div>
   ),
   play: async ({ canvasElement }) => {

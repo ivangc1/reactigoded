@@ -1,20 +1,20 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
-import { useDropdown } from "./DropdownContext";
-import { NAVIGABLE_ITEM_SELECTOR } from "./dropdownSelectors";
+import { useOptionsMenu } from "./OptionsMenuContext";
+import { NAVIGABLE_ITEM_SELECTOR } from "./optionsMenuSelectors";
 
-export interface DropdownTriggerProps
+export interface OptionsMenuTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   ref?: Ref<HTMLButtonElement>;
 }
 
 /**
- * DropdownTrigger — botón que abre/cierra el menú.
+ * OptionsMenuTrigger — botón que abre/cierra el menú.
  *
  * Click toggleea. ↓/Enter/Space abren y enfocan el primer item; ↑ abre y
  * enfoca el último. Aplica `aria-haspopup="menu"` y `aria-expanded`.
  */
-export function DropdownTrigger({
+export function OptionsMenuTrigger({
   className,
   children,
   type = "button",
@@ -22,9 +22,9 @@ export function DropdownTrigger({
   onKeyDown,
   ref,
   ...rest
-}: DropdownTriggerProps) {
+}: OptionsMenuTriggerProps) {
   const { open, setOpen, triggerId, menuId, triggerRef, menuRef } =
-    useDropdown();
+    useOptionsMenu();
 
   const handleRef = (node: HTMLButtonElement | null) => {
     triggerRef.current = node;
@@ -67,7 +67,7 @@ export function DropdownTrigger({
       aria-haspopup="menu"
       aria-expanded={open}
       aria-controls={menuId}
-      className={cn("ig-dropdown-trigger", className)}
+      className={cn("ig-options-menu-trigger", className)}
       onClick={(e) => {
         onClick?.(e);
         if (!e.defaultPrevented) setOpen(!open);

@@ -17,7 +17,7 @@ componente PUEDE auto-protegerse, debe hacerlo.
 | Bug | Versión detectado | Patrón |
 |---|---|---|
 | Divider con texto pintaba franja completa cyan | beta.14 | CSS scope-leak global → wrapper compound |
-| Textarea/Select estados `error`/`success` invisibles | beta.17 | Orden de cascada CSS, misma especificidad |
+| Textarea/NativeSelect estados `error`/`success` invisibles | beta.17 | Orden de cascada CSS, misma especificidad |
 | Elevación LIGHT con tinte sub-perceptible | beta.15 | Contraste técnico ≥ 4.5 pero distinción visual mínima |
 | Divider con texto: jerarquía de color invertida | beta.13 | Visual gestalt (líneas adyacentes formando banda) |
 | `<button>` reset asume contexto del padre | beta.5 | Reset CSS con asunciones de fondo |
@@ -47,9 +47,9 @@ unit anti-regresión y entry en CHANGELOG.
 ### 1.1 Inputs sin label asociado ✅ aplicada en post-RC1
 
 **Solución aplicada**: hook `src/utils/useA11yWarnInput.ts` que warn
-en dev cuando Input/Textarea/Select se montan sin ningún mecanismo
+en dev cuando Input/Textarea/NativeSelect se montan sin ningún mecanismo
 de label (htmlFor, aria-label, aria-labelledby, placeholder no vacío).
-Una vez por instancia. Aplicado a Input, Textarea, Select. Tests
+Una vez por instancia. Aplicado a Input, Textarea, NativeSelect. Tests
 anti-regresión cubren los 4 mecanismos + componentName en mensaje.
 
 ```tsx
@@ -69,7 +69,7 @@ useEffect(() => {
 }, []);
 ```
 
-**Componentes afectados**: Input, Textarea, Select.
+**Componentes afectados**: Input, Textarea, NativeSelect.
 **Estimación**: 1-2h.
 **Detectado**: beta.19 (AllStates Ola 1).
 
@@ -179,7 +179,7 @@ isControlled
 - Slider (`readOnly` futuro si se añade) — preventivo.
 - Switch (no tiene readOnly hoy, pero algunos consumers lo usan
   como display-only via `disabled`; revisar si pasa el warn).
-- Resto (Tabs, Accordion, Modal, Toast, Dropdown, Pagination,
+- Resto (Tabs, Accordion, Modal, Toast, OptionsMenu, Pagination,
   Stepper, ThemeSwitch, Input compound): no tienen modo
   display-only legítimo, deberían disparar el warn correctamente.
 
@@ -246,7 +246,7 @@ Stories dedicadas disparando focus + axe lo capturarían.
 
 ### 2.3 Estados hover/active sub-perceptibles
 
-Tabs items, Dropdown items con fondo muy claro y texto poco contrastante
+Tabs items, OptionsMenu items con fondo muy claro y texto poco contrastante
 en hover. Stories con `play()` que dispara hover via `userEvent.hover()`.
 
 **Estimación**: 1-2h.
@@ -299,7 +299,7 @@ accidentalmente wrappers anidados.
    Modo soft solo warn.
 
 **Run inicial beta.21**: 420 clases modificadoras candidatas, 6
-allowlisted (Step labeled, Sidebar/Dropdown link-vs-button modes,
+allowlisted (Step labeled, Sidebar/OptionsMenu link-vs-button modes,
 Divider variants, Navbar brand slot), 0 riesgos nuevos.
 
 **Limitaciones documentadas** (en JSDoc del script):
@@ -413,7 +413,7 @@ En galerías, envolver cada instancia en
 ### 5.3 Inputs sueltos con `aria-label` o `placeholder`
 
 Cuando la story no usa un `<Label htmlFor>` adyacente, cada Input,
-Textarea, Select necesita `aria-label` (o `placeholder` si visible).
+Textarea, NativeSelect necesita `aria-label` (o `placeholder` si visible).
 
 ### 5.4 `defaultValue=` en inputs sueltos sin `onChange`
 

@@ -74,7 +74,7 @@ El mismo patrón funciona con `<footer>`.
 ## 3. Inputs sueltos: `aria-label` o `placeholder` obligatorio
 
 Cuando la story no usa un `<Label htmlFor>` adyacente, cada `Input`,
-`Textarea`, `Select`, `Slider`, `Switch`, `Checkbox`, `Radio`
+`Textarea`, `NativeSelect`, `Slider`, `Switch`, `Checkbox`, `Radio`
 necesita un `aria-label` (o `placeholder` con texto significativo).
 
 ```tsx

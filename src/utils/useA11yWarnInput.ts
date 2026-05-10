@@ -1,7 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 /**
- * useA11yWarnInput — warn dev cuando un componente Input/Textarea/Select
+ * useA11yWarnInput — warn dev cuando un componente Input/Textarea/NativeSelect
  * se monta sin ningún mecanismo de label accesible.
  *
  * Capa 1.1 del debt doc. Mecanismos aceptados:
@@ -26,11 +26,11 @@ import { useEffect, useRef, type RefObject } from "react";
  *
  * @param ref - Ref al elemento input/textarea/select del DOM.
  * @param componentName - Nombre del componente (`"Input"`, `"Textarea"`,
- *   `"Select"`) que sale en el mensaje del warn.
+ *   `"NativeSelect"`) que sale en el mensaje del warn.
  */
 export function useA11yWarnInput(
   ref: RefObject<HTMLElement | null>,
-  componentName: "Input" | "Textarea" | "Select",
+  componentName: "Input" | "Textarea" | "NativeSelect",
 ) {
   const warnedRef = useRef(false);
   useEffect(() => {

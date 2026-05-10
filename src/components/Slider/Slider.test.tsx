@@ -190,7 +190,7 @@ describe("Slider", () => {
     });
   });
 
-  // H-05 (gate review): describedBy alineado con Input/Select/Textarea.
+  // H-05 (gate review): describedBy alineado con Input/NativeSelect/Textarea.
   it("describedBy aplica aria-describedby + concatena con nativo", () => {
     render(
       <Slider

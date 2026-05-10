@@ -8,11 +8,11 @@ import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
-export type SelectState = "default" | "error" | "success";
+export type NativeSelectState = "default" | "error" | "success";
 
-export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+export interface NativeSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   /** Estado de validación visual. */
-  state?: SelectState;
+  state?: NativeSelectState;
   /**
    * IDs de elementos descriptivos (`Helper`/`ErrorText`) combinados en
    * `aria-describedby`. Acepta un id o lista de ids. Si pasas también
@@ -23,7 +23,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 /**
- * Select — `<select>` nativo estilizado. Pasa `<option>` como children.
+ * NativeSelect — `<select>` nativo estilizado. Pasa `<option>` como children.
  *
  * **Limitación de plataforma**: la apariencia depende de
  * `appearance: none` + un caret SVG inyectado en CSS. Cubre Chrome,
@@ -36,32 +36,32 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
  *
  * **A11y dev warn**: si en desarrollo se monta sin `<Label htmlFor>`,
  * `aria-label` ni `aria-labelledby`, se emite warn
- * `[reactigoded] <Select> sin label asociado.` (capa 1.1 debt doc).
+ * `[reactigoded] <NativeSelect> sin label asociado.` (capa 1.1 debt doc).
  * Nota: `<select>` no tiene `placeholder`.
  *
  * @example
- * <Select value={country} onChange={(e) => setCountry(e.target.value)}>
+ * <NativeSelect value={country} onChange={(e) => setCountry(e.target.value)}>
  *   <option value="es">España</option>
  *   <option value="mx">México</option>
  *   <option value="ar">Argentina</option>
- * </Select>
- * <Select state="error" describedBy={errorId}>
+ * </NativeSelect>
+ * <NativeSelect state="error" describedBy={errorId}>
  *   <option value="">Selecciona…</option>
- * </Select>
+ * </NativeSelect>
  */
-export function Select({
+export function NativeSelect({
   state = "default",
   describedBy,
   className,
   children,
   ref,
   ...rest
-}: SelectProps) {
+}: NativeSelectProps) {
   const { "aria-describedby": ariaDescribedByNative, ...selectRest } = rest;
   const describedByValue = mergeDescribedBy(ariaDescribedByNative, describedBy);
 
   const internalRef = useRef<HTMLSelectElement>(null);
-  useA11yWarnInput(internalRef, "Select");
+  useA11yWarnInput(internalRef, "NativeSelect");
   const setRefs = useCallback(
     (el: HTMLSelectElement | null) => {
       internalRef.current = el;
@@ -76,7 +76,7 @@ export function Select({
       {...selectRest}
       ref={setRefs}
       className={cn(
-        "ig-select",
+        "ig-native-select",
         state === "error" && "ig-input-error",
         state === "success" && "ig-input-success",
         className,

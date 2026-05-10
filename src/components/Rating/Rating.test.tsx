@@ -264,7 +264,7 @@ describe("Rating — clamp inputs inválidos (regression beta.4)", () => {
     expect(onValueChange).toHaveBeenLastCalledWith(3); // floor(3.9)=3
   });
 
-  // H-05 (gate review): describedBy alineado con Input/Select/Textarea.
+  // H-05 (gate review): describedBy alineado con Input/NativeSelect/Textarea.
   // En Rating va al radiogroup (root div), no al input nativo.
   it("describedBy aplica aria-describedby al radiogroup + concatena con nativo", () => {
     render(

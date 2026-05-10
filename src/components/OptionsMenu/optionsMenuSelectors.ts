@@ -1,5 +1,5 @@
 /**
- * Selector compartido por DropdownTrigger y DropdownItem para localizar
+ * Selector compartido por OptionsMenuTrigger y OptionsMenuItem para localizar
  * los items navegables del menú.
  *
  * Excluye:

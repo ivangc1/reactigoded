@@ -14,7 +14,7 @@
  * Astro, Remix server-rendering, Solid/Qwik con React islands, etc.
  *
  * Test estilo `it.each` con composiciones mínimas. Para componentes
- * compound (Card, Dropdown, Tabs, Accordion, Modal, Stepper, Toast,
+ * compound (Card, OptionsMenu, Tabs, Accordion, Modal, Stepper, Toast,
  * Sidebar, Navbar, Input compound, Table, Timeline) se usa la
  * estructura mínima documentada en su JSDoc/storybook.
  *
@@ -44,10 +44,10 @@ import {
   Checkbox,
   Chip,
   Divider,
-  Dropdown,
-  DropdownItem,
-  DropdownMenu,
-  DropdownTrigger,
+  OptionsMenu,
+  OptionsMenuItem,
+  OptionsMenuContent,
+  OptionsMenuTrigger,
   ErrorText,
   Helper,
   IconButton,
@@ -70,7 +70,7 @@ import {
   Progress,
   Radio,
   Rating,
-  Select,
+  NativeSelect,
   Sidebar,
   SidebarFooter,
   SidebarItem,
@@ -201,18 +201,18 @@ const cases: SsrCase[] = [
     expects: "ig-divider",
   },
   {
-    name: "Dropdown (compound)",
+    name: "OptionsMenu (compound)",
     jsx: () => (
-      <Dropdown>
-        <DropdownTrigger>
+      <OptionsMenu>
+        <OptionsMenuTrigger>
           <Button>menu</Button>
-        </DropdownTrigger>
-        <DropdownMenu>
-          <DropdownItem>uno</DropdownItem>
-        </DropdownMenu>
-      </Dropdown>
+        </OptionsMenuTrigger>
+        <OptionsMenuContent>
+          <OptionsMenuItem>uno</OptionsMenuItem>
+        </OptionsMenuContent>
+      </OptionsMenu>
     ),
-    expects: "ig-dropdown",
+    expects: "ig-options-menu",
   },
   {
     name: "Input",
@@ -284,13 +284,13 @@ const cases: SsrCase[] = [
     expects: "ig-rating",
   },
   {
-    name: "Select",
+    name: "NativeSelect",
     jsx: () => (
-      <Select aria-label="país" defaultValue="es">
+      <NativeSelect aria-label="país" defaultValue="es">
         <option value="es">España</option>
-      </Select>
+      </NativeSelect>
     ),
-    expects: "ig-select",
+    expects: "ig-native-select",
   },
   {
     name: "Sidebar (compound)",

@@ -1,6 +1,6 @@
 import { createContext, useContext, type RefObject } from "react";
 
-export interface DropdownContextValue {
+export interface OptionsMenuContextValue {
   /** Si el menú está visible. */
   open: boolean;
   /** Cambia visibilidad y dispara `onOpenChange`. */
@@ -17,33 +17,33 @@ export interface DropdownContextValue {
   closeOnSelect: boolean;
 }
 
-export const DropdownContext = createContext<DropdownContextValue | null>(null);
+export const OptionsMenuContext = createContext<OptionsMenuContextValue | null>(null);
 
 /**
- * Hook que expone el contexto de un `<Dropdown>` (open, setOpen, ids para
+ * Hook que expone el contexto de un `<OptionsMenu>` (open, setOpen, ids para
  * `aria-controls`/`aria-labelledby`, refs al trigger/menu, closeOnSelect).
- * Lo usan internamente `DropdownTrigger`, `DropdownMenu` y `DropdownItem`.
+ * Lo usan internamente `OptionsMenuTrigger`, `OptionsMenuContent` y `OptionsMenuItem`.
  * También útil si construyes tu propio item custom o quieres cerrar el
  * dropdown desde código en respuesta a algún evento externo.
  *
  * @example
  * function CustomItem() {
- *   const { setOpen } = useDropdown();
+ *   const { setOpen } = useOptionsMenu();
  *   const router = useRouter();
  *   return (
- *     <DropdownItem onClick={() => { router.push("/perfil"); setOpen(false); }}>
+ *     <OptionsMenuItem onClick={() => { router.push("/perfil"); setOpen(false); }}>
  *       Ir a perfil
- *     </DropdownItem>
+ *     </OptionsMenuItem>
  *   );
  * }
  *
- * @throws Error si se usa fuera de `<Dropdown>`.
+ * @throws Error si se usa fuera de `<OptionsMenu>`.
  */
-export function useDropdown(): DropdownContextValue {
-  const ctx = useContext(DropdownContext);
+export function useOptionsMenu(): OptionsMenuContextValue {
+  const ctx = useContext(OptionsMenuContext);
   if (!ctx) {
     throw new Error(
-      "Componentes DropdownTrigger/DropdownMenu/DropdownItem deben usarse dentro de <Dropdown>",
+      "Componentes OptionsMenuTrigger/OptionsMenuContent/OptionsMenuItem deben usarse dentro de <OptionsMenu>",
     );
   }
   return ctx;
