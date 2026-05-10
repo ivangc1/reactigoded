@@ -327,6 +327,16 @@ export function Tooltip({
               `ig-tooltip-place-${placement}`,
               variant && `ig-tooltip-color-${variant}`,
             )}
+            // C-01 extendido (codex P1 follow-up): el portal flotante
+            // también lleva `inert`. Tooltip es decoración visual por
+            // diseño (no es interactivo — para contenido interactivo
+            // usar Popover). Si text es ReactNode con `<button>`/`<a>`,
+            // los descendants serían tab targets visibles que rompen
+            // el flujo de teclado del documento sin que el consumer lo
+            // espere. `inert` los neutraliza visualmente igual que en
+            // el SR-only span persistente. El usuario nunca debe poder
+            // tabbear dentro de un tooltip.
+            inert
             // C-01: data-tooltip-content solo es útil cuando text es
             // serializable como atributo HTML (string). Para ReactNode
             // arbitrario el atributo se serializaría como

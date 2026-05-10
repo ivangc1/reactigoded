@@ -399,6 +399,32 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     // spec HTML garantiza que en browsers reales (Chrome 102+, Firefox
     // 112+, Safari 15.5+) los descendants de un elemento inert no son
     // focuseables vía Tab ni programáticamente con .focus().
+    // Codex P1 follow-up: el portal flotante TAMBIÉN lleva inert.
+    // Tooltip es decoración visual por diseño (no interactivo). Si
+    // text es ReactNode con `<button>`/`<a>`, los descendants del
+    // portal serían tab targets visibles que rompen el flujo de
+    // teclado del documento. Mismo razonamiento que el SR-only span.
+    it("portal flotante también lleva inert al abrirse (codex P1 follow-up)", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip
+          text={
+            <button data-testid="trap-en-portal">trap</button>
+          }
+        >
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button", { name: "x" }));
+      const portal = document.querySelector(".ig-tooltip-place-top");
+      expect(portal).not.toBeNull();
+      expect(portal?.hasAttribute("inert")).toBe(true);
+      // El button trap existe en el portal pero está neutralizado.
+      expect(
+        portal?.querySelector('[data-testid="trap-en-portal"]'),
+      ).not.toBeNull();
+    });
+
     it("SR-only span lleva inert para neutralizar interactividad de ReactNode (codex P1)", () => {
       const { container } = render(
         <Tooltip
