@@ -8625,6 +8625,11 @@ VARIANTES:
 .ig-table-auto { table-layout: auto; }
 .ig-table-fixed { table-layout: fixed; }
 
+/* Region scrollable horizontal del Table (M-08 RC1: extraído del
+   inline style={overflowX:"auto"} para que CSP estricto sin
+   'unsafe-inline' funcione sin necesitar el attribute). */
+.ig-table-scroll-region { overflow-x: auto; }
+
 /* Caption side */
 .ig-caption-top { caption-side: top; }
 .ig-caption-bottom { caption-side: bottom; }

@@ -65,7 +65,10 @@ describe("Table", () => {
     const table = screen.getByTestId("t");
     const wrapper = table.parentElement;
     expect(wrapper?.tagName).toBe("DIV");
-    expect(wrapper?.style.overflowX).toBe("auto");
+    // M-08: overflow-x ahora vive en la clase `.ig-table-scroll-region`
+    // (extraído del inline style para CSP estricto). El test verifica
+    // la clase; el CSS real se cubre por visual regression / Storybook.
+    expect(wrapper).toHaveClass("ig-table-scroll-region");
     expect(wrapper).toHaveAttribute("role", "region");
     expect(wrapper).toHaveAttribute("tabindex", "0");
     expect(wrapper).toHaveAttribute(
