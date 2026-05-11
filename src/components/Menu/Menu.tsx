@@ -1,13 +1,28 @@
 import {
-  useEffect,
   useId,
   useMemo,
   useRef,
+  useState,
   type HTMLAttributes,
   type Ref,
 } from "react";
+import {
+  autoUpdate,
+  flip,
+  offset,
+  shift,
+  useClick,
+  useDismiss,
+  useFloating,
+  useInteractions,
+  useListNavigation,
+  useRole,
+  useTypeahead,
+  type Placement,
+} from "@floating-ui/react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";
+import { useFloatingNode } from "@/components/floating/primitives/useFloatingNode";
 import { MenuContext } from "./MenuContext";
 
 export type MenuAlign = "left" | "right";
@@ -34,8 +49,27 @@ export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
  *
  * Compón con `MenuTrigger`, `MenuContent`, `MenuItem`,
  * `MenuSeparator`, `MenuLabel`. Cierra con ESC y al hacer click fuera;
- * soporta navegación con ↑/↓/Home/End/Enter/Espacio siguiendo el patrón
- * WAI-ARIA menu button.
+ * soporta navegación con ↑/↓/Home/End/Enter/Espacio + typeahead (foco
+ * por primera letra) siguiendo el patrón WAI-ARIA APG menu-button.
+ *
+ * **C-03 (RC1)**: migración a `@floating-ui/react` sobre la capa
+ * `floating/primitives/` (compartida con Tooltip + futuros Popover/
+ * HoverCard). Reemplaza ~600 LOC hand-rolled de outside-click/escape/
+ * arrow-keys por hooks composables FUI con APG menu pattern completo:
+ *
+ * - `useListNavigation`: flechas + Home/End + loop.
+ * - `useTypeahead`: focus por primera letra (APG menu).
+ * - `useDismiss({ bubbles.escapeKey: true })`: cascade dismiss vía
+ *   `<FloatingTreeRoot>` opt-in (cierra ancestros registrados).
+ * - `useFloatingNode`: registro en el tree para anidación.
+ * - `<FloatingFocusManager>`: focus trap + return al trigger al cerrar.
+ *
+ * **Positioning**: actualmente CSS-driven (la clase `.ig-menu-open` +
+ * `.ig-menu-right`/`.ig-menu-up` controla layout). FUI computa
+ * `floatingStyles` internamente para el caso futuro (overflow:hidden
+ * de ancestor) pero no se aplican porque el patrón actual del DS es
+ * inline-positioned. Si en 1.1+ aparece overflow-clipping reportado,
+ * se activa `FloatingPortal` y `floatingStyles` como opt-in.
  *
  * Modo controlado: pasa `open` + `onOpenChange`. Modo no controlado: omite `open`.
  *
@@ -48,6 +82,16 @@ export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
  *     <MenuItem danger onClick={borrar}>Eliminar</MenuItem>
  *   </MenuContent>
  * </Menu>
+ *
+ * @example // cascade dismiss con FloatingTreeRoot (Menu dentro de Dialog)
+ * <FloatingTreeRoot>
+ *   <Dialog open>
+ *     <Menu>
+ *       <MenuTrigger>...</MenuTrigger>
+ *       <MenuContent>...</MenuContent>
+ *     </Menu>
+ *   </Dialog>
+ * </FloatingTreeRoot>
  */
 export function Menu({
   open: openProp,
@@ -71,44 +115,81 @@ export function Menu({
     onChange: onOpenChange,
   });
 
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { nodeId } = useFloatingNode();
 
-  // Click fuera cierra.
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (e: MouseEvent) => {
-      const root = rootRef.current;
-      if (!root) return;
-      if (!root.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onPointer);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-    };
-  }, [open, setOpen]);
+  // Mapeo placement DS → FUI placement string. El DS expone props
+  // separadas (placement: align horizontal + direction: dirección
+  // vertical) por compat con la API antigua; FUI usa un único string.
+  const fuiPlacement: Placement =
+    direction === "up"
+      ? placement === "right"
+        ? "top-end"
+        : "top-start"
+      : placement === "right"
+        ? "bottom-end"
+        : "bottom-start";
 
-  // ESC global cierra y devuelve foco al trigger.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, setOpen]);
+  const { refs, context } = useFloating({
+    ...(nodeId !== undefined ? { nodeId } : {}),
+    open,
+    // setOpen viene de useControllableState con firma
+    // `(next, options?)` (options es SetValueOptions interno del DS).
+    // FUI espera `(open, event?, reason?)`. Adapter: solo propagamos
+    // el boolean (el Event/reason de FUI no aplica a SetValueOptions).
+    onOpenChange: (next: boolean) => {
+      setOpen(next);
+    },
+    placement: fuiPlacement,
+    middleware: [offset(4), flip(), shift({ padding: 4 })],
+    whileElementsMounted: autoUpdate,
+  });
 
-  const handleRef = (node: HTMLDivElement | null) => {
-    rootRef.current = node;
-    if (typeof ref === "function") ref(node);
-    else if (ref) (ref as { current: HTMLDivElement | null }).current = node;
-  };
+  // Refs de items para useListNavigation/useTypeahead. listRef registra
+  // los HTMLElement de cada MenuItem (en orden de aparición); labelsRef
+  // registra el texto plano para typeahead matching.
+  const listRef = useRef<Array<HTMLElement | null>>([]);
+  const labelsRef = useRef<Array<string | null>>([]);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  // useClick: trigger toggle con click + Space/Enter (button nativo).
+  const click = useClick(context);
+
+  // useDismiss: outside click + Escape. bubbles.escapeKey: true para
+  // cascade vía FloatingTreeRoot (mismo patrón que Tooltip H-01).
+  const dismiss = useDismiss(context, {
+    bubbles: { escapeKey: true },
+  });
+
+  // useRole: aplica aria-haspopup="menu" al reference, role="menu" al
+  // floating, role="menuitem" a items (via getItemProps).
+  const role = useRole(context, { role: "menu" });
+
+  // useListNavigation: flechas ↑/↓ entre items, Home/End, wrap.
+  // focusItemOnOpen="auto": al abrir por teclado, foca primer/último
+  // según la tecla; al abrir por click, NO foca ningún item.
+  const listNavigation = useListNavigation(context, {
+    listRef,
+    activeIndex,
+    onNavigate: setActiveIndex,
+    loop: true,
+    focusItemOnOpen: "auto",
+  });
+
+  // useTypeahead: focus por primera letra (APG menu). Solo aplica
+  // cuando el menu está open (guard inline para evitar onMatch
+  // disparar fuera del estado abierto). exactOptionalPropertyTypes
+  // prohíbe `onMatch: undefined`, así que pasamos siempre un callback
+  // que internamente comprueba `open`.
+  const typeahead = useTypeahead(context, {
+    listRef: labelsRef,
+    activeIndex,
+    onMatch: (idx: number) => {
+      if (open) setActiveIndex(idx);
+    },
+  });
+
+  const { getReferenceProps, getFloatingProps, getItemProps } =
+    useInteractions([click, dismiss, role, listNavigation, typeahead]);
 
   const ctxValue = useMemo(
     () => ({
@@ -116,17 +197,40 @@ export function Menu({
       setOpen,
       triggerId,
       menuId,
-      triggerRef,
-      menuRef,
       closeOnSelect,
+      getReferenceProps,
+      getFloatingProps,
+      getItemProps,
+      listRef,
+      labelsRef,
+      activeIndex,
+      setActiveIndex,
+      setReference: refs.setReference,
+      setFloating: refs.setFloating,
+      context,
+      nodeId,
     }),
-    [open, setOpen, triggerId, menuId, closeOnSelect],
+    [
+      open,
+      setOpen,
+      triggerId,
+      menuId,
+      closeOnSelect,
+      getReferenceProps,
+      getFloatingProps,
+      getItemProps,
+      activeIndex,
+      refs.setReference,
+      refs.setFloating,
+      context,
+      nodeId,
+    ],
   );
 
   return (
     <MenuContext.Provider value={ctxValue}>
       <div
-        ref={handleRef}
+        ref={ref}
         className={cn(
           "ig-menu",
           placement === "right" && "ig-menu-right",

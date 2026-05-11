@@ -9,6 +9,41 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Breaking
 
+- **`Menu` internals migrados a Floating UI (C-03)**: `Menu` reescrito sobre la
+  capa `floating/primitives/` (PR #62). Reemplaza ~600 LOC hand-rolled de
+  navegación por hooks composables:
+
+  - `useListNavigation` con `focusItemOnOpen: 'auto'` (APG menu pattern: arrows
+    abren menu + focan primer/último item; click abre sin focar).
+  - `useTypeahead` (focus por primera letra, APG).
+  - `useDismiss({ bubbles: { escapeKey: true } })` (cascade dismiss via
+    `<FloatingTreeRoot>`).
+  - `FloatingFocusManager` con `initialFocus={-1}` + `returnFocus` (defiere
+    focus management a useListNavigation, devuelve foco al trigger al cerrar).
+  - `useFloatingNode` para registrar el Menu en el FloatingTree (cascade dismiss
+    cuando hay descendientes flotantes como Tooltip dentro de MenuItem).
+
+  API pública (`open`/`defaultOpen`/`onOpenChange`/`placement`/`direction`/
+  `closeOnSelect`) y compound shape (`Menu`/`MenuTrigger`/`MenuContent`/
+  `MenuItem`/`MenuSeparator`/`MenuLabel`) sin cambio. Las clases CSS
+  `.ig-menu-*` mantienen mismo contrato.
+
+  Breaking de tipos en callbacks de `MenuItem`:
+  - `onClick` y `onKeyDown` cambian de `MouseEvent<HTMLAnchorElement>` /
+    `MouseEvent<HTMLButtonElement>` (según rama) a `MouseEvent<HTMLElement>`
+    (genérico). Mismo para `KeyboardEvent`. Audit pre-RC1 verificó cero usage
+    de API anchor/button-specific (`.href`, `.disabled`, etc.) en callbacks
+    de MenuItem en repo + cero consumers reales.
+
+  Migración consumers futuros que necesiten API element-specific:
+  ```tsx
+  onClick={(e) => {
+    if (e.currentTarget instanceof HTMLAnchorElement) {
+      e.currentTarget.href;  // narrow type-safe
+    }
+  }}
+  ```
+
 - **`OptionsMenu` → `Menu` + 5 subcomponentes renombrados (B-01 redefinido)**:
   alineación con la industria. 5 de 7 librerías top (MUI, Mantine, Ark UI,
   HeadlessUI, Chakra) usan el nombre canónico `Menu`. B-01 original (rename

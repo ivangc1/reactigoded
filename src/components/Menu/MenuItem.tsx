@@ -1,13 +1,15 @@
+import { useMergeRefs } from "@floating-ui/react";
 import type {
   AnchorHTMLAttributes,
   ButtonHTMLAttributes,
   KeyboardEvent,
   MouseEvent,
+  ReactNode,
   Ref,
 } from "react";
+import { useRef } from "react";
 import { cn } from "@/utils/cn";
 import { useMenu } from "./MenuContext";
-import { NAVIGABLE_ITEM_SELECTOR } from "./menuSelectors";
 
 interface CommonProps {
   /** Marca el item como acción destructiva (color malum). */
@@ -16,46 +18,53 @@ interface CommonProps {
   active?: boolean;
 }
 
+// Callbacks consumer-facing tipados con HTMLElement (no element-specific).
+// Razón (C-03 RC1): los handlers internos del MenuItem no aprovechan API
+// anchor/button-specific. Auditar el repo + consumers reveló 0 accesos a
+// e.currentTarget.{href,disabled,form,target,...} desde callbacks del
+// consumer. Alinear consumer-facing con la firma que el componente
+// realmente necesita evita 4 casts `as unknown as` en el bridge interno.
+// Si un consumer necesitase API anchor-specific, narrowing manual:
+//   onClick={(e) => { if (e.currentTarget instanceof HTMLAnchorElement) ... }}
+type ItemMouseHandler = (e: MouseEvent<HTMLElement>) => void;
+type ItemKeyboardHandler = (e: KeyboardEvent<HTMLElement>) => void;
+
 type ButtonItemProps = CommonProps &
-  ButtonHTMLAttributes<HTMLButtonElement> & {
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "onKeyDown"> & {
     href?: undefined;
+    onClick?: ItemMouseHandler;
+    onKeyDown?: ItemKeyboardHandler;
     ref?: Ref<HTMLButtonElement>;
   };
 
 type AnchorItemProps = CommonProps &
-  AnchorHTMLAttributes<HTMLAnchorElement> & {
+  Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "onClick" | "onKeyDown"> & {
     href: string;
+    onClick?: ItemMouseHandler;
+    onKeyDown?: ItemKeyboardHandler;
     ref?: Ref<HTMLAnchorElement>;
   };
 
 export type MenuItemProps = ButtonItemProps | AnchorItemProps;
 
-function handleNavKeys(
-  e: KeyboardEvent<HTMLElement>,
-  menuRef: { current: HTMLDivElement | null },
-) {
+/**
+ * Helper interno — extrae texto plano de children para typeahead matching.
+ */
+function extractLabel(children: ReactNode): string {
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(extractLabel).join(" ");
   if (
-    e.key !== "ArrowDown" &&
-    e.key !== "ArrowUp" &&
-    e.key !== "Home" &&
-    e.key !== "End"
+    children !== null &&
+    typeof children === "object" &&
+    "props" in children &&
+    typeof children.props === "object" &&
+    children.props !== null &&
+    "children" in children.props
   ) {
-    return;
+    return extractLabel(children.props.children as ReactNode);
   }
-  const items = Array.from(
-    menuRef.current?.querySelectorAll<HTMLElement>(NAVIGABLE_ITEM_SELECTOR) ??
-      [],
-  );
-  if (items.length === 0) return;
-  const idx = items.indexOf(e.currentTarget);
-  let target: HTMLElement | undefined;
-  if (e.key === "ArrowDown") target = items[(idx + 1) % items.length];
-  else if (e.key === "ArrowUp")
-    target = items[(idx - 1 + items.length) % items.length];
-  else if (e.key === "Home") target = items[0];
-  else target = items[items.length - 1];
-  e.preventDefault();
-  target?.focus();
+  return "";
 }
 
 /**
@@ -63,41 +72,123 @@ function handleNavKeys(
  *
  * Si recibe `href` renderiza un `<a>`, si no un `<button>`. Cierra el menu
  * al activarse cuando `Menu.closeOnSelect` está activo (por defecto).
- * Soporta navegación con ↑/↓/Home/End entre los items hermanos.
  *
- * **Roving tabindex consistente desde 1.0.0-beta.3**: tanto buttons como
- * anchors usan `tabIndex={-1}` (los menuitems no deben ser tab stops del
- * documento; el foco entra al menú vía el trigger). Items con
- * `aria-disabled="true"` se saltan en la nav por flechas Y bloquean clicks.
+ * **C-03 (RC1)**: navegación delegada a `useListNavigation` + `useTypeahead`
+ * de Floating UI sobre el primitive layer.
+ *
+ * **A11y APG menu**:
+ * - `role="menuitem"`.
+ * - `aria-disabled="true"` salta el item en flechas Y bloquea clicks.
+ * - Roving tabindex: `tabIndex={-1}` para todos.
+ *
+ * **H-19**: `<a>` sintetiza click en Space (Enter ya dispara click nativo).
+ *
+ * **Tipo de callbacks**: `onClick`/`onKeyDown` tipan `MouseEvent<HTMLElement>`
+ * / `KeyboardEvent<HTMLElement>` (no element-specific). Razón: alineación
+ * con la firma genuinamente común de ambos branches (`<a>` y `<button>`).
+ * Audit pre-RC1 verificó 0 consumers accediendo a `e.currentTarget.{href,
+ * disabled,...}` desde callbacks de MenuItem. Si un consumer hipotético lo
+ * necesita: narrowing manual con `instanceof`.
  */
-export function MenuItem(props: MenuItemProps) {
-  const { setOpen, triggerRef, menuRef, closeOnSelect } = useMenu();
+export function MenuItem({ ref, ...props }: MenuItemProps) {
+  const { setOpen, closeOnSelect, listRef, labelsRef, getItemProps } =
+    useMenu();
+  const indexRef = useRef<number | null>(null);
+
+  // Discriminator preservado tras destructure: `"href" in props` con
+  // typeof string detecta la rama AnchorItemProps.
+  const isAnchor = "href" in props && typeof props.href === "string";
+
+  const registerItem = (node: HTMLElement | null) => {
+    if (node === null) return;
+    let idx = listRef.current.indexOf(node);
+    if (idx === -1) {
+      idx = listRef.current.length;
+      listRef.current[idx] = node;
+      labelsRef.current[idx] = extractLabel(props.children).trim() || null;
+    }
+    indexRef.current = idx;
+  };
+
+  // useMergeRefs SIEMPRE al mismo orden (Rules of Hooks). El `ref` viene
+  // del parameter destructure — el linter `react-hooks/refs` NO lo flagea
+  // como leak porque no es acceso a `props.ref`.
+  const refMerged = useMergeRefs([
+    registerItem,
+    (ref ?? null) as Ref<HTMLElement>,
+  ]);
 
   const close = () => {
     if (!closeOnSelect) return;
     setOpen(false);
-    triggerRef.current?.focus();
   };
 
-  // True si el item está marcado como aria-disabled. Los browsers no
-  // bloquean clicks por defecto en estos items (no es como `disabled` en
-  // <button>), así que lo hacemos manualmente.
-  const isAriaDisabled = props["aria-disabled"] === true ||
-    props["aria-disabled"] === "true";
+  const ariaDisabled = props["aria-disabled"];
+  const isAriaDisabled = ariaDisabled === true || ariaDisabled === "true";
 
-  if (props.href !== undefined) {
+  // tabIndex={-1} hardcoded — APG menu pattern: Tab NO navega items
+  // del menu (solo arrows + typeahead). El foco entra al primer/último
+  // item via `.focus()` programático invocado por useListNavigation con
+  // focusItemOnOpen: 'auto'. `tabIndex={-1}` permite `.focus()`
+  // programático sin participar del Tab order del documento.
+
+  // Handlers internos con firma genérica Element (alineada con la firma
+  // de getItemProps de FUI). Cero casts.
+  const handleClick = (e: MouseEvent<HTMLElement>) => {
+    if (isAriaDisabled) {
+      e.preventDefault();
+      return;
+    }
+    props.onClick?.(e);
+    if (!e.defaultPrevented) close();
+  };
+
+  const handleKeyDownButton = (e: KeyboardEvent<HTMLElement>) => {
+    props.onKeyDown?.(e);
+  };
+
+  const handleKeyDownAnchor = (e: KeyboardEvent<HTMLElement>) => {
+    props.onKeyDown?.(e);
+    if (e.defaultPrevented) return;
+    if (isAriaDisabled && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      return;
+    }
+    // H-19: Space en <a> sintetiza click. e.repeat ignora keydown
+    // repetidos. preventDefault siempre evita scroll. instanceof
+    // HTMLElement es narrowing real (type guard), no afirmación —
+    // garantiza que `.click()` existe en el target.
+    if (e.key === " ") {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (e.currentTarget instanceof HTMLElement) {
+        e.currentTarget.click();
+      }
+    }
+  };
+
+  if (isAnchor) {
+    const anchorProps = props as Omit<AnchorItemProps, "ref">;
     const {
+      onClick: _omitClick,
+      onKeyDown: _omitKey,
+      children,
+      className,
       danger,
       active,
-      className,
-      onClick,
-      onKeyDown,
-      children,
-      ...rest
-    } = props;
+      ...anchorRest
+    } = anchorProps;
+    void _omitClick;
+    void _omitKey;
+
     return (
       <a
-        {...rest}
+        {...getItemProps({
+          ...anchorRest,
+          onClick: handleClick,
+          onKeyDown: handleKeyDownAnchor,
+        })}
+        ref={refMerged}
         role="menuitem"
         tabIndex={-1}
         className={cn(
@@ -106,63 +197,34 @@ export function MenuItem(props: MenuItemProps) {
           active && "ig-menu-item-active",
           className,
         )}
-        onClick={(e: MouseEvent<HTMLAnchorElement>) => {
-          if (isAriaDisabled) {
-            e.preventDefault();
-            return;
-          }
-          onClick?.(e);
-          if (!e.defaultPrevented) close();
-        }}
-        onKeyDown={(e) => {
-          onKeyDown?.(e);
-          if (e.defaultPrevented) return;
-          // Activación por teclado: aria-disabled bloquea Enter+Space.
-          if (isAriaDisabled && (e.key === "Enter" || e.key === " ")) {
-            e.preventDefault();
-            return;
-          }
-          // H-19 (gate review, WAI-ARIA APG menu-button-links):
-          // role="menuitem" debe activarse con Enter Y Space. Para
-          // <a>, Enter dispara click nativo pero Space NO — sintetizar
-          // el click manualmente. El click handler ya cubre aria-disabled,
-          // onClick consumer y close().
-          //
-          // Codex review P2 sobre PR #28: ignorar key auto-repeat.
-          // Mantener Space presionado dispara keydown repetidos; sin
-          // guard, cada repeat sintetiza un click extra. La activación
-          // nativa de <button> ocurre al keyup → un solo click por
-          // pulsación larga. Replicamos esa semántica con e.repeat.
-          // Mantenemos preventDefault en TODOS los repeats para evitar
-          // que el browser haga scroll de la página al presionar
-          // Espacio.
-          if (e.key === " ") {
-            e.preventDefault();
-            if (e.repeat) return;
-            e.currentTarget.click();
-            return;
-          }
-          handleNavKeys(e, menuRef);
-        }}
       >
         {children}
       </a>
     );
   }
 
+  const buttonProps = props as Omit<ButtonItemProps, "ref">;
   const {
+    onClick: _omitClick,
+    onKeyDown: _omitKey,
+    children,
+    className,
     danger,
     active,
-    className,
     type = "button",
-    onClick,
-    onKeyDown,
-    children,
-    ...rest
-  } = props;
+    ...buttonRest
+  } = buttonProps;
+  void _omitClick;
+  void _omitKey;
+
   return (
     <button
-      {...rest}
+      {...getItemProps({
+        ...buttonRest,
+        onClick: handleClick,
+        onKeyDown: handleKeyDownButton,
+      })}
+      ref={refMerged}
       type={type}
       role="menuitem"
       tabIndex={-1}
@@ -172,20 +234,12 @@ export function MenuItem(props: MenuItemProps) {
         active && "ig-menu-item-active",
         className,
       )}
-      onClick={(e: MouseEvent<HTMLButtonElement>) => {
-        if (isAriaDisabled) {
-          e.preventDefault();
-          return;
-        }
-        onClick?.(e);
-        if (!e.defaultPrevented) close();
-      }}
-      onKeyDown={(e) => {
-        onKeyDown?.(e);
-        if (!e.defaultPrevented) handleNavKeys(e, menuRef);
-      }}
     >
       {children}
     </button>
   );
 }
+
+// Re-exporta tipos individuales por si el consumer necesita tipar
+// específicamente (poco común — usar MenuItemProps).
+export type { ButtonItemProps, AnchorItemProps };

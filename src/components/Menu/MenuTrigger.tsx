@@ -1,7 +1,7 @@
-import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
+import { useMergeRefs } from "@floating-ui/react";
+import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useMenu } from "./MenuContext";
-import { NAVIGABLE_ITEM_SELECTOR } from "./menuSelectors";
 
 export interface MenuTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,68 +11,40 @@ export interface MenuTriggerProps
 /**
  * MenuTrigger — botón que abre/cierra el menú.
  *
- * Click toggleea. ↓/Enter/Space abren y enfocan el primer item; ↑ abre y
- * enfoca el último. Aplica `aria-haspopup="menu"` y `aria-expanded`.
+ * **C-03 (RC1)**: internals via `@floating-ui/react`. `useClick` ya
+ * cubre toggle por click + Space/Enter (estándar `<button>`).
+ * `useListNavigation` con `focusItemOnOpen: "auto"` ya foca primer/
+ * último item según la tecla que abrió el menú (↓ → primero, ↑ →
+ * último), reemplazando el `requestAnimationFrame` + `focusItem`
+ * manual de la versión hand-rolled.
+ *
+ * ARIA inyectada por `useRole({ role: "menu" })`:
+ * - `aria-haspopup="menu"`
+ * - `aria-expanded={open}`
+ *
+ * `aria-controls={menuId}` se inyecta explícitamente para enlace al
+ * MenuContent (no lo cubre useRole por defecto).
  */
 export function MenuTrigger({
   className,
   children,
   type = "button",
-  onClick,
-  onKeyDown,
   ref,
   ...rest
 }: MenuTriggerProps) {
-  const { open, setOpen, triggerId, menuId, triggerRef, menuRef } =
-    useMenu();
+  const { triggerId, menuId, setReference, getReferenceProps } = useMenu();
 
-  const handleRef = (node: HTMLButtonElement | null) => {
-    triggerRef.current = node;
-    if (typeof ref === "function") ref(node);
-    else if (ref) (ref as { current: HTMLButtonElement | null }).current = node;
-  };
-
-  const focusItem = (which: "first" | "last") => {
-    // Usa requestAnimationFrame para esperar a que el menu esté visible.
-    requestAnimationFrame(() => {
-      const items = menuRef.current?.querySelectorAll<HTMLElement>(
-        NAVIGABLE_ITEM_SELECTOR,
-      );
-      if (!items || items.length === 0) return;
-      (which === "first" ? items[0] : items[items.length - 1])?.focus();
-    });
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    onKeyDown?.(e);
-    if (e.defaultPrevented) return;
-
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      if (!open) setOpen(true);
-      focusItem("first");
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (!open) setOpen(true);
-      focusItem("last");
-    }
-  };
+  // Merge del ref del consumer con setReference de FUI.
+  const refMerged = useMergeRefs([setReference, ref ?? null]);
 
   return (
     <button
-      {...rest}
-      ref={handleRef}
+      {...getReferenceProps(rest)}
+      ref={refMerged}
       id={triggerId}
       type={type}
-      aria-haspopup="menu"
-      aria-expanded={open}
       aria-controls={menuId}
       className={cn("ig-menu-trigger", className)}
-      onClick={(e) => {
-        onClick?.(e);
-        if (!e.defaultPrevented) setOpen(!open);
-      }}
-      onKeyDown={handleKeyDown}
     >
       {children}
     </button>
