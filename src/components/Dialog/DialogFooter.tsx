@@ -1,17 +1,17 @@
 import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
-export interface ModalFooterProps extends HTMLAttributes<HTMLDivElement> {
+export interface DialogFooterProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** ModalFooter — pie del modal con acciones alineadas a la derecha. */
-export function ModalFooter({
+/** DialogFooter — pie del modal con acciones alineadas a la derecha. */
+export function DialogFooter({
   className,
   children,
   ref,
   ...rest
-}: ModalFooterProps) {
+}: DialogFooterProps) {
   return (
     <div ref={ref} className={cn("ig-dialog-footer", className)} {...rest}>
       {children}

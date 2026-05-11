@@ -9,6 +9,38 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Breaking
 
+- **`Modal` → `Dialog` (rename + regularización CSS-JS)**: el componente JS
+  se renombra a `Dialog` para alinear con el HTML element nativo `<dialog>`
+  (que ya usaba internamente) y con la industria (Radix, Ark UI, HeadlessUI,
+  MUI usan `Dialog`). Las clases CSS ya estaban nombradas `.ig-dialog-*`
+  (alineación previa), por lo que NO cambian. Este rename regulariza la
+  inconsistencia legacy: componente `Modal` (JS) emitiendo clases
+  `.ig-dialog-*` (CSS).
+
+  Renames JS:
+
+  | Antes | Después |
+  |---|---|
+  | `Modal` | `Dialog` |
+  | `ModalBody` | `DialogBody` |
+  | `ModalHeader` | `DialogHeader` |
+  | `ModalFooter` | `DialogFooter` |
+  | `ModalClose` | `DialogClose` |
+  | `ModalProps` (y `Modal*Props` subcomponentes) | `DialogProps` (y `Dialog*Props`) |
+  | `ModalContext` (interno) | `DialogContext` (interno) |
+  | `ModalSize` / `ModalBackdrop` (types) | `DialogSize` / `DialogBackdrop` |
+
+  Las **clases CSS `.ig-dialog-*` SIN cambios** (ya alineadas pre-RC1).
+  Tokens `--ig-z-modal` / `--ig-z-modal-backdrop` se mantienen como
+  utilities z-index genéricas (no renombradas para preservar
+  compatibilidad con custom CSS de consumers).
+
+  Migración:
+  ```diff
+  - import { Modal, ModalBody, ModalHeader, ModalFooter, ModalClose } from "reactigoded";
+  + import { Dialog, DialogBody, DialogHeader, DialogFooter, DialogClose } from "reactigoded";
+  ```
+
 - **`Menu` internals migrados a Floating UI (C-03)**: `Menu` reescrito sobre la
   capa `floating/primitives/` (PR #62). Reemplaza ~600 LOC hand-rolled de
   navegación por hooks composables:

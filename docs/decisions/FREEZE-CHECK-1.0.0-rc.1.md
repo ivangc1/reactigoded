@@ -35,7 +35,7 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 
 | | |
 |---|---|
-| **Estado actual** | Sub-componentes documentados: `AccordionItem/Header/Content`, `CardBody/Header/Footer/Image/Divider`, `ModalHeader/Body/Footer/Close`, `Tab/TabList/TabPanel`, `TabsContent`, `Sidebar*` (7), `Navbar*` (5), `Table*` (7), `BreadcrumbItem`, `AvatarGroup`, `IconButton`, `InputAddon/InputGroup`, `ErrorText/Helper/Label`, `Skeleton/SkeletonContainer`, `Step/Stepper`, `TimelineItem`, `ToastProvider`, `Menu*` (5). |
+| **Estado actual** | Sub-componentes documentados: `AccordionItem/Header/Content`, `CardBody/Header/Footer/Image/Divider`, `DialogHeader/Body/Footer/Close`, `Tab/TabList/TabPanel`, `TabsContent`, `Sidebar*` (7), `Navbar*` (5), `Table*` (7), `BreadcrumbItem`, `AvatarGroup`, `IconButton`, `InputAddon/InputGroup`, `ErrorText/Helper/Label`, `Skeleton/SkeletonContainer`, `Step/Stepper`, `TimelineItem`, `ToastProvider`, `Menu*` (5). |
 | **Bloqueado por** | Parcialmente B-01 si afecta naming Menu/NativeSelect compound. |
 | **Confirmación** | ⚠ **Requiere input** |
 | **Notas** | El recuento exacto del review (42) no coincide 1:1 con mi inventario. Iván debería verificar el listado completo en `src/components/index.ts` + sub-barrels. Sin re-naming pendiente, el set actual es freezable. |
@@ -112,14 +112,14 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 | **Confirmación** | ✅ **Confirmable** |
 | **Notas** | C-01 y C-02 ya cerrados. API estable post-fixes. |
 
-### 11. Modal API
+### 11. Dialog API
 
 | | |
 |---|---|
-| **Estado actual** | `ModalProps`: `open`, `onClose`, `size`, `backdrop`, `closeOnBackdrop`, `closeOnEsc`, `loading`, `ref`. + sub-componentes `ModalHeader/Body/Footer/Close`. |
+| **Estado actual** | `DialogProps`: `open`, `onClose`, `size`, `backdrop`, `closeOnBackdrop`, `closeOnEsc`, `loading`, `ref`. + sub-componentes `DialogHeader/Body/Footer/Close`. |
 | **Bloqueado por** | — |
 | **Confirmación** | ✅ **Confirmable** |
-| **Notas** | API completa documentada. C-02 (Tooltip-en-Modal) deja la integración como manual con trigger documentado. |
+| **Notas** | API completa documentada. C-02 (Tooltip-en-Dialog) deja la integración como manual con trigger documentado. |
 
 ### 12. Política `"use client"` global en barrel (H-09)
 
@@ -143,7 +143,7 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 
 | | |
 |---|---|
-| **Estado actual** | Patrón actual del DS: **compound** (`<Modal><ModalHeader/></Modal>`, `<Tabs><Tab/></Tabs>`). Tooltip es **prop-based** (`<Tooltip text="...">child</Tooltip>`) por su naturaleza wrapper. |
+| **Estado actual** | Patrón actual del DS: **compound** (`<Dialog><DialogHeader/></Dialog>`, `<Tabs><Tab/></Tabs>`). Tooltip es **prop-based** (`<Tooltip text="...">child</Tooltip>`) por su naturaleza wrapper. |
 | **Bloqueado por** | — |
 | **Confirmación** | ⚠ **Requiere input** |
 | **Notas** | Para futuros `Popover`/`HoverCard`/`Combobox` (1.1.0+), ¿se mantiene compound? El review pide explicitar el commitment. Recomendación: **compound** para todos excepto wrappers de descripción simple (Tooltip estilo). |

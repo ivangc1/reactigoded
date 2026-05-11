@@ -8,12 +8,12 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { ModalContext, type ModalContextValue } from "./ModalContext";
+import { DialogContext, type DialogContextValue } from "./DialogContext";
 
-export type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
-export type ModalBackdrop = "default" | "blur" | "dark" | "light" | "none";
+export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
+export type DialogBackdrop = "default" | "blur" | "dark" | "light" | "none";
 
-export interface ModalProps
+export interface DialogProps
   extends Omit<DialogHTMLAttributes<HTMLDialogElement>, "open"> {
   /** Estado controlado: si está abierto. */
   open: boolean;
@@ -24,16 +24,16 @@ export interface ModalProps
    *
    * En 1.0.0-rc.1 solo dispara con `open=false` (eventos `cancel`/`close`
    * del `<dialog>`). El consumer es quien controla `open=true` desde
-   * fuera. Si en el futuro Modal añade triggers internos para abrirse,
+   * fuera. Si en el futuro Dialog añade triggers internos para abrirse,
    * `onOpenChange` también disparará con `true` (additive sin breaking).
    */
   onOpenChange?: (open: boolean) => void;
   /** @deprecated B-02: usa `onOpenChange`. Eliminado en 2.0. */
   onClose?: () => void;
   /** Tamaño del modal. Por defecto `"md"`. */
-  size?: ModalSize;
+  size?: DialogSize;
   /** Estilo del backdrop. Por defecto `"default"`. */
-  backdrop?: ModalBackdrop;
+  backdrop?: DialogBackdrop;
   /** Cerrar al hacer click fuera del contenido. Por defecto `true`. */
   closeOnBackdrop?: boolean;
   /** Permitir cerrar con la tecla ESC. Por defecto `true`. */
@@ -44,27 +44,27 @@ export interface ModalProps
 }
 
 /**
- * Modal — diálogo modal sobre `<dialog>` HTML nativo.
+ * Dialog — diálogo modal sobre `<dialog>` HTML nativo.
  *
  * Aprovecha la accesibilidad nativa: focus trap, restauración de foco al
  * cerrar, top-layer (sale por encima de cualquier z-index/overflow ancestro),
  * `role="dialog"` + `aria-modal` automáticos.
  *
- * Compón con `ModalHeader`, `ModalBody`, `ModalFooter`, `ModalClose`.
+ * Compón con `DialogHeader`, `DialogBody`, `DialogFooter`, `DialogClose`.
  *
  * @example
- * <Modal open={open} onClose={() => setOpen(false)} size="md">
- *   <ModalHeader>Confirmar <ModalClose onClick={() => setOpen(false)} /></ModalHeader>
- *   <ModalBody>¿Seguro?</ModalBody>
- *   <ModalFooter>
+ * <Dialog open={open} onClose={() => setOpen(false)} size="md">
+ *   <DialogHeader>Confirmar <DialogClose onClick={() => setOpen(false)} /></DialogHeader>
+ *   <DialogBody>¿Seguro?</DialogBody>
+ *   <DialogFooter>
  *     <Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
  *     <Button>Aceptar</Button>
- *   </ModalFooter>
- * </Modal>
+ *   </DialogFooter>
+ * </Dialog>
  */
-export function Modal({
+export function Dialog({
   open,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- Modal acepta el alias deprecated por backwards compat (warn dev al consumer abajo).
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- Dialog acepta el alias deprecated por backwards compat (warn dev al consumer abajo).
   onClose,
   onOpenChange,
   size = "md",
@@ -76,7 +76,7 @@ export function Modal({
   children,
   ref,
   ...rest
-}: ModalProps) {
+}: DialogProps) {
   const innerRef = useRef<HTMLDialogElement>(null);
   const [headerId, setHeaderId] = useState<string | null>(null);
 
@@ -89,7 +89,7 @@ export function Modal({
     if (onClose !== undefined && onOpenChange === undefined) {
       warnedOnCloseRef.current = true;
       console.warn(
-        "[reactigoded] <Modal onClose>: prop deprecated en 1.0.0-rc.1. " +
+        "[reactigoded] <Dialog onClose>: prop deprecated en 1.0.0-rc.1. " +
           "Usa onOpenChange={(open) => ...} para alinear con el resto " +
           "del DS (B-02). onClose seguirá funcionando en 1.x; eliminado " +
           "en 2.0.",
@@ -114,7 +114,7 @@ export function Modal({
     setHeaderId(id);
   }, []);
 
-  const ctx = useMemo<ModalContextValue>(
+  const ctx = useMemo<DialogContextValue>(
     () => ({ headerId, setHeaderId: setHeaderIdStable }),
     [headerId, setHeaderIdStable],
   );
@@ -166,7 +166,7 @@ export function Modal({
   const ariaLabelledByFromConsumer = rest["aria-labelledby"];
 
   return (
-    <ModalContext.Provider value={ctx}>
+    <DialogContext.Provider value={ctx}>
       {/* `<dialog>` es interactivo nativo; el onClick detecta clicks en el
           backdrop (target === currentTarget). jsx-a11y no lo entiende. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-noninteractive-element-interactions */}
@@ -200,6 +200,6 @@ export function Modal({
       >
         {children}
       </dialog>
-    </ModalContext.Provider>
+    </DialogContext.Provider>
   );
 }

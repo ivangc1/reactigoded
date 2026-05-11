@@ -254,7 +254,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     expect(onFocus).toHaveBeenCalled();
   });
 
-  // H-04 (gate review): Tooltip-en-Modal queda invisible si el portal
+  // H-04 (gate review): Tooltip-en-Dialog queda invisible si el portal
   // se monta en body (default) porque el dialog top-layer queda
   // encima. La prop `container` permite anclar el portal a otro nodo.
   describe("container prop (H-04)", () => {

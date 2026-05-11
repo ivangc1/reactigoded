@@ -1,17 +1,17 @@
 import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
-export interface ModalBodyProps extends HTMLAttributes<HTMLDivElement> {
+export interface DialogBodyProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** ModalBody — cuerpo scrollable del modal. */
-export function ModalBody({
+/** DialogBody — cuerpo scrollable del modal. */
+export function DialogBody({
   className,
   children,
   ref,
   ...rest
-}: ModalBodyProps) {
+}: DialogBodyProps) {
   return (
     <div ref={ref} className={cn("ig-dialog-body", className)} {...rest}>
       {children}

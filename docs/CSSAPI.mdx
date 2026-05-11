@@ -288,7 +288,7 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 
 ---
 
-### Modal (`<dialog>` nativo)
+### Dialog (`<dialog>` nativo)
 
 | Categoría | Clases |
 |---|---|
@@ -738,7 +738,7 @@ El DS expone strings user-facing (a11y labels y texto visible mínimo) con **def
 |---|---|---|
 | `Alert` | "Cerrar" | `closeLabel` |
 | `Chip` | "Eliminar" | `removeLabel` |
-| `ModalClose` | "Cerrar" | `aria-label` (HTML estándar) |
+| `DialogClose` | "Cerrar" | `aria-label` (HTML estándar) |
 | `Pagination` | "Anterior" / "Siguiente" | `prevLabel`, `nextLabel` |
 | `Progress` | "Cargando" / "X por ciento completado" | `loadingLabel`, `formatLabel` |
 | `Stepper` | "Progreso" | `aria-label` (HTML estándar) |
@@ -787,7 +787,7 @@ Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaj
 ## Notas finales
 
 - Los slots compound (`-header`, `-body`, `-footer`, etc.) están pensados para reflejar la jerarquía semántica nativa del HTML; no son obligatorios si construyes un layout custom encima.
-- Los componentes con múltiples sub-clases (Sidebar, Card, Modal, Menu, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
+- Los componentes con múltiples sub-clases (Sidebar, Card, Dialog, Menu, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
 - Estados del navegador (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador automáticamente cuando los elementos son interactivos. La librería utility-pseudo (`state.css`, opt-in) permite forzar estados desde HTML estático sin depender del estado real del DOM.
 
 ---

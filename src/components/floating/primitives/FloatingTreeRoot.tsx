@@ -11,7 +11,7 @@ export interface FloatingTreeRootProps {
  *
  * **Comportamiento sin el root**: cada float funciona independiente —
  * un `Escape` cierra solo el float más interno. Si el consumer abre un
- * Popover dentro de un Modal y un Tooltip dentro del Popover, cada
+ * Popover dentro de un Dialog y un Tooltip dentro del Popover, cada
  * Escape requiere acción separada y los floats no comparten estado de
  * dismiss.
  *
@@ -23,7 +23,7 @@ export interface FloatingTreeRootProps {
  *
  * **Cuándo usarlo**: opt-in por consumer. Si tu app no anida floats
  * (típico en formularios planos / dashboards simples), no lo necesitas
- * y pagas un context extra sin beneficio. Si tienes Modal con
+ * y pagas un context extra sin beneficio. Si tienes Dialog con
  * Tooltips/Popovers, o menús contextuales con sub-menús, envuelve la
  * raíz de la app.
  *

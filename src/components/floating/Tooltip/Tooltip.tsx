@@ -90,7 +90,7 @@ export interface TooltipProps {
    * Contenedor donde se monta el portal del tooltip. Por defecto
    * `document.body`. También aplica para CSS containment / shadow roots.
    *
-   * **Caso típico — Tooltip dentro de Modal**: `<Modal>` usa
+   * **Caso típico — Tooltip dentro de Dialog**: `<Dialog>` usa
    * `<dialog>.showModal()` que crea un top-layer del browser. Si el
    * portal del tooltip queda en `document.body`, aparece *detrás* del
    * backdrop del dialog (invisible al usuario). Pasar el ref del
@@ -104,13 +104,13 @@ export interface TooltipProps {
    * function MiPantalla() {
    *   const dialogRef = useRef<HTMLDialogElement>(null);
    *   return (
-   *     <Modal ref={dialogRef} open onClose={...}>
-   *       <ModalBody>
+   *     <Dialog ref={dialogRef} open onClose={...}>
+   *       <DialogBody>
    *         <Tooltip text="Eliminar" container={dialogRef}>
    *           <Button>×</Button>
    *         </Tooltip>
-   *       </ModalBody>
-   *     </Modal>
+   *       </DialogBody>
+   *     </Dialog>
    *   );
    * }
    * ```
@@ -263,7 +263,7 @@ export function Tooltip({
   //
   // H-01 (RC1): con FloatingTreeRoot, `Escape` se propaga en cascada
   // por el árbol — cierra el tooltip y también ancestros (Popover,
-  // Modal) que estén registrados como nodos. `bubbles.escapeKey: true`
+  // Dialog) que estén registrados como nodos. `bubbles.escapeKey: true`
   // es REQUERIDO para activar la propagación — sin él, `useDismiss`
   // no emite el evento `dismiss` al tree y el cascade efectivamente
   // no funciona (el tooltip se cierra pero los ancestros NO se
@@ -335,7 +335,7 @@ export function Tooltip({
   //
   // H-04 (gate review): `container` permite anclar el portal a otro
   // contenedor que no sea `document.body`. Caso típico: Tooltip
-  // dentro de un Modal (<dialog>.showModal() crea top-layer); sin
+  // dentro de un Dialog (<dialog>.showModal() crea top-layer); sin
   // root, el portal va a body y queda detrás del backdrop. Spread
   // condicional (NO `root={container ?? null}`): exactOptionalPropertyTypes
   // prohíbe `undefined` explícito y `root={null}` FUI lo trata como

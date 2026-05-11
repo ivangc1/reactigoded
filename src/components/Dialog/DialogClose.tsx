@@ -1,23 +1,23 @@
 import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
-export interface ModalCloseProps
+export interface DialogCloseProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   ref?: Ref<HTMLButtonElement>;
 }
 
 /**
- * ModalClose — botón "×" para cerrar el modal. Renderiza un `×` por defecto
+ * DialogClose — botón "×" para cerrar el modal. Renderiza un `×` por defecto
  * y aplica `aria-label="Cerrar"` automáticamente; ambos pueden sobrescribirse.
  */
-export function ModalClose({
+export function DialogClose({
   className,
   children,
   type = "button",
   "aria-label": ariaLabel = "Cerrar",
   ref,
   ...rest
-}: ModalCloseProps) {
+}: DialogCloseProps) {
   return (
     <button
       {...rest}

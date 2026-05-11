@@ -4,12 +4,12 @@ import { expect, within } from "storybook/test";
 import { Tooltip } from "./Tooltip";
 import { Button } from "@/components/Button";
 import {
-  Modal,
-  ModalBody,
-  ModalClose,
-  ModalFooter,
-  ModalHeader,
-} from "@/components/Modal";
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/Dialog";
 
 const meta = {
   title: "Componentes/Tooltip",
@@ -145,7 +145,7 @@ export const WithCustomContainer: Story = {
     docs: {
       description: {
         story:
-          "Caso del roadmap RC1 (H-04 gate review): Tooltip dentro de un `<dialog>` con `showModal()`. Sin la prop `container` el `<FloatingPortal>` se monta en `document.body` y el tooltip queda detrás del backdrop top-layer del dialog. Pasar el elemento del dialog como `container` ancla el portal al top-layer y el tooltip aparece visible. Patrón canónico para Tooltip en Modal, y blueprint para futuros `<Popover>`/`<HoverCard>` que tendrán la misma prop.",
+          "Caso del roadmap RC1 (H-04 gate review): Tooltip dentro de un `<dialog>` con `showModal()`. Sin la prop `container` el `<FloatingPortal>` se monta en `document.body` y el tooltip queda detrás del backdrop top-layer del dialog. Pasar el elemento del dialog como `container` ancla el portal al top-layer y el tooltip aparece visible. Patrón canónico para Tooltip en Dialog, y blueprint para futuros `<Popover>`/`<HoverCard>` que tendrán la misma prop.",
       },
     },
   },
@@ -222,7 +222,7 @@ export const TooltipDentroDeModal: Story = {
     docs: {
       description: {
         story:
-          "Patrón canónico documentado en `docs/decisions/C-02-modal-tooltip-portal.md`: cuando un `<Tooltip>` vive dentro de un `<Modal>`, el consumer DEBE pasar `container={dialogRef}` para que el portal del tooltip se ancle al top-layer del dialog. Sin esto, el portal va a `document.body` y el tooltip queda *detrás* del backdrop, invisible. Decisión consciente RC1: mantenemos esto manual para preservar la opción de migrar a context interno post-RC1 sin breaking change. Ver C-02 para criterios de re-evaluación.",
+          "Patrón canónico documentado en `docs/decisions/C-02-modal-tooltip-portal.md`: cuando un `<Tooltip>` vive dentro de un `<Dialog>`, el consumer DEBE pasar `container={dialogRef}` para que el portal del tooltip se ancle al top-layer del dialog. Sin esto, el portal va a `document.body` y el tooltip queda *detrás* del backdrop, invisible. Decisión consciente RC1: mantenemos esto manual para preservar la opción de migrar a context interno post-RC1 sin breaking change. Ver C-02 para criterios de re-evaluación.",
       },
     },
   },
@@ -250,9 +250,9 @@ export const TooltipDentroDeModal: Story = {
               setOpen(true);
             }}
           >
-            Abrir Modal
+            Abrir Dialog
           </Button>
-          <Modal
+          <Dialog
             ref={dialogRef}
             open={open}
             onOpenChange={() => {
@@ -260,15 +260,15 @@ export const TooltipDentroDeModal: Story = {
             }}
             size="md"
           >
-            <ModalHeader>
+            <DialogHeader>
               Confirmar acción
-              <ModalClose
+              <DialogClose
                 onClick={() => {
                   setOpen(false);
                 }}
               />
-            </ModalHeader>
-            <ModalBody>
+            </DialogHeader>
+            <DialogBody>
               <p>
                 El Tooltip de abajo recibe{" "}
                 <code>{"container={dialogRef.current}"}</code>. Su
@@ -283,8 +283,8 @@ export const TooltipDentroDeModal: Story = {
               >
                 <Button variant="danger">Eliminar permanente</Button>
               </Tooltip>
-            </ModalBody>
-            <ModalFooter>
+            </DialogBody>
+            <DialogFooter>
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -300,8 +300,8 @@ export const TooltipDentroDeModal: Story = {
               >
                 Aceptar
               </Button>
-            </ModalFooter>
-          </Modal>
+            </DialogFooter>
+          </Dialog>
         </>
       );
     }

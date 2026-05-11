@@ -6,7 +6,7 @@
 
 ## Contexto
 
-`<Tooltip>` no usaba `<FloatingTree>` de `@floating-ui/react`. Sin árbol, en jerarquías anidadas (Tooltip → Popover → Modal), un `Escape` sobre el float más interno NO cerraba el ancestro — quedaba un comportamiento inconsistente.
+`<Tooltip>` no usaba `<FloatingTree>` de `@floating-ui/react`. Sin árbol, en jerarquías anidadas (Tooltip → Popover → Dialog), un `Escape` sobre el float más interno NO cerraba el ancestro — quedaba un comportamiento inconsistente.
 
 ## Decisión final (2026-05-10)
 
@@ -36,7 +36,7 @@ Coste real: ~30 LOC en Tooltip + tests específicos (`FloatingTreeRoot` opcional
 ## Asociado a
 
 - **B-03** (floating/primitives layer): ✅ implementado RC1; aporta `FloatingTreeRoot` + `useFloatingNode`.
-- **C-02** (Tooltip-en-Modal): no relacionado (portal target).
+- **C-02** (Tooltip-en-Dialog): no relacionado (portal target).
 - **D-01** / **M-05** (Slot pattern): empaquetados en el mismo PR de RC1.
 
 ## Cierra

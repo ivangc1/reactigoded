@@ -2174,7 +2174,7 @@ Por ejemplo, cambiar el padding de los alerts sin cambiar el de los modales.
 
 COMPONENTES CON VARIABLES:
 - Alert: padding, gap, radius, colores por tipo
-- Modal: backdrop, fondo, radius, anchos
+- Dialog: backdrop, fondo, radius, anchos
 - Tooltip: fondo, texto, radius, padding
 - Tabs: colores de fondo, texto, borde activo, gap
 - Card: fondo, borde, radius, padding
@@ -2217,11 +2217,15 @@ Ejemplo: --ig-alert-padding o --ig-tooltip-bg.
   --ig-alert-info-border: var(--ig-kobalium);
   --ig-alert-info-text: var(--ig-kobalium);
 
-  /* MODAL — los tokens `--ig-modal-*` se eliminaron junto con las clases
-     legacy `.ig-modal-*`. El componente actual usa `<dialog>` (sección 78b)
-     con tokens `--ig-bg-elevated` y `--ig-rounded-xl` directamente.
-     Los tokens `--ig-z-modal` y `--ig-z-modal-backdrop` se mantienen como
-     utilities z-index genéricas. */
+  /* DIALOG — el componente Dialog (renombrado desde Modal en RC1) usa
+     el elemento HTML `<dialog>` nativo (sección 78b del CSS) con las
+     clases `.ig-dialog-*` y tokens `--ig-bg-elevated` + `--ig-rounded-xl`
+     directamente. Tokens legacy `--ig-modal-*` y clases `.ig-modal-*`
+     fueron eliminados pre-RC1 (test anti-regresión en styles.test.ts).
+     Los tokens `--ig-z-modal` y `--ig-z-modal-backdrop` se mantienen
+     como utilities z-index genéricas (no se renombran a `--ig-z-dialog-*`
+     para preservar compatibilidad con consumers que los usen en
+     custom CSS). */
 
   /* === TOOLTIP === */
   --ig-tooltip-bg: var(--ig-neutral-900);
