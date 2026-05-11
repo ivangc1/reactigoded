@@ -5554,7 +5554,7 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
   }
 
   /* Tabs */
-  .ig-tab.ig-tab-active {
+  .ig-tabs-trigger.ig-tabs-trigger-active {
     border-bottom-width: 3px;
   }
 
@@ -5747,11 +5747,11 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
   }
 
   /* Tabs */
-  .ig-tab {
+  .ig-tabs-trigger {
     border: 1px solid transparent;
   }
 
-  .ig-tab.ig-tab-active {
+  .ig-tabs-trigger.ig-tabs-trigger-active {
     border-color: currentColor;
     border-bottom-color: Highlight;
   }
@@ -7987,7 +7987,7 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
   border-bottom: 1px solid var(--ig-border-subtle);
 }
 
-.ig-tab {
+.ig-tabs-trigger {
   padding: var(--ig-space-2) var(--ig-space-4);
   font-family: var(--ig-font-base);
   font-size: var(--ig-text-sm);
@@ -8001,64 +8001,65 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
   transition: var(--ig-transition-fast);
 }
 
-.ig-tab:hover {
+.ig-tabs-trigger:hover {
   color: var(--ig-text-heading);
 }
 
-.ig-tab-active,
-.ig-tab.active {
+.ig-tabs-trigger-active,
+.ig-tabs-trigger.active {
   color: var(--ig-tab-text-active);
   background: var(--ig-tab-bg-active);
   border-bottom-color: var(--ig-tab-border-active);
 }
 
-.ig-tab:disabled {
+.ig-tabs-trigger:disabled {
   color: var(--ig-text-disabled);
   cursor: not-allowed;
 }
 
 /* Variantes de color */
-.ig-tabs-brand .ig-tab-active,
-.ig-tabs-brand .ig-tab.active {
+.ig-tabs-brand .ig-tabs-trigger-active,
+.ig-tabs-brand .ig-tabs-trigger.active {
   color: var(--ig-vitreus);
   border-bottom-color: var(--ig-vitreus);
 }
-.ig-tabs-secondary .ig-tab-active,
-.ig-tabs-secondary .ig-tab.active {
+.ig-tabs-secondary .ig-tabs-trigger-active,
+.ig-tabs-secondary .ig-tabs-trigger.active {
   color: var(--ig-axis);
   border-bottom-color: var(--ig-axis);
 }
-.ig-tabs-success .ig-tab-active,
-.ig-tabs-success .ig-tab.active {
+.ig-tabs-success .ig-tabs-trigger-active,
+.ig-tabs-success .ig-tabs-trigger.active {
   color: var(--ig-laurus);
   border-bottom-color: var(--ig-laurus);
 }
-.ig-tabs-warning .ig-tab-active,
-.ig-tabs-warning .ig-tab.active {
+.ig-tabs-warning .ig-tabs-trigger-active,
+.ig-tabs-warning .ig-tabs-trigger.active {
   color: var(--ig-rutilus);
   border-bottom-color: var(--ig-rutilus);
 }
-.ig-tabs-danger .ig-tab-active,
-.ig-tabs-danger .ig-tab.active {
+.ig-tabs-danger .ig-tabs-trigger-active,
+.ig-tabs-danger .ig-tabs-trigger.active {
   color: var(--ig-malum);
   border-bottom-color: var(--ig-malum);
 }
-.ig-tabs-info .ig-tab-active,
-.ig-tabs-info .ig-tab.active {
+.ig-tabs-info .ig-tabs-trigger-active,
+.ig-tabs-info .ig-tabs-trigger.active {
   color: var(--ig-kobalium);
   border-bottom-color: var(--ig-kobalium);
 }
 
+/* PR 4 RC1: wrapper TabsContent eliminado (era estructural sin lógica).
+   TabPanel renombrado a TabsContent. El padding-top que aplicaba el
+   wrapper antes se mueve a `.ig-tabs-content` (que antes era `.ig-tab-panel`)
+   para preservar el spacing visual entre TabsList y el contenido. */
 .ig-tabs-content {
   padding-top: var(--ig-space-4);
-}
-
-.ig-tab-panel {
   display: none;
 }
 
-.ig-tab-panel-active,
-.ig-tab-panel.active {
+.ig-tabs-content-active,
+.ig-tabs-content.active {
   display: block;
   animation: var(--ig-anim-fade-in);
 }
@@ -8072,46 +8073,46 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
   gap: var(--ig-space-1);
 }
 
-.ig-tabs-pills .ig-tab {
+.ig-tabs-pills .ig-tabs-trigger {
   border-bottom: none;
   margin-bottom: 0;
   border-radius: var(--ig-rounded-md);
 }
 
-.ig-tabs-pills .ig-tab-active,
-.ig-tabs-pills .ig-tab.active {
+.ig-tabs-pills .ig-tabs-trigger-active,
+.ig-tabs-pills .ig-tabs-trigger.active {
   background-color: var(--ig-bg-surface);
   box-shadow: var(--ig-shadow-sm);
 }
 
 /* Pills con color */
-.ig-tabs-pills.ig-tabs-brand .ig-tab-active,
-.ig-tabs-pills.ig-tabs-brand .ig-tab.active {
+.ig-tabs-pills.ig-tabs-brand .ig-tabs-trigger-active,
+.ig-tabs-pills.ig-tabs-brand .ig-tabs-trigger.active {
   background-color: var(--ig-vitreus);
   color: var(--ig-text-on-brand);
 }
-.ig-tabs-pills.ig-tabs-secondary .ig-tab-active,
-.ig-tabs-pills.ig-tabs-secondary .ig-tab.active {
+.ig-tabs-pills.ig-tabs-secondary .ig-tabs-trigger-active,
+.ig-tabs-pills.ig-tabs-secondary .ig-tabs-trigger.active {
   background-color: var(--ig-axis);
   color: var(--ig-text-on-secondary);
 }
-.ig-tabs-pills.ig-tabs-success .ig-tab-active,
-.ig-tabs-pills.ig-tabs-success .ig-tab.active {
+.ig-tabs-pills.ig-tabs-success .ig-tabs-trigger-active,
+.ig-tabs-pills.ig-tabs-success .ig-tabs-trigger.active {
   background-color: var(--ig-laurus);
   color: var(--ig-text-on-success);
 }
-.ig-tabs-pills.ig-tabs-warning .ig-tab-active,
-.ig-tabs-pills.ig-tabs-warning .ig-tab.active {
+.ig-tabs-pills.ig-tabs-warning .ig-tabs-trigger-active,
+.ig-tabs-pills.ig-tabs-warning .ig-tabs-trigger.active {
   background-color: var(--ig-rutilus);
   color: var(--ig-text-on-warning);
 }
-.ig-tabs-pills.ig-tabs-danger .ig-tab-active,
-.ig-tabs-pills.ig-tabs-danger .ig-tab.active {
+.ig-tabs-pills.ig-tabs-danger .ig-tabs-trigger-active,
+.ig-tabs-pills.ig-tabs-danger .ig-tabs-trigger.active {
   background-color: var(--ig-malum);
   color: var(--ig-text-on-danger);
 }
-.ig-tabs-pills.ig-tabs-info .ig-tab-active,
-.ig-tabs-pills.ig-tabs-info .ig-tab.active {
+.ig-tabs-pills.ig-tabs-info .ig-tabs-trigger-active,
+.ig-tabs-pills.ig-tabs-info .ig-tabs-trigger.active {
   background-color: var(--ig-kobalium);
   color: var(--ig-text-on-info);
 }
@@ -8129,7 +8130,7 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
   padding-right: var(--ig-space-4);
 }
 
-.ig-tabs-vertical .ig-tab {
+.ig-tabs-vertical .ig-tabs-trigger {
   border-bottom: none;
   border-right: 2px solid transparent;
   margin-right: -1px;
@@ -8137,39 +8138,39 @@ NOTA: Necesitas JS para manejar el cambio entre tabs activos.
   text-align: left;
 }
 
-.ig-tabs-vertical .ig-tab-active,
-.ig-tabs-vertical .ig-tab.active {
+.ig-tabs-vertical .ig-tabs-trigger-active,
+.ig-tabs-vertical .ig-tabs-trigger.active {
   border-right-color: var(--ig-tab-border-active);
 }
 
 /* Vertical con color */
-.ig-tabs-vertical.ig-tabs-brand .ig-tab-active,
-.ig-tabs-vertical.ig-tabs-brand .ig-tab.active {
+.ig-tabs-vertical.ig-tabs-brand .ig-tabs-trigger-active,
+.ig-tabs-vertical.ig-tabs-brand .ig-tabs-trigger.active {
   color: var(--ig-vitreus);
   border-right-color: var(--ig-vitreus);
 }
-.ig-tabs-vertical.ig-tabs-secondary .ig-tab-active,
-.ig-tabs-vertical.ig-tabs-secondary .ig-tab.active {
+.ig-tabs-vertical.ig-tabs-secondary .ig-tabs-trigger-active,
+.ig-tabs-vertical.ig-tabs-secondary .ig-tabs-trigger.active {
   color: var(--ig-axis);
   border-right-color: var(--ig-axis);
 }
-.ig-tabs-vertical.ig-tabs-success .ig-tab-active,
-.ig-tabs-vertical.ig-tabs-success .ig-tab.active {
+.ig-tabs-vertical.ig-tabs-success .ig-tabs-trigger-active,
+.ig-tabs-vertical.ig-tabs-success .ig-tabs-trigger.active {
   color: var(--ig-laurus);
   border-right-color: var(--ig-laurus);
 }
-.ig-tabs-vertical.ig-tabs-warning .ig-tab-active,
-.ig-tabs-vertical.ig-tabs-warning .ig-tab.active {
+.ig-tabs-vertical.ig-tabs-warning .ig-tabs-trigger-active,
+.ig-tabs-vertical.ig-tabs-warning .ig-tabs-trigger.active {
   color: var(--ig-rutilus);
   border-right-color: var(--ig-rutilus);
 }
-.ig-tabs-vertical.ig-tabs-danger .ig-tab-active,
-.ig-tabs-vertical.ig-tabs-danger .ig-tab.active {
+.ig-tabs-vertical.ig-tabs-danger .ig-tabs-trigger-active,
+.ig-tabs-vertical.ig-tabs-danger .ig-tabs-trigger.active {
   color: var(--ig-malum);
   border-right-color: var(--ig-malum);
 }
-.ig-tabs-vertical.ig-tabs-info .ig-tab-active,
-.ig-tabs-vertical.ig-tabs-info .ig-tab.active {
+.ig-tabs-vertical.ig-tabs-info .ig-tabs-trigger-active,
+.ig-tabs-vertical.ig-tabs-info .ig-tabs-trigger.active {
   color: var(--ig-kobalium);
   border-right-color: var(--ig-kobalium);
 }

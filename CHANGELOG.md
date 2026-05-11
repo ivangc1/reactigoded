@@ -9,6 +9,66 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Breaking
 
+- **Tabs API alineada a Radix puro (rename + wrapper eliminado)**: la API
+  pública se simplifica a `<Tabs>`, `<TabsList>`, `<TabsTrigger>`, `<TabsContent>`
+  con composición 100% Radix-style. Cierra inconsistencia interna del DS y
+  alinea con la industria (Radix, ShadCN, Ark UI).
+
+  | Antes | Después | Notas |
+  |---|---|---|
+  | `Tab` | `TabsTrigger` | trigger del tab |
+  | `TabList` | `TabsList` | coherencia plural con `TabsContent`/`TabsContext` |
+  | `TabPanel` | `TabsContent` | panel asociado al `value` |
+  | `<TabsContent>` (wrapper sin lógica) | ❌ eliminado | era Caso 1 (`<div ig-tabs-content>` puro). Padding-top movido a `.ig-tabs-content` (el panel renombrado). |
+
+  API final 100% Radix-style:
+  ```tsx
+  <Tabs>
+    <TabsList>
+      <TabsTrigger value="a">A</TabsTrigger>
+    </TabsList>
+    <TabsContent value="a">…</TabsContent>
+  </Tabs>
+  ```
+
+  CSS coordinado:
+  - `.ig-tab` → `.ig-tabs-trigger` (con sufijo `-active`)
+  - `.ig-tab-panel` → `.ig-tabs-content` (con sufijo `-active`)
+  - `.ig-tabs-list` SIN cambio (ya plural pre-RC1)
+  - `.ig-tabs-content` (wrapper original) eliminada — el panel renombrado
+    hereda el nombre.
+  - Utilities `.ig-tab-1/2/4/8` (tab-size CSS) **SIN cambios** — son
+    typography utilities, no componente Tabs.
+
+  Tokens CSS-variable `--ig-tab-*` **mantenidos** (no renombrados) por
+  compatibilidad con custom CSS de consumers (mismo criterio que
+  `--ig-z-modal` en PR 3).
+
+  Razón última: paralelismo con `Menu`/`MenuTrigger`/`MenuContent`
+  post-PR Menu — los compounds del DS siguen el mismo patrón
+  estructural `<X>` / `<XTrigger>` / `<XContent>`.
+
+  Migración:
+  ```diff
+  - import { Tabs, TabList, Tab, TabPanel, TabsContent } from "reactigoded";
+  + import { Tabs, TabsList, TabsTrigger, TabsContent } from "reactigoded";
+
+  - <Tabs>
+  -   <TabList>
+  -     <Tab value="a">A</Tab>
+  -   </TabList>
+  -   <TabsContent>
+  -     <TabPanel value="a">...</TabPanel>
+  -   </TabsContent>
+  - </Tabs>
+  + <Tabs>
+  +   <TabsList>
+  +     <TabsTrigger value="a">A</TabsTrigger>
+  +   </TabsList>
+  +   <TabsContent value="a">...</TabsContent>
+  + </Tabs>
+  ```
+
 - **`Modal` → `Dialog` (rename + regularización CSS-JS)**: el componente JS
   se renombra a `Dialog` para alinear con el HTML element nativo `<dialog>`
   (que ya usaba internamente) y con la industria (Radix, Ark UI, HeadlessUI,

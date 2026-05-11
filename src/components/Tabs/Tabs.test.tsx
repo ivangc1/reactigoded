@@ -2,21 +2,21 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Tabs, TabList, Tab, TabPanel } from "./index";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./index";
 // B-04 (RC1): useTabs retirado del barrel. Test accede vía path interno.
 import { useTabs } from "./TabsContext";
 
 function basicTabs(props?: Partial<React.ComponentProps<typeof Tabs>>) {
   return (
     <Tabs {...props}>
-      <TabList aria-label="Demo">
-        <Tab value="a">Alpha</Tab>
-        <Tab value="b">Beta</Tab>
-        <Tab value="c">Gamma</Tab>
-      </TabList>
-      <TabPanel value="a">Contenido A</TabPanel>
-      <TabPanel value="b">Contenido B</TabPanel>
-      <TabPanel value="c">Contenido C</TabPanel>
+      <TabsList aria-label="Demo">
+        <TabsTrigger value="a">Alpha</TabsTrigger>
+        <TabsTrigger value="b">Beta</TabsTrigger>
+        <TabsTrigger value="c">Gamma</TabsTrigger>
+      </TabsList>
+      <TabsContent value="a">Contenido A</TabsContent>
+      <TabsContent value="b">Contenido B</TabsContent>
+      <TabsContent value="c">Contenido C</TabsContent>
     </Tabs>
   );
 }
@@ -28,7 +28,7 @@ describe("Tabs", () => {
     expect(list).toHaveAttribute("aria-orientation", "horizontal");
   });
 
-  it("Tab activo lleva aria-selected=true y tabindex=0; los demás false/-1", () => {
+  it("TabsTrigger activo lleva aria-selected=true y tabindex=0; los demás false/-1", () => {
     render(basicTabs({ defaultValue: "b" }));
     const a = screen.getByRole("tab", { name: "Alpha" });
     const b = screen.getByRole("tab", { name: "Beta" });
@@ -53,10 +53,10 @@ describe("Tabs", () => {
     expect(screen.queryByText("Contenido C")).not.toBeInTheDocument();
   });
 
-  it("sin value/defaultValue auto-selecciona el primer Tab montado", () => {
+  it("sin value/defaultValue auto-selecciona el primer TabsTrigger montado", () => {
     // Regresión documentada por la auditoría: cuando register tenía
-    // deps [] y leía `internal === ""` por closure, el último Tab en
-    // montar ganaba (Tab C activo en lugar de Tab A). El fix actual
+    // deps [] y leía `internal === ""` por closure, el último TabsTrigger en
+    // montar ganaba (TabsTrigger C activo en lugar de TabsTrigger A). El fix actual
     // lee desde internalRef sincronizado y preserva la primera
     // selección.
     render(basicTabs());
@@ -76,18 +76,18 @@ describe("Tabs", () => {
   });
 
   it("auto-select inicial NO dispara onValueChange (silent)", () => {
-    // Regresión F.3: el auto-select del primer Tab no es acción del
+    // Regresión F.3: el auto-select del primer TabsTrigger no es acción del
     // usuario y no debe filtrarse a onValueChange. El consumer puede
     // tener side-effects (analytics, fetch) que no deben dispararse al
     // mount.
     const onValueChange = vi.fn();
     render(
       <Tabs onValueChange={onValueChange}>
-        <TabList aria-label="silent">
-          <Tab value="a">A</Tab>
-          <Tab value="b">B</Tab>
-        </TabList>
-        <TabPanel value="a">PA</TabPanel>
+        <TabsList aria-label="silent">
+          <TabsTrigger value="a">A</TabsTrigger>
+          <TabsTrigger value="b">B</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">PA</TabsContent>
       </Tabs>,
     );
     expect(screen.getByRole("tab", { name: "A" })).toHaveAttribute(
@@ -97,17 +97,17 @@ describe("Tabs", () => {
     expect(onValueChange).not.toHaveBeenCalled();
   });
 
-  it("click en Tab SÍ dispara onValueChange (acción del usuario)", async () => {
+  it("click en TabsTrigger SÍ dispara onValueChange (acción del usuario)", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
     render(
       <Tabs defaultValue="a" onValueChange={onValueChange}>
-        <TabList aria-label="user-action">
-          <Tab value="a">A</Tab>
-          <Tab value="b">B</Tab>
-        </TabList>
-        <TabPanel value="a">PA</TabPanel>
-        <TabPanel value="b">PB</TabPanel>
+        <TabsList aria-label="user-action">
+          <TabsTrigger value="a">A</TabsTrigger>
+          <TabsTrigger value="b">B</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">PA</TabsContent>
+        <TabsContent value="b">PB</TabsContent>
       </Tabs>,
     );
     await user.click(screen.getByRole("tab", { name: "B" }));
@@ -120,12 +120,12 @@ describe("Tabs", () => {
     // "ningún tab activo".
     render(
       <Tabs value="">
-        <TabList aria-label="Demo">
-          <Tab value="a">Alpha</Tab>
-          <Tab value="b">Beta</Tab>
-        </TabList>
-        <TabPanel value="a">PA</TabPanel>
-        <TabPanel value="b">PB</TabPanel>
+        <TabsList aria-label="Demo">
+          <TabsTrigger value="a">Alpha</TabsTrigger>
+          <TabsTrigger value="b">Beta</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">PA</TabsContent>
+        <TabsContent value="b">PB</TabsContent>
       </Tabs>,
     );
     expect(screen.getByRole("tab", { name: "Alpha" })).toHaveAttribute(
@@ -162,12 +162,12 @@ describe("Tabs", () => {
             setV(next);
           }}
         >
-          <TabList>
-            <Tab value="a">A</Tab>
-            <Tab value="b">B</Tab>
-          </TabList>
-          <TabPanel value="a">PA</TabPanel>
-          <TabPanel value="b">PB</TabPanel>
+          <TabsList>
+            <TabsTrigger value="a">A</TabsTrigger>
+            <TabsTrigger value="b">B</TabsTrigger>
+          </TabsList>
+          <TabsContent value="a">PA</TabsContent>
+          <TabsContent value="b">PB</TabsContent>
         </Tabs>
       );
     }
@@ -208,14 +208,14 @@ describe("Tabs", () => {
   it("keepMounted mantiene el panel oculto en el DOM", () => {
     render(
       <Tabs defaultValue="a">
-        <TabList>
-          <Tab value="a">A</Tab>
-          <Tab value="b">B</Tab>
-        </TabList>
-        <TabPanel value="a">PA</TabPanel>
-        <TabPanel value="b" keepMounted>
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+          <TabsTrigger value="b">B</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">PA</TabsContent>
+        <TabsContent value="b" keepMounted>
           PB
-        </TabPanel>
+        </TabsContent>
       </Tabs>,
     );
     const pb = screen.getByText("PB");
@@ -234,10 +234,10 @@ describe("Tabs", () => {
     it(`aplica clase ig-tabs-${v}`, () => {
       render(
         <Tabs defaultValue="a" variant={v} data-testid="t">
-          <TabList>
-            <Tab value="a">A</Tab>
-          </TabList>
-          <TabPanel value="a">PA</TabPanel>
+          <TabsList>
+            <TabsTrigger value="a">A</TabsTrigger>
+          </TabsList>
+          <TabsContent value="a">PA</TabsContent>
         </Tabs>,
       );
       expect(screen.getByTestId("t")).toHaveClass(`ig-tabs-${v}`);
@@ -247,10 +247,10 @@ describe("Tabs", () => {
   it("pills añade ig-tabs-pills", () => {
     render(
       <Tabs defaultValue="a" pills data-testid="t">
-        <TabList>
-          <Tab value="a">A</Tab>
-        </TabList>
-        <TabPanel value="a">PA</TabPanel>
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">PA</TabsContent>
       </Tabs>,
     );
     expect(screen.getByTestId("t")).toHaveClass("ig-tabs-pills");
@@ -259,10 +259,10 @@ describe("Tabs", () => {
   it("orientation=vertical añade clase y aria-orientation", () => {
     render(
       <Tabs defaultValue="a" orientation="vertical" data-testid="t">
-        <TabList>
-          <Tab value="a">A</Tab>
-        </TabList>
-        <TabPanel value="a">PA</TabPanel>
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">PA</TabsContent>
       </Tabs>,
     );
     expect(screen.getByTestId("t")).toHaveClass("ig-tabs-vertical");
@@ -274,21 +274,21 @@ describe("Tabs", () => {
 });
 
 describe("Tabs — controlled inválido fallback tabIndex (H-26)", () => {
-  // En modo controlled con `value` que no matchea ningún Tab montado,
+  // En modo controlled con `value` que no matchea ningún TabsTrigger montado,
   // el componente NO auto-corrige. Sin fallback, todos los Tabs tendrían
   // tabIndex=-1 y el tablist quedaría sin tab stop accesible. H-26
-  // hace que el primer Tab montado entre en modo "fallback tab stop"
+  // hace que el primer TabsTrigger montado entre en modo "fallback tab stop"
   // (tabIndex=0) sin tocar aria-selected (que sigue false en todos).
-  it("primer Tab tiene tabIndex=0 cuando value=missing en modo controlled", () => {
+  it("primer TabsTrigger tiene tabIndex=0 cuando value=missing en modo controlled", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     render(
       <Tabs value="missing">
-        <TabList aria-label="Demo">
-          <Tab value="a">Alpha</Tab>
-          <Tab value="b">Beta</Tab>
-        </TabList>
-        <TabPanel value="a">A</TabPanel>
-        <TabPanel value="b">B</TabPanel>
+        <TabsList aria-label="Demo">
+          <TabsTrigger value="a">Alpha</TabsTrigger>
+          <TabsTrigger value="b">Beta</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">A</TabsContent>
+        <TabsContent value="b">B</TabsContent>
       </Tabs>,
     );
     const tabs = screen.getAllByRole("tab");
@@ -300,15 +300,15 @@ describe("Tabs — controlled inválido fallback tabIndex (H-26)", () => {
     warn.mockRestore();
   });
 
-  it("cuando value matchea, el primer Tab no entra en fallback", () => {
+  it("cuando value matchea, el primer TabsTrigger no entra en fallback", () => {
     render(
       <Tabs value="b">
-        <TabList aria-label="Demo">
-          <Tab value="a">Alpha</Tab>
-          <Tab value="b">Beta</Tab>
-        </TabList>
-        <TabPanel value="a">A</TabPanel>
-        <TabPanel value="b">B</TabPanel>
+        <TabsList aria-label="Demo">
+          <TabsTrigger value="a">Alpha</TabsTrigger>
+          <TabsTrigger value="b">Beta</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">A</TabsContent>
+        <TabsContent value="b">B</TabsContent>
       </Tabs>,
     );
     const tabs = screen.getAllByRole("tab");
@@ -331,13 +331,13 @@ describe("useTabs fuera de provider", () => {
 });
 
 describe("Tabs — className merge", () => {
-  it("Tabs root, TabList, Tab y TabPanel conservan su clase base con className consumer", () => {
+  it("Tabs root, TabsList, TabsTrigger y TabsContent conservan su clase base con className consumer", () => {
     render(
       <Tabs defaultValue="a" variant="brand" className="my-tabs extra" data-testid="root">
-        <TabList className="my-list">
-          <Tab value="a" className="my-tab">A</Tab>
-        </TabList>
-        <TabPanel value="a" className="my-panel">PA</TabPanel>
+        <TabsList className="my-list">
+          <TabsTrigger value="a" className="my-tab">A</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a" className="my-panel">PA</TabsContent>
       </Tabs>,
     );
     const root = screen.getByTestId("root");
@@ -365,29 +365,29 @@ describe("Tabs — AllStates regression", () => {
   });
 });
 
-// Codex P2 sobre commit antiguo: auto-select del primer Tab corría
+// Codex P2 sobre commit antiguo: auto-select del primer TabsTrigger corría
 // en useEffect (post-paint), causando flash visual y transient
 // state sin tab stop. Movido a useIsoLayoutEffect (pre-paint
 // cliente). Test verifica que el primer render YA tiene el primer
-// Tab seleccionado, sin frame intermedio sin tab activo.
+// TabsTrigger seleccionado, sin frame intermedio sin tab activo.
 describe("Tabs — auto-select pre-paint (codex P2)", () => {
-  it("uncontrolled sin defaultValue: primer Tab activo en el primer render (no flash)", async () => {
-    const { Tab } = await import("./Tab");
-    const { TabList } = await import("./TabList");
-    const { TabPanel } = await import("./TabPanel");
+  it("uncontrolled sin defaultValue: primer TabsTrigger activo en el primer render (no flash)", async () => {
+    const { TabsTrigger } = await import("./TabsTrigger");
+    const { TabsList } = await import("./TabsList");
+    const { TabsContent } = await import("./TabsContent");
     const { Tabs } = await import("./Tabs");
     render(
       <Tabs>
-        <TabList>
-          <Tab value="a">A</Tab>
-          <Tab value="b">B</Tab>
-        </TabList>
-        <TabPanel value="a">contenido A</TabPanel>
-        <TabPanel value="b">contenido B</TabPanel>
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+          <TabsTrigger value="b">B</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">contenido A</TabsContent>
+        <TabsContent value="b">contenido B</TabsContent>
       </Tabs>,
     );
     // En el primer paint observable (síncrono tras render),
-    // useIsoLayoutEffect ya ejecutó el auto-select. El primer Tab
+    // useIsoLayoutEffect ya ejecutó el auto-select. El primer TabsTrigger
     // tiene aria-selected=true SIN re-render visible al user.
     const firstTab = screen.getByRole("tab", { name: "A" });
     expect(firstTab).toHaveAttribute("aria-selected", "true");
@@ -396,18 +396,18 @@ describe("Tabs — auto-select pre-paint (codex P2)", () => {
   });
 
   it("uncontrolled con defaultValue: NO dispara auto-select (consumer eligió)", async () => {
-    const { Tab } = await import("./Tab");
-    const { TabList } = await import("./TabList");
-    const { TabPanel } = await import("./TabPanel");
+    const { TabsTrigger } = await import("./TabsTrigger");
+    const { TabsList } = await import("./TabsList");
+    const { TabsContent } = await import("./TabsContent");
     const { Tabs } = await import("./Tabs");
     render(
       <Tabs defaultValue="b">
-        <TabList>
-          <Tab value="a">A</Tab>
-          <Tab value="b">B</Tab>
-        </TabList>
-        <TabPanel value="a">contenido A</TabPanel>
-        <TabPanel value="b">contenido B</TabPanel>
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+          <TabsTrigger value="b">B</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">contenido A</TabsContent>
+        <TabsContent value="b">contenido B</TabsContent>
       </Tabs>,
     );
     expect(screen.getByRole("tab", { name: "A" })).toHaveAttribute(

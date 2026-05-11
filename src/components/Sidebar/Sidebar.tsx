@@ -42,7 +42,7 @@ export function Sidebar({
 }: SidebarProps) {
   // Precedencia desde beta.22: aria-label (rest) > default ES.
   // La prop `ariaLabel` separada se eliminó en beta.22 por consistencia
-  // con el resto del DS (Pagination, Spinner, Stepper, TabList, Rating
+  // con el resto del DS (Pagination, Spinner, Stepper, TabsList, Rating
   // ya usaban aria-label estándar desde beta.4). Migration: rename
   // ariaLabel → aria-label en el JSX consumidor.
   const { "aria-label": ariaLabelOverride, id: idOverride, ...asideRest } =
