@@ -78,7 +78,7 @@ export const Uncontrolled: Story = {
     docs: {
       description: {
         story:
-          "Modo **uncontrolled**: el componente maneja su propio state interno arrancando en `defaultPage`. Pasa `onValueChange` (opcional) para reaccionar (fetch, sync URL, analytics). Patrón consistente con Tabs/Accordion/OptionsMenu del DS.",
+          "Modo **uncontrolled**: el componente maneja su propio state interno arrancando en `defaultPage`. Pasa `onValueChange` (opcional) para reaccionar (fetch, sync URL, analytics). Patrón consistente con Tabs/Accordion/Menu del DS.",
       },
     },
   },

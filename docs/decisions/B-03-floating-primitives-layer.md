@@ -8,7 +8,7 @@
 
 `<Tooltip>` (subfamilia `floating/`) importaba directamente de `@floating-ui/react`: `FloatingPortal`, `useFloating`, `useHover`, `useFocus`, `useDismiss`, `useInteractions`, `autoUpdate`, `flip`, `offset`, `shift`. **No usaba `FloatingTree` ni `useFloatingNodeId`**.
 
-Roadmap post-RC1: `Popover`, `HoverCard`, `OptionsMenuContent` (FUI), `Submenu`, `MentionMenu`, `SlashCommand`. Todos floating con anidamiento. Sin primitive base compartido, cada componente futuro duplica setup.
+Roadmap post-RC1: `Popover`, `HoverCard`, `MenuContent` (FUI), `Submenu`, `MentionMenu`, `SlashCommand`. Todos floating con anidamiento. Sin primitive base compartido, cada componente futuro duplica setup.
 
 ## Decisión final (2026-05-10)
 

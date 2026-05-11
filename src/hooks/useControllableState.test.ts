@@ -239,7 +239,7 @@ describe("useControllableState", () => {
 
   // ─── Transiciones controlled ↔ uncontrolled ──────────────────
   // Tests del CONTRATO ABSTRACTO del hook. Si pasan, los 9
-  // componentes que wrappean el hook (Accordion, Alert, OptionsMenu,
+  // componentes que wrappean el hook (Accordion, Alert, Menu,
   // Rating, Sidebar, Slider, Switch, Tabs, ThemeSwitch) respetan
   // por construcción el contrato de transición — sin necesidad de
   // duplicar el test 9×.

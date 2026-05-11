@@ -1,4 +1,4 @@
-# C-04 — `useOptionsMenu`/`useTabs`/etc accidentalmente públicos
+# C-04 — `useMenu`/`useTabs`/etc accidentalmente públicos
 
 **Fecha**: 2026-05-10
 **Estado**: cerrada como duplicado de **B-04**
@@ -7,7 +7,7 @@
 
 `docs/RC1_GATE_REVIEW.md § VI` (línea 1354) documenta C-04 como decisión cuestionada:
 
-> ## C-04 — `useOptionsMenu`/`useTabs`/etc. accidentalmente públicos (B-04)
+> ## C-04 — `useMenu`/`useTabs`/etc. accidentalmente públicos (B-04)
 >
 > Cubierto en B-04.
 
@@ -21,8 +21,8 @@ Cerrar C-04 sin acción separada. La resolución se aplicará al cerrar **B-04**
 
 L-10 (audit de `dist/index.d.ts`) ya identificó los 12 sospechosos cat3 acoplados a esta decisión:
 
-- 6 hooks: `useAccordion`, `useAccordionItem`, `useOptionsMenu`, `useSidebar`, `useTabs`, `useToast`
-- 6 ContextValues: `AccordionContextValue`, `AccordionItemContextValue`, `OptionsMenuContextValue`, `SidebarContextValue`, `TabsContextValue`, `ToastContextValue`
+- 6 hooks: `useAccordion`, `useAccordionItem`, `useMenu`, `useSidebar`, `useTabs`, `useToast`
+- 6 ContextValues: `AccordionContextValue`, `AccordionItemContextValue`, `MenuContextValue`, `SidebarContextValue`, `TabsContextValue`, `ToastContextValue`
 
 Cuando B-04 se cierre, los 12 sospechosos se resuelven en la misma operación. Ver `docs/decisions/L-10-no-bundle-types.md` § Coupling con C-04.
 

@@ -49,15 +49,15 @@ cinco se cierran en 5-30 LOC cada una; la quinta es naming.
   H-27.
 - HIGHs adicionales del cruce: Tooltip `children: ReactNode` permite
   string sin asociar, Tooltip Storybook descripción falsa "CSS-only",
-  OptionsMenuItem href no activa con Space (spec violation),
-  OptionsMenu sin typeahead, Toast `role="alert"` blanket.
+  MenuItem href no activa con Space (spec violation),
+  Menu sin typeahead, Toast `role="alert"` blanket.
 - Nuevo MEDIUM: ThemeSwitch lee DOM en `derive()` durante render —
   protegido con guard pero contradice claim README sobre cero acceso
   DOM en render.
 
 **Lo que más me preocupa tras el cruce**:
 1. Stepper a11y bug (BLOCKER nuevo).
-2. Las 4 colisiones nominales: `NativeSelect`, `OptionsMenuContent`, callbacks `on*Change`, hooks documentados vs exportados.
+2. Las 4 colisiones nominales: `NativeSelect`, `MenuContent`, callbacks `on*Change`, hooks documentados vs exportados.
 3. Tooltip sin primitive floating compartido bloquea la familia futura.
 
 **Lo que sigue verdadero**: la geometría OKLCH dual + ΔE OKLab guard,
@@ -124,7 +124,7 @@ ejecución de pipeline o test reproductor ad-hoc**.
     - **Stepper active fuera de rango** (B-06, tras cruce con B): `active=999/-1/NaN` → todos los `<Step>` quedan con `tabIndex=-1`. Tablist sin tab stop. **Reproducido tras cruce**.
 14. **Consumer sintético en `/tmp/consumer-test`** con TS strict +
     `moduleResolution: "Bundler"`:
-    - `useOptionsMenu`, `useTabs`, `useSidebar`, `useToast`,
+    - `useMenu`, `useTabs`, `useSidebar`, `useToast`,
       `useAccordion`, `useAccordionItem` importables sin error.
     - Tipos `*ContextValue` también importables.
     - `__suppressNoHandlerWarn` correctamente stripeado del `.d.ts`.
@@ -144,7 +144,7 @@ ejecución de pipeline o test reproductor ad-hoc**.
 17. **Documentación leída** (verificación tras cruce con B):
     - `README.md`: línea 194 declara hooks públicos como
       `useTheme, useToast, useAccordion, useAccordionItem,
-      useOptionsMenu, useSidebar, useTabs`. **NO incluye
+      useMenu, useSidebar, useTabs`. **NO incluye
       `useControllableState`**.
     - `src/index.ts`: exporta `useTheme`, `useControllableState`,
       `cn` + `export * from "./components"`.
@@ -184,7 +184,7 @@ Para cada hallazgo de B:
 
 Tests adicionales ejecutados durante el cruce:
 - B-06 GPT (Stepper active fuera de rango): reproducido.
-- H-04 GPT (OptionsMenuItem href Space): verificado en código.
+- H-04 GPT (MenuItem href Space): verificado en código.
 - B-08 GPT (README hooks omite useControllableState): verificado en README.
 - H-02 GPT (Tooltip Storybook "CSS-only"): verificado en stories.
 - B-09 GPT (peer-dep floating-ui packaging): tree-shake ejecutado.
@@ -212,8 +212,8 @@ inevitable más adelante o bug a11y permanente.
 
 **No, sin tres decisiones más antes del freeze.** En orden de impacto:
 
-1. **B-01** (resolver `NativeSelect` y `OptionsMenuContent` collisions con roadmap).
-2. **C-03** (decisión cuestionada): OptionsMenu hand-rolled vs Floating UI. El DS publica rc.1 con dos arquitecturas en paralelo.
+1. **B-01** (resolver `NativeSelect` y `MenuContent` collisions con roadmap).
+2. **C-03** (decisión cuestionada): Menu hand-rolled vs Floating UI. El DS publica rc.1 con dos arquitecturas en paralelo.
 3. **H-01**: Tooltip no envuelve con `<FloatingTree>`. Cuando llegue Submenu, la cascada de dismiss no orquesta.
 
 ## II.3 Pregunta 3 — ¿Storybook publicado coincide con código?
@@ -227,7 +227,7 @@ alineada.
 - `Tooltip.stories.tsx:13` describe el componente como "Wrapper
   CSS-only" cuando usa Floating UI. Documentación falsa (B H-02).
 - Las stories existentes son por-componente. Ningún escenario cruzado
-  (Tooltip-en-Modal, OptionsMenu-en-Sidebar-colapsada, etc.) está
+  (Tooltip-en-Modal, Menu-en-Sidebar-colapsada, etc.) está
   cubierto. H-04 reproducido por A se hubiera detectado en CI con 1
   story cruzada.
 - Tests de Tooltip son placebo: comprueban presencia de
@@ -246,7 +246,7 @@ alineada.
 ### Componentes raíz (32)
 
 `Accordion`, `Alert`, `Avatar`, `Badge`, `Breadcrumb`, `Button`,
-`Card`, `Checkbox`, `Chip`, `Divider`, `OptionsMenu`, `Input`, `Modal`,
+`Card`, `Checkbox`, `Chip`, `Divider`, `Menu`, `Input`, `Modal`,
 `Navbar`, `Pagination`, `Progress`, `Radio`, `Rating`, `NativeSelect`,
 `Sidebar`, `Skeleton`, `Slider`, `Spinner`, `Stepper`, `Switch`,
 `Table`, `Tabs`, `Textarea`, `ThemeSwitch`, `Timeline`, `Toast`,
@@ -273,7 +273,7 @@ Total exports en `dist/index.cjs`:
 - `useTheme` ✓ (en src/index.ts)
 - `useControllableState` ✓ (en src/index.ts)
 - `useToast` ✓ (vía components barrel)
-- `useOptionsMenu` ✓ (vía components barrel)
+- `useMenu` ✓ (vía components barrel)
 - `useTabs` ✓ (vía components barrel)
 - `useSidebar` ✓ (vía components barrel)
 - `useAccordion` ✓ (vía components barrel)
@@ -283,7 +283,7 @@ Total exports en `dist/index.cjs`:
 
 `README.md:194`:
 > Hooks públicos: `useTheme`, `useToast`, `useAccordion`,
-> `useAccordionItem`, `useOptionsMenu`, `useSidebar`, `useTabs`.
+> `useAccordionItem`, `useMenu`, `useSidebar`, `useTabs`.
 
 ### Inconsistencia
 
@@ -292,7 +292,7 @@ Total exports en `dist/index.cjs`:
 | `useTheme` | ✓ | ✓ | ✓ |
 | `useControllableState` | ✓ | **✗ omitido** | ✓ |
 | `useToast` | (vía components) | ✓ | ✓ |
-| `useOptionsMenu` | (vía components) | ✓ | ✓ |
+| `useMenu` | (vía components) | ✓ | ✓ |
 | `useTabs` | (vía components) | ✓ | ✓ |
 | `useSidebar` | (vía components) | ✓ | ✓ |
 | `useAccordion` | (vía components) | ✓ | ✓ |
@@ -437,24 +437,24 @@ El wildcard firma como pública la disponibilidad individual de los
 **Convergente con B B-01 + B-02.**
 
 - **Archivos**:
-  - `src/components/index.ts:14` (`export * from "./OptionsMenu"`)
+  - `src/components/index.ts:14` (`export * from "./Menu"`)
   - `src/components/index.ts:23` (`export * from "./NativeSelect"`)
-  - Roadmap: `src/components/floating/menu/OptionsMenuContent/`,
+  - Roadmap: `src/components/floating/menu/MenuContent/`,
     `src/components/floating/selection/NativeSelect/`.
 
 - **Problema**:
-  El barrel actual exporta `OptionsMenu` (compound hand-rolled, sin
-  Floating UI) y `OptionsMenuContent` (compound child del OptionsMenu). El
-  roadmap planea `floating/menu/OptionsMenuContent/` (Floating UI con
+  El barrel actual exporta `Menu` (compound hand-rolled, sin
+  Floating UI) y `MenuContent` (compound child del Menu). El
+  roadmap planea `floating/menu/MenuContent/` (Floating UI con
   anchor virtual). **Mismo símbolo, dos componentes distintos**.
 
   Igual con `NativeSelect`: el actual es `<select>` nativo estilizado. El
   planeado es un combobox-listbox custom basado en Floating UI.
 
 - **Reproducción**:
-  Test consumer-side. `import { OptionsMenuContent, NativeSelect } from
+  Test consumer-side. `import { MenuContent, NativeSelect } from
   "reactigoded"` resuelve a los actuales. Si entra `floating/menu/
-  OptionsMenuContent` con `export *`, conflicto duplicate export en TS.
+  MenuContent` con `export *`, conflicto duplicate export en TS.
 
 - **Por qué BLOCKER**:
   rc.1 = API freeze. Después, renombrar uno de los dos = breaking.
@@ -465,8 +465,8 @@ El wildcard firma como pública la disponibilidad individual de los
 
   | Opción | Acción | Coste | Riesgo |
   |---|---|---|---|
-  | A | Renombrar **ahora** los actuales: `OptionsMenu` → `Menu`/`OptionsMenu`, `NativeSelect` → `NativeSelect` | Breaking en beta.23 + guía migración | Bajo (1 consumer = Iván) |
-  | B | Renombrar el roadmap: `OptionsMenuContent` planeado → `FloatingMenu`/`Menu` | Documentación divergente del estándar Radix/Mantine | Bajo |
+  | A | Renombrar **ahora** los actuales: `Menu` → `Menu`/`Menu`, `NativeSelect` → `NativeSelect` | Breaking en beta.23 + guía migración | Bajo (1 consumer = Iván) |
+  | B | Renombrar el roadmap: `MenuContent` planeado → `FloatingMenu`/`Menu` | Documentación divergente del estándar Radix/Mantine | Bajo |
   | C | Subpath exports `reactigoded/floating` | Reorganizar barrel después de 22 betas | Medio-alto |
 
 - **Mi opinión**: A. Alinea el DS con naming estándar.
@@ -490,13 +490,13 @@ El wildcard firma como pública la disponibilidad individual de los
   | `Stepper` | `active: number` | **`onValueChange`** | number |
   | `Sidebar` | `collapsed: boolean` | **`onValueChange`** | boolean |
   | `ThemeSwitch` | `theme: Theme` | **`onValueChange`** | Theme |
-  | `OptionsMenu` | `open: boolean` | `onOpenChange` | boolean |
+  | `Menu` | `open: boolean` | `onOpenChange` | boolean |
   | `Modal` | `open: boolean` | **`onClose`** (no payload) | — |
   | `Switch`/`Checkbox`/`Radio` | `checked: boolean` | `onChange` (nativo) | ChangeEvent |
 
   Cinco naming alternativos para "el componente cambió de estado",
   más `onChange` para inputs nativos, más `onOpenChange` para
-  OptionsMenu, más `onClose` (sin payload) para Modal.
+  Menu, más `onClose` (sin payload) para Modal.
 
 - **Caso especial Modal** (sube de mi v3 M-06 a HIGH tras cruce con
   B B-05): `onClose` no recibe el nuevo estado y solo dispara para
@@ -534,7 +534,7 @@ El wildcard firma como pública la disponibilidad individual de los
 - **Problema**:
   No existe primitive compartido para portal target, FloatingTree,
   nested dismiss, controlled/uncontrolled open state, virtual
-  anchors, shared middleware. El roadmap planea `OptionsMenuContent`,
+  anchors, shared middleware. El roadmap planea `MenuContent`,
   `Submenu`, `MentionMenu`, `SlashCommand`, `Popover`, `HoverCard`
   — todos floating con anidamiento.
 
@@ -578,7 +578,7 @@ El wildcard firma como pública la disponibilidad individual de los
   - `src/index.ts:43-47` — exporta `useTheme`,
     `useControllableState`. Plus `export * from "./components"`.
   - `README.md:194` — declara hooks públicos:
-    `useTheme, useToast, useAccordion, useAccordionItem, useOptionsMenu,
+    `useTheme, useToast, useAccordion, useAccordionItem, useMenu,
     useSidebar, useTabs`.
   - `dist/index.cjs` — exports finales: 8 hooks (los del README + `useControllableState`).
 
@@ -590,7 +590,7 @@ El wildcard firma como pública la disponibilidad individual de los
   | `useTheme` | ✓ | ✓ | ✓ |
   | `useControllableState` | ✓ | **✗** | ✓ |
   | `useToast` | (transitivo) | ✓ | ✓ |
-  | `useOptionsMenu` | (transitivo) | ✓ | ✓ |
+  | `useMenu` | (transitivo) | ✓ | ✓ |
   | `useTabs` | (transitivo) | ✓ | ✓ |
   | `useSidebar` | (transitivo) | ✓ | ✓ |
   | `useAccordion` | (transitivo) | ✓ | ✓ |
@@ -696,11 +696,11 @@ El wildcard firma como pública la disponibilidad individual de los
 [Sin cambios respecto a v3 — relacionado con B-03 BLOCKER].
 
 `<FloatingTree>` orquesta dismiss en jerarquías anidadas
-(`OptionsMenuContent` → `Submenu` → `Tooltip`). Sin árbol, ESC sobre el
+(`MenuContent` → `Submenu` → `Tooltip`). Sin árbol, ESC sobre el
 Submenu cierra todo, no solo el más cercano.
 
 Si `FloatingTree` se monta como envoltorio interno de los nuevos
-`<OptionsMenuContent>` / `<Popover>` y Tooltip empieza a usar
+`<MenuContent>` / `<Popover>` y Tooltip empieza a usar
 `useFloatingNodeId()` internamente, **la API pública del Tooltip no
 cambia**. Los selectores `.ig-tooltip-place-top` siguen siendo
 válidos.
@@ -811,7 +811,7 @@ oficial del DS para 2.0.
 [Sin cambios respecto a v3 + convergente con B H-03 + H-07.]
 
 Las stories existentes son por-componente. Ningún escenario cruzado
-(Tooltip-en-Modal, OptionsMenu-en-Sidebar-colapsada, Toast-con-Modal,
+(Tooltip-en-Modal, Menu-en-Sidebar-colapsada, Toast-con-Modal,
 Tabs-con-Tooltip-en-TabPanel, Modal-en-Modal). Si el equipo
 añadiera 3 stories cruzadas, axe-core las ejecutaría
 automáticamente y H-04 se hubiera detectado en CI.
@@ -844,7 +844,7 @@ NO breaking (la directiva no es API surface).
 
 [Sin cambios respecto a v3.]
 
-Otros componentes lo hacen bien (OptionsMenuTrigger, Modal,
+Otros componentes lo hacen bien (MenuTrigger, Modal,
 AccordionHeader). Solo SidebarToggle es asimétrico.
 
 **Fix**: añadir id al `<aside>` vía Provider context, referenciar
@@ -1008,12 +1008,12 @@ inputs nativos solo `onChange`).
 
 ---
 
-### H-19 — OptionsMenuItem `href` no activa con Space (spec violation)
+### H-19 — MenuItem `href` no activa con Space (spec violation)
 
 **Hallazgo nuevo del cruce con B H-04. Verificado en código.**
 
 - **Archivos**:
-  `src/components/OptionsMenu/OptionsMenuItem.tsx:121-122` (comentario en
+  `src/components/Menu/MenuItem.tsx:121-122` (comentario en
   el código mismo):
   > "Activación por teclado: Enter en `<a>` activa nativo, pero
   > Space no — y para aria-disabled hay que bloquear ambos."
@@ -1029,7 +1029,7 @@ inputs nativos solo `onChange`).
   Spec violation real.
 
 - **Por qué HIGH**:
-  rc.1 freezea el comportamiento de `OptionsMenuItem` con `href`.
+  rc.1 freezea el comportamiento de `MenuItem` con `href`.
   Después, añadir Space activation es breaking del comportamiento
   user-facing si alguno está confiando en el silencio actual (raro).
 
@@ -1279,7 +1279,7 @@ Tratado en B-02 (BLOCKER). No duplico aquí.
 
 **Adicionales del cruce con B**:
 
-- **L-11**: OptionsMenu llama `placement` a lo que es `align` (B M-05). En Floating UI, placement es `top/bottom/right/left + start/center/end`. Aquí solo horizontal align. Naming confuso de cara al futuro `floating/menu/OptionsMenuContent`. Worth renombrar a `align` antes de freeze.
+- **L-11**: Menu llama `placement` a lo que es `align` (B M-05). En Floating UI, placement es `top/bottom/right/left + start/center/end`. Aquí solo horizontal align. Naming confuso de cara al futuro `floating/menu/MenuContent`. Worth renombrar a `align` antes de freeze.
 - **L-12**: Pagination `aria-label="Página N"` hardcoded sin `getPageLabel` (B M-04). i18n parcial.
 - **L-13**: README mezcla guía consumer con tracking interno post-RC1 (B LOW). Lenguaje de proceso interno.
 
@@ -1346,12 +1346,12 @@ Coherente solo si nunca hay Tooltip dentro de Modal. Roadmap
 explícita ese caso (H-04 reproducido). Tres opciones, hoy ninguna
 implementada.
 
-## C-03 — Hand-rolled OptionsMenu vs Floating UI
+## C-03 — Hand-rolled Menu vs Floating UI
 
-Tooltip usa Floating UI. OptionsMenu no. Si llega `floating/menu/
-OptionsMenuContent`, dos arquitecturas en paralelo para siempre.
+Tooltip usa Floating UI. Menu no. Si llega `floating/menu/
+MenuContent`, dos arquitecturas en paralelo para siempre.
 
-## C-04 — `useOptionsMenu`/`useTabs`/etc. accidentalmente públicos (B-04)
+## C-04 — `useMenu`/`useTabs`/etc. accidentalmente públicos (B-04)
 
 Cubierto en B-04.
 
@@ -1383,7 +1383,7 @@ runtime.
   silenciosamente.
 - **Stepper**: defensivo bien hecho EXCEPTO `active` fuera de rango
   (B-05 nuevo BLOCKER). Sin clamp ni fallback.
-- **OptionsMenuItem**: el branch anchor reconoce el problema Space en
+- **MenuItem**: el branch anchor reconoce el problema Space en
   comentario pero no sintetiza activación (H-19 nuevo).
 - **Tooltip**: descripción Storybook miente sobre arquitectura
   (H-20 nuevo).
@@ -1391,7 +1391,7 @@ runtime.
 
 Resto de componentes: **Accordion, Alert, Avatar, AvatarGroup,
 Badge, Breadcrumb, Button, IconButton, Card (compound), Checkbox,
-Chip, Divider, OptionsMenu (compound), Input (compound), Modal
+Chip, Divider, Menu (compound), Input (compound), Modal
 (compound), Navbar (compound), Pagination, Progress, Radio, Rating,
 NativeSelect, Sidebar (compound), Skeleton, SkeletonContainer, Spinner,
 Step, Switch, Table (compound), Tabs (compound), Textarea,
@@ -1481,7 +1481,7 @@ qué cambios materiales se aplicaron al informe final.
 
 ## X.2 Donde A y B convergen
 
-- **B-01 / GPT B-01 + B-02**: Naming `NativeSelect` y `OptionsMenuContent` colisionan con roadmap. Ambos lo flagean como BLOCKER.
+- **B-01 / GPT B-01 + B-02**: Naming `NativeSelect` y `MenuContent` colisionan con roadmap. Ambos lo flagean como BLOCKER.
 - **B-02 / GPT B-05 + H-13**: Inconsistencia callbacks `on*Change` + Modal `onClose` opcional. Convergente con matiz: A trata Modal como caso especial dentro de B-02; B lo separa como B-05 (BLOCKER).
 - **B-03 / GPT B-03**: Tooltip sin primitive floating común. Convergente.
 - **H-04 / GPT B-04**: Tooltip sin `container` prop. Convergente.
@@ -1539,9 +1539,9 @@ dentro del BLOCKER B-02.
 ## X.5 Gaps de A que B cubre (5 nuevos hallazgos integrados)
 
 1. **H-18** — Tooltip `children: ReactNode` permite string sin asociar (de B H-01).
-2. **H-19** — OptionsMenuItem `href` no activa con Space (de B H-04).
+2. **H-19** — MenuItem `href` no activa con Space (de B H-04).
 3. **H-20** — Tooltip Storybook descripción "CSS-only" falsa (de B H-02).
-4. **L-11** — OptionsMenu llama `placement` a lo que es `align` (de B M-05).
+4. **L-11** — Menu llama `placement` a lo que es `align` (de B M-05).
 5. **L-12** — Pagination i18n hardcoded (de B M-04).
 
 ## X.6 Gaps de B que A cubre (cosas que B no pudo verificar)
@@ -1565,13 +1565,13 @@ Cada hallazgo de B fue validado con código local:
 
 - **B-06 GPT (Stepper)**: test ad-hoc ejecutado, reproducido.
 - **B-08 GPT (README hooks)**: `grep -nE "useControllableState|useTheme|useToast" README.md` ejecutado, confirmado línea 194.
-- **H-04 GPT (OptionsMenuItem Space)**: lectura de `OptionsMenuItem.tsx:121-122`, comentario en código mismo lo reconoce.
+- **H-04 GPT (MenuItem Space)**: lectura de `MenuItem.tsx:121-122`, comentario en código mismo lo reconoce.
 - **H-08 GPT (Slider value inválido)**: lectura de `Slider.tsx:111-119`, comentario H-27 internal lo confirma.
 - **H-02 GPT (Tooltip Storybook)**: `grep "CSS-only" Tooltip.stories.tsx` ejecutado, confirmado línea 13.
 - **B-09 GPT (peer floating-ui)**: esbuild bundle ejecutado con/sin externalización, midió 0 ocurrencias en bundle.
 - **B-10 GPT (ThemeSwitch)**: lectura de `ThemeSwitch.tsx:114`, guard `typeof document` confirmado.
 - **H-01 GPT (Tooltip children)**: `grep "children" Tooltip.tsx` ejecutado, confirmado tipo `ReactNode`.
-- **H-06 GPT (OptionsMenu listeners)**: `grep "addEventListener" OptionsMenu.tsx`, confirmado `document.addEventListener`.
+- **H-06 GPT (Menu listeners)**: `grep "addEventListener" Menu.tsx`, confirmado `document.addEventListener`.
 
 ---
 
@@ -1760,7 +1760,7 @@ rm /home/claude/reactigoded/src/__<test>__.test.tsx
 grep -nE "useControllableState|useTheme|useToast" README.md
 grep -nE "CSS-only|css-only" src/components/floating/Tooltip/Tooltip.stories.tsx
 sed -n '105,140p' src/components/ThemeSwitch/ThemeSwitch.tsx
-sed -n '95,160p' src/components/OptionsMenu/OptionsMenuItem.tsx
+sed -n '95,160p' src/components/Menu/MenuItem.tsx
 sed -n '85,135p' src/components/Slider/Slider.tsx
 ```
 
@@ -1789,12 +1789,12 @@ añade:
 - Si Stepper pierde tab stop con `active` inválido (B-05 nuevo).
 - Si Slider cambia silenciosamente de modo controlled→uncontrolled
   (H-16 promovido).
-- Si OptionsMenuItem viola WAI-ARIA APG (H-19 nuevo).
+- Si MenuItem viola WAI-ARIA APG (H-19 nuevo).
 - Si Tooltip Storybook miente sobre arquitectura (H-20 nuevo).
 
 Las **5 BLOCKERs** son decisiones de **5-30 LOC cada una**:
 
-1. **B-01**: ~30 LOC. Renombrar `OptionsMenu`/`NativeSelect` o reservar
+1. **B-01**: ~30 LOC. Renombrar `Menu`/`NativeSelect` o reservar
    namespace `floating/`.
 2. **B-02**: ~50-100 LOC find/replace coordinado en 7 componentes
    + tests + stories. Estandarizar `onValueChange<T>`.
@@ -1812,7 +1812,7 @@ Las **20 HIGHs** son decisiones de día a 5 días cada una. Cerrar
 - H-04 (Tooltip-en-Modal — escenario explícito del roadmap roto).
 - H-09 (`"use client"` global — DX Next.js consumers).
 - H-16 (Slider modo silencioso — bug contrato).
-- H-19 (OptionsMenuItem Space — spec violation).
+- H-19 (MenuItem Space — spec violation).
 - H-20 (Tooltip Storybook miente — confianza).
 - H-13 (budgets ajustados — proceso).
 

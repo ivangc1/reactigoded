@@ -237,27 +237,27 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 
 ---
 
-### OptionsMenu (compound)
+### Menu (compound)
 
 | Categoría | Clases |
 |---|---|
-| Wrapper | `.ig-options-menu` |
-| Trigger | `.ig-options-menu-trigger` (sobre `<button>`) |
-| Menu | `.ig-options-menu-content` (`role="menu"`) |
-| Item | `.ig-options-menu-item` (`role="menuitem"`) · `.ig-options-menu-item-active` · `.ig-options-menu-item-danger` |
-| Slots | `.ig-options-menu-header` · `.ig-options-menu-divider` |
-| Estado | `.ig-options-menu-open` (en wrapper) |
-| Posición | `.ig-options-menu-right` · `.ig-options-menu-up` |
+| Wrapper | `.ig-menu` |
+| Trigger | `.ig-menu-trigger` (sobre `<button>`) |
+| Menu | `.ig-menu-content` (`role="menu"`) |
+| Item | `.ig-menu-item` (`role="menuitem"`) · `.ig-menu-item-active` · `.ig-menu-item-danger` |
+| Slots | `.ig-menu-label` · `.ig-menu-separator` |
+| Estado | `.ig-menu-open` (en wrapper) |
+| Posición | `.ig-menu-right` · `.ig-menu-up` |
 
 ```html
-<div class="ig-options-menu ig-options-menu-open">
-  <button class="ig-options-menu-trigger" aria-expanded="true">Acciones</button>
-  <div class="ig-options-menu-content" role="menu">
-    <div class="ig-options-menu-header">Cuenta</div>
-    <button class="ig-options-menu-item" role="menuitem">Perfil</button>
-    <button class="ig-options-menu-item ig-options-menu-item-active" role="menuitem">Ajustes</button>
-    <hr class="ig-options-menu-divider" />
-    <button class="ig-options-menu-item ig-options-menu-item-danger" role="menuitem">Cerrar sesión</button>
+<div class="ig-menu ig-menu-open">
+  <button class="ig-menu-trigger" aria-expanded="true">Acciones</button>
+  <div class="ig-menu-content" role="menu">
+    <div class="ig-menu-label">Cuenta</div>
+    <button class="ig-menu-item" role="menuitem">Perfil</button>
+    <button class="ig-menu-item ig-menu-item-active" role="menuitem">Ajustes</button>
+    <hr class="ig-menu-separator" />
+    <button class="ig-menu-item ig-menu-item-danger" role="menuitem">Cerrar sesión</button>
   </div>
 </div>
 ```
@@ -365,7 +365,7 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 > `onValueChange` son opcionales. Pasa `currentPage`+`onValueChange`
 > para controlled, o `defaultPage` (default 1) para uncontrolled
 > (el componente maneja state interno; `onValueChange` opcional como
-> side-effect). Patrón consistente con Tabs / Accordion / OptionsMenu.
+> side-effect). Patrón consistente con Tabs / Accordion / Menu.
 
 ---
 
@@ -787,7 +787,7 @@ Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaj
 ## Notas finales
 
 - Los slots compound (`-header`, `-body`, `-footer`, etc.) están pensados para reflejar la jerarquía semántica nativa del HTML; no son obligatorios si construyes un layout custom encima.
-- Los componentes con múltiples sub-clases (Sidebar, Card, Modal, OptionsMenu, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
+- Los componentes con múltiples sub-clases (Sidebar, Card, Modal, Menu, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
 - Estados del navegador (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador automáticamente cuando los elementos son interactivos. La librería utility-pseudo (`state.css`, opt-in) permite forzar estados desde HTML estático sin depender del estado real del DOM.
 
 ---

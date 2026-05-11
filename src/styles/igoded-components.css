@@ -5574,8 +5574,8 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     border: 2px solid currentColor;
   }
 
-  /* OptionsMenu */
-  .ig-options-menu-content {
+  /* Menu */
+  .ig-menu-content {
     border: 2px solid currentColor;
   }
 
@@ -5729,13 +5729,13 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     background: Canvas;
   }
 
-  /* OptionsMenu */
-  .ig-options-menu-content {
+  /* Menu */
+  .ig-menu-content {
     border: 2px solid currentColor;
     background: Canvas;
   }
 
-  .ig-options-menu-item:hover {
+  .ig-menu-item:hover {
     background: Highlight;
     color: HighlightText;
   }
@@ -8283,33 +8283,33 @@ Solo se muestran cuando el usuario las necesita.
 
 DIFERENCIA CON TOOLTIP:
 - Tooltip: hover, solo muestra información
-- OptionsMenu: click, permite seleccionar opciones
+- Menu: click, permite seleccionar opciones
 
 ESTRUCTURA:
-<div class="ig-options-menu">
-  <button class="ig-options-menu-trigger">Opciones ▼</button>
-  <div class="ig-options-menu-content">
-    <a class="ig-options-menu-item" href="#">Editar</a>
-    <a class="ig-options-menu-item" href="#">Duplicar</a>
-    <div class="ig-options-menu-divider"></div>
-    <a class="ig-options-menu-item ig-options-menu-item-danger" href="#">Eliminar</a>
+<div class="ig-menu">
+  <button class="ig-menu-trigger">Opciones ▼</button>
+  <div class="ig-menu-content">
+    <a class="ig-menu-item" href="#">Editar</a>
+    <a class="ig-menu-item" href="#">Duplicar</a>
+    <div class="ig-menu-separator"></div>
+    <a class="ig-menu-item ig-menu-item-danger" href="#">Eliminar</a>
   </div>
 </div>
 
 CÓMO USAR:
-1. Contenedor ig-options-menu con position: relative
-2. Trigger (botón) con ig-options-menu-trigger
-3. Menú con ig-options-menu-content (hidden por defecto)
-4. Items con ig-options-menu-item
+1. Contenedor ig-menu con position: relative
+2. Trigger (botón) con ig-menu-trigger
+3. Menú con ig-menu-content (hidden por defecto)
+4. Items con ig-menu-item
 5. JS para toggle clase 'open' en el contenedor (o usa :focus-within)
 
 POSICIONES:
-- ig-options-menu-right: alineado a la derecha
-- ig-options-menu-up: abre hacia arriba
+- ig-menu-right: alineado a la derecha
+- ig-menu-up: abre hacia arriba
 
 ESTADOS:
-- ig-options-menu-item-active: item actualmente seleccionado
-- ig-options-menu-item-danger: acciones destructivas (eliminar, etc.)
+- ig-menu-item-active: item actualmente seleccionado
+- ig-menu-item-danger: acciones destructivas (eliminar, etc.)
 
 CUÁNDO USAR:
 - Menús de acciones (•••)
@@ -8318,16 +8318,16 @@ CUÁNDO USAR:
 - Cualquier lista de acciones contextual
 */
 
-.ig-options-menu {
+.ig-menu {
   position: relative;
   display: inline-block;
 }
 
-.ig-options-menu-trigger {
+.ig-menu-trigger {
   cursor: pointer;
 }
 
-.ig-options-menu-content {
+.ig-menu-content {
   position: absolute;
   top: 100%;
   left: 0;
@@ -8335,22 +8335,22 @@ CUÁNDO USAR:
   min-width: 180px;
   padding: var(--ig-space-1);
   margin-top: var(--ig-space-1);
-  background-color: var(--ig-options-menu-bg);
-  border: 1px solid var(--ig-options-menu-border);
-  border-radius: var(--ig-options-menu-radius);
-  box-shadow: var(--ig-options-menu-shadow);
+  background-color: var(--ig-menu-bg);
+  border: 1px solid var(--ig-menu-border);
+  border-radius: var(--ig-menu-radius);
+  box-shadow: var(--ig-menu-shadow);
   opacity: 0;
   visibility: hidden;
   transform: translateY(calc(-1 * var(--ig-space-2)));
   transition: var(--ig-transition-fast);
 }
 
-.ig-options-menu-right .ig-options-menu-content {
+.ig-menu-right .ig-menu-content {
   left: auto;
   right: 0;
 }
 
-.ig-options-menu-up .ig-options-menu-content {
+.ig-menu-up .ig-menu-content {
   top: auto;
   bottom: 100%;
   margin-top: 0;
@@ -8359,14 +8359,14 @@ CUÁNDO USAR:
 }
 
 /* Mostrar con clase o focus-within */
-.ig-options-menu.ig-options-menu-open .ig-options-menu-content,
-.ig-options-menu:focus-within .ig-options-menu-content {
+.ig-menu.ig-menu-open .ig-menu-content,
+.ig-menu:focus-within .ig-menu-content {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
 }
 
-.ig-options-menu-item {
+.ig-menu-item {
   display: flex;
   align-items: center;
   gap: var(--ig-space-2);
@@ -8379,34 +8379,34 @@ CUÁNDO USAR:
   transition: var(--ig-transition-fast);
 }
 
-.ig-options-menu-item:hover {
-  background-color: var(--ig-options-menu-item-hover);
+.ig-menu-item:hover {
+  background-color: var(--ig-menu-item-hover);
   color: var(--ig-text-heading);
 }
 
 /* Estado activo (item seleccionado) */
-.ig-options-menu-item-active,
-.ig-options-menu-item.active {
+.ig-menu-item-active,
+.ig-menu-item.active {
   background-color: color-mix(in srgb, var(--ig-axis) 15%, transparent);
   color: var(--ig-axis);
 }
 
-.ig-options-menu-item-danger {
+.ig-menu-item-danger {
   color: var(--ig-malum);
 }
 
-.ig-options-menu-item-danger:hover {
+.ig-menu-item-danger:hover {
   background-color: color-mix(in srgb, var(--ig-malum) 10%, transparent);
   color: var(--ig-malum);
 }
 
-.ig-options-menu-divider {
+.ig-menu-separator {
   height: 1px;
   margin: var(--ig-space-1) 0;
   background-color: var(--ig-border-subtle);
 }
 
-.ig-options-menu-header {
+.ig-menu-label {
   padding: var(--ig-space-2) var(--ig-space-3);
   font-size: var(--ig-text-xs);
   font-weight: var(--ig-fw-semibold);
@@ -9891,7 +9891,7 @@ Controla cómo responde el elemento al modo de alto contraste de Windows.
   nav,
   .ig-btn,
   .ig-dialog,
-  .ig-options-menu-content,
+  .ig-menu-content,
   .ig-sidebar,
   .ig-navbar,
   .ig-toast,
