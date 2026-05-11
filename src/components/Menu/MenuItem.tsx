@@ -93,21 +93,41 @@ function extractLabel(children: ReactNode): string {
 export function MenuItem({ ref, ...props }: MenuItemProps) {
   const { setOpen, closeOnSelect, listRef, labelsRef, getItemProps } =
     useMenu();
-  const indexRef = useRef<number | null>(null);
+  // slotRef guarda el índice que este MenuItem ocupa actualmente en
+  // listRef. Necesario para limpiar el slot al unmount — sin esto,
+  // listRef acumula nodes detached cuando MenuContent remontea entre
+  // las ramas open?<FloatingFocusManager>:<div> (o en React StrictMode
+  // ref cycles), y useListNavigation/useTypeahead leen índices stale.
+  // (Codex P1 review sobre PR #63).
+  const slotRef = useRef<number | null>(null);
 
   // Discriminator preservado tras destructure: `"href" in props` con
   // typeof string detecta la rama AnchorItemProps.
   const isAnchor = "href" in props && typeof props.href === "string";
 
   const registerItem = (node: HTMLElement | null) => {
-    if (node === null) return;
+    if (node === null) {
+      // Unmount/detach: liberar el slot que ocupábamos para que
+      // siguientes items puedan reciclarlo y FUI no lea node stale.
+      if (slotRef.current !== null) {
+        listRef.current[slotRef.current] = null;
+        labelsRef.current[slotRef.current] = null;
+        slotRef.current = null;
+      }
+      return;
+    }
+    // Mount o re-mount: ¿ya registrado en algún slot?
     let idx = listRef.current.indexOf(node);
     if (idx === -1) {
-      idx = listRef.current.length;
+      // Buscar slot reciclado (null tras unmount previo) o append.
+      idx = listRef.current.indexOf(null);
+      if (idx === -1) {
+        idx = listRef.current.length;
+      }
       listRef.current[idx] = node;
       labelsRef.current[idx] = extractLabel(props.children).trim() || null;
     }
-    indexRef.current = idx;
+    slotRef.current = idx;
   };
 
   // useMergeRefs SIEMPRE al mismo orden (Rules of Hooks). El `ref` viene
