@@ -1,4 +1,4 @@
-# C-02 — Tooltip dentro de Modal
+# C-02 — Tooltip dentro de Dialog
 
 **Fecha**: 2026-05-10
 **Estado**: decisión consciente con trigger de re-evaluación
@@ -6,7 +6,7 @@
 
 ## Decisión
 
-Mantener patrón manual: el consumer pasa `container={modalRef}` explícitamente cuando un Tooltip vive dentro de un Modal.
+Mantener patrón manual: el consumer pasa `container={modalRef}` explícitamente cuando un Tooltip vive dentro de un Dialog.
 
 ## Por qué no resolver automáticamente ahora
 
@@ -32,9 +32,9 @@ Documentado explícitamente para evitar trap futuro:
 
 Reabrir si ocurre cualquiera de estos:
 
-1. **≥3 issues de consumers** reportando "Tooltip detrás del backdrop en Modal" en los primeros 6 meses post-rc.1.
+1. **≥3 issues de consumers** reportando "Tooltip detrás del backdrop en Dialog" en los primeros 6 meses post-rc.1.
 2. **≥2 PRs de proyectos consumer** pegándose con el patrón manual (workarounds explícitos en su código consumer).
-3. **Decisión interna** de migrar el resto de componentes floating a un sistema de context unificado (entonces Tooltip-en-Modal es un caso natural del sistema, no una excepción).
+3. **Decisión interna** de migrar el resto de componentes floating a un sistema de context unificado (entonces Tooltip-en-Dialog es un caso natural del sistema, no una excepción).
 
 Si se reabre, la opción a evaluar es **D con context interno NO exportado**. Nunca C ni D con context público.
 
@@ -42,7 +42,7 @@ Si se reabre, la opción a evaluar es **D con context interno NO exportado**. Nu
 
 Aplicada en este PR:
 - Story `TooltipDentroDeModal` en `src/components/floating/Tooltip/Tooltip.stories.tsx` con código de ejemplo pasando `container={dialogRef}`. Verificable visualmente en Storybook.
-- JSDoc del prop `container` ampliado: frase explícita sobre el caso Modal con snippet copy-paste.
+- JSDoc del prop `container` ampliado: frase explícita sobre el caso Dialog con snippet copy-paste.
 
 ## Próxima revisión
 

@@ -1,21 +1,21 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
-import { Modal } from "./Modal";
-import { ModalHeader } from "./ModalHeader";
-import { ModalBody } from "./ModalBody";
-import { ModalFooter } from "./ModalFooter";
-import { ModalClose } from "./ModalClose";
+import { Dialog } from "./Dialog";
+import { DialogHeader } from "./DialogHeader";
+import { DialogBody } from "./DialogBody";
+import { DialogFooter } from "./DialogFooter";
+import { DialogClose } from "./DialogClose";
 import { Button } from "@/components/Button";
 
 const meta = {
-  title: "Componentes/Modal",
-  component: Modal,
+  title: "Componentes/Dialog",
+  component: Dialog,
   parameters: {
     docs: {
       description: {
         component:
-          "Modal sobre `<dialog>` HTML nativo. Foco-trap, ESC y top-layer son nativos del navegador. Compón con `ModalHeader`, `ModalBody`, `ModalFooter`, `ModalClose`.",
+          "Dialog sobre `<dialog>` HTML nativo. Foco-trap, ESC y top-layer son nativos del navegador. Compón con `DialogHeader`, `DialogBody`, `DialogFooter`, `DialogClose`.",
       },
     },
   },
@@ -38,7 +38,7 @@ const meta = {
     closeOnBackdrop: true,
     closeOnEsc: true,
   },
-} satisfies Meta<typeof Modal>;
+} satisfies Meta<typeof Dialog>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -49,23 +49,23 @@ export const PorDefecto: Story = {
     return (
       <>
         <Button onClick={() => { setOpen(true); }}>Abrir modal</Button>
-        <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-          <ModalHeader>
+        <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
+          <DialogHeader>
             <h2>Confirmar acción</h2>
-            <ModalClose onClick={() => { setOpen(false); }} />
-          </ModalHeader>
-          <ModalBody>
+            <DialogClose onClick={() => { setOpen(false); }} />
+          </DialogHeader>
+          <DialogBody>
             <p>
               ¿Seguro que quieres continuar? Esta acción no se puede deshacer.
             </p>
-          </ModalBody>
-          <ModalFooter>
+          </DialogBody>
+          <DialogFooter>
             <Button variant="secondary" onClick={() => { setOpen(false); }}>
               Cancelar
             </Button>
             <Button onClick={() => { setOpen(false); }}>Aceptar</Button>
-          </ModalFooter>
-        </Modal>
+          </DialogFooter>
+        </Dialog>
       </>
     );
   },
@@ -85,19 +85,19 @@ export const Sizes: Story = {
             </Button>
           ))}
         </div>
-        <Modal
+        <Dialog
           open={size !== null}
           onOpenChange={() => { setSize(null); }}
           size={size ?? "md"}
         >
-          <ModalHeader>
+          <DialogHeader>
             <h2>Tamaño: {size}</h2>
-            <ModalClose onClick={() => { setSize(null); }} />
-          </ModalHeader>
-          <ModalBody>
-            <p>Modal de tamaño {size}.</p>
-          </ModalBody>
-        </Modal>
+            <DialogClose onClick={() => { setSize(null); }} />
+          </DialogHeader>
+          <DialogBody>
+            <p>Dialog de tamaño {size}.</p>
+          </DialogBody>
+        </Dialog>
       </>
     );
   },
@@ -109,16 +109,16 @@ export const BackdropBlur: Story = {
     const [open, setOpen] = useState(false);
     return (
       <>
-        <Button onClick={() => { setOpen(true); }}>Modal con backdrop blur</Button>
-        <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-          <ModalHeader>
+        <Button onClick={() => { setOpen(true); }}>Dialog con backdrop blur</Button>
+        <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
+          <DialogHeader>
             <h2>Backdrop con blur</h2>
-            <ModalClose onClick={() => { setOpen(false); }} />
-          </ModalHeader>
-          <ModalBody>
+            <DialogClose onClick={() => { setOpen(false); }} />
+          </DialogHeader>
+          <DialogBody>
             <p>Detrás del modal hay un blur de 8px.</p>
-          </ModalBody>
-        </Modal>
+          </DialogBody>
+        </Dialog>
       </>
     );
   },
@@ -146,28 +146,28 @@ export const Loading: Story = {
         >
           Abrir modal con loading
         </Button>
-        <Modal
+        <Dialog
           open={open}
           loading={loading}
           onOpenChange={() => {
             setOpen(false);
           }}
         >
-          <ModalHeader>
+          <DialogHeader>
             <h2>Procesando…</h2>
-            <ModalClose
+            <DialogClose
               onClick={() => {
                 setOpen(false);
               }}
             />
-          </ModalHeader>
-          <ModalBody>
+          </DialogHeader>
+          <DialogBody>
             <p>
               Pulsa el botón para simular un envío de 2 segundos. El modal queda
               en estado <code>loading</code>.
             </p>
-          </ModalBody>
-          <ModalFooter>
+          </DialogBody>
+          <DialogFooter>
             <Button
               loading={loading}
               onClick={() => {
@@ -180,8 +180,8 @@ export const Loading: Story = {
             >
               Confirmar
             </Button>
-          </ModalFooter>
-        </Modal>
+          </DialogFooter>
+        </Dialog>
       </>
     );
   },
@@ -193,21 +193,21 @@ export const NoCloseOnBackdrop: Story = {
     const [open, setOpen] = useState(false);
     return (
       <>
-        <Button onClick={() => { setOpen(true); }}>Modal "obligatorio"</Button>
-        <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-          <ModalHeader>
+        <Button onClick={() => { setOpen(true); }}>Dialog "obligatorio"</Button>
+        <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
+          <DialogHeader>
             <h2>Confirmación obligatoria</h2>
-          </ModalHeader>
-          <ModalBody>
+          </DialogHeader>
+          <DialogBody>
             <p>
               Este modal no se cierra con ESC ni clicando fuera. Solo con el
               botón.
             </p>
-          </ModalBody>
-          <ModalFooter>
+          </DialogBody>
+          <DialogFooter>
             <Button onClick={() => { setOpen(false); }}>Entendido</Button>
-          </ModalFooter>
-        </Modal>
+          </DialogFooter>
+        </Dialog>
       </>
     );
   },
@@ -228,12 +228,12 @@ export const OpenInteraction: Story = {
       return (
         <>
           <Button onClick={() => { setOpen(true); }}>Abrir</Button>
-          <Modal {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-            <ModalHeader>
+          <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
+            <DialogHeader>
               <h2>Diálogo de prueba</h2>
-            </ModalHeader>
-            <ModalBody>Contenido</ModalBody>
-          </Modal>
+            </DialogHeader>
+            <DialogBody>Contenido</DialogBody>
+          </Dialog>
         </>
       );
     };
@@ -245,7 +245,7 @@ export const OpenInteraction: Story = {
     // El <dialog> es accesible en el body con role=dialog tras showModal().
     const dialog = await canvas.findByRole("dialog");
     await expect(dialog).toHaveAttribute("open");
-    // aria-labelledby debe apuntar al ModalHeader.
+    // aria-labelledby debe apuntar al DialogHeader.
     const labelledBy = dialog.getAttribute("aria-labelledby");
     await expect(labelledBy).toBeTruthy();
   },
@@ -263,19 +263,19 @@ export const AllStates: Story = {
     },
   },
   render: () => (
-    <Modal open size="md">
-      <ModalHeader>
+    <Dialog open size="md">
+      <DialogHeader>
         Confirmar acción
-        <ModalClose />
-      </ModalHeader>
-      <ModalBody>
+        <DialogClose />
+      </DialogHeader>
+      <DialogBody>
         ¿Seguro que quieres continuar? Esta acción afecta a 3 elementos.
-      </ModalBody>
-      <ModalFooter>
+      </DialogBody>
+      <DialogFooter>
         <Button variant="secondary">Cancelar</Button>
         <Button variant="brand">Aceptar</Button>
-      </ModalFooter>
-    </Modal>
+      </DialogFooter>
+    </Dialog>
   ),
   play: async () => {
     // <dialog> se monta en top-layer del documento, no necesariamente

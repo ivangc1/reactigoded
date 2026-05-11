@@ -1,18 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
 import { createRef } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { Modal } from "./Modal";
-import { ModalHeader } from "./ModalHeader";
-import { ModalBody } from "./ModalBody";
-import { ModalFooter } from "./ModalFooter";
-import { ModalClose } from "./ModalClose";
+import { Dialog } from "./Dialog";
+import { DialogHeader } from "./DialogHeader";
+import { DialogBody } from "./DialogBody";
+import { DialogFooter } from "./DialogFooter";
+import { DialogClose } from "./DialogClose";
 
-describe("Modal", () => {
+describe("Dialog", () => {
   it("aplica ig-dialog y por defecto no añade clase de tamaño cuando size=md", () => {
     render(
-      <Modal open={false} data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false} data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     expect(screen.getByTestId("m")).toHaveClass("ig-dialog");
   });
@@ -20,9 +20,9 @@ describe("Modal", () => {
   describe.each(["sm", "lg", "xl", "full"] as const)("size=%s", (s) => {
     it(`aplica clase ig-dialog-${s}`, () => {
       render(
-        <Modal open={false} size={s} data-testid="m">
-          <ModalBody>x</ModalBody>
-        </Modal>,
+        <Dialog open={false} size={s} data-testid="m">
+          <DialogBody>x</DialogBody>
+        </Dialog>,
       );
       expect(screen.getByTestId("m")).toHaveClass(`ig-dialog-${s}`);
     });
@@ -34,9 +34,9 @@ describe("Modal", () => {
   ] as const)("backdrop=%s", (b, klass) => {
     it(`aplica clase ${klass}`, () => {
       render(
-        <Modal open={false} backdrop={b} data-testid="m">
-          <ModalBody>x</ModalBody>
-        </Modal>,
+        <Dialog open={false} backdrop={b} data-testid="m">
+          <DialogBody>x</DialogBody>
+        </Dialog>,
       );
       expect(screen.getByTestId("m")).toHaveClass(klass);
     });
@@ -45,15 +45,15 @@ describe("Modal", () => {
   it("llama showModal cuando open pasa a true", () => {
     const spy = vi.spyOn(HTMLDialogElement.prototype, "showModal");
     const { rerender } = render(
-      <Modal open={false}>
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false}>
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     expect(spy).not.toHaveBeenCalled();
     rerender(
-      <Modal open>
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open>
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     expect(spy).toHaveBeenCalledOnce();
     spy.mockRestore();
@@ -62,14 +62,14 @@ describe("Modal", () => {
   it("llama close cuando open pasa a false", () => {
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
     const { rerender } = render(
-      <Modal open>
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open>
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     rerender(
-      <Modal open={false}>
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false}>
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     expect(closeSpy).toHaveBeenCalled();
     closeSpy.mockRestore();
@@ -78,9 +78,9 @@ describe("Modal", () => {
   it("dispara onOpenChange cuando el dialog emite el evento close", () => {
     const onOpenChange = vi.fn();
     render(
-      <Modal open onOpenChange={onOpenChange} data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open onOpenChange={onOpenChange} data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     fireEvent(screen.getByTestId("m"), new Event("close"));
     expect(onOpenChange).toHaveBeenCalledOnce();
@@ -89,9 +89,9 @@ describe("Modal", () => {
   it("dispara onOpenChange al click en el backdrop (target === dialog)", () => {
     const onOpenChange = vi.fn();
     render(
-      <Modal open onOpenChange={onOpenChange} data-testid="m">
-        <ModalBody>contenido</ModalBody>
-      </Modal>,
+      <Dialog open onOpenChange={onOpenChange} data-testid="m">
+        <DialogBody>contenido</DialogBody>
+      </Dialog>,
     );
     const dialog = screen.getByTestId("m");
     fireEvent.click(dialog); // click sobre el propio dialog (backdrop)
@@ -101,11 +101,11 @@ describe("Modal", () => {
   it("no dispara onOpenChange al click dentro del contenido", () => {
     const onOpenChange = vi.fn();
     render(
-      <Modal open onOpenChange={onOpenChange}>
-        <ModalBody>
+      <Dialog open onOpenChange={onOpenChange}>
+        <DialogBody>
           <button>dentro</button>
-        </ModalBody>
-      </Modal>,
+        </DialogBody>
+      </Dialog>,
     );
     fireEvent.click(screen.getByRole("button", { name: /dentro/i }));
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -114,9 +114,9 @@ describe("Modal", () => {
   it("closeOnBackdrop=false ignora click en el backdrop", () => {
     const onOpenChange = vi.fn();
     render(
-      <Modal open onOpenChange={onOpenChange} closeOnBackdrop={false} data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open onOpenChange={onOpenChange} closeOnBackdrop={false} data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     fireEvent.click(screen.getByTestId("m"));
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -124,9 +124,9 @@ describe("Modal", () => {
 
   it("closeOnEsc=false bloquea el evento cancel", () => {
     render(
-      <Modal open closeOnEsc={false} data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open closeOnEsc={false} data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     const dialog = screen.getByTestId("m");
     const cancelEvent = new Event("cancel", { cancelable: true });
@@ -137,18 +137,18 @@ describe("Modal", () => {
   it("forwarda ref al <dialog>", () => {
     const ref = createRef<HTMLDialogElement>();
     render(
-      <Modal open={false} ref={ref}>
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false} ref={ref}>
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     expect(ref.current).toBeInstanceOf(HTMLDialogElement);
   });
 
   it("className merge: la clase del consumer se añade al <dialog>", () => {
     render(
-      <Modal open={false} className="my-modal extra" data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false} className="my-modal extra" data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     const dialog = screen.getByTestId("m");
     expect(dialog).toHaveClass("ig-dialog");
@@ -157,40 +157,40 @@ describe("Modal", () => {
   });
 });
 
-describe("Modal subcomponents", () => {
-  it("ModalHeader aplica ig-dialog-header", () => {
-    render(<ModalHeader data-testid="h">t</ModalHeader>);
+describe("Dialog subcomponents", () => {
+  it("DialogHeader aplica ig-dialog-header", () => {
+    render(<DialogHeader data-testid="h">t</DialogHeader>);
     expect(screen.getByTestId("h")).toHaveClass("ig-dialog-header");
   });
 
-  it("ModalBody aplica ig-dialog-body", () => {
-    render(<ModalBody data-testid="b">t</ModalBody>);
+  it("DialogBody aplica ig-dialog-body", () => {
+    render(<DialogBody data-testid="b">t</DialogBody>);
     expect(screen.getByTestId("b")).toHaveClass("ig-dialog-body");
   });
 
-  it("ModalFooter aplica ig-dialog-footer", () => {
-    render(<ModalFooter data-testid="f">t</ModalFooter>);
+  it("DialogFooter aplica ig-dialog-footer", () => {
+    render(<DialogFooter data-testid="f">t</DialogFooter>);
     expect(screen.getByTestId("f")).toHaveClass("ig-dialog-footer");
   });
 
-  it("ModalClose renderiza × por defecto con aria-label Cerrar", () => {
-    render(<ModalClose />);
+  it("DialogClose renderiza × por defecto con aria-label Cerrar", () => {
+    render(<DialogClose />);
     const btn = screen.getByRole("button", { name: /cerrar/i });
     expect(btn).toHaveTextContent("×");
     expect(btn).toHaveClass("ig-dialog-close");
   });
 
-  it("ModalClose permite override de children y aria-label", () => {
-    render(<ModalClose aria-label="Close">X</ModalClose>);
+  it("DialogClose permite override de children y aria-label", () => {
+    render(<DialogClose aria-label="Close">X</DialogClose>);
     const btn = screen.getByRole("button", { name: /close/i });
     expect(btn).toHaveTextContent("X");
   });
 
   it("loading=true aplica ig-dialog-loading + aria-busy", () => {
     render(
-      <Modal open={false} loading data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false} loading data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     const dialog = screen.getByTestId("m");
     expect(dialog).toHaveClass("ig-dialog-loading");
@@ -199,21 +199,21 @@ describe("Modal subcomponents", () => {
 
   it("loading=false NO aplica aria-busy", () => {
     render(
-      <Modal open={false} data-testid="m">
-        <ModalBody>x</ModalBody>
-      </Modal>,
+      <Dialog open={false} data-testid="m">
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     expect(screen.getByTestId("m")).not.toHaveAttribute("aria-busy");
   });
 
-  it("ModalHeader registra su id en el dialog vía aria-labelledby", () => {
+  it("DialogHeader registra su id en el dialog vía aria-labelledby", () => {
     render(
-      <Modal open={false} data-testid="m">
-        <ModalHeader>
+      <Dialog open={false} data-testid="m">
+        <DialogHeader>
           <h2>Título</h2>
-        </ModalHeader>
-        <ModalBody>x</ModalBody>
-      </Modal>,
+        </DialogHeader>
+        <DialogBody>x</DialogBody>
+      </Dialog>,
     );
     const dialog = screen.getByTestId("m");
     const labelledBy = dialog.getAttribute("aria-labelledby");
@@ -225,11 +225,11 @@ describe("Modal subcomponents", () => {
 
   it("aria-labelledby pasado por el consumer prevalece sobre el del header", () => {
     render(
-      <Modal open={false} aria-labelledby="custom-id" data-testid="m">
-        <ModalHeader>
+      <Dialog open={false} aria-labelledby="custom-id" data-testid="m">
+        <DialogHeader>
           <h2>Otro título</h2>
-        </ModalHeader>
-      </Modal>,
+        </DialogHeader>
+      </Dialog>,
     );
     expect(screen.getByTestId("m")).toHaveAttribute(
       "aria-labelledby",

@@ -72,8 +72,8 @@ describe("igoded-base.css — a11y media queries y baseline global", () => {
   });
 });
 
-describe("igoded-components.css — Modal y selectores específicos del DS", () => {
-  it("Modal con dialog respeta reduced-motion (override específico)", () => {
+describe("igoded-components.css — Dialog y selectores específicos del DS", () => {
+  it("Dialog con dialog respeta reduced-motion (override específico)", () => {
     // Hay una regla específica que cancela `animation` del .ig-dialog[open]
     // dentro de @media (prefers-reduced-motion: reduce). Vive en components.css
     // porque depende de la clase `.ig-dialog`.

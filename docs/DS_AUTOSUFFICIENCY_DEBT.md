@@ -179,7 +179,7 @@ isControlled
 - Slider (`readOnly` futuro si se añade) — preventivo.
 - Switch (no tiene readOnly hoy, pero algunos consumers lo usan
   como display-only via `disabled`; revisar si pasa el warn).
-- Resto (Tabs, Accordion, Modal, Toast, Menu, Pagination,
+- Resto (Tabs, Accordion, Dialog, Toast, Menu, Pagination,
   Stepper, ThemeSwitch, Input compound): no tienen modo
   display-only legítimo, deberían disparar el warn correctamente.
 

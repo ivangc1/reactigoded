@@ -14,7 +14,7 @@
  * Astro, Remix server-rendering, Solid/Qwik con React islands, etc.
  *
  * Test estilo `it.each` con composiciones mínimas. Para componentes
- * compound (Card, Menu, Tabs, Accordion, Modal, Stepper, Toast,
+ * compound (Card, Menu, Tabs, Accordion, Dialog, Stepper, Toast,
  * Sidebar, Navbar, Input compound, Table, Timeline) se usa la
  * estructura mínima documentada en su JSDoc/storybook.
  *
@@ -55,11 +55,11 @@ import {
   InputAddon,
   InputGroup,
   Label,
-  Modal,
-  ModalBody,
-  ModalClose,
-  ModalFooter,
-  ModalHeader,
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogFooter,
+  DialogHeader,
   Navbar,
   NavbarActions,
   NavbarBrand,
@@ -235,16 +235,16 @@ const cases: SsrCase[] = [
     expects: "ig-input-group",
   },
   {
-    name: "Modal (open=false)",
+    name: "Dialog (open=false)",
     jsx: () => (
-      <Modal open={false} onOpenChange={() => {}}>
-        <ModalHeader title="x" />
-        <ModalBody>cuerpo</ModalBody>
-        <ModalFooter>pie</ModalFooter>
-        <ModalClose />
-      </Modal>
+      <Dialog open={false} onOpenChange={() => {}}>
+        <DialogHeader title="x" />
+        <DialogBody>cuerpo</DialogBody>
+        <DialogFooter>pie</DialogFooter>
+        <DialogClose />
+      </Dialog>
     ),
-    // Modal open=false NO debe emitir contenido — verificamos que no lanza
+    // Dialog open=false NO debe emitir contenido — verificamos que no lanza
     // y el HTML está vacío o sin clase.
     expects: "",
   },

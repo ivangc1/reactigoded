@@ -17,7 +17,7 @@ export * from "./Chip";
 export * from "./Divider";
 export * from "./Menu";
 export * from "./Input";
-export * from "./Modal";
+export * from "./Dialog";
 export * from "./Navbar";
 export * from "./Pagination";
 export * from "./Progress";

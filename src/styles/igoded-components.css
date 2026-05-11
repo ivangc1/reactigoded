@@ -3602,7 +3602,7 @@ ESCALA SEMÁNTICA (más fácil de recordar):
 
 CÓMO USAR:
 <div class="ig-z-modal-backdrop">Fondo oscuro</div>
-<div class="ig-z-modal">Modal encima del fondo</div>
+<div class="ig-z-modal">Dialog encima del fondo</div>
 */
 
 .ig-z-0 { z-index: 0; }
@@ -5569,7 +5569,7 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     border: 1px solid currentColor;
   }
 
-  /* Modal (<dialog>) */
+  /* Dialog (<dialog>) */
   .ig-dialog {
     border: 2px solid currentColor;
   }
@@ -5719,7 +5719,7 @@ CUÁNDO SE ACTIVA: Automáticamente cuando el usuario tiene activada la opción
     background: Canvas;
   }
 
-  /* Modal (<dialog>): usa ::backdrop nativo, no clase wrapper */
+  /* Dialog (<dialog>): usa ::backdrop nativo, no clase wrapper */
   .ig-dialog::backdrop {
     background: rgba(0, 0, 0, 0.8);
   }
@@ -7337,7 +7337,7 @@ MODIFICADORES:
 ═══════════════════════════════════════════════════════════════════════════════
 
 QUÉ ES: Estilos para el elemento <dialog> nativo de HTML, base del componente
-React `<Modal>`. La variante legacy con `<div class="ig-modal">` se eliminó
+React `<Dialog>`. La variante legacy con `<div class="ig-modal">` se eliminó
 porque <dialog> es semántico y accesible por defecto (foco-trap, ESC, top-layer).
 
 VENTAJAS DE <dialog>:

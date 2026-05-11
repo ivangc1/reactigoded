@@ -54,7 +54,7 @@ export {
 export { cn } from "./utils/cn";
 ```
 
-Un solo `export *` apunta a `./components/index.ts`. Ese sub-barrel tiene 32 `export *` adicionales hacia cada componente. Cada barrel de componente lista símbolos **explícitamente** (revisado: Accordion, Modal, Stepper, Tabs, Toast, etc).
+Un solo `export *` apunta a `./components/index.ts`. Ese sub-barrel tiene 32 `export *` adicionales hacia cada componente. Cada barrel de componente lista símbolos **explícitamente** (revisado: Accordion, Dialog, Stepper, Tabs, Toast, etc).
 
 ✅ **Limpio**. No hay arrastres tipo `export * from "./internal"` ni `export * from "./AccordionContext"` directos.
 
@@ -66,7 +66,7 @@ Un solo `export *` apunta a `./components/index.ts`. Ese sub-barrel tiene 32 `ex
 
 #### Cat 1 — públicos esperados (componentes + Props/Variants/Sizes): **213**
 
-Componentes raíz (38), sub-componentes documentados (Accordion{Item,Header,Content}, Card{Body,Header,Footer,...}, Modal{Header,Body,Footer,Close}, Tab{,List,Panel}, Sidebar{Header,Footer,Item,Nav,Section,Toggle,Divider}, Navbar{Brand,Link,Nav,Actions,MenuButton}, Table{Body,Cell,...}, etc), Props types correspondientes, Variant/Size/Layout/Position/Side/State/Direction/Placement/Appearance/Status types.
+Componentes raíz (38), sub-componentes documentados (Accordion{Item,Header,Content}, Card{Body,Header,Footer,...}, Dialog{Header,Body,Footer,Close}, Tab{,List,Panel}, Sidebar{Header,Footer,Item,Nav,Section,Toggle,Divider}, Navbar{Brand,Link,Nav,Actions,MenuButton}, Table{Body,Cell,...}, etc), Props types correspondientes, Variant/Size/Layout/Position/Side/State/Direction/Placement/Appearance/Status types.
 
 #### Cat 2 — hooks/utils públicos intencionales: **3**
 

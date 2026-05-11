@@ -12,7 +12,7 @@ QUÉ CONTIENE:
 - Scrollbar tematizada (`::-webkit-scrollbar*`) — solo Chromium/WebKit.
 - `::selection` / `::-moz-selection` — color de selección coherente con tema.
 - `@media (prefers-reduced-motion: reduce)` — animation/transition a 0.01ms
-  como **garantía a11y, no opcional**. Modal `<dialog>` tiene su propio
+  como **garantía a11y, no opcional**. Dialog `<dialog>` tiene su propio
   override en `igoded-design.css`.
 - `@media (prefers-contrast: more)` — refuerza bordes en `.ig-btn`/`.ig-input`/
   `.ig-card` (los selectores apuntan al DS, NO a HTML nativo).
