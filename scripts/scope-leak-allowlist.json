@@ -12,14 +12,14 @@
       "reason": "Emitida en `<a>` y `<button>` por if/else mutuamente excluyente (link vs button mode). En runtime solo se renderea uno; no es scope-leak."
     },
     {
-      "class": "ig-options-menu-item-active",
-      "file": "src/components/OptionsMenu/OptionsMenuItem.tsx",
-      "reason": "Emitida en `<a>` y `<button>` por if/else mutuamente excluyente. En runtime solo se renderea uno; no es scope-leak. B-01: renombrado de ig-dropdown-item-active en el rename Dropdown→OptionsMenu (PR #58)."
+      "class": "ig-menu-item-active",
+      "file": "src/components/Menu/MenuItem.tsx",
+      "reason": "Emitida en `<a>` y `<button>` por if/else mutuamente excluyente. En runtime solo se renderea uno; no es scope-leak. Renombrado en cascada: ig-dropdown-item-active → ig-options-menu-item-active (PR #58, B-01 original) → ig-menu-item-active (PR #63, B-01 redefinido + C-03)."
     },
     {
-      "class": "ig-options-menu-item-danger",
-      "file": "src/components/OptionsMenu/OptionsMenuItem.tsx",
-      "reason": "Mismo patrón que ig-options-menu-item-active: ramas exclusivas link/button del mismo componente. B-01: renombrado en PR #58."
+      "class": "ig-menu-item-danger",
+      "file": "src/components/Menu/MenuItem.tsx",
+      "reason": "Mismo patrón que ig-menu-item-active: ramas exclusivas link/button del mismo componente. Renombrado en cascada (mismos PRs)."
     },
     {
       "class": "ig-divider-dashed",
