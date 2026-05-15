@@ -378,11 +378,17 @@ export const TooltipDentroDeModal: Story = {
     });
 
     // (3) Hover el botón danger → Tooltip portal debe montar dentro
-    //     del top-layer del dialog (no detrás del backdrop).
+    //     del <dialog> (top-layer), NO en document.body. Codex P2: si
+    //     `container={dialogRef.current}` regresiona, FloatingPortal
+    //     cae a document.body y el tooltip queda detrás del backdrop;
+    //     un assert solo sobre document.body lo dejaría pasar. Verify
+    //     literal del descendant chain con dialog.querySelector.
     await userEvent.hover(dangerBtn);
-    const portalTooltip = document.body.querySelector(".ig-tooltip");
-    await expect(portalTooltip).not.toBeNull();
-    await expect(portalTooltip).toHaveTextContent(
+    const dialogEl = document.body.querySelector("dialog");
+    if (!dialogEl) throw new Error("Dialog element no encontrado");
+    const tooltipInDialog = dialogEl.querySelector(".ig-tooltip");
+    await expect(tooltipInDialog).not.toBeNull();
+    await expect(tooltipInDialog).toHaveTextContent(
       "Esta acción no se puede deshacer",
     );
 
@@ -390,7 +396,7 @@ export const TooltipDentroDeModal: Story = {
     //     todavía deja el Dialog abierto — Escape sobre tooltip solo
     //     cierra el tooltip).
     await userEvent.keyboard("{Escape}");
-    await expect(document.body.querySelector(".ig-tooltip")).toBeNull();
+    await expect(dialogEl.querySelector(".ig-tooltip")).toBeNull();
   },
 };
 
