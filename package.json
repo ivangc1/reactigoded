@@ -48,6 +48,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./cn": {
+      "types": "./dist/utils/cn.d.ts",
+      "import": "./dist/cn.js",
+      "require": "./dist/cn.cjs"
+    },
     "./styles/tokens.css": "./dist/styles/igoded-tokens.css",
     "./styles/base.css": "./dist/styles/igoded-base.css",
     "./styles/components.css": "./dist/styles/igoded-components.css",
