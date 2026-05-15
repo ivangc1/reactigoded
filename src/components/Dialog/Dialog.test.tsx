@@ -122,6 +122,78 @@ describe("Dialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  // H-02 (RC1 gate review): drag-out parity tracking. Sin este fix,
+  // un mousedown dentro del contenido + mouseup sobre el backdrop
+  // disparaba un `click` event con `target === currentTarget` (el
+  // <dialog>) — el handler de backdrop lo interpretaba como click
+  // legítimo y cerraba el modal, abandonando la selección del usuario.
+  describe("H-02 drag-out parity", () => {
+    it("pointerdown en contenido + pointerup en backdrop NO cierra (drag-out)", () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog open onOpenChange={onOpenChange} data-testid="m">
+          <DialogBody>texto seleccionable largo</DialogBody>
+        </Dialog>,
+      );
+      const dialog = screen.getByTestId("m");
+      const body = screen.getByText("texto seleccionable largo");
+      // Usuario empieza selección de texto en el body.
+      fireEvent.pointerDown(body);
+      // Drag fuera + suelta sobre el backdrop.
+      fireEvent.pointerUp(dialog);
+      // Browser dispara click con target=dialog (común ancestor de
+      // pointerdown/pointerup en este caso).
+      fireEvent.click(dialog, { target: dialog });
+      // Antes del fix: onOpenChange llamado 1×. Tras fix: 0×.
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("backdrop click puro (pointerdown + click ambos en dialog) sigue cerrando", () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog open onOpenChange={onOpenChange} data-testid="m">
+          <DialogBody>contenido</DialogBody>
+        </Dialog>,
+      );
+      const dialog = screen.getByTestId("m");
+      // Click legítimo en backdrop: pointerdown y click ambos sobre dialog.
+      fireEvent.pointerDown(dialog);
+      fireEvent.click(dialog, { target: dialog });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    // NOTA: el edge case "drag cancelado completamente fuera del dialog"
+    // (pointerup en document.body sin click sintetizado posterior) no
+    // se puede testear como unit test porque el handler onPointerUp
+    // del dialog nunca recibiría ese evento — los eventos no propagan
+    // de padre a hijo. En navegador real este caso no genera un bug
+    // observable: ningún click posterior se dispara sin un nuevo
+    // pointerdown que reescribe el ref. El fallback `pointerdownTarget
+    // === null` en el código protege contra clicks programáticos
+    // (sin pointerdown previo) que sí ocurren en tests.
+
+    it("pointerdownTargetRef se resetea entre interacciones", () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog open onOpenChange={onOpenChange} data-testid="m">
+          <DialogBody>texto</DialogBody>
+        </Dialog>,
+      );
+      const dialog = screen.getByTestId("m");
+      const body = screen.getByText("texto");
+      // Primera interacción: drag-out (no cierra).
+      fireEvent.pointerDown(body);
+      fireEvent.pointerUp(dialog);
+      fireEvent.click(dialog, { target: dialog });
+      expect(onOpenChange).not.toHaveBeenCalled();
+      // Segunda interacción: backdrop click puro debe cerrar
+      // (el ref se ha reseteado tras el click anterior).
+      fireEvent.pointerDown(dialog);
+      fireEvent.click(dialog, { target: dialog });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+
   it("closeOnEsc=false bloquea el evento cancel", () => {
     render(
       <Dialog open closeOnEsc={false} data-testid="m">

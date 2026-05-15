@@ -82,6 +82,26 @@ export function Dialog({
   const innerRef = useRef<HTMLDialogElement>(null);
   const [headerId, setHeaderId] = useState<string | null>(null);
 
+  // H-02 (RC1 gate review): drag-out parity tracking. Sin este ref,
+  // un mousedown dentro del contenido + mouseup sobre el backdrop
+  // disparaba un `click` event con `target === currentTarget` (el
+  // <dialog>) — el handler de backdrop lo interpretaba como click
+  // legítimo en backdrop y cerraba el modal, abandonando la selección
+  // del usuario. Fix: registrar el target del pointerdown; solo
+  // considerar backdrop click si AMBOS pointerdown y click tienen
+  // target=dialog (no si pointerdown empezó en contenido).
+  //
+  // Edge case conocido (no cubierto): si el usuario empieza un drag
+  // dentro del contenido y suelta COMPLETAMENTE fuera del <dialog>
+  // (pointerup en document.body o similar), el handler nunca recibe
+  // el pointerup — eventos no propagan de padre a hijo. El ref queda
+  // stale hasta el siguiente pointerdown sobre el dialog. En navegador
+  // real esto no causa bug visible porque ningún `click` posterior
+  // se disparará sin un nuevo pointerdown que reescribe el ref. Sí
+  // afecta a tests que llaman `fireEvent.click(dialog)` sin pointerdown
+  // previo — para ese caso, el fallback null abajo evita falso bloqueo.
+  const pointerdownTargetRef = useRef<EventTarget | null>(null);
+
   // B-02 (RC1): dev-warn cuando se usa el alias deprecated `onClose`.
   // Eliminar en 2.0. Una vez por instancia.
   const warnedOnCloseRef = useRef(false);
@@ -193,11 +213,30 @@ export function Dialog({
           }
           fireClose();
         }}
+        onPointerDown={(e) => {
+          pointerdownTargetRef.current = e.target;
+        }}
         onClick={(e) => {
+          const pointerdownTarget = pointerdownTargetRef.current;
+          // Reset para el siguiente interacción independientemente
+          // de si cerramos o no.
+          pointerdownTargetRef.current = null;
           if (!closeOnBackdrop) return;
-          // El click en el backdrop tiene como target el propio <dialog>,
-          // no sus hijos (el contenido).
-          if (e.target === e.currentTarget) fireClose();
+          // H-02: cerrar SOLO si el pointerdown empezó en el backdrop
+          // (target=dialog) o nunca se registró (click programático
+          // del consumer, p.ej. test que dispara fireEvent.click sin
+          // pointerdown previo). Distingue:
+          //   - Click legítimo en backdrop: pointerdown=dialog, click=dialog → cierra.
+          //   - Drag-out (selección): pointerdown=contenido, click=dialog → NO cierra.
+          //   - Click programático: pointerdownTarget=null, click=dialog → cierra
+          //     (preserva el behavior anterior; el consumer sabe lo que hace).
+          if (
+            e.target === e.currentTarget &&
+            (pointerdownTarget === null ||
+              pointerdownTarget === e.currentTarget)
+          ) {
+            fireClose();
+          }
         }}
       >
         {children}
