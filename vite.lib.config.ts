@@ -157,7 +157,15 @@ export default defineConfig({
         // directiva la añadimos también en src/index.ts para que tsc
         // y los autodocs la vean en source, pero el banner es la única
         // garantía cross-version de que termine en el dist.
-        banner: '"use client";',
+        //
+        // H-12 follow-up (codex P1 sobre PR #73): el banner se aplica
+        // SOLO al chunk del entry `index`. El subpath `cn` (utility
+        // pura, sin hooks ni browser APIs) y los chunks compartidos
+        // (clsx) son server-safe y NO deben llevar "use client" —
+        // si lo hicieran, RSC (Next.js App Router server files) los
+        // rechazaría, defeating el propósito del subpath.
+        banner: (chunk) =>
+          chunk.name === "index" ? '"use client";' : "",
         globals: {
           react: "React",
           "react-dom": "ReactDOM",
