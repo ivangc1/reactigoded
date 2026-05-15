@@ -7,6 +7,63 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
+
+Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la
+branch `rc1-gate-fixes` (Menu/FUI, Modal→Dialog, Tabs Radix alignment,
+ThemeSwitch→ThemeToggle, "use client" granular, Tooltip 12 placements,
+3 stories cruzadas, useControllableState updater + breaking semantic,
+Tooltip dev-warn 4-layer + extractText, Dialog drag-out parity,
+`reactigoded/cn` subpath, Skeleton ARIA soak) + **audit post-RC1
+con codex sobre 16 PRs antiguos** que descubrió 5 findings adicionales
+(todos resueltos antes de tagear).
+
+**19 PRs auditados por codex / 5 findings reales / 0 issues abiertos
+en main al cerrar la beta.**
+
+Última pre-release antes de FREEZE-CHECK final + `1.0.0-rc.1`.
+
+### Internal — bump de deps a latest
+
+22 paquetes actualizados a su última versión (minors + patches, sin
+breaking detectado en verify cold 794/794):
+
+| Paquete | Antes | Después |
+|---|---|---|
+| Storybook ecosystem (`storybook`, `addon-a11y`, `addon-docs`, `addon-themes`, `addon-vitest`, `react-vite`, `eslint-plugin-storybook`) | 10.3.6 | **10.4.0** |
+| `vitest`, `@vitest/browser`, `@vitest/browser-playwright`, `@vitest/coverage-v8` | 4.1.5 | 4.1.6 |
+| `vite` | 8.0.10 | 8.0.13 |
+| `eslint` | 10.3.0 | 10.4.0 |
+| `react`, `react-dom` | 19.2.5 | 19.2.6 |
+| `chromatic` | 16.6.3 | 16.10.1 |
+| `playwright` | 1.59.1 | 1.60.0 |
+| `globals` | 17.5.0 | 17.6.0 |
+| `@types/node` | 25.6.0 | 25.8.0 |
+| `@vitejs/plugin-react` | 6.0.1 | 6.0.2 |
+| `postcss` | 8.5.13 | 8.5.14 |
+| `typescript-eslint` | 8.59.1 | 8.59.3 |
+
+**Storybook 10.4 highlights aprovechables**:
+- Sidebar review tools: status filtering, URL-persisted filters,
+  clearer review signals (útil para gate humano FREEZE-CHECK).
+- A11y: `aria-live` announcements en el propio Storybook, contrast en
+  forced colors mode, ArgsTable borders Windows HCM.
+- Addon-Docs: reset story button, avoid re-render de Source blocks (perf).
+- Addon-Vitest: `provide-API` para injectar values en stories.
+
+**Patch local mantenido**: `patches/eslint-plugin-jest-dom+5.5.0.patch`
+sigue necesario — upstream v5.5.0 sigue inconsistente entre uso del
+helper `getSourceCode(context)` y llamadas directas `context.getSourceCode()`
+(broken en ESLint v9). El patch sustituye las directas por
+`context.sourceCode` (sin breaking aún en ESLint v8 porque el wrapper
+upstream ya hace el fallback). Re-evaluar en upgrades futuros del
+plugin.
+
+**`engines.node` raised a `>=22.12.0`** (codex P1 sobre PR #76):
+Vite 8.0.13 exige `^20.19.0 || >=22.12.0`. Nuestro `>=22` previo
+incluía Node 22.0–22.11 en el declared support pero fallaría en
+install/runtime. Floor alineado al peor caso del ecosystem.
+
 ### Changed (BREAKING — pre-RC1)
 
 - **`useControllableState.setValue` en modo controlled ya NO advance el
