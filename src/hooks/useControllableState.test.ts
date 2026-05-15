@@ -525,7 +525,14 @@ describe("useControllableState", () => {
       expect(onChange).toHaveBeenNthCalledWith(3, 3);
     });
 
-    it("controlled: updaters encadenados pasan resueltos a onChange secuencialmente", () => {
+    // Codex P1 post-audit sobre PR #70: en controlled, dos setValue
+    // chained en mismo tick deben PARTIR DEL MISMO controlled value
+    // (no advance pending). El padre es la fuente de verdad — si
+    // rechaza el commit, no hay re-render, useIsoLayoutEffect no
+    // resincroniza, y siguientes chained leerían pending stale.
+    // Decisión: pending no advance en controlled. Cada setValue parte
+    // del último value committed (que en este test no cambia).
+    it("controlled: updaters chained NO advance pending (parten del mismo value committed)", () => {
       const onChange = vi.fn();
       const { result } = renderHook(() =>
         useControllableState<number>({ value: 10, onChange }),
@@ -534,11 +541,35 @@ describe("useControllableState", () => {
         result.current.setValue((prev) => prev + 1);
         result.current.setValue((prev) => prev * 2);
       });
-      // Controlled: value externo se mantiene en 10 (no rerender entre llamadas),
-      // pero onChange recibe 11 luego 22 (chained pending).
+      // value externo NO cambia (controlled, padre no commitó).
       expect(result.current.value).toBe(10);
+      // AMBOS updaters partieron de 10 (no chaining):
+      //   first:  prev=10 → 11
+      //   second: prev=10 → 20 (no 22, porque pending no advanzó).
       expect(onChange).toHaveBeenNthCalledWith(1, 11);
-      expect(onChange).toHaveBeenNthCalledWith(2, 22);
+      expect(onChange).toHaveBeenNthCalledWith(2, 20);
+    });
+
+    // Y si el padre SÍ commitea entre chained calls (rerender),
+    // el siguiente setValue parte del nuevo value committed.
+    it("controlled: tras commit padre (rerender), pending se resincroniza al nuevo value", () => {
+      const onChange = vi.fn();
+      const { result, rerender } = renderHook(
+        ({ value }: { value: number }) =>
+          useControllableState<number>({ value, onChange }),
+        { initialProps: { value: 10 } },
+      );
+      act(() => {
+        result.current.setValue((prev) => prev + 5);
+      });
+      expect(onChange).toHaveBeenLastCalledWith(15);
+      // Padre commit: value=15.
+      rerender({ value: 15 });
+      // Siguiente updater parte del nuevo value committed.
+      act(() => {
+        result.current.setValue((prev) => prev * 2);
+      });
+      expect(onChange).toHaveBeenLastCalledWith(30);
     });
 
     it("derive: updaters encadenados aplican secuencialmente", () => {
