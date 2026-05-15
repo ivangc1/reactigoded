@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { createRef, useState } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Pagination } from "./Pagination";
 
@@ -343,5 +343,43 @@ describe("Pagination — uncontrolled state sync (B-18)", () => {
         screen.queryByRole("button", { name: "Página 1" }),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+// Codex P2 post-audit sobre PR #19: defaultPage fuera de rango se
+// almacenaba raw en state interno y solo se clampaba en render. Si
+// totalPages aumentaba después, la UI saltaba al defaultPage stale.
+describe("Pagination — pre-clamp defaultPage (codex P2 post-audit)", () => {
+  it("defaultPage fuera de rango se clampa al entrar al state, no solo en render", () => {
+    function Harness() {
+      const [total, setTotal] = useState(3);
+      return (
+        <>
+          <button
+            data-testid="bump"
+            onClick={() => {
+              setTotal(15);
+            }}
+          >
+            bump
+          </button>
+          <Pagination
+            defaultPage={10}
+            totalPages={total}
+            onValueChange={vi.fn()}
+          />
+        </>
+      );
+    }
+    const { container } = render(<Harness />);
+    // Render inicial: clampado a totalPages=3.
+    const current1 = container.querySelector('[aria-current="page"]');
+    expect(current1?.textContent).toBe("3");
+    // Subir totalPages a 15. Pre-fix: el state interno guardaba 10 raw
+    // y el current "salta" a 10. Post-fix: state ya estaba sanitizado,
+    // sigue en 3.
+    fireEvent.click(screen.getByTestId("bump"));
+    const current2 = container.querySelector('[aria-current="page"]');
+    expect(current2?.textContent).toBe("3");
   });
 });
