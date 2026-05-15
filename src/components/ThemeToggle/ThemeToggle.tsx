@@ -9,7 +9,7 @@ import { Switch, type SwitchProps } from "@/components/Switch";
 import { useControllableState } from "@/hooks/useControllableState";
 import type { Theme } from "@/hooks/useTheme";
 
-export interface ThemeSwitchProps
+export interface ThemeToggleProps
   extends Omit<SwitchProps, "checked" | "defaultChecked" | "onChange" | "ref"> {
   /** Tema actual (modo controlado). */
   theme?: Theme;
@@ -68,7 +68,7 @@ function useStoredTheme(storageKey: string | null): Theme | null {
 }
 
 /**
- * ThemeSwitch — toggle de tema light/dark sobre el `Switch` del design system.
+ * ThemeToggle — toggle de tema light/dark sobre el `Switch` del design system.
  *
  * SSR-safe: en el servidor renderiza el tema por defecto y en el cliente
  * hidrata el valor desde `localStorage` (vía `useSyncExternalStore`). Persiste
@@ -80,11 +80,11 @@ function useStoredTheme(storageKey: string | null): Theme | null {
  * inyecta en el `<head>` un script que aplique `data-theme` antes del paint.
  *
  * @example
- * <ThemeSwitch />
- * <ThemeSwitch defaultTheme="dark" label={(t) => t === "dark" ? "🌙" : "☀️"} />
- * <ThemeSwitch theme={theme} onValueChange={setTheme} storageKey={null} />
+ * <ThemeToggle />
+ * <ThemeToggle defaultTheme="dark" label={(t) => t === "dark" ? "🌙" : "☀️"} />
+ * <ThemeToggle theme={theme} onValueChange={setTheme} storageKey={null} />
  */
-export function ThemeSwitch({
+export function ThemeToggle({
   theme: themeProp,
   defaultTheme,
   onValueChange,
@@ -93,7 +93,7 @@ export function ThemeSwitch({
   label,
   ref,
   ...rest
-}: ThemeSwitchProps) {
+}: ThemeToggleProps) {
   const stored = useStoredTheme(storageKey);
   const [override, setOverride] = useState<Theme | null>(null);
 
@@ -101,7 +101,7 @@ export function ThemeSwitch({
   // como `override ?? stored ?? <html data-theme> ?? defaultTheme ?? "dark"`.
   // El paso intermedio `<html data-theme>` (B-08) respeta el script
   // anti-flash del consumer: si la app inyecta `data-theme="light"` en
-  // `<html>` antes de hidratar, ThemeSwitch lo conserva en lugar de
+  // `<html>` antes de hidratar, ThemeToggle lo conserva en lugar de
   // sobrescribirlo con su propio default. `override` sigue siendo state
   // React local — NO localStorage. El effect post-mount persiste el
   // valor; useStoredTheme se mantiene para sync cross-tab vía

@@ -192,7 +192,7 @@ function Page() {
 | **Acciones** | `Button`, `Chip`, `Pagination` |
 | **Display** | `Avatar`, `AvatarGroup`, `Badge`, `Card` (+`CardHeader`/`Body`/`Footer`/`Image`/`Divider`), `Divider`, `Skeleton`, `Spinner`, `Timeline`+`TimelineItem` |
 | **Feedback** | `Alert`, `Progress`, `Toast`+`ToastProvider`+`useToast`, `Tooltip` |
-| **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `NativeSelect`, `Slider`, `Switch`, `Textarea`, `ThemeSwitch` |
+| **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `NativeSelect`, `Slider`, `Switch`, `Textarea`, `ThemeToggle` |
 | **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `OptionsMenu`+`OptionsMenuTrigger`+`OptionsMenuContent`+`OptionsMenuItem`+`OptionsMenuDivider`+`OptionsMenuHeader`, `Modal`+`ModalHeader`+`ModalBody`+`ModalFooter`+`ModalClose`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabList`+`Tab`+`TabPanel`+`TabsContent` |
 
 Hooks públicos: `useTheme`, `useToast`, `useControllableState`.
@@ -243,7 +243,7 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 | `Slider`                | `.ig-slider`              | `-group`, `-value`                                                                      |
 | `Spinner`               | `.ig-spinner`             | variants color, sizes                                                                   |
 | `Stepper`               | `.ig-stepper`             | `-labeled`                                                                              |
-| `Switch` / `ThemeSwitch`| `.ig-switch`              | variants color, sizes                                                                   |
+| `Switch` / `ThemeToggle`| `.ig-switch`              | variants color, sizes                                                                   |
 | `Table`                 | `.ig-table`               | `-bordered`, `-auto`, `-row`, `-header-cell`, `-cell`, `-caption`                       |
 | `Tabs`                  | `.ig-tabs`                | variants color, `-content`, `-list`, `-tab`, `-panel`                                   |
 | `Timeline`              | `.ig-timeline`            | `-item`, `-content`, `-date`                                                            |
@@ -260,7 +260,7 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 ### Controlled vs. uncontrolled
 
 Componentes con estado (`Accordion`, `Alert`, `OptionsMenu`, `Sidebar`,
-`Slider`, `Switch`, `Tabs`, `ThemeSwitch`, `Rating`) soportan ambos modos:
+`Slider`, `Switch`, `Tabs`, `ThemeToggle`, `Rating`) soportan ambos modos:
 
 ```tsx
 // Uncontrolled — el componente gestiona su estado.
@@ -279,7 +279,7 @@ uncontrolled (`defaultPage`, `onValueChange` opcional) desde 1.0.0-beta.20.
 
 Tres opciones según necesidad:
 
-1. **Toggle UI listo**: `<ThemeSwitch />` (persiste en `localStorage`,
+1. **Toggle UI listo**: `<ThemeToggle />` (persiste en `localStorage`,
    aplica `data-theme` a `<html>`, SSR-safe).
 2. **Hook programático**: `const { theme, toggleTheme, setTheme } = useTheme()`
    para integrarlo en menús de ajustes.
@@ -335,7 +335,7 @@ script blocking en `<head>` que aplique `data-theme` antes del paint:
 - Todos los componentes son SSR-safe: `renderToString` no lanza con
   ningún componente público (verificado en `src/__ssr__.test.tsx`,
   37 casos sobre los 32 componentes raíz).
-- Componentes que necesitan estado del cliente (ej. `ThemeSwitch`,
+- Componentes que necesitan estado del cliente (ej. `ThemeToggle`,
   para sincronizarse con un script anti-flash que ya escribió
   `data-theme` en `<html>` antes de la hidratación) leen el DOM
   detrás de guards `typeof document !== "undefined"`. En server caen

@@ -180,7 +180,7 @@ isControlled
 - Switch (no tiene readOnly hoy, pero algunos consumers lo usan
   como display-only via `disabled`; revisar si pasa el warn).
 - Resto (Tabs, Accordion, Dialog, Toast, Menu, Pagination,
-  Stepper, ThemeSwitch, Input compound): no tienen modo
+  Stepper, ThemeToggle, Input compound): no tienen modo
   display-only legítimo, deberían disparar el warn correctamente.
 
 **Tests anti-regresión para rc.1**:

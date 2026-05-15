@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
-import { ThemeSwitch } from "./index";
+import { ThemeToggle } from "./index";
 import type { Theme } from "@/hooks/useTheme";
 
 const meta = {
-  title: "Componentes/ThemeSwitch",
-  component: ThemeSwitch,
+  title: "Componentes/ThemeToggle",
+  component: ThemeToggle,
   parameters: {
     docs: {
       description: {
@@ -20,7 +20,7 @@ const meta = {
     storageKey: { control: "text" },
     attribute: { control: "text" },
   },
-} satisfies Meta<typeof ThemeSwitch>;
+} satisfies Meta<typeof ThemeToggle>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -40,7 +40,7 @@ export const SinPersistencia: Story = {
       },
     },
   },
-  render: (args) => <ThemeSwitch {...args} />,
+  render: (args) => <ThemeToggle {...args} />,
 };
 
 export const Controlado: Story = {
@@ -56,7 +56,7 @@ export const Controlado: Story = {
       const [theme, setTheme] = useState<Theme>("light");
       return (
         <div className="ig-story-stack ig-story-stack--full">
-          <ThemeSwitch
+          <ThemeToggle
             theme={theme}
             onValueChange={setTheme}
             storageKey={null}
@@ -99,10 +99,10 @@ export const LabelCustom: Story = {
 export const Variantes: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--full">
-      <ThemeSwitch storageKey={null} attribute={null} variant="brand" />
-      <ThemeSwitch storageKey={null} attribute={null} variant="success" />
-      <ThemeSwitch storageKey={null} attribute={null} variant="warning" />
-      <ThemeSwitch storageKey={null} attribute={null} variant="danger" />
+      <ThemeToggle storageKey={null} attribute={null} variant="brand" />
+      <ThemeToggle storageKey={null} attribute={null} variant="success" />
+      <ThemeToggle storageKey={null} attribute={null} variant="warning" />
+      <ThemeToggle storageKey={null} attribute={null} variant="danger" />
     </div>
   ),
 };
@@ -139,27 +139,27 @@ export const AllStates: Story = {
   },
   render: () => (
     <div style={{ display: "grid", gap: "1rem", maxWidth: 320 }}>
-      <ThemeSwitch
+      <ThemeToggle
         defaultTheme="dark"
         storageKey={null}
-        aria-label="ThemeSwitch dark default"
+        aria-label="ThemeToggle dark default"
       />
-      <ThemeSwitch
+      <ThemeToggle
         defaultTheme="light"
         storageKey={null}
-        aria-label="ThemeSwitch light default"
+        aria-label="ThemeToggle light default"
       />
-      <ThemeSwitch
+      <ThemeToggle
         defaultTheme="dark"
         storageKey={null}
         label={(t) => (t === "dark" ? "🌙 Oscuro" : "☀️ Claro")}
-        aria-label="ThemeSwitch label función"
+        aria-label="ThemeToggle label función"
       />
-      <ThemeSwitch
+      <ThemeToggle
         defaultTheme="dark"
         storageKey={null}
         attribute={null}
-        aria-label="ThemeSwitch sin attribute DOM"
+        aria-label="ThemeToggle sin attribute DOM"
       />
     </div>
   ),

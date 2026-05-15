@@ -9,6 +9,26 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Breaking
 
+- **`ThemeSwitch` → `ThemeToggle` (rename JS, sin cambios CSS)**: el componente
+  se renombra a `ThemeToggle` para reflejar fielmente su comportamiento (toggle
+  binario light/dark) y desacoplar el nombre público de la implementación
+  interna (que sigue usando `<Switch>` por dentro). Alinea con la industria
+  (Radix, ShadCN, MUI usan `ThemeToggle`/`ThemeButton`).
+
+  Migración consumers:
+  ```diff
+  - import { ThemeSwitch } from "reactigoded";
+  - <ThemeSwitch defaultTheme="dark" />
+  + import { ThemeToggle } from "reactigoded";
+  + <ThemeToggle defaultTheme="dark" />
+  ```
+
+  Tipo de props renombrado en paralelo: `ThemeSwitchProps` → `ThemeToggleProps`.
+
+  **CSS sin cambios**: `ThemeToggle` sigue emitiendo `.ig-switch` (delega
+  en `<Switch>` internamente). Consumers que customicen vía CSS de
+  `.ig-switch` no se ven afectados.
+
 - **Tabs API alineada a Radix puro (rename + wrapper eliminado)**: la API
   pública se simplifica a `<Tabs>`, `<TabsList>`, `<TabsTrigger>`, `<TabsContent>`
   con composición 100% Radix-style. Cierra inconsistencia interna del DS y
