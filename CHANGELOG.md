@@ -59,6 +59,11 @@ helper `getSourceCode(context)` y llamadas directas `context.getSourceCode()`
 upstream ya hace el fallback). Re-evaluar en upgrades futuros del
 plugin.
 
+**`engines.node` raised a `>=22.12.0`** (codex P1 sobre PR #76):
+Vite 8.0.13 exige `^20.19.0 || >=22.12.0`. Nuestro `>=22` previo
+incluía Node 22.0–22.11 en el declared support pero fallaría en
+install/runtime. Floor alineado al peor caso del ecosystem.
+
 ### Changed (BREAKING — pre-RC1)
 
 - **`useControllableState.setValue` en modo controlled ya NO advance el
