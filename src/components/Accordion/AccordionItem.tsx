@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import {

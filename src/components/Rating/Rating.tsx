@@ -1,3 +1,5 @@
+"use client";
+
 import type { HTMLAttributes, Ref, KeyboardEvent } from "react";
 import { useState } from "react";
 import { cn } from "@/utils/cn";

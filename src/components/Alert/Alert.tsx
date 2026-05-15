@@ -1,3 +1,5 @@
+"use client";
+
 import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";

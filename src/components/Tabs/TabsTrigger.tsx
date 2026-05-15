@@ -1,3 +1,5 @@
+"use client";
+
 import type { ButtonHTMLAttributes, KeyboardEvent, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";

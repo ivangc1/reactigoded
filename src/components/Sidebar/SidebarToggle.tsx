@@ -1,3 +1,5 @@
+"use client";
+
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useSidebar } from "./SidebarContext";

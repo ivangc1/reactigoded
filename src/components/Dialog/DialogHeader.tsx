@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useId, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useDialogContextOptional } from "./DialogContext";

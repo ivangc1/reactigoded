@@ -1,3 +1,5 @@
+"use client";
+
 import { useId, useMemo, type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useControllableState } from "@/hooks/useControllableState";

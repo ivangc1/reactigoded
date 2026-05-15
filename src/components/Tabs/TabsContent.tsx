@@ -1,3 +1,5 @@
+"use client";
+
 import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useTabs } from "./TabsContext";

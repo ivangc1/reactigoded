@@ -1,3 +1,5 @@
+"use client";
+
 import { type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
