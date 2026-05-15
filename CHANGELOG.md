@@ -7,6 +7,24 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Dialog`: drag-out parity tracking — selección de texto ya no cierra
+  el modal [H-02]**: cuando el usuario hacía `mousedown` sobre el contenido
+  del Dialog (para seleccionar texto) y arrastraba hasta soltar sobre el
+  backdrop, el browser disparaba un `click` event con `target === currentTarget`
+  (el `<dialog>` propio) — el handler interpretaba ese click como "click
+  en backdrop" y cerraba el modal, abandonando la selección.
+
+  Fix con `pointerdownTargetRef`: registra el target del `pointerdown` y
+  solo considera "click en backdrop" cuando AMBOS el pointerdown Y el
+  click final tienen target = dialog (no si pointerdown empezó en
+  contenido). El fallback `pointerdownTarget === null` preserva el
+  comportamiento para clicks programáticos sin pointerdown previo
+  (tests, consumer-side `.click()` calls).
+
+  Sin cambio de API — fix interno transparente.
+
 ### Added
 
 - **`Tooltip` dev-warn cuando custom child no forwardea ref [M-07.2]**:
