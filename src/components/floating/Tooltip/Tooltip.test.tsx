@@ -602,9 +602,12 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     function hasM07Warn(warn: {
       mock: { calls: unknown[][] };
     }): boolean {
+      // Matcher por prefix común — cubre los 3 variantes de mensaje
+      // diferenciado (ref+handlers / solo ref / solo handlers).
       return warn.mock.calls.some(
         (c) =>
-          typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
+          typeof c[0] === "string" &&
+          c[0].startsWith("[reactigoded] <Tooltip>:"),
       );
     }
 
@@ -713,9 +716,11 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       function DelayedButton({
         ref,
         children,
+        ...rest
       }: {
         ref?: Ref<HTMLButtonElement>;
         children: ReactNode;
+        [k: string]: unknown;
       }) {
         const [show, setShow] = useState(false);
         useEffect(() => {
@@ -724,11 +729,18 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
           });
         }, []);
         if (!show) return null;
-        return <button ref={ref}>{children}</button>;
+        return (
+          <button ref={ref} {...rest}>
+            {children}
+          </button>
+        );
       }
       render(<Tooltip text="hint"><DelayedButton>X</DelayedButton></Tooltip>);
       const btn = await screen.findByText("X");
       await user.hover(btn);
+      // Flush microtask del sentinel evaluate antes de mockRestore,
+      // si no la microtask fires en el siguiente test polucionando spy.
+      await Promise.resolve();
       expect(hasM07Warn(warn)).toBe(false);
       warn.mockRestore();
     });
@@ -769,5 +781,49 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
         vi.useRealTimers();
       }
     });
+
+    // Codex P2 sobre 934ba46: handler probe. Child forwardea ref pero
+    // dropea `...rest` → handlers FUI no llegan al DOM → tooltip
+    // queda inerte aunque el ref esté conectado. Pre-fix: probe
+    // sticky decía "OK" y suprimía el warn. Post-fix: handler probe
+    // independiente detecta el drop y warn diferenciado.
+    it("child forwardea ref pero dropea ...rest: warn diferenciado handlers", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function RefOnly({
+        ref,
+        children,
+      }: {
+        ref?: Ref<HTMLButtonElement>;
+        children: ReactNode;
+      }) {
+        return <button ref={ref}>{children}</button>;
+      }
+      render(<Tooltip text="hint"><RefOnly>X</RefOnly></Tooltip>);
+      await user.hover(screen.getByText("X"));
+      await Promise.resolve();
+      const m07Calls = warn.mock.calls.filter(
+        (c) =>
+          typeof c[0] === "string" &&
+          c[0].startsWith("[reactigoded] <Tooltip>:"),
+      );
+      expect(m07Calls).toHaveLength(1);
+      const msg = m07Calls[0]?.[0] as string;
+      expect(msg).toMatch(/RefOnly/);
+      expect(msg).toMatch(/NO propaga handlers/);
+      expect(msg).toMatch(/drop de `\.\.\.rest`/);
+      warn.mockRestore();
+    });
+
+    // Codex P2 sobre 934ba46: probe Element validation. El check
+    // `node instanceof Element || node.getBoundingClientRect` rechaza
+    // imperative handles (objetos custom sin contrato de medición).
+    // NOTA: testear este path end-to-end requiere `useImperativeHandle`
+    // que rompe FUI internamente (FUI's refs.setReference rejects no-
+    // Element causing infinite update loop). El check del probe queda
+    // como defensa unitaria validable por inspección — el bug que
+    // protege se manifiesta como FUI crash antes de llegar al warn.
+    // Verificación indirecta: el filter del path "no se conectó" sigue
+    // funcionando para los otros casos (ver tests Capa 4 + sentinel).
   });
 });

@@ -404,27 +404,88 @@ export function Tooltip({
   //         dev-only — sin coste real en consumers.
   const verdict = analyzeChildType(children.type);
 
+  // Capa 2a — probe sticky del ref. Codex P2 follow-up: aceptar
+  // solo Element DOM o el virtual element contract de FUI
+  // (`getBoundingClientRect`). Rechaza imperative handles
+  // (`useImperativeHandle` con objeto custom) — FUI no puede medirlos
+  // y el tooltip queda igualmente roto.
   const refEverConnectedRef = useRef(false);
   const probeRef = useCallback((node: Element | null) => {
-    if (node != null) refEverConnectedRef.current = true;
+    if (node == null) return;
+    const raw = node as unknown;
+    if (raw instanceof Element) {
+      refEverConnectedRef.current = true;
+      return;
+    }
+    if (
+      typeof raw === "object" &&
+      raw !== null &&
+      "getBoundingClientRect" in raw &&
+      typeof (raw as { getBoundingClientRect?: unknown })
+        .getBoundingClientRect === "function"
+    ) {
+      refEverConnectedRef.current = true;
+    }
   }, []);
+
+  // Capa 2b — handler probe. Codex P2 follow-up: child que forwardea
+  // ref pero hace drop de `...rest` deja FUI sin sus handlers
+  // (`onMouseEnter`/`onFocus`/etc.) — el tooltip nunca abre aunque
+  // el ref esté conectado. El probe es independiente: si el sentinel
+  // detecta intent del usuario pero ninguno de los handlers FUI se
+  // invocó, sabemos que el child los dropeó.
+  const handlersInvokedRef = useRef(false);
 
   const childRef = children.props.ref ?? null;
   const referenceRef = useMergeRefs([refs.setReference, probeRef, childRef]);
 
   const warnedNoForwardRefRef = useRef(false);
-  const evaluateForwardRef = useCallback(() => {
-    if (!import.meta.env.DEV) return;
-    if (warnedNoForwardRefRef.current) return;
-    if (refEverConnectedRef.current) return;
-    warnedNoForwardRefRef.current = true;
-    console.warn(
-      `[reactigoded] <Tooltip>: el child <${getChildTypeName(children.type)}> no expone su nodo DOM via ref. ` +
-        `El tooltip no puede medir el trigger ni abrirse al hover/focus. ` +
-        `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
-        `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
-    );
-  }, [children.type]);
+  // Source diferenciado: `"intent"` (sentinel disparó tras hover/focus,
+  // los dos probes son significativos) vs `"timeout"` (safety net,
+  // solo el ref probe es significativo porque no hubo events).
+  const evaluateForwardRef = useCallback(
+    (source: "intent" | "timeout") => {
+      if (!import.meta.env.DEV) return;
+      if (warnedNoForwardRefRef.current) return;
+      const refConnected = refEverConnectedRef.current;
+      if (source === "timeout") {
+        // Sin events no podemos diagnosticar el handler-drop.
+        if (refConnected) return;
+        warnedNoForwardRefRef.current = true;
+        console.warn(
+          `[reactigoded] <Tooltip>: el child <${getChildTypeName(children.type)}> no expone su nodo DOM via ref. ` +
+            `El tooltip no puede medir el trigger ni abrirse al hover/focus. ` +
+            `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
+            `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
+        );
+        return;
+      }
+      // source === "intent": hover/focus capturado por sentinel → los
+      // dos diagnósticos son significativos. Mensajes diferenciados.
+      const handlersInvoked = handlersInvokedRef.current;
+      if (refConnected && handlersInvoked) return;
+      warnedNoForwardRefRef.current = true;
+      const childName = getChildTypeName(children.type);
+      let detail: string;
+      if (!refConnected && !handlersInvoked) {
+        detail =
+          "no expone su nodo DOM via ref NI propaga handlers (`...rest` se ignora)";
+      } else if (!refConnected) {
+        detail =
+          "no expone su nodo DOM via ref (handlers sí llegan al DOM, pero sin anchor el portal no puede posicionar)";
+      } else {
+        detail =
+          "forwardea ref pero NO propaga handlers (drop de `...rest` — onMouseEnter/onFocus no llegan al DOM)";
+      }
+      console.warn(
+        `[reactigoded] <Tooltip>: el child <${childName}> ${detail}. ` +
+          `El tooltip queda inerte al hover/focus. ` +
+          `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+), y propaga \`...rest\` al elemento DOM root. ` +
+          `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
+      );
+    },
+    [children.type],
+  );
 
   // Safety net 2000ms — solo se monta para casos ambiguous (function
   // components donde no podemos decidir estáticamente). El sentinel
@@ -433,7 +494,9 @@ export function Tooltip({
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (verdict.kind === "guaranteed_ok") return;
-    const t = setTimeout(evaluateForwardRef, 2000);
+    const t = setTimeout(() => {
+      evaluateForwardRef("timeout");
+    }, 2000);
     return () => {
       clearTimeout(t);
     };
@@ -448,13 +511,22 @@ export function Tooltip({
   // directo da semántica exacta: 1 fire al entrar al sentinel (no N
   // como onMouseOverCapture sintético) y captura focus también en
   // phase capture real.
+  //
+  // `queueMicrotask` defer: capture-phase corre ANTES que el bubble
+  // donde React dispara los synthetic handlers. Si evaluáramos al
+  // toque, `handlersInvokedRef` siempre estaría false (los handlers
+  // FUI aún no han firado). El microtask espera al fin del tick del
+  // event handling — para entonces, si el child propagó los handlers,
+  // ya se invocaron y `handlersInvokedRef` es true.
   const sentinelRef = useRef<HTMLSpanElement | null>(null);
   useEffect(() => {
     if (!shouldWrapInDevSentinel) return;
     const node = sentinelRef.current;
     if (!node) return;
     const handler = () => {
-      evaluateForwardRef();
+      queueMicrotask(() => {
+        evaluateForwardRef("intent");
+      });
     };
     node.addEventListener("mouseenter", handler, { capture: true });
     node.addEventListener("focus", handler, { capture: true });
@@ -475,11 +547,36 @@ export function Tooltip({
   const existing = children.props["aria-describedby"];
   const combined = existing ? `${existing} ${tooltipId}` : tooltipId;
   const referenceProps = getReferenceProps(children.props);
-  const child = cloneElement(children, {
+
+  // Capa 2b — wrap dev-only de onMouseEnter/onFocus para detectar si
+  // el child propagó los handlers FUI al DOM. Si el child hace drop
+  // de `...rest` (modo 2 de fallo), estos wraps no se llaman y
+  // `handlersInvokedRef` queda false → warn diferenciado.
+  let cloneProps: Record<string, unknown> = {
     ...referenceProps,
     ref: referenceRef,
     "aria-describedby": combined,
-  });
+  };
+  if (import.meta.env.DEV && verdict.kind === "ambiguous") {
+    const origMouseEnter = referenceProps.onMouseEnter as
+      | ((e: unknown) => void)
+      | undefined;
+    const origFocus = referenceProps.onFocus as
+      | ((e: unknown) => void)
+      | undefined;
+    cloneProps = {
+      ...cloneProps,
+      onMouseEnter: (e: unknown) => {
+        handlersInvokedRef.current = true;
+        origMouseEnter?.(e);
+      },
+      onFocus: (e: unknown) => {
+        handlersInvokedRef.current = true;
+        origFocus?.(e);
+      },
+    };
+  }
+  const child = cloneElement(children, cloneProps);
 
   // D-01 / M-05 (RC1): Slot pattern. Devolvemos un Fragment con:
   //   1. El child clonado (anchor del tooltip).
