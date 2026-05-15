@@ -7,6 +7,74 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed (BREAKING — pre-RC1)
+
+- **`useControllableState.setValue` en modo controlled ya NO advance el
+  pending entre chained calls [codex P1 post-audit sobre PR #70]**:
+  pre-fix, dos `setValue(p => p + 1)` chained en modo controlled desde
+  `value=10` emitían `onChange(11)` y `onChange(22)` — el segundo
+  partía del pending advanced.
+
+  Post-fix: emiten `onChange(11)` y `onChange(20)` — ambos parten del
+  último committed value externo. Esto es semánticamente correcto: en
+  controlled, el padre es la fuente de verdad. Si rechaza el commit
+  (no actualiza `value` prop), no hay re-render y el pending no debe
+  avanzar — si avanzara, el segundo `onChange` daría payload
+  inconsistente con el state real.
+
+  Consumers afectados: uso de chained updater functions con `setValue`
+  en modo controlled (prop `value` definido). Verificado: cero
+  consumers internos del DS dependen de este patrón. Mitigación
+  external consumer: pasar valor calculado externamente en lugar de
+  chaining, o usar modo uncontrolled si el chaining era intencional.
+
+### Fixed
+
+- **`Tooltip`: sr-only span renderiza texto plano via `extractText`
+  [codex P1 post-audit sobre PR #52]**: pre-fix, `text={ReactNode}`
+  con contenido interactivo (`<button>`/`<a>`) se renderizaba completo
+  en el sr-only span. Solución previa (`inert` en el span) rompía
+  `aria-describedby` al excluir el subárbol del a11y tree.
+
+  Fix: `extractText()` extrae texto plano del ReactNode recursivamente.
+  El sr-only renderiza solo `string` — sin focusables posibles → no se
+  necesita `inert`. Resuelve simultáneamente:
+  - Bug original (focus trap invisible con ReactNode interactivo).
+  - Bug post-audit (`inert` rompe accessible name del trigger).
+
+  El portal flotante mantiene el `ReactNode` completo con `inert`
+  (decoración visual aislada).
+
+- **`Stepper`: guard idx-mismatch en focus management
+  [codex P1 post-audit sobre PR #19]**: si el padre rechaza una
+  transición de `active` (no commitea el cambio), `focusTargetIdxRef`
+  quedaba stale apuntando al idx rechazado. Una transición posterior
+  distinta podía mover focus al idx antiguo.
+
+  Fix: guard `if (idx !== clampedActive) return` antes de aplicar
+  focus — solo movemos focus si el commit del padre coincide con la
+  intent del keydown.
+
+- **`Pagination`: `defaultPage` se clampa al inicializar state, no
+  solo en render [codex P2 post-audit sobre PR #19]**: pre-fix,
+  `defaultPage` fuera de rango se almacenaba raw en state interno y
+  solo se clampaba en render. Si `totalPages` aumentaba después, la
+  UI saltaba al `defaultPage` stale.
+
+  Fix: pre-clamp de `defaultPage` contra `totalPages` antes de pasar
+  al hook.
+
+- **`Avatar`: fallback de img preserva accessible name via `alt`
+  [codex P2 post-audit sobre PR #36]**: pre-fix, cuando la imagen
+  fallaba a cargar y caía a `initials`, el span de initials estaba
+  `aria-hidden="true"` y el wrapper sin role/aria-label — el SR
+  quedaba mudo si el consumer no había pasado `aria-label` explícito.
+
+  Fix: en fallback mode, el wrapper recibe `role="img"` +
+  `aria-label={alt ?? ariaLabel}`. Avatares solo decorativos (sin
+  `alt` ni `ariaLabel`) siguen siendo silenciosos por decisión
+  consciente del consumer.
+
 ### Added
 
 - **Soak del cambio ARIA de `Skeleton` (beta.22) [M-02]**: cobertura de
