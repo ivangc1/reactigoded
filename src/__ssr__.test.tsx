@@ -90,11 +90,10 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-  Tab,
-  TabList,
-  TabPanel,
-  Tabs,
+  TabsTrigger,
+  TabsList,
   TabsContent,
+  Tabs,
   Textarea,
   ThemeSwitch,
   Timeline,
@@ -401,31 +400,19 @@ const cases: SsrCase[] = [
     name: "Tabs (compound)",
     jsx: () => (
       <Tabs defaultValue="a">
-        <TabList>
-          <Tab value="a">A</Tab>
-        </TabList>
-        <TabPanel value="a">contenido</TabPanel>
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">contenido</TabsContent>
       </Tabs>
     ),
     expects: "ig-tabs",
   },
-  // L-09 (gate review): TabsContent es wrapper opcional para spacing/CSS
-  // alrededor de los TabPanel. SSR independiente para verificar que
-  // emite la clase ig-tabs-content y soporta server-rendering.
-  {
-    name: "TabsContent (wrapper)",
-    jsx: () => (
-      <Tabs defaultValue="a">
-        <TabList>
-          <Tab value="a">A</Tab>
-        </TabList>
-        <TabsContent>
-          <TabPanel value="a">contenido</TabPanel>
-        </TabsContent>
-      </Tabs>
-    ),
-    expects: "ig-tabs-content",
-  },
+  // L-09 (gate review) test "TabsContent (wrapper)" eliminado en PR 4:
+  // el wrapper TabsContent (Caso 1, sin lógica) fue eliminado como
+  // ciudadano API. TabsContent ahora es el panel asociado a `value`
+  // (renombrado desde TabPanel). El test "Tabs (compound)" arriba ya
+  // verifica SSR de TabsContent post-rename.
   {
     name: "Textarea",
     jsx: () => <Textarea placeholder="escribe…" />,

@@ -3,21 +3,21 @@ import { cn } from "@/utils/cn";
 import { useIsoLayoutEffect } from "@/utils/useIsoLayoutEffect";
 import { useTabs } from "./TabsContext";
 
-export interface TabProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Identificador único del tab. Debe coincidir con el `value` del `TabPanel` correspondiente. */
+export interface TabsTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Identificador único del tab. Debe coincidir con el `value` del `TabsContent` correspondiente. */
   value: string;
   ref?: Ref<HTMLButtonElement>;
 }
 
 /**
- * Tab — botón `role="tab"` dentro de `TabList`. Incluye `aria-selected`,
+ * TabsTrigger — botón `role="tab"` dentro de `TabsList`. Incluye `aria-selected`,
  * `aria-controls` y roving tabindex (sólo el activo es focuseable directamente).
  *
  * Keyboard:
  *   - ←/→ (horizontal) o ↑/↓ (vertical): mueve foco al sibling y lo activa.
  *   - Home/End: salta al primero/último activable.
  */
-export function Tab({
+export function TabsTrigger({
   value,
   className,
   children,
@@ -25,7 +25,7 @@ export function Tab({
   onKeyDown,
   ref,
   ...rest
-}: TabProps) {
+}: TabsTriggerProps) {
   const {
     selected,
     setSelected,
@@ -38,15 +38,15 @@ export function Tab({
   const isActive = selected === value;
   const tabId = `${baseId}-tab-${value}`;
   const panelId = `${baseId}-panel-${value}`;
-  // H-26: si el `selected` del Tabs no matchea ningún Tab montado
-  // (controlled con value inválido), el PRIMER Tab registrado entra
+  // H-26: si el `selected` del Tabs no matchea ningún TabsTrigger montado
+  // (controlled con value inválido), el PRIMER TabsTrigger registrado entra
   // en modo fallback con tabIndex=0 para mantener el tablist accesible
   // por teclado. Sin esto, todos los Tabs tendrían tabIndex=-1 y el
   // tablist quedaría sin tab stop. NO afecta a aria-selected (sigue
   // false en todos), solo al tab stop.
   const isFirstFallback = !selectedExists && value === firstRegistered;
 
-  // Registra este Tab al montar; el primer Tab montado es la selección
+  // Registra este TabsTrigger al montar; el primer TabsTrigger montado es la selección
   // inicial cuando el consumer omite `value` y `defaultValue`. Usamos
   // useLayoutEffect (en cliente) para que el register corra ANTES del
   // primer paint y se evite el flicker "ningún tab activo" en el primer
@@ -62,7 +62,7 @@ export function Tab({
 
     // Buscamos el tablist por role en lugar de parentElement para que
     // el componente sobreviva a wrappers intermedios (ej. un <span>
-    // decorativo entre TabList y Tab que un consumer pueda introducir).
+    // decorativo entre TabsList y TabsTrigger que un consumer pueda introducir).
     const tablist = e.currentTarget.closest('[role="tablist"]');
     if (!tablist) return;
     const tabs = Array.from(
@@ -97,7 +97,7 @@ export function Tab({
       aria-controls={panelId}
       tabIndex={isActive || isFirstFallback ? 0 : -1}
       disabled={disabled}
-      className={cn("ig-tab", isActive && "ig-tab-active", className)}
+      className={cn("ig-tabs-trigger", isActive && "ig-tabs-trigger-active", className)}
       onClick={(e) => {
         rest.onClick?.(e);
         if (!e.defaultPrevented && !disabled) setSelected(value);

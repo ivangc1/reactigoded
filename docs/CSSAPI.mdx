@@ -609,19 +609,17 @@ Usa el contrato del `Input` para estados:
 | Wrapper | `.ig-tabs` |
 | Variants | `.ig-tabs-{brand,secondary,success,warning,danger,info}` |
 | Modifiers | `.ig-tabs-pills` · `.ig-tabs-vertical` |
-| Slots | `.ig-tabs-list` (`role="tablist"`) · `.ig-tabs-content` |
-| Tab | `.ig-tab` · `.ig-tab-active` |
-| Panel | `.ig-tab-panel` · `.ig-tab-panel-active` |
+| List | `.ig-tabs-list` (`role="tablist"`) |
+| Trigger | `.ig-tabs-trigger` · `.ig-tabs-trigger-active` |
+| Content (panel) | `.ig-tabs-content` · `.ig-tabs-content-active` |
 
 ```html
 <div class="ig-tabs ig-tabs-brand">
   <div class="ig-tabs-list" role="tablist">
-    <button class="ig-tab ig-tab-active" role="tab" aria-selected="true">Perfil</button>
-    <button class="ig-tab" role="tab" aria-selected="false">Seguridad</button>
+    <button class="ig-tabs-trigger ig-tabs-trigger-active" role="tab" aria-selected="true">Perfil</button>
+    <button class="ig-tabs-trigger" role="tab" aria-selected="false">Seguridad</button>
   </div>
-  <div class="ig-tabs-content">
-    <div class="ig-tab-panel ig-tab-panel-active" role="tabpanel">Datos personales</div>
-  </div>
+  <div class="ig-tabs-content ig-tabs-content-active" role="tabpanel">Datos personales</div>
 </div>
 ```
 

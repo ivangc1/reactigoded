@@ -35,7 +35,7 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 
 | | |
 |---|---|
-| **Estado actual** | Sub-componentes documentados: `AccordionItem/Header/Content`, `CardBody/Header/Footer/Image/Divider`, `DialogHeader/Body/Footer/Close`, `Tab/TabList/TabPanel`, `TabsContent`, `Sidebar*` (7), `Navbar*` (5), `Table*` (7), `BreadcrumbItem`, `AvatarGroup`, `IconButton`, `InputAddon/InputGroup`, `ErrorText/Helper/Label`, `Skeleton/SkeletonContainer`, `Step/Stepper`, `TimelineItem`, `ToastProvider`, `Menu*` (5). |
+| **Estado actual** | Sub-componentes documentados: `AccordionItem/Header/Content`, `CardBody/Header/Footer/Image/Divider`, `DialogHeader/Body/Footer/Close`, `TabsTrigger/TabsList/TabsContent`, `TabsContent`, `Sidebar*` (7), `Navbar*` (5), `Table*` (7), `BreadcrumbItem`, `AvatarGroup`, `IconButton`, `InputAddon/InputGroup`, `ErrorText/Helper/Label`, `Skeleton/SkeletonContainer`, `Step/Stepper`, `TimelineItem`, `ToastProvider`, `Menu*` (5). |
 | **Bloqueado por** | Parcialmente B-01 si afecta naming Menu/NativeSelect compound. |
 | **Confirmación** | ⚠ **Requiere input** |
 | **Notas** | El recuento exacto del review (42) no coincide 1:1 con mi inventario. Iván debería verificar el listado completo en `src/components/index.ts` + sub-barrels. Sin re-naming pendiente, el set actual es freezable. |
@@ -143,7 +143,7 @@ Iván firma cada ítem en la columna "Iván confirma" tras revisar el estado.
 
 | | |
 |---|---|
-| **Estado actual** | Patrón actual del DS: **compound** (`<Dialog><DialogHeader/></Dialog>`, `<Tabs><Tab/></Tabs>`). Tooltip es **prop-based** (`<Tooltip text="...">child</Tooltip>`) por su naturaleza wrapper. |
+| **Estado actual** | Patrón actual del DS: **compound** (`<Dialog><DialogHeader/></Dialog>`, `<Tabs><TabsTrigger/></Tabs>`). Tooltip es **prop-based** (`<Tooltip text="...">child</Tooltip>`) por su naturaleza wrapper. |
 | **Bloqueado por** | — |
 | **Confirmación** | ⚠ **Requiere input** |
 | **Notas** | Para futuros `Popover`/`HoverCard`/`Combobox` (1.1.0+), ¿se mantiene compound? El review pide explicitar el commitment. Recomendación: **compound** para todos excepto wrappers de descripción simple (Tooltip estilo). |
