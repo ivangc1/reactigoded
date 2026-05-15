@@ -505,5 +505,58 @@ describe("useControllableState", () => {
       expect(result.current.value).toBe(42);
       expect(onChange).toHaveBeenCalledWith(42);
     });
+
+    // Codex P1 sobre PR #70: dos updaters encadenados en el mismo
+    // tick deben aplicar secuencialmente (cada uno ve el resultado
+    // del anterior, no el committed pre-tick).
+    it("uncontrolled: updaters encadenados en mismo tick aplican secuencialmente", () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() =>
+        useControllableState<number>({ defaultValue: 0, onChange }),
+      );
+      act(() => {
+        result.current.setValue((prev) => prev + 1);
+        result.current.setValue((prev) => prev + 1);
+        result.current.setValue((prev) => prev + 1);
+      });
+      expect(result.current.value).toBe(3);
+      expect(onChange).toHaveBeenNthCalledWith(1, 1);
+      expect(onChange).toHaveBeenNthCalledWith(2, 2);
+      expect(onChange).toHaveBeenNthCalledWith(3, 3);
+    });
+
+    it("controlled: updaters encadenados pasan resueltos a onChange secuencialmente", () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() =>
+        useControllableState<number>({ value: 10, onChange }),
+      );
+      act(() => {
+        result.current.setValue((prev) => prev + 1);
+        result.current.setValue((prev) => prev * 2);
+      });
+      // Controlled: value externo se mantiene en 10 (no rerender entre llamadas),
+      // pero onChange recibe 11 luego 22 (chained pending).
+      expect(result.current.value).toBe(10);
+      expect(onChange).toHaveBeenNthCalledWith(1, 11);
+      expect(onChange).toHaveBeenNthCalledWith(2, 22);
+    });
+
+    it("derive: updaters encadenados aplican secuencialmente", () => {
+      function useTest() {
+        const [src, setSrc] = useState<number>(0);
+        const hook = useControllableState<number>({
+          derive: () => src,
+          setDerivedValue: setSrc,
+        });
+        return { ...hook, src };
+      }
+      const { result } = renderHook(() => useTest());
+      act(() => {
+        result.current.setValue((prev) => prev + 1);
+        result.current.setValue((prev) => prev + 1);
+      });
+      expect(result.current.value).toBe(2);
+      expect(result.current.src).toBe(2);
+    });
   });
 });

@@ -232,10 +232,16 @@ export function useControllableState<T>(
   const setDerivedValueRef = useRef<((next: T) => void) | undefined>(
     isDerived ? options.setDerivedValue : undefined,
   );
-  // M-06 (RC1): ref del value actual para resolver updater functions
-  // contra el snapshot correcto. La updater forma `(prev) => next`
-  // necesita ver el valor del último render para producir el siguiente.
-  const valueRef = useRef<T>(undefined as T);
+  // M-06 (RC1): ref del value "pending" para resolver updater functions
+  // contra el último valor — incluso si hay encadenamientos en el mismo
+  // tick antes de que React re-renderice. Codex P1 sobre PR #70 detectó
+  // que leer solo el ref committed dejaba `setValue(p=>p+1); setValue(p=>p+1)`
+  // resolviendo ambos a `1` en lugar de `2`. Fix: tras resolver una
+  // updater, advanzamos el ref para que la siguiente llamada vea el
+  // valor pendiente. useIsoLayoutEffect resincroniza el ref con el
+  // value committed en el próximo render — relevante cuando un re-render
+  // externo cambia el controlled prop o el derived source.
+  const pendingValueRef = useRef<T>(undefined as T);
 
   const value = isControlled
     ? (controlledValue as T)
@@ -249,18 +255,20 @@ export function useControllableState<T>(
     setDerivedValueRef.current = isDerived
       ? options.setDerivedValue
       : undefined;
-    valueRef.current = value;
+    pendingValueRef.current = value;
   });
 
   const setValue = useCallback(
     (action: SetValueAction<T>, setOptions?: SetValueOptions) => {
       // M-06 (RC1): si el caller pasa una function, la invocamos contra
-      // el snapshot actual para producir el siguiente valor. Si pasa
-      // un valor directo, se usa tal cual.
+      // el pending value para producir el siguiente. Si pasa un valor
+      // directo, se usa tal cual. Tras resolver, advanzamos el ref para
+      // permitir chaining `setValue(p=>p+1); setValue(p=>p+1)` → +2.
       const resolved =
         typeof action === "function"
-          ? (action as (prev: T) => T)(valueRef.current)
+          ? (action as (prev: T) => T)(pendingValueRef.current)
           : action;
+      pendingValueRef.current = resolved;
       if (!isControlledRef.current) {
         const setDerivedValue = setDerivedValueRef.current;
         if (setDerivedValue) {
