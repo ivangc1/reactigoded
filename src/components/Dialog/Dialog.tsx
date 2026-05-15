@@ -77,6 +77,11 @@ export function Dialog({
   className,
   children,
   ref,
+  // Codex P2 sobre PR #72: extraer handlers que el consumer pueda
+  // pasar via DialogHTMLAttributes para chainearlos en nuestros
+  // wrappers en lugar de shadowear silenciosamente.
+  onPointerDown: consumerOnPointerDown,
+  onClick: consumerOnClick,
   ...rest
 }: DialogProps) {
   const innerRef = useRef<HTMLDialogElement>(null);
@@ -214,13 +219,21 @@ export function Dialog({
           fireClose();
         }}
         onPointerDown={(e) => {
+          // Codex P2 sobre PR #72: chain consumer handler primero —
+          // permite que el consumer haga preventDefault si quiere
+          // bloquear el tracking de drag (raro, pero respeta su API).
+          consumerOnPointerDown?.(e);
           pointerdownTargetRef.current = e.target;
         }}
         onClick={(e) => {
+          // Chain consumer handler primero (mismo motivo que pointerdown).
+          consumerOnClick?.(e);
           const pointerdownTarget = pointerdownTargetRef.current;
           // Reset para el siguiente interacción independientemente
           // de si cerramos o no.
           pointerdownTargetRef.current = null;
+          // Si el consumer canceló el evento, no cerramos.
+          if (e.defaultPrevented) return;
           if (!closeOnBackdrop) return;
           // H-02: cerrar SOLO si el pointerdown empezó en el backdrop
           // (target=dialog) o nunca se registró (click programático

@@ -162,6 +162,66 @@ describe("Dialog", () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
+    // Codex P2 sobre PR #72: consumer puede pasar onPointerDown/onClick
+    // via DialogHTMLAttributes; antes del fix, nuestros wrappers
+    // shadowean esos handlers sin invocarlos. Tests de chaining:
+    it("chain consumer onPointerDown sin shadowearlo", () => {
+      const consumerOnPointerDown = vi.fn();
+      render(
+        <Dialog
+          open
+          onOpenChange={vi.fn()}
+          onPointerDown={consumerOnPointerDown}
+          data-testid="m"
+        >
+          <DialogBody>x</DialogBody>
+        </Dialog>,
+      );
+      const dialog = screen.getByTestId("m");
+      fireEvent.pointerDown(dialog);
+      expect(consumerOnPointerDown).toHaveBeenCalledOnce();
+    });
+
+    it("chain consumer onClick sin shadowearlo (cierra después)", () => {
+      const consumerOnClick = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog
+          open
+          onOpenChange={onOpenChange}
+          onClick={consumerOnClick}
+          data-testid="m"
+        >
+          <DialogBody>x</DialogBody>
+        </Dialog>,
+      );
+      const dialog = screen.getByTestId("m");
+      fireEvent.pointerDown(dialog);
+      fireEvent.click(dialog, { target: dialog });
+      expect(consumerOnClick).toHaveBeenCalledOnce();
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("consumer onClick con preventDefault bloquea el close", () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog
+          open
+          onOpenChange={onOpenChange}
+          onClick={(e) => {
+            e.preventDefault();
+          }}
+          data-testid="m"
+        >
+          <DialogBody>x</DialogBody>
+        </Dialog>,
+      );
+      const dialog = screen.getByTestId("m");
+      fireEvent.pointerDown(dialog);
+      fireEvent.click(dialog, { target: dialog });
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
     // NOTA: el edge case "drag cancelado completamente fuera del dialog"
     // (pointerup en document.body sin click sintetizado posterior) no
     // se puede testear como unit test porque el handler onPointerUp
