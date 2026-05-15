@@ -2,6 +2,7 @@
 
 import {
   cloneElement,
+  isValidElement,
   useCallback,
   useEffect,
   useId,
@@ -12,6 +13,43 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+
+/**
+ * Extrae texto plano de un ReactNode arbitrario. Usado para el span
+ * sr-only del Tooltip — garantiza que el referente de aria-describedby
+ * contiene solo string (sin focusables que crearían un focus trap
+ * invisible al estar dentro de un elemento sr-only fuera del viewport).
+ *
+ * Resuelve simultáneamente:
+ * - Codex P1 sobre PR #52 (original): ReactNode interactivo en sr-only
+ *   atrapaba focus al teclado de forma invisible.
+ * - Codex P1 post-audit: `inert` en sr-only rompía aria-describedby
+ *   al excluir el subárbol del a11y tree.
+ *
+ * Net result: el sr-only renderiza solo string puro, sin necesidad de
+ * `inert`. aria-describedby resuelve correctamente. Cero focus traps.
+ *
+ * Mapping:
+ * - `string` / `number` → `String(node)`
+ * - `boolean` / `null` / `undefined` → `""`
+ * - `Array` → concat recursivo
+ * - `ReactElement` → recursión sobre `props.children`
+ * - Otros (Portal, función, símbolo) → `""`
+ */
+function extractText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(extractText).join("");
+  }
+  if (isValidElement(node)) {
+    const children = (node.props as { children?: ReactNode }).children;
+    return extractText(children);
+  }
+  return "";
+}
 import {
   FloatingNode,
   FloatingPortal,
@@ -652,8 +690,19 @@ export function Tooltip({
   return (
     <>
       {childOrSentinel}
-      <span id={tooltipId} role="tooltip" className="ig-sr-only" inert>
-        {text}
+      {/* Codex P1 post-audit sobre PR #52: el sr-only contiene SOLO
+          string plano extraído del ReactNode `text`. Esta solución
+          resuelve simultáneamente:
+            (a) el codex P1 original sobre #52 — ReactNode interactivo
+                aquí atrapaba focus invisible al teclado, y
+            (b) el codex P1 post-audit — `inert` en sr-only rompía
+                aria-describedby al excluir del a11y tree.
+          Net: sin focusables posibles → no se necesita `inert`. El
+          aria-describedby resuelve a string puro (lo que el SR debe
+          anunciar). El portal flotante sí renderiza el ReactNode
+          completo y mantiene `inert` por separado (decoración visual). */}
+      <span id={tooltipId} role="tooltip" className="ig-sr-only">
+        {extractText(text)}
       </span>
       {nodeId === undefined ? (
         portal

@@ -360,12 +360,14 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
           <button>x</button>
         </Tooltip>,
       );
-      // SR-only span renderiza el ReactNode literal (consumer
-      // responsable de a11y del contenido).
+      // Codex P1 post-audit sobre PR #52: sr-only ahora extrae texto
+      // plano via extractText() — el <strong> no aparece en sr-only,
+      // pero sí su texto concatenado en el textContent. El portal
+      // flotante sí renderiza el ReactNode rico (siguiente test).
       const sr = container.querySelector('.ig-sr-only[role="tooltip"]');
       expect(sr).not.toBeNull();
-      expect(sr?.querySelector("strong")?.textContent).toBe("Bold");
-      expect(sr?.textContent).toContain("texto plain");
+      expect(sr?.querySelector("strong")).toBeNull();
+      expect(sr?.textContent).toBe("Bold + texto plain");
     });
 
     it("portal flotante muestra el ReactNode al hover", async () => {
@@ -453,25 +455,47 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       ).not.toBeNull();
     });
 
-    it("SR-only span lleva inert para neutralizar interactividad de ReactNode (codex P1)", () => {
+    it("SR-only contiene texto plano extraído de ReactNode (codex P1 post-audit)", () => {
+      // Codex P1 post-audit sobre PR #52 + neutralización ReactNode
+      // (codex P1 original sobre #52): el sr-only solo renderiza
+      // texto plano via extractText(). Sin focusables dentro → no
+      // se necesita `inert`. aria-describedby resuelve a string puro.
       const { container } = render(
-        <Tooltip
-          text={
-            <button data-testid="invisible-trap">trap</button>
-          }
-        >
+        <Tooltip text={<button data-testid="trap">trap</button>}>
           <button>x</button>
         </Tooltip>,
       );
       const sr = container.querySelector('.ig-sr-only[role="tooltip"]');
       expect(sr).not.toBeNull();
-      // El atributo HTML inert neutraliza interactividad de TODOS los
-      // descendants en browsers reales. Sin él, un botón/link/input
-      // dentro del text={...} sería focus target invisible.
-      expect(sr?.hasAttribute("inert")).toBe(true);
-      // Sanity: el descendant existe en el DOM (no estamos verificando
-      // que inert lo elimine, sino que existe pero es neutralizado).
-      expect(sr?.querySelector('[data-testid="invisible-trap"]')).not.toBeNull();
+      // El button del ReactNode NO existe en el sr-only — extractText
+      // recorrió el árbol y descartó el elemento, quedándose con su
+      // children text.
+      expect(sr?.querySelector("button")).toBeNull();
+      expect(sr?.textContent).toBe("trap");
+      // Sin inert porque ya no hay nada que neutralizar.
+      expect(sr?.hasAttribute("inert")).toBe(false);
+    });
+
+    it("SR-only con text string sigue funcionando idéntico", () => {
+      const { container } = render(
+        <Tooltip text="hint">
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(
+        container.querySelector('.ig-sr-only[role="tooltip"]')?.textContent,
+      ).toBe("hint");
+    });
+
+    it("extractText recorre fragmentos, arrays y elementos anidados", () => {
+      const { container } = render(
+        <Tooltip text={<>Press <kbd>Enter</kbd> or <kbd>Space</kbd></>}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      expect(
+        container.querySelector('.ig-sr-only[role="tooltip"]')?.textContent,
+      ).toBe("Press Enter or Space");
     });
 
     it("L-02 dev warn NO se dispara con ReactNode no-string (false positive guard)", () => {
