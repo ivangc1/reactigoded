@@ -41,8 +41,8 @@ export function TabsContent({
       hidden={!isActive}
       tabIndex={isActive ? 0 : -1}
       className={cn(
-        "ig-tab-panel",
-        isActive && "ig-tab-panel-active",
+        "ig-tabs-content",
+        isActive && "ig-tabs-content-active",
         className,
       )}
     >

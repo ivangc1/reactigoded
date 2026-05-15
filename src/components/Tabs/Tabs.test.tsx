@@ -346,9 +346,19 @@ describe("Tabs — className merge", () => {
     expect(root).toHaveClass("my-tabs");
     expect(root).toHaveClass("extra");
 
+    const list = screen.getByRole("tablist");
+    expect(list).toHaveClass("ig-tabs-list");
+    expect(list).toHaveClass("my-list");
+
     const tab = screen.getByRole("tab", { name: "A" });
-    expect(tab).toHaveClass("ig-tab");
+    expect(tab).toHaveClass("ig-tabs-trigger");
+    expect(tab).toHaveClass("ig-tabs-trigger-active");
     expect(tab).toHaveClass("my-tab");
+
+    const panel = screen.getByRole("tabpanel");
+    expect(panel).toHaveClass("ig-tabs-content");
+    expect(panel).toHaveClass("ig-tabs-content-active");
+    expect(panel).toHaveClass("my-panel");
   });
 });
 

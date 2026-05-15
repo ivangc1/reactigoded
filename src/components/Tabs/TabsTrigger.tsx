@@ -97,7 +97,7 @@ export function TabsTrigger({
       aria-controls={panelId}
       tabIndex={isActive || isFirstFallback ? 0 : -1}
       disabled={disabled}
-      className={cn("ig-tab", isActive && "ig-tab-active", className)}
+      className={cn("ig-tabs-trigger", isActive && "ig-tabs-trigger-active", className)}
       onClick={(e) => {
         rest.onClick?.(e);
         if (!e.defaultPrevented && !disabled) setSelected(value);
