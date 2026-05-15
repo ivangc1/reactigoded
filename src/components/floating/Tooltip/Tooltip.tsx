@@ -331,11 +331,17 @@ export function Tooltip({
   // Estrategia (codex P2 sobre PR #71): el check se difiere con
   // setTimeout para permitir que children "lazy" (que renderizan
   // null inicialmente y montan el DOM en un render posterior por
-  // state/effect/data) hayan completado su ciclo. Si tras el delay
-  // el ref sigue null, es un bug real — el child no forwardea o
-  // nunca renderiza un Element. No usamos `isOpen` como trigger
-  // porque sin ref, useFloating no tiene anchor para useHover y el
-  // tooltip nunca se abre — el warn nunca dispararía.
+  // state/effect/data/React.lazy/Suspense) hayan completado su
+  // ciclo. Si tras el delay el ref sigue null, es un bug real —
+  // el child no forwardea o nunca renderiza un Element. No usamos
+  // `isOpen` como trigger porque sin ref, useFloating no tiene
+  // anchor para useHover y el tooltip nunca se abre — el warn
+  // nunca dispararía.
+  //
+  // 300ms: margen para chunks tardíos (red lenta + React.lazy),
+  // data-driven mounts (useEffect con fetch), requestIdleCallback,
+  // Suspense fallbacks. Sigue siendo dev-only (no-op en producción)
+  // por lo que el delay no tiene coste en consumers.
   const warnedNoForwardRefRef = useRef(false);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -358,7 +364,7 @@ export function Tooltip({
           `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
           `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
       );
-    }, 50);
+    }, 300);
     return () => {
       clearTimeout(t);
     };

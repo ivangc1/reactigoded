@@ -616,7 +616,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       expect(hasM07Warn(warn)).toBe(false);
       // Esperar al setTimeout (50ms + buffer) — useFloating tuvo
       // tiempo de poblar refs, pero como el child no forwardea, sigue null.
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 400));
       const m07Calls = warn.mock.calls.filter(
         (c) =>
           typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
@@ -650,7 +650,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
           <button>X</button>
         </Tooltip>,
       );
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 400));
       expect(hasM07Warn(warn)).toBe(false);
       warn.mockRestore();
     });
@@ -673,7 +673,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
         );
       }
       render(<Tooltip text="hint"><MyForwarded>X</MyForwarded></Tooltip>);
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 400));
       expect(hasM07Warn(warn)).toBe(false);
       warn.mockRestore();
     });
@@ -708,7 +708,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       // del warn dispare (50ms). El button ya estará montado y el ref
       // populated cuando el check corra.
       await screen.findByText("X");
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 400));
       expect(hasM07Warn(warn)).toBe(false);
       warn.mockRestore();
     });
