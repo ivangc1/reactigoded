@@ -11,8 +11,8 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 - **`"use client"` granular por archivo en lugar de global [H-09]**: el
   barrel `src/index.ts` ya no lleva `"use client";` global. En su lugar,
-  los **47 archivos** que dependen de hooks React, browser APIs o context
-  interno llevan la directive en su propio archivo. Los **45 archivos
+  los **48 archivos** que dependen de hooks React, browser APIs o context
+  interno llevan la directive en su propio archivo. Los **44 archivos
   restantes** (Card subcomponents, Dialog body/footer/close, Sidebar
   items, Navbar pieces, Skeleton, Spinner, Badge, Progress, Divider,
   Timeline, etc. — ~49% del DS) son server-safe y pueden renderizarse
