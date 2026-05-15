@@ -9,6 +9,27 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **Soak del cambio ARIA de `Skeleton` (beta.22) [M-02]**: cobertura de
+  tests + Storybook ampliada para validar el patrón ARIA del breaking
+  change introducido en beta.22 (cada `Skeleton` standalone es
+  decorativo; el announcement al SR vive en `SkeletonContainer`).
+
+  - Story `ConContainer` recibe play test real verificando contrato
+    completo (único `role=status` + `aria-busy` + `aria-live=polite` +
+    `aria-label` + Skeletons internos con `role=presentation`).
+  - 2 stories nuevas: `SkeletonsStandaloneNoAnuncian` (consciente:
+    sin container, cero announcements) y `MultiplesContainersParalelos`
+    (cada container con status independiente).
+  - 5 tests nuevos en `describe("Skeleton — M-02 ARIA soak")`:
+    container vacío sigue anunciando, múltiples paralelos independientes,
+    anidación preserva ambos status, standalone fuera del a11y tree,
+    role inmutable (regresión guard).
+  - Test extra en `AllStates regression` verifica invariante "sin
+    container, cero announcements" — convierte el placebo legacy en
+    aserción significativa.
+
+  axe-core ahora ejecuta sobre 3 stories del patrón en CI.
+
 - **Subpath export `reactigoded/cn` para tree-shaking [H-12]**: pre-fix,
   `import { cn } from "reactigoded"` arrastraba el bundle entero
   (~64 KB ungz / 16 KB gz) incluyendo `createPortal` de `react-dom`
