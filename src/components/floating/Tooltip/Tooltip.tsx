@@ -2,10 +2,12 @@
 
 import {
   cloneElement,
+  useCallback,
   useEffect,
   useId,
   useRef,
   useState,
+  type CSSProperties,
   type HTMLProps,
   type ReactElement,
   type ReactNode,
@@ -26,6 +28,74 @@ import {
 } from "@floating-ui/react";
 import { cn } from "@/utils/cn";
 import { useFloatingNode } from "../primitives/useFloatingNode";
+
+// M-07.2 (RC1 gate review): detección de child que no forwardea ref.
+//
+// Capa 1 — static analysis O(1) del children.type:
+//   - string ('button', 'a', ...): DOM intrinsic → guaranteed_ok.
+//   - $$typeof === REACT_FORWARD_REF_TYPE: explicit forwardRef → guaranteed_ok.
+//   - $$typeof === REACT_MEMO_TYPE: recurse en .type.
+//   - function: React 19 puede aceptar ref como prop → ambiguous.
+//
+// Las ramas guaranteed_ok no entran al safety net ni al sentinel —
+// cero coste runtime para casos comunes (botones nativos, components
+// con forwardRef explícito).
+const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+const REACT_MEMO_TYPE = Symbol.for("react.memo");
+
+type RefForwardingVerdict =
+  | { kind: "guaranteed_ok"; reason: "dom_intrinsic" | "forward_ref" }
+  | { kind: "ambiguous" };
+
+function analyzeChildType(type: unknown): RefForwardingVerdict {
+  if (typeof type === "string") {
+    return { kind: "guaranteed_ok", reason: "dom_intrinsic" };
+  }
+  if (type != null && typeof type === "object") {
+    const $$typeof = (type as { $$typeof?: symbol }).$$typeof;
+    if ($$typeof === REACT_FORWARD_REF_TYPE) {
+      return { kind: "guaranteed_ok", reason: "forward_ref" };
+    }
+    if ($$typeof === REACT_MEMO_TYPE) {
+      const inner = (type as { type?: unknown }).type;
+      return analyzeChildType(inner);
+    }
+  }
+  return { kind: "ambiguous" };
+}
+
+function getChildTypeName(type: unknown): string {
+  if (typeof type === "string") return type;
+  if (typeof type === "function") {
+    return (
+      (type as { displayName?: string }).displayName ??
+      (type as { name?: string }).name ??
+      "custom component"
+    );
+  }
+  if (type != null && typeof type === "object") {
+    const $$typeof = (type as { $$typeof?: symbol }).$$typeof;
+    if ($$typeof === REACT_FORWARD_REF_TYPE) {
+      const render = (
+        type as { render?: { displayName?: string; name?: string } }
+      ).render;
+      if (render) {
+        return render.displayName ?? render.name ?? "ForwardRef";
+      }
+      return "ForwardRef";
+    }
+    if ($$typeof === REACT_MEMO_TYPE) {
+      return getChildTypeName((type as { type?: unknown }).type);
+    }
+  }
+  return "custom component";
+}
+
+// Sentinel dev-only con display:contents para detectar intent del
+// usuario (hover/focus) sin depender de que el child propague handlers.
+// `display:contents` hace que el span no tenga caja propia — el child
+// se comporta como si el span no estuviera para layout.
+const DEV_SENTINEL_STYLE: CSSProperties = { display: "contents" };
 
 // M-04 (RC1): los 12 placements de Floating UI. 4 sides × 3 alignments
 // (base, -start, -end). Floating UI ya posiciona vía inline styles —
@@ -317,58 +387,82 @@ export function Tooltip({
   // en compile-time. Consumer JS sin TS verá un crash inmediato si
   // pasa string/array/fragment al cloneElement, lo cual es señal
   // clara mejor que el warn silencioso anterior.
-  const childRef = children.props.ref ?? null;
-  const referenceRef = useMergeRefs([refs.setReference, childRef]);
+  // M-07.2 (RC1 gate review): detección de child que no forwardea ref
+  // con un approach de 4 capas (ver `analyzeChildType` arriba).
+  //
+  // Capa 1: static analysis ya hecha — `verdict` decide si entramos al
+  //         runtime del warn o nos saltamos todo (guaranteed_ok).
+  // Capa 2: probe sticky — la pregunta no es "¿está conectado ahora?"
+  //         sino "¿se ha conectado alguna vez?". Una vez true, no se
+  //         resetea → cero false positives en lazy mounting.
+  // Capa 3: sentinel dev-only con capture-phase handlers — disparar
+  //         `evaluate()` en el momento exacto en que el dev intenta
+  //         usar el tooltip (hover/focus sobre el área del child).
+  // Capa 4: setTimeout 2000ms como safety net solo para el caso edge
+  //         de "dev observa pero no interactúa". Honestamente generoso
+  //         (cubre React.lazy + Suspense + fetch + idleCallback) y
+  //         dev-only — sin coste real en consumers.
+  const verdict = analyzeChildType(children.type);
 
-  // M-07 (RC1 gate review): dev warn cuando el child es un custom
-  // component que NO forwardea ref. Sin ref, Floating UI no puede
-  // medir el trigger ni montar el portal — el tooltip queda inerte
-  // al hover/focus pero el aria-describedby sigue intacto (el sr-only
-  // span funciona). El consumer no tiene señal del fallo. Este warn
-  // explica el síntoma y la solución (`forwardRef` o, React 19+,
-  // aceptar `ref` como prop normal).
-  //
-  // Estrategia (codex P2 sobre PR #71): el check se difiere con
-  // setTimeout para permitir que children "lazy" (que renderizan
-  // null inicialmente y montan el DOM en un render posterior por
-  // state/effect/data/React.lazy/Suspense) hayan completado su
-  // ciclo. Si tras el delay el ref sigue null, es un bug real —
-  // el child no forwardea o nunca renderiza un Element. No usamos
-  // `isOpen` como trigger porque sin ref, useFloating no tiene
-  // anchor para useHover y el tooltip nunca se abre — el warn
-  // nunca dispararía.
-  //
-  // 300ms: margen para chunks tardíos (red lenta + React.lazy),
-  // data-driven mounts (useEffect con fetch), requestIdleCallback,
-  // Suspense fallbacks. Sigue siendo dev-only (no-op en producción)
-  // por lo que el delay no tiene coste en consumers.
+  const refEverConnectedRef = useRef(false);
+  const probeRef = useCallback((node: Element | null) => {
+    if (node != null) refEverConnectedRef.current = true;
+  }, []);
+
+  const childRef = children.props.ref ?? null;
+  const referenceRef = useMergeRefs([refs.setReference, probeRef, childRef]);
+
   const warnedNoForwardRefRef = useRef(false);
-  useEffect(() => {
+  const evaluateForwardRef = useCallback(() => {
     if (!import.meta.env.DEV) return;
     if (warnedNoForwardRefRef.current) return;
-    const t = setTimeout(() => {
-      if (warnedNoForwardRefRef.current) return;
-      if (refs.reference.current != null) return;
-      warnedNoForwardRefRef.current = true;
-      const childType = children.type;
-      const typeName =
-        typeof childType === "string"
-          ? childType
-          : (typeof childType === "function" &&
-              ((childType as { displayName?: string }).displayName ??
-                (childType as { name?: string }).name)) ||
-            "custom component";
-      console.warn(
-        `[reactigoded] <Tooltip>: el child <${typeName}> no expone su nodo DOM via ref. ` +
-          `El tooltip no puede medir el trigger ni abrirse al hover/focus. ` +
-          `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
-          `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
-      );
-    }, 300);
+    if (refEverConnectedRef.current) return;
+    warnedNoForwardRefRef.current = true;
+    console.warn(
+      `[reactigoded] <Tooltip>: el child <${getChildTypeName(children.type)}> no expone su nodo DOM via ref. ` +
+        `El tooltip no puede medir el trigger ni abrirse al hover/focus. ` +
+        `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
+        `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
+    );
+  }, [children.type]);
+
+  // Safety net 2000ms — solo se monta para casos ambiguous (function
+  // components donde no podemos decidir estáticamente). El sentinel
+  // capture-phase suele disparar evaluate() mucho antes (en el primer
+  // hover/focus); el timer es respaldo para "dev observa pasivamente".
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (verdict.kind === "guaranteed_ok") return;
+    const t = setTimeout(evaluateForwardRef, 2000);
     return () => {
       clearTimeout(t);
     };
-  }, [children.type, refs.reference]);
+  }, [verdict.kind, evaluateForwardRef]);
+
+  const shouldWrapInDevSentinel =
+    import.meta.env.DEV && verdict.kind === "ambiguous";
+
+  // Sentinel ref + listeners nativos con capture-phase real. React no
+  // expone onMouseEnterCapture (mouseenter no bubblea nativamente y el
+  // polyfill sintético no garantiza capture). Pasar por addEventListener
+  // directo da semántica exacta: 1 fire al entrar al sentinel (no N
+  // como onMouseOverCapture sintético) y captura focus también en
+  // phase capture real.
+  const sentinelRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!shouldWrapInDevSentinel) return;
+    const node = sentinelRef.current;
+    if (!node) return;
+    const handler = () => {
+      evaluateForwardRef();
+    };
+    node.addEventListener("mouseenter", handler, { capture: true });
+    node.addEventListener("focus", handler, { capture: true });
+    return () => {
+      node.removeEventListener("mouseenter", handler, { capture: true });
+      node.removeEventListener("focus", handler, { capture: true });
+    };
+  }, [shouldWrapInDevSentinel, evaluateForwardRef]);
 
   // Inyectar handlers/refs de Floating UI MERGEADOS con los del child:
   // - `getReferenceProps(children.props)` pasa los props existentes,
@@ -441,9 +535,26 @@ export function Tooltip({
     </FloatingPortal>
   );
 
+  // M-07.2 Capa 3: sentinel dev-only para casos ambiguous. Wrappea el
+  // child con un <span style="display:contents"> que escucha hover y
+  // focus en CAPTURE phase. Capture corre top-down (window → ancestros
+  // → target), por lo que el sentinel recibe el evento ANTES que el
+  // child — funciona incluso si el child no propaga handlers (modo 2
+  // de fallo: ignora ...rest props). `display:contents` hace que el
+  // span no tenga caja propia — cero impacto en layout. Sólo se monta
+  // en dev y solo para function components (children de DOM intrinsic
+  // y forwardRef no entran aquí, cero coste runtime).
+  const childOrSentinel = shouldWrapInDevSentinel ? (
+    <span ref={sentinelRef} style={DEV_SENTINEL_STYLE}>
+      {child}
+    </span>
+  ) : (
+    child
+  );
+
   return (
     <>
-      {child}
+      {childOrSentinel}
       <span id={tooltipId} role="tooltip" className="ig-sr-only" inert>
         {text}
       </span>
