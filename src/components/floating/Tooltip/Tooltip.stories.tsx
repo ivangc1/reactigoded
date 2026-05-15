@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 import { Tooltip } from "./Tooltip";
 import { Button } from "@/components/Button";
 import {
@@ -10,6 +10,12 @@ import {
   DialogFooter,
   DialogHeader,
 } from "@/components/Dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/Tabs";
 
 const meta = {
   title: "Componentes/Tooltip",
@@ -166,12 +172,27 @@ export const A11yInteraction: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const btn = canvas.getByRole("button", { name: "Eliminar" });
+    // (1) aria-describedby siempre presente: el sr-only role="tooltip"
+    //     vive en el DOM aunque el portal visual no esté montado.
     const describedBy = btn.getAttribute("aria-describedby");
     await expect(describedBy).toBeTruthy();
-    // El span con ese id debe contener el texto del tooltip.
-    const tooltipNode = canvas.getByRole("tooltip", { hidden: true });
-    await expect(tooltipNode.id).toBe(describedBy);
-    await expect(tooltipNode).toHaveTextContent("Eliminar elemento");
+    const srOnly = canvas.getByRole("tooltip", { hidden: true });
+    await expect(srOnly.id).toBe(describedBy);
+    await expect(srOnly).toHaveTextContent("Eliminar elemento");
+
+    // (2) Hover monta el portal en document.body (no en canvasElement).
+    await userEvent.hover(btn);
+    const portalTooltip = document.body.querySelector(".ig-tooltip");
+    await expect(portalTooltip).not.toBeNull();
+    await expect(portalTooltip).toHaveTextContent("Eliminar elemento");
+
+    // (3) Escape cierra el portal (useDismiss bubbles.escapeKey true).
+    await userEvent.keyboard("{Escape}");
+    await expect(document.body.querySelector(".ig-tooltip")).toBeNull();
+
+    // (4) El sr-only persiste tras cerrar — sigue siendo el referente
+    //     estable de aria-describedby.
+    await expect(canvas.getByRole("tooltip", { hidden: true })).toBeInTheDocument();
   },
 };
 
@@ -342,6 +363,115 @@ export const TooltipDentroDeModal: Story = {
     }
     return <DemoModal />;
   },
+  play: async ({ canvasElement }) => {
+    // H-08 (RC1): play test cruzado real Tooltip-en-Dialog.
+    const canvas = within(canvasElement);
+    const openBtn = canvas.getByRole("button", { name: "Abrir Dialog" });
+
+    // (1) Abrir el Dialog — sin esto el Tooltip child no está en DOM.
+    await userEvent.click(openBtn);
+
+    // (2) El Dialog usa <dialog> nativo con top-layer; queryAll en
+    //     document.body (no canvasElement) porque dialog se eleva.
+    const dangerBtn = await within(document.body).findByRole("button", {
+      name: "Eliminar permanente",
+    });
+
+    // (3) Hover el botón danger → Tooltip portal debe montar dentro
+    //     del <dialog> (top-layer), NO en document.body. Codex P2: si
+    //     `container={dialogRef.current}` regresiona, FloatingPortal
+    //     cae a document.body y el tooltip queda detrás del backdrop;
+    //     un assert solo sobre document.body lo dejaría pasar. Verify
+    //     literal del descendant chain con dialog.querySelector.
+    await userEvent.hover(dangerBtn);
+    const dialogEl = document.body.querySelector("dialog");
+    if (!dialogEl) throw new Error("Dialog element no encontrado");
+    const tooltipInDialog = dialogEl.querySelector(".ig-tooltip");
+    await expect(tooltipInDialog).not.toBeNull();
+    await expect(tooltipInDialog).toHaveTextContent(
+      "Esta acción no se puede deshacer",
+    );
+
+    // (4) Escape cierra el tooltip (cascade dismiss del FloatingTree
+    //     todavía deja el Dialog abierto — Escape sobre tooltip solo
+    //     cierra el tooltip).
+    await userEvent.keyboard("{Escape}");
+    await expect(dialogEl.querySelector(".ig-tooltip")).toBeNull();
+  },
+};
+
+export const TooltipDentroDeTabs: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Story cruzada H-08 (RC1 gate review): Tooltip envolviendo un control dentro de un `TabsContent`. Verifica que el portal funciona correctamente cuando el panel activo cambia: el Tooltip del panel inactivo NO debe aparecer en `document.body` (su content no se renderiza), y el del panel activo SÍ. Patrón usado para iconos de ayuda en formularios tab-eados.",
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="ig-story-frame ig-story-frame--lg">
+        <Story />
+      </div>
+    ),
+  ],
+  render: () => (
+    <Tabs defaultValue="general">
+      <TabsList>
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="avanzado">Avanzado</TabsTrigger>
+      </TabsList>
+      <TabsContent value="general">
+        <p>Ajustes generales del perfil.</p>
+        <Tooltip text="Tu nombre completo público" placement="right">
+          <Button variant="secondary">Editar nombre</Button>
+        </Tooltip>
+      </TabsContent>
+      <TabsContent value="avanzado">
+        <p>Ajustes avanzados (solo expertos).</p>
+        <Tooltip text="Acción irreversible — elimina cuenta" placement="right">
+          <Button variant="danger">Eliminar cuenta</Button>
+        </Tooltip>
+      </TabsContent>
+    </Tabs>
+  ),
+  play: async ({ canvasElement }) => {
+    // H-08 (RC1): play test cruzado real Tooltip-en-Tabs.
+    const canvas = within(canvasElement);
+
+    // (1) Panel "general" activo por defecto: hover sobre su tooltip
+    //     trigger monta el portal.
+    const editBtn = canvas.getByRole("button", { name: "Editar nombre" });
+    await userEvent.hover(editBtn);
+    await expect(document.body.querySelector(".ig-tooltip")).not.toBeNull();
+    await expect(
+      document.body.querySelector(".ig-tooltip"),
+    ).toHaveTextContent("Tu nombre completo público");
+    await userEvent.unhover(editBtn);
+
+    // (2) Cambiar a panel "avanzado" — el botón "Editar nombre" sale
+    //     del DOM (TabsContent keepMounted=false por defecto).
+    const avanzadoTab = canvas.getByRole("tab", { name: "Avanzado" });
+    await userEvent.click(avanzadoTab);
+    await expect(
+      canvas.queryByRole("button", { name: "Editar nombre" }),
+    ).not.toBeInTheDocument();
+
+    // (3) Hover sobre el botón danger del nuevo panel monta su
+    //     tooltip propio (sin restos del anterior en document.body).
+    const dangerBtn = canvas.getByRole("button", { name: "Eliminar cuenta" });
+    await userEvent.hover(dangerBtn);
+    const portalTooltip = document.body.querySelector(".ig-tooltip");
+    await expect(portalTooltip).not.toBeNull();
+    await expect(portalTooltip).toHaveTextContent(
+      "Acción irreversible — elimina cuenta",
+    );
+
+    // (4) Escape cierra el tooltip.
+    await userEvent.keyboard("{Escape}");
+    await expect(document.body.querySelector(".ig-tooltip")).toBeNull();
+  },
 };
 
 export const AllStates: Story = {
@@ -390,14 +520,29 @@ export const AllStates: Story = {
     </div>
   ),
   play: async ({ canvasElement }) => {
-    // RC1 (D-01 / M-05 / B-03): Tooltip ya no envuelve en wrapper span.
-    // El elemento `.ig-tooltip` visual vive en portal y solo monta al
-    // hover. Para snapshot estático verificamos los sr-only spans
-    // persistentes con role="tooltip" — uno por instancia — que son el
-    // referente estable de aria-describedby.
+    // H-08 (RC1): play test reescrito para no ser placebo (counting spans).
+    // (1) Sr-only persistentes: una instancia por Tooltip — referentes
+    //     estables de aria-describedby.
     const srOnlies = canvasElement.querySelectorAll(
       '.ig-sr-only[role="tooltip"]',
     );
     await expect(srOnlies.length).toBeGreaterThanOrEqual(10);
+
+    // (2) Hover real sobre uno de los botones — verifica que el portal
+    //     monta en document.body con la clase + texto correctos.
+    const canvas = within(canvasElement);
+    const topBtn = canvas.getByRole("button", { name: "top" });
+    await userEvent.hover(topBtn);
+    const portalTooltip = document.body.querySelector(
+      ".ig-tooltip.ig-tooltip-place-top",
+    );
+    await expect(portalTooltip).not.toBeNull();
+    await expect(portalTooltip).toHaveTextContent("Top");
+
+    // (3) Unhover desmonta el portal.
+    await userEvent.unhover(topBtn);
+    await expect(
+      document.body.querySelector(".ig-tooltip.ig-tooltip-place-top"),
+    ).toBeNull();
   },
 };

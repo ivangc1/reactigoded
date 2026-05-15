@@ -9,6 +9,33 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **`Tooltip` stories cruzadas + play tests reales [H-08]**: cobertura
+  Storybook ampliada con 1 story cruzada nueva (`TooltipDentroDeTabs`)
+  y play tests reescritos en stories existentes para sustituir las
+  asserts placebo (counting spans, leyendo `aria-describedby` sin abrir
+  el portal) por **interacciones reales**:
+
+  - `A11yInteraction`: play ahora hace `userEvent.hover`, verifica que
+    el portal monta en `document.body` con `.ig-tooltip` y el texto
+    correcto, dispara `{Escape}` y verifica que el portal desmonta —
+    y que el sr-only persiste como referente estable de `aria-describedby`.
+  - `AllStates`: el `expect(spans).toHaveLength` legacy se mantiene
+    como sanity check pero se añade hover real sobre `top` →
+    verify `.ig-tooltip.ig-tooltip-place-top` en `document.body` con
+    texto → unhover → verify desmonte.
+  - `TooltipDentroDeModal` (story cruzada existente): nuevo play que
+    abre el Dialog, hace hover en el botón danger, verifica que el
+    portal del tooltip monta dentro del top-layer del `<dialog>` (no
+    detrás del backdrop) y dispara Escape para cerrar solo el tooltip.
+  - `TooltipDentroDeTabs` (story cruzada nueva): cambia entre paneles
+    de `Tabs`, verifica que el tooltip del panel inactivo desaparece
+    del DOM al cambiar, y que el del panel activo aparece al hover.
+
+  Coverage cruzada total: 3 stories (`WithCustomContainer` con `<dialog>`
+  nativo + `TooltipDentroDeModal` con `<Dialog>` del DS + `TooltipDentroDeTabs`
+  con `<Tabs>` del DS). axe-core ahora ejecutará a11y checks sobre estas
+  combinaciones en CI.
+
 - **`Tooltip` ampliado a los 12 placements de Floating UI [M-04]**: el
   type `TooltipPlacement` pasa de 4 (`top` / `bottom` / `left` / `right`)
   a los **12 valores nativos** de Floating UI — 4 sides × 3 alignments
