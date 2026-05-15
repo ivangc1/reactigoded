@@ -133,14 +133,38 @@ export interface SetValueOptions {
   silent?: boolean;
 }
 
+/**
+ * Acción aceptada por `setValue`: un valor directo `T` o una función
+ * updater `(prev: T) => T` (M-06, RC1) — mismo patrón que `useState`
+ * de React. La updater function recibe el `value` actual del hook
+ * (controlled, derivado o internal según el modo) y debe retornar el
+ * siguiente valor sin mutar el anterior.
+ *
+ * Útil para updates que no dependen del closure del callback:
+ *
+ * ```tsx
+ * <button onClick={() => setValue((prev) => !prev)}>Toggle</button>
+ * ```
+ *
+ * vs. el equivalente con valor directo (depende del closure):
+ *
+ * ```tsx
+ * <button onClick={() => setValue(!value)}>Toggle</button>
+ * ```
+ */
+export type SetValueAction<T> = T | ((prev: T) => T);
+
 export interface UseControllableStateReturn<T> {
   /** Valor actual (controlled, derivado o internal). */
   value: T;
   /**
    * Setter que respeta el modo. En controlled solo dispara `onChange`.
    * Pasa `{ silent: true }` para no notificar al consumer.
+   *
+   * Acepta valor directo `T` o updater function `(prev: T) => T`
+   * (M-06, RC1) — mismo patrón que `useState`.
    */
-  setValue: (next: T, options?: SetValueOptions) => void;
+  setValue: (action: SetValueAction<T>, options?: SetValueOptions) => void;
   /** True si el componente está en modo controlled. */
   isControlled: boolean;
 }
@@ -208,14 +232,16 @@ export function useControllableState<T>(
   const setDerivedValueRef = useRef<((next: T) => void) | undefined>(
     isDerived ? options.setDerivedValue : undefined,
   );
-
-  useIsoLayoutEffect(() => {
-    isControlledRef.current = isControlled;
-    onChangeRef.current = options.onChange;
-    setDerivedValueRef.current = isDerived
-      ? options.setDerivedValue
-      : undefined;
-  });
+  // M-06 (RC1): ref del value "pending" para resolver updater functions
+  // contra el último valor — incluso si hay encadenamientos en el mismo
+  // tick antes de que React re-renderice. Codex P1 sobre PR #70 detectó
+  // que leer solo el ref committed dejaba `setValue(p=>p+1); setValue(p=>p+1)`
+  // resolviendo ambos a `1` en lugar de `2`. Fix: tras resolver una
+  // updater, advanzamos el ref para que la siguiente llamada vea el
+  // valor pendiente. useIsoLayoutEffect resincroniza el ref con el
+  // value committed en el próximo render — relevante cuando un re-render
+  // externo cambia el controlled prop o el derived source.
+  const pendingValueRef = useRef<T>(undefined as T);
 
   const value = isControlled
     ? (controlledValue as T)
@@ -223,19 +249,40 @@ export function useControllableState<T>(
       ? options.derive()
       : internalValue;
 
-  const setValue = useCallback((next: T, setOptions?: SetValueOptions) => {
-    if (!isControlledRef.current) {
-      const setDerivedValue = setDerivedValueRef.current;
-      if (setDerivedValue) {
-        setDerivedValue(next);
-      } else {
-        setInternalValue(next);
+  useIsoLayoutEffect(() => {
+    isControlledRef.current = isControlled;
+    onChangeRef.current = options.onChange;
+    setDerivedValueRef.current = isDerived
+      ? options.setDerivedValue
+      : undefined;
+    pendingValueRef.current = value;
+  });
+
+  const setValue = useCallback(
+    (action: SetValueAction<T>, setOptions?: SetValueOptions) => {
+      // M-06 (RC1): si el caller pasa una function, la invocamos contra
+      // el pending value para producir el siguiente. Si pasa un valor
+      // directo, se usa tal cual. Tras resolver, advanzamos el ref para
+      // permitir chaining `setValue(p=>p+1); setValue(p=>p+1)` → +2.
+      const resolved =
+        typeof action === "function"
+          ? (action as (prev: T) => T)(pendingValueRef.current)
+          : action;
+      pendingValueRef.current = resolved;
+      if (!isControlledRef.current) {
+        const setDerivedValue = setDerivedValueRef.current;
+        if (setDerivedValue) {
+          setDerivedValue(resolved);
+        } else {
+          setInternalValue(resolved);
+        }
       }
-    }
-    if (!setOptions?.silent) {
-      onChangeRef.current?.(next);
-    }
-  }, []);
+      if (!setOptions?.silent) {
+        onChangeRef.current?.(resolved);
+      }
+    },
+    [],
+  );
 
   // Dev-only warn: controlled (`value` definido) sin `onChange` y sin
   // el escape hatch SUPPRESS_NO_HANDLER_WARN = UI bloqueada al input
