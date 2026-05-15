@@ -7,6 +7,32 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **Subpath export `reactigoded/cn` para tree-shaking [H-12]**: pre-fix,
+  `import { cn } from "reactigoded"` arrastraba el bundle entero
+  (~64 KB ungz / 16 KB gz) incluyendo `createPortal` de `react-dom`
+  vía Toast — los bundlers consumers no tree-shaken bundles
+  monolíticos. Build multi-entry de Vite separa `cn` como entry
+  independiente.
+
+  ```ts
+  // Antes: arrastra todo el DS
+  import { cn } from "reactigoded";  // 16 KB gz
+
+  // Ahora: ~0.4 KB gz (wrapper + clsx)
+  import { cn } from "reactigoded/cn";
+  ```
+
+  El import desde el root (`reactigoded`) sigue funcionando — no es
+  breaking. La subpath solo añade una opción más eficiente para
+  consumers que solo necesitan `cn` (utility libraries, build
+  helpers, etc).
+
+  Output del build:
+  - `dist/cn.js` 70 B (re-export)
+  - `dist/cn-<hash>.js` 0.55 KB (chunk clsx compartido con el root bundle)
+
 ### Fixed
 
 - **`Dialog`: drag-out parity tracking — selección de texto ya no cierra

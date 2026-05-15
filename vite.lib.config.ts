@@ -116,11 +116,21 @@ export default defineConfig({
   build: {
     minify: "esbuild",
     lib: {
-      entry: resolve(__dirname, "src/index.ts"),
+      // H-12 (RC1 gate review): multi-entry para permitir tree-shaking
+      // del subpath `reactigoded/cn`. Pre-fix: importar `cn` desde el
+      // barrel root arrastraba el bundle entero (incluyendo createPortal
+      // de Toast vía react-dom) porque el build era monolítico. Con
+      // entry separado, el consumer que solo necesita `cn` recibe un
+      // chunk de ~600 B sin react-dom.
+      entry: {
+        index: resolve(__dirname, "src/index.ts"),
+        cn: resolve(__dirname, "src/utils/cn.ts"),
+      },
       name: "Reactigoded",
       formats: ["es", "cjs"] as const,
-      fileName: (format: string) =>
-        `index.${format === "es" ? "js" : "cjs"}`,
+      // Filename por entry: ESM `<name>.js`, CJS `<name>.cjs`.
+      fileName: (format: string, entryName: string) =>
+        `${entryName}.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
       // @floating-ui/react: peer-dep externalizada desde post-RC1.
