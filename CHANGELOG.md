@@ -9,6 +9,52 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **`Tooltip` dev-warn cuando custom child no forwardea ref [M-07.2]**:
+  cuando el `children` del Tooltip es un componente custom que ignora
+  el ref (sin `React.forwardRef` o sin aceptar `ref` como prop normal
+  en React 19), Floating UI no puede medir el trigger ni montar el
+  portal — el tooltip queda inerte al hover/focus pero el sr-only
+  span con `aria-describedby` sigue funcionando. Pre-RC1 el síntoma
+  era silencioso (consumer no sabía por qué el tooltip "no abre").
+
+  Implementación con **approach de 4 capas** (cero magic numbers en
+  camino crítico):
+
+  1. **Static analysis O(1)** sobre `children.type`:
+     - `string` (DOM intrinsic): `guaranteed_ok` → cero runtime.
+     - `$$typeof === REACT_FORWARD_REF_TYPE`: `guaranteed_ok`.
+     - `memo(...)`: recurse en el inner type.
+     - `function`: `ambiguous` (React 19 ref-as-prop posible).
+  2. **Probe sticky** en el ref: `useRef(false)` que se setea a `true`
+     la primera vez que recibe un Element no-null. Una vez true, no se
+     resetea — cero false positives en lazy mounting.
+  3. **Sentinel dev-only** con `display: contents` envolviendo el child
+     (solo si `verdict === 'ambiguous'`). Listeners `mouseenter`/`focus`
+     en capture-phase via `addEventListener` nativo (React no expone
+     `onMouseEnterCapture` porque mouseenter no bubblea). Captura el
+     intent del usuario incluso si el child no propaga handlers — sin
+     depender de tiempo arbitrario.
+  4. **Safety net 2000ms** como fallback solo para el caso edge "dev
+     observa pero no interactúa". Honestamente generoso (cubre
+     `React.lazy`, Suspense, fetch lentos, `requestIdleCallback`).
+
+  Detecta los **3 modos de fallo** del Tooltip (no solo el del ref):
+  child que no forwardea ref, child que no propaga handlers (`...rest`
+  ignorado), child que renderiza null permanentemente.
+
+  Mensaje del warn (incluye nombre del componente):
+
+  ```
+  [reactigoded] <Tooltip>: el child <MyCustom> no expone su nodo DOM
+  via ref. El tooltip no puede medir el trigger ni abrirse al hover/
+  focus. Usa React.forwardRef (React <19) o acepta `ref` como prop
+  normal (React 19+) y pásalo al elemento DOM root del componente.
+  aria-describedby sigue funcionando — el SR anuncia el texto del
+  tooltip pero el portal visual no aparece.
+  ```
+
+  No-op en producción (gated por `import.meta.env.DEV`).
+
 - **`useControllableState.setValue` acepta updater function [M-06]**: el
   setter del hook ahora acepta valor directo `T` **o** una función
   updater `(prev: T) => T` — mismo patrón que `useState` de React.

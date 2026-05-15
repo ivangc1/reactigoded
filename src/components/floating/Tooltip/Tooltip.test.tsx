@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef, useState, type ReactNode } from "react";
+import { createRef, forwardRef, useEffect, useState, type ReactNode, type Ref } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -590,5 +590,240 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       // por estar registrado como FloatingNode padre del Tooltip).
       expect(onAncestorClose).toHaveBeenCalled();
     });
+  });
+
+  // M-07.2 (RC1 gate review): detección de child que no forwardea ref
+  // con approach de 4 capas (static analysis + probe sticky + sentinel
+  // + safety net 2000ms). El discriminador ya no es "¿está el ref
+  // conectado a los X ms?" sino "¿se ha conectado alguna vez?" (probe
+  // sticky) y la evaluación se dispara al primer intent del usuario
+  // (sentinel capture-phase) o, como fallback, a los 2s.
+  describe("Tooltip dev-warn no-forwardRef — M-07.2 (4-layer)", () => {
+    function hasM07Warn(warn: {
+      mock: { calls: unknown[][] };
+    }): boolean {
+      // Matcher por prefix común — cubre los 3 variantes de mensaje
+      // diferenciado (ref+handlers / solo ref / solo handlers).
+      return warn.mock.calls.some(
+        (c) =>
+          typeof c[0] === "string" &&
+          c[0].startsWith("[reactigoded] <Tooltip>:"),
+      );
+    }
+
+    // Capa 3: sentinel capture-phase dispara evaluate() en el primer
+    // hover. El probe nunca se setea (child no forwardea) → warn.
+    it("custom no-forward + hover dispara warn por sentinel capture-phase", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function MyCustom({ children }: { children: ReactNode }) {
+        return <div>{children}</div>;
+      }
+      render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
+      // Pre-hover: warn no disparado (no hay intent todavía).
+      expect(hasM07Warn(warn)).toBe(false);
+      // Hover → sentinel onMouseEnterCapture → evaluate() → warn.
+      await user.hover(screen.getByText("X"));
+      const m07Calls = warn.mock.calls.filter(
+        (c) =>
+          typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
+      );
+      expect(m07Calls).toHaveLength(1);
+      const msg = m07Calls[0]?.[0] as string;
+      expect(msg).toMatch(/MyCustom/);
+      expect(msg).toMatch(/forwardRef/);
+      warn.mockRestore();
+    });
+
+    it("custom no-forward: aria-describedby sigue funcionando (sr-only persiste)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function MyCustom(props: { children: ReactNode; [k: string]: unknown }) {
+        return <div data-testid="root" {...props} />;
+      }
+      render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
+      const root = screen.getByTestId("root");
+      const id = root.getAttribute("aria-describedby");
+      expect(id).toBeTruthy();
+      const srOnly = id ? document.getElementById(id) : null;
+      expect(srOnly).not.toBeNull();
+      expect(srOnly).toHaveTextContent("hint");
+      warn.mockRestore();
+    });
+
+    // Capa 1: static analysis dice guaranteed_ok (dom_intrinsic) →
+    // ni safety net ni sentinel. Cero coste runtime, sin warn jamás.
+    it("DOM intrinsic child (button): static analysis guaranteed_ok, sin warn", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Tooltip text="hint">
+          <button>X</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByText("X"));
+      expect(hasM07Warn(warn)).toBe(false);
+      warn.mockRestore();
+    });
+
+    // Capa 1: forwardRef wrapper también es guaranteed_ok via $$typeof.
+    it("React.forwardRef wrapper: static analysis guaranteed_ok, sin warn", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const MyForwarded = forwardRef<HTMLButtonElement, { children: ReactNode }>(
+        function MyForwarded({ children }, ref) {
+          return <button ref={ref}>{children}</button>;
+        },
+      );
+      render(<Tooltip text="hint"><MyForwarded>X</MyForwarded></Tooltip>);
+      await user.hover(screen.getByText("X"));
+      expect(hasM07Warn(warn)).toBe(false);
+      warn.mockRestore();
+    });
+
+    // Capa 2: React 19 ref-as-prop function — verdict ambiguous, pero
+    // el probe sticky atrapa el ref en el primer mount. Hover dispara
+    // evaluate() → probe ya es true → return early sin warn.
+    it("React 19 ref-as-prop (ambiguous) + ref se conecta: probe sticky evita warn", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function MyAmbiguous({
+        ref,
+        children,
+        ...rest
+      }: {
+        ref?: Ref<HTMLButtonElement>;
+        children: ReactNode;
+        [k: string]: unknown;
+      }) {
+        return (
+          <button ref={ref} {...rest}>
+            {children}
+          </button>
+        );
+      }
+      render(<Tooltip text="hint"><MyAmbiguous>X</MyAmbiguous></Tooltip>);
+      await user.hover(screen.getByText("X"));
+      expect(hasM07Warn(warn)).toBe(false);
+      warn.mockRestore();
+    });
+
+    // Capa 2: child lazy que renderiza null primero y luego un button.
+    // Pre-hover el probe ya se setea en el mount diferido. Hover no
+    // dispara warn. No es necesario esperar al safety net.
+    it("child lazy (null → button): probe sticky atrapa ref tardío, sin false positive", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function DelayedButton({
+        ref,
+        children,
+        ...rest
+      }: {
+        ref?: Ref<HTMLButtonElement>;
+        children: ReactNode;
+        [k: string]: unknown;
+      }) {
+        const [show, setShow] = useState(false);
+        useEffect(() => {
+          queueMicrotask(() => {
+            setShow(true);
+          });
+        }, []);
+        if (!show) return null;
+        return (
+          <button ref={ref} {...rest}>
+            {children}
+          </button>
+        );
+      }
+      render(<Tooltip text="hint"><DelayedButton>X</DelayedButton></Tooltip>);
+      const btn = await screen.findByText("X");
+      await user.hover(btn);
+      // Flush microtask del sentinel evaluate antes de mockRestore,
+      // si no la microtask fires en el siguiente test polucionando spy.
+      await Promise.resolve();
+      expect(hasM07Warn(warn)).toBe(false);
+      warn.mockRestore();
+    });
+
+    // Capa 4: safety net 2000ms cubre "dev no interactúa". Sin hover,
+    // el sentinel nunca dispara; el setTimeout sí.
+    it("custom no-forward sin interacción: safety net 2000ms dispara warn", async () => {
+      vi.useFakeTimers();
+      try {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        function MyCustom({ children }: { children: ReactNode }) {
+          return <div>{children}</div>;
+        }
+        render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
+        expect(hasM07Warn(warn)).toBe(false);
+        await vi.advanceTimersByTimeAsync(2100);
+        expect(hasM07Warn(warn)).toBe(true);
+        warn.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Capa 1: DOM intrinsic NO programa el safety net.
+    it("DOM intrinsic: no programa setTimeout safety net (guaranteed_ok)", async () => {
+      vi.useFakeTimers();
+      try {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        render(
+          <Tooltip text="hint">
+            <button>X</button>
+          </Tooltip>,
+        );
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(hasM07Warn(warn)).toBe(false);
+        warn.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Codex P2 sobre 934ba46: handler probe. Child forwardea ref pero
+    // dropea `...rest` → handlers FUI no llegan al DOM → tooltip
+    // queda inerte aunque el ref esté conectado. Pre-fix: probe
+    // sticky decía "OK" y suprimía el warn. Post-fix: handler probe
+    // independiente detecta el drop y warn diferenciado.
+    it("child forwardea ref pero dropea ...rest: warn diferenciado handlers", async () => {
+      const user = userEvent.setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function RefOnly({
+        ref,
+        children,
+      }: {
+        ref?: Ref<HTMLButtonElement>;
+        children: ReactNode;
+      }) {
+        return <button ref={ref}>{children}</button>;
+      }
+      render(<Tooltip text="hint"><RefOnly>X</RefOnly></Tooltip>);
+      await user.hover(screen.getByText("X"));
+      await Promise.resolve();
+      const m07Calls = warn.mock.calls.filter(
+        (c) =>
+          typeof c[0] === "string" &&
+          c[0].startsWith("[reactigoded] <Tooltip>:"),
+      );
+      expect(m07Calls).toHaveLength(1);
+      const msg = m07Calls[0]?.[0] as string;
+      expect(msg).toMatch(/RefOnly/);
+      expect(msg).toMatch(/NO propaga handlers/);
+      expect(msg).toMatch(/drop de `\.\.\.rest`/);
+      warn.mockRestore();
+    });
+
+    // Codex P2 sobre 934ba46: probe Element validation. El check
+    // `node instanceof Element || node.getBoundingClientRect` rechaza
+    // imperative handles (objetos custom sin contrato de medición).
+    // NOTA: testear este path end-to-end requiere `useImperativeHandle`
+    // que rompe FUI internamente (FUI's refs.setReference rejects no-
+    // Element causing infinite update loop). El check del probe queda
+    // como defensa unitaria validable por inspección — el bug que
+    // protege se manifiesta como FUI crash antes de llegar al warn.
+    // Verificación indirecta: el filter del path "no se conectó" sigue
+    // funcionando para los otros casos (ver tests Capa 4 + sentinel).
   });
 });
