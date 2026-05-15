@@ -133,14 +133,38 @@ export interface SetValueOptions {
   silent?: boolean;
 }
 
+/**
+ * Acción aceptada por `setValue`: un valor directo `T` o una función
+ * updater `(prev: T) => T` (M-06, RC1) — mismo patrón que `useState`
+ * de React. La updater function recibe el `value` actual del hook
+ * (controlled, derivado o internal según el modo) y debe retornar el
+ * siguiente valor sin mutar el anterior.
+ *
+ * Útil para updates que no dependen del closure del callback:
+ *
+ * ```tsx
+ * <button onClick={() => setValue((prev) => !prev)}>Toggle</button>
+ * ```
+ *
+ * vs. el equivalente con valor directo (depende del closure):
+ *
+ * ```tsx
+ * <button onClick={() => setValue(!value)}>Toggle</button>
+ * ```
+ */
+export type SetValueAction<T> = T | ((prev: T) => T);
+
 export interface UseControllableStateReturn<T> {
   /** Valor actual (controlled, derivado o internal). */
   value: T;
   /**
    * Setter que respeta el modo. En controlled solo dispara `onChange`.
    * Pasa `{ silent: true }` para no notificar al consumer.
+   *
+   * Acepta valor directo `T` o updater function `(prev: T) => T`
+   * (M-06, RC1) — mismo patrón que `useState`.
    */
-  setValue: (next: T, options?: SetValueOptions) => void;
+  setValue: (action: SetValueAction<T>, options?: SetValueOptions) => void;
   /** True si el componente está en modo controlled. */
   isControlled: boolean;
 }
@@ -208,14 +232,10 @@ export function useControllableState<T>(
   const setDerivedValueRef = useRef<((next: T) => void) | undefined>(
     isDerived ? options.setDerivedValue : undefined,
   );
-
-  useIsoLayoutEffect(() => {
-    isControlledRef.current = isControlled;
-    onChangeRef.current = options.onChange;
-    setDerivedValueRef.current = isDerived
-      ? options.setDerivedValue
-      : undefined;
-  });
+  // M-06 (RC1): ref del value actual para resolver updater functions
+  // contra el snapshot correcto. La updater forma `(prev) => next`
+  // necesita ver el valor del último render para producir el siguiente.
+  const valueRef = useRef<T>(undefined as T);
 
   const value = isControlled
     ? (controlledValue as T)
@@ -223,19 +243,38 @@ export function useControllableState<T>(
       ? options.derive()
       : internalValue;
 
-  const setValue = useCallback((next: T, setOptions?: SetValueOptions) => {
-    if (!isControlledRef.current) {
-      const setDerivedValue = setDerivedValueRef.current;
-      if (setDerivedValue) {
-        setDerivedValue(next);
-      } else {
-        setInternalValue(next);
+  useIsoLayoutEffect(() => {
+    isControlledRef.current = isControlled;
+    onChangeRef.current = options.onChange;
+    setDerivedValueRef.current = isDerived
+      ? options.setDerivedValue
+      : undefined;
+    valueRef.current = value;
+  });
+
+  const setValue = useCallback(
+    (action: SetValueAction<T>, setOptions?: SetValueOptions) => {
+      // M-06 (RC1): si el caller pasa una function, la invocamos contra
+      // el snapshot actual para producir el siguiente valor. Si pasa
+      // un valor directo, se usa tal cual.
+      const resolved =
+        typeof action === "function"
+          ? (action as (prev: T) => T)(valueRef.current)
+          : action;
+      if (!isControlledRef.current) {
+        const setDerivedValue = setDerivedValueRef.current;
+        if (setDerivedValue) {
+          setDerivedValue(resolved);
+        } else {
+          setInternalValue(resolved);
+        }
       }
-    }
-    if (!setOptions?.silent) {
-      onChangeRef.current?.(next);
-    }
-  }, []);
+      if (!setOptions?.silent) {
+        onChangeRef.current?.(resolved);
+      }
+    },
+    [],
+  );
 
   // Dev-only warn: controlled (`value` definido) sin `onChange` y sin
   // el escape hatch SUPPRESS_NO_HANDLER_WARN = UI bloqueada al input

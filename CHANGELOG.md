@@ -9,6 +9,34 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **`useControllableState.setValue` acepta updater function [M-06]**: el
+  setter del hook ahora acepta valor directo `T` **o** una función
+  updater `(prev: T) => T` — mismo patrón que `useState` de React.
+
+  ```ts
+  const { value, setValue } = useControllableState<boolean>({
+    defaultValue: false,
+  });
+
+  // Antes: solo valor directo (depende del closure de `value`).
+  setValue(!value);
+
+  // Ahora también: updater (no depende del closure).
+  setValue((prev) => !prev);
+  ```
+
+  Útil para updates encadenados en handlers que no quieren capturar
+  `value` en el closure (`onClick`/`onKeyDown` con múltiples acciones).
+
+  Funciona en los 3 modos:
+  - **uncontrolled**: la updater recibe el `internalValue` actual.
+  - **controlled**: la updater recibe el `value` controlado externo y
+    el resuelto se pasa a `onChange` (sin tocar state interno).
+  - **derive**: la updater recibe el valor derivado y el resuelto se
+    pasa a `setDerivedValue`.
+
+  Sin breaking — `setValue(directValue)` sigue funcionando.
+
 - **`Tooltip` stories cruzadas + play tests reales [H-08]**: cobertura
   Storybook ampliada con 1 story cruzada nueva (`TooltipDentroDeTabs`)
   y play tests reescritos en stories existentes para sustituir las

@@ -420,4 +420,90 @@ describe("useControllableState", () => {
       warn.mockRestore();
     });
   });
+
+  // M-06 (RC1): setValue acepta updater function (prev) => next, mismo
+  // patrón que useState de React.
+  describe("setValue acepta updater function (M-06)", () => {
+    it("uncontrolled: updater recibe prev value y actualiza state", () => {
+      const { result } = renderHook(() =>
+        useControllableState<number>({ defaultValue: 0 }),
+      );
+      act(() => {
+        result.current.setValue((prev) => prev + 1);
+      });
+      expect(result.current.value).toBe(1);
+      act(() => {
+        result.current.setValue((prev) => prev + 10);
+      });
+      expect(result.current.value).toBe(11);
+    });
+
+    it("uncontrolled: updater dispara onChange con el valor resuelto", () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() =>
+        useControllableState<number>({ defaultValue: 5, onChange }),
+      );
+      act(() => {
+        result.current.setValue((prev) => prev * 2);
+      });
+      expect(onChange).toHaveBeenCalledWith(10);
+      expect(result.current.value).toBe(10);
+    });
+
+    it("controlled: updater recibe value controlado y dispara onChange (no internal state)", () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() =>
+        useControllableState<number>({ value: 7, onChange }),
+      );
+      act(() => {
+        result.current.setValue((prev) => prev + 3);
+      });
+      // Controlled: el value externo (7) sigue siendo el value (no se
+      // actualiza state interno) — pero onChange recibe el resuelto (10).
+      expect(onChange).toHaveBeenCalledWith(10);
+      expect(result.current.value).toBe(7);
+    });
+
+    it("derive: updater recibe valor derivado actual y llama setDerivedValue con resuelto", () => {
+      function useTest() {
+        const [src, setSrc] = useState<number>(2);
+        const hook = useControllableState<number>({
+          derive: () => src,
+          setDerivedValue: setSrc,
+        });
+        return { ...hook, src };
+      }
+      const { result } = renderHook(() => useTest());
+      expect(result.current.value).toBe(2);
+      act(() => {
+        result.current.setValue((prev) => prev * 5);
+      });
+      expect(result.current.value).toBe(10);
+      expect(result.current.src).toBe(10);
+    });
+
+    it("silent: updater + silent suprime onChange pero aplica el resuelto", () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() =>
+        useControllableState<number>({ defaultValue: 0, onChange }),
+      );
+      act(() => {
+        result.current.setValue((prev) => prev + 1, { silent: true });
+      });
+      expect(result.current.value).toBe(1);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("valor directo sigue funcionando (backwards-compat)", () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() =>
+        useControllableState<number>({ defaultValue: 0, onChange }),
+      );
+      act(() => {
+        result.current.setValue(42);
+      });
+      expect(result.current.value).toBe(42);
+      expect(onChange).toHaveBeenCalledWith(42);
+    });
+  });
 });
