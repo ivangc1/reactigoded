@@ -607,25 +607,31 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     }
 
     it("custom no-forward dispara dev-warn explicativo tras delay", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      function MyCustom({ children }: { children: ReactNode }) {
-        return <div>{children}</div>;
+      vi.useFakeTimers();
+      try {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        function MyCustom({ children }: { children: ReactNode }) {
+          return <div>{children}</div>;
+        }
+        render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
+        // Pre-delay: warn NO se ha disparado (check diferido por setTimeout).
+        expect(hasM07Warn(warn)).toBe(false);
+        // Avanzar el reloj fake hasta cubrir el setTimeout interno (300ms)
+        // — useFloating tuvo tiempo de poblar refs, pero como el child no
+        // forwardea, sigue null.
+        await vi.advanceTimersByTimeAsync(400);
+        const m07Calls = warn.mock.calls.filter(
+          (c) =>
+            typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
+        );
+        expect(m07Calls).toHaveLength(1);
+        const msg = m07Calls[0]?.[0] as string;
+        expect(msg).toMatch(/MyCustom/);
+        expect(msg).toMatch(/forwardRef/);
+        warn.mockRestore();
+      } finally {
+        vi.useRealTimers();
       }
-      render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
-      // Pre-delay: warn NO se ha disparado (check diferido por setTimeout).
-      expect(hasM07Warn(warn)).toBe(false);
-      // Esperar al setTimeout (50ms + buffer) — useFloating tuvo
-      // tiempo de poblar refs, pero como el child no forwardea, sigue null.
-      await new Promise((r) => setTimeout(r, 400));
-      const m07Calls = warn.mock.calls.filter(
-        (c) =>
-          typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
-      );
-      expect(m07Calls).toHaveLength(1);
-      const msg = m07Calls[0]?.[0] as string;
-      expect(msg).toMatch(/MyCustom/);
-      expect(msg).toMatch(/forwardRef/);
-      warn.mockRestore();
     });
 
     it("custom no-forward: aria-describedby SÍ se setea (sr-only sigue funcionando)", () => {
@@ -644,38 +650,48 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     });
 
     it("DOM intrinsic child (button) NO dispara el warn tras delay", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      render(
-        <Tooltip text="hint">
-          <button>X</button>
-        </Tooltip>,
-      );
-      await new Promise((r) => setTimeout(r, 400));
-      expect(hasM07Warn(warn)).toBe(false);
-      warn.mockRestore();
+      vi.useFakeTimers();
+      try {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        render(
+          <Tooltip text="hint">
+            <button>X</button>
+          </Tooltip>,
+        );
+        await vi.advanceTimersByTimeAsync(400);
+        expect(hasM07Warn(warn)).toBe(false);
+        warn.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("forwardRef (React 19 ref-as-prop) NO dispara el warn tras delay", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      function MyForwarded({
-        ref,
-        children,
-        ...rest
-      }: {
-        ref?: Ref<HTMLButtonElement>;
-        children: ReactNode;
-        [k: string]: unknown;
-      }) {
-        return (
-          <button ref={ref} {...rest}>
-            {children}
-          </button>
-        );
+      vi.useFakeTimers();
+      try {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        function MyForwarded({
+          ref,
+          children,
+          ...rest
+        }: {
+          ref?: Ref<HTMLButtonElement>;
+          children: ReactNode;
+          [k: string]: unknown;
+        }) {
+          return (
+            <button ref={ref} {...rest}>
+              {children}
+            </button>
+          );
+        }
+        render(<Tooltip text="hint"><MyForwarded>X</MyForwarded></Tooltip>);
+        await vi.advanceTimersByTimeAsync(400);
+        expect(hasM07Warn(warn)).toBe(false);
+        warn.mockRestore();
+      } finally {
+        vi.useRealTimers();
       }
-      render(<Tooltip text="hint"><MyForwarded>X</MyForwarded></Tooltip>);
-      await new Promise((r) => setTimeout(r, 400));
-      expect(hasM07Warn(warn)).toBe(false);
-      warn.mockRestore();
     });
 
     // Codex P2 sobre PR #71: child que renderiza null inicialmente y
@@ -685,6 +701,12 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     // dando tiempo a que children lazy completen su ciclo. Si la
     // microtask que llama setShow(true) corre antes del setTimeout,
     // el button monta y refs.reference.current se popula a tiempo.
+    // NOTA: este test mantiene timers reales (no vi.useFakeTimers).
+    // El child setea state vía queueMicrotask en useEffect, y
+    // combinar microtask + setState + fake timers + findByText
+    // resulta en un re-render no envuelto en act(). Coste: 400ms
+    // reales solo en este test. Los otros 3 tests del bloque usan
+    // fake timers (cero coste).
     it("child que renderiza null inicialmente y luego un button NO dispara false positive", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       function DelayedButton({
@@ -704,9 +726,6 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
         return <button ref={ref}>{children}</button>;
       }
       render(<Tooltip text="hint"><DelayedButton>X</DelayedButton></Tooltip>);
-      // Esperar a que el button monte (microtask) + a que el setTimeout
-      // del warn dispare (50ms). El button ya estará montado y el ref
-      // populated cuando el check corra.
       await screen.findByText("X");
       await new Promise((r) => setTimeout(r, 400));
       expect(hasM07Warn(warn)).toBe(false);
