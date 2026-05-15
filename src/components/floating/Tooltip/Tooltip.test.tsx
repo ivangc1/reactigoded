@@ -117,23 +117,34 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     expect(document.querySelector(".ig-tooltip-place-top")).toBeNull();
   });
 
-  describe.each(["top", "right", "bottom", "left"] as const)(
-    "placement=%s",
-    (p) => {
-      it(`portal aplica clase ig-tooltip-place-${p} al abrir`, async () => {
-        const user = userEvent.setup();
-        render(
-          <Tooltip text="x" placement={p}>
-            <button>x</button>
-          </Tooltip>,
-        );
-        await user.hover(screen.getByRole("button"));
-        expect(
-          document.querySelector(`.ig-tooltip-place-${p}`),
-        ).not.toBeNull();
-      });
-    },
-  );
+  // M-04 (RC1): los 12 placements de Floating UI (4 sides × 3 alignments).
+  describe.each([
+    "top",
+    "top-start",
+    "top-end",
+    "right",
+    "right-start",
+    "right-end",
+    "bottom",
+    "bottom-start",
+    "bottom-end",
+    "left",
+    "left-start",
+    "left-end",
+  ] as const)("placement=%s", (p) => {
+    it(`portal aplica clase ig-tooltip-place-${p} al abrir`, async () => {
+      const user = userEvent.setup();
+      render(
+        <Tooltip text="x" placement={p}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      await user.hover(screen.getByRole("button"));
+      expect(
+        document.querySelector(`.ig-tooltip-place-${p}`),
+      ).not.toBeNull();
+    });
+  });
 
   describe.each([
     ["brand"],
