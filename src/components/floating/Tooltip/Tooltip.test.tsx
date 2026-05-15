@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef, useState, type ReactNode, type Ref } from "react";
+import { createRef, useEffect, useState, type ReactNode, type Ref } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -695,11 +695,11 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
         children: ReactNode;
       }) {
         const [show, setShow] = useState(false);
-        useState(() => {
+        useEffect(() => {
           queueMicrotask(() => {
             setShow(true);
           });
-        });
+        }, []);
         if (!show) return null;
         return <button ref={ref}>{children}</button>;
       }
