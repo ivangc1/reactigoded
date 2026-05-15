@@ -95,7 +95,7 @@ import {
   TabsContent,
   Tabs,
   Textarea,
-  ThemeSwitch,
+  ThemeToggle,
   Timeline,
   TimelineItem,
   Toast,
@@ -419,9 +419,9 @@ const cases: SsrCase[] = [
     expects: "ig-textarea",
   },
   {
-    name: "ThemeSwitch",
-    jsx: () => <ThemeSwitch defaultTheme="light" />,
-    // ThemeSwitch derive lee `document` solo en effect — server NO toca DOM.
+    name: "ThemeToggle",
+    jsx: () => <ThemeToggle defaultTheme="light" />,
+    // ThemeToggle derive lee `document` solo en effect — server NO toca DOM.
     expects: 'role="switch"',
   },
   {

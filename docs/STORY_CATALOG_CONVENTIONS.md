@@ -41,7 +41,7 @@ regla axe `landmark-unique`.
 ```
 
 **Componentes afectados (verificados en beta.19/20)**: Breadcrumb,
-Pagination, Sidebar, SidebarNav, Navbar, NavbarNav, ThemeSwitch (si
+Pagination, Sidebar, SidebarNav, Navbar, NavbarNav, ThemeToggle (si
 está dentro de `<header>`).
 
 ---
