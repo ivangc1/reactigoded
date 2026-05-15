@@ -122,6 +122,19 @@ export function Avatar(props: AvatarProps) {
       : false;
   const showImg = src && !imgFailed;
 
+  // Codex P2 post-audit sobre PR #36: cuando la imagen falla y caemos
+  // a initials, los descendants quedan con aria-hidden="true" → el
+  // avatar pierde el `alt` que era su único accessible name. Si el
+  // consumer pasó `src`+`alt` y luego la URL falla, el SR queda mudo.
+  // Fix: cuando estamos en fallback de imagen, exponer `alt` (o el
+  // ariaLabel del consumer, con prioridad) como aria-label del wrapper
+  // con role="img". Para avatares puramente decorativos (initials sin
+  // alt ni ariaLabel) el avatar sigue siendo silencioso — decisión
+  // consciente del consumer al no pasar nombre.
+  const fallbackAccessibleName =
+    ariaLabel ?? (showInitials && src && alt ? alt : undefined);
+  const effectiveRole = fallbackAccessibleName ? "img" : undefined;
+
   return (
     <div
       ref={ref}
@@ -131,8 +144,8 @@ export function Avatar(props: AvatarProps) {
         rounded && "ig-avatar-rounded",
         className,
       )}
-      role={ariaLabel ? "img" : undefined}
-      aria-label={ariaLabel}
+      role={effectiveRole}
+      aria-label={fallbackAccessibleName}
       {...divProps}
     >
       {showImg && (

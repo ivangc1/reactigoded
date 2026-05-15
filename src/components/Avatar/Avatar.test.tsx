@@ -124,3 +124,49 @@ describe("Avatar — AllStates regression", () => {
     expect(container.querySelector(".ig-avatar-rounded")).not.toBeNull();
   });
 });
+
+// Codex P2 post-audit sobre PR #36: cuando la img falla y caemos a
+// initials, los descendants son aria-hidden → el avatar pierde el
+// `alt` que era su único accessible name. Fix: el wrapper recibe
+// role=img + aria-label=alt en fallback mode.
+describe("Avatar — fallback aria-label preserva alt (codex P2 post-audit)", () => {
+  it("img falla con alt: wrapper queda con role=img + aria-label=alt", () => {
+    const { container } = render(
+      <Avatar src="invalid://broken.url" alt="Iván Goded" initials="IG" />,
+    );
+    const wrapper = container.querySelector(".ig-avatar");
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    fireEvent.error(img!);
+    // Tras fallback: wrapper expone alt como accessible name.
+    expect(wrapper?.getAttribute("role")).toBe("img");
+    expect(wrapper?.getAttribute("aria-label")).toBe("Iván Goded");
+  });
+
+  it("img falla con alt='' (vacío) y sin ariaLabel: avatar queda silencioso (decisión consciente)", () => {
+    const { container } = render(
+      <Avatar src="invalid://broken.url" alt="" initials="IG" />,
+    );
+    const wrapper = container.querySelector(".ig-avatar");
+    const img = container.querySelector("img");
+    fireEvent.error(img!);
+    // alt vacío (falsy) y sin aria-label explícito: sin nombre
+    // accesible → wrapper sin role/aria-label.
+    expect(wrapper?.hasAttribute("role")).toBe(false);
+    expect(wrapper?.hasAttribute("aria-label")).toBe(false);
+  });
+
+  it("aria-label explícito tiene prioridad sobre alt en fallback", () => {
+    const { container } = render(
+      <Avatar
+        src="invalid://broken.url"
+        alt="alt val"
+        aria-label="custom"
+        initials="X"
+      />,
+    );
+    const wrapper = container.querySelector(".ig-avatar");
+    fireEvent.error(container.querySelector("img")!);
+    expect(wrapper?.getAttribute("aria-label")).toBe("custom");
+  });
+});
