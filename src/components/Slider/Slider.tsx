@@ -1,3 +1,5 @@
+"use client";
+
 import type { InputHTMLAttributes, Ref } from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";

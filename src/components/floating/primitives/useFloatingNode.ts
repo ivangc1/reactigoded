@@ -1,3 +1,5 @@
+"use client";
+
 import { useFloatingNodeId, useFloatingParentNodeId } from "@floating-ui/react";
 
 /**

@@ -1,4 +1,12 @@
-"use client";
+// H-09 (RC1): `"use client"` granular por archivo en lugar de global en
+// este barrel. Los componentes que dependen de hooks React, browser APIs
+// o context interno llevan `"use client";` en su propio archivo (47 de
+// 92 archivos source — ~51% del DS). Los presentacionales puros (Card
+// subcomponents, Dialog body/footer/close, Sidebar items, Navbar pieces,
+// Skeleton, Spinner, Badge, Progress, Divider, Timeline, etc.) son
+// server-safe y pueden renderizarse desde React Server Components sin
+// forzar boundary client en el árbol consumer.
+
 /**
  * Igoded Design System — entry point del paquete.
  *

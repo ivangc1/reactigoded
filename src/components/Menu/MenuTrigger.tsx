@@ -1,3 +1,5 @@
+"use client";
+
 import { useMergeRefs } from "@floating-ui/react";
 import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
