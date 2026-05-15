@@ -157,19 +157,30 @@ export function Pagination({
   // beta.20: Pagination soporta controlled + uncontrolled vía
   // useControllableState. En uncontrolled, el state interno arranca en
   // defaultPage y onValueChange (si existe) actúa como side-effect.
+  //
+  // Codex P2 post-audit sobre PR #19: clamp defaultPage AL ENTRAR al
+  // state, no solo en render. Pre-fix: si defaultPage=10 con totalPages=3,
+  // el render mostraba página 3 (clamp safeCurrent) pero el state
+  // interno guardaba 10 raw. Si después totalPages subía a 15, la UI
+  // saltaba a página 10 sin acción del usuario (state stale emerge).
+  // Fix: pre-clamp contra totalPages al entrar al hook.
+  const preClampedSafeTotal = Math.max(1, Math.floor(totalPages || 1));
+  const sanitizedDefaultPage = Math.min(
+    Math.max(1, Math.floor(defaultPage || 1)),
+    preClampedSafeTotal,
+  );
   const { value: page, setValue: setPage } = useControllableState<number>({
     value: currentPage,
-    defaultValue: defaultPage,
+    defaultValue: sanitizedDefaultPage,
     onChange: onValueChange,
   });
 
-  // Clamps: el componente jamás debe renderizar páginas fuera de rango
-  // ni dejar el `aria-current` huérfano si el consumer pasa basura.
-  // Cualquier non-finite o ≤ 0 cae a defaults seguros (totalPages=1,
-  // currentPage=1, siblingCount=0).
+  // Clamps en render: el componente jamás debe renderizar páginas fuera
+  // de rango ni dejar el `aria-current` huérfano si el consumer pasa
+  // basura. Cualquier non-finite o ≤ 0 cae a defaults seguros.
   // `|| 1` cubre 0, NaN e -Infinity por la coerción de OR a falsy/finite.
   // Math.floor + max/min normaliza Infinity y negativos.
-  const safeTotal = Math.max(1, Math.floor(totalPages || 1));
+  const safeTotal = preClampedSafeTotal;
   const safeCurrent = Math.min(
     Math.max(1, Math.floor(page || 1)),
     safeTotal,

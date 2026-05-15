@@ -556,4 +556,56 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
       expect(onActive).toHaveBeenLastCalledWith(2);
     });
   });
+
+  // Codex P1 post-audit sobre PR #19: si el padre rechaza una
+  // transición (no commitea active), `focusTargetIdxRef` queda stale.
+  // Cuando posteriormente el padre commitea una transición DISTINTA,
+  // el guard `idx !== clampedActive` debe abortar para evitar que el
+  // focus salte al idx rechazado antiguo.
+  describe("guard idx-mismatch en focus (codex P1 post-audit)", () => {
+    it("padre rechaza ArrowRight, luego commitea idx distinto: focus NO va al idx rechazado", async () => {
+      const user = userEvent.setup();
+      function Harness() {
+        const [active, setActive] = useState(0);
+        return (
+          <>
+            <button
+              data-testid="set-2"
+              onClick={() => {
+                setActive(2);
+              }}
+            >
+              set 2
+            </button>
+            <Stepper
+              active={active}
+              onValueChange={(next) => {
+                // Padre rechaza si next === 1 (simulación de validación).
+                if (next === 1) return;
+                setActive(next);
+              }}
+            >
+              <Step label="S0" />
+              <Step label="S1" />
+              <Step label="S2" />
+            </Stepper>
+          </>
+        );
+      }
+      render(<Harness />);
+      const dots = document.querySelectorAll<HTMLElement>(
+        '.ig-step[role="button"]',
+      );
+      const step0 = dots[0];
+      step0?.focus();
+      // ArrowRight: intent=1, padre rechaza. focusTargetIdxRef queda en 1.
+      await user.keyboard("{ArrowRight}");
+      expect(step0).toHaveFocus();
+      // Padre commitea programáticamente idx=2 (distinto del rechazado).
+      await user.click(screen.getByTestId("set-2"));
+      // Guard debe abortar: focus NO va al idx=1 stale.
+      // Lo crítico es que el focus NO termine en el step 1 (idx stale).
+      expect(dots[1]).not.toHaveFocus();
+    });
+  });
 });

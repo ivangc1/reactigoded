@@ -162,6 +162,17 @@ export function Stepper({
     if (focusTargetIdxRef.current === null) return;
     const idx = focusTargetIdxRef.current;
     focusTargetIdxRef.current = null;
+    // Codex P1 post-audit sobre PR #19: si el consumer rechaza la
+    // transición (no actualiza `active`), clampedActive no cambia y
+    // este effect no fire — pero el ref queda apuntando al idx
+    // rechazado. Posteriormente, cuando el padre SÍ commitea una
+    // transición distinta (ej. un set programático de active), el
+    // effect fire con el ref stale y movería focus al idx ANTIGUO.
+    // Guard: solo movemos focus si el idx solicitado coincide con
+    // el clampedActive committed. Si no coincide, el padre rechazó
+    // o cambió la transición — abortamos para mantener focus
+    // sincronizado con el active real.
+    if (idx !== clampedActive) return;
     // data-step-index resuelve por índice lógico, no por orden DOM —
     // robusto contra conditional rendering, Steps decorativos sin
     // role=button intercalados o CSS reordering. Step.tsx inyecta el

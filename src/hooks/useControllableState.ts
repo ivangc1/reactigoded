@@ -262,14 +262,22 @@ export function useControllableState<T>(
     (action: SetValueAction<T>, setOptions?: SetValueOptions) => {
       // M-06 (RC1): si el caller pasa una function, la invocamos contra
       // el pending value para producir el siguiente. Si pasa un valor
-      // directo, se usa tal cual. Tras resolver, advanzamos el ref para
-      // permitir chaining `setValue(p=>p+1); setValue(p=>p+1)` → +2.
+      // directo, se usa tal cual.
       const resolved =
         typeof action === "function"
           ? (action as (prev: T) => T)(pendingValueRef.current)
           : action;
-      pendingValueRef.current = resolved;
+      // Codex P1 post-audit sobre PR #70: solo advance pendingValueRef
+      // en modo NO-controlled. En controlled el padre es la fuente de
+      // verdad — si rechaza el commit (no actualiza `value` prop), no
+      // hay re-render, useIsoLayoutEffect no resincroniza el ref, y
+      // siguientes setValue chained leerían pending stale produciendo
+      // onChange con payloads incorrectos. En controlled, cada setValue
+      // parte del último valor committed por el padre (pendingValueRef
+      // se mantiene sincronizado vía useIsoLayoutEffect cuando el
+      // padre sí commitea).
       if (!isControlledRef.current) {
+        pendingValueRef.current = resolved;
         const setDerivedValue = setDerivedValueRef.current;
         if (setDerivedValue) {
           setDerivedValue(resolved);
