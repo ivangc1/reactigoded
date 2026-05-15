@@ -328,14 +328,21 @@ export function Tooltip({
   // explica el síntoma y la solución (`forwardRef` o, React 19+,
   // aceptar `ref` como prop normal).
   //
-  // Estrategia: post-mount, verificar que `refs.reference.current` es
-  // un Element. Si es null/undefined tras commit, el cloneElement
-  // inyectó el ref pero el child custom no lo conectó al DOM.
+  // Estrategia (codex P2 sobre PR #71): el check se difiere con
+  // setTimeout para permitir que children "lazy" (que renderizan
+  // null inicialmente y montan el DOM en un render posterior por
+  // state/effect/data) hayan completado su ciclo. Si tras el delay
+  // el ref sigue null, es un bug real — el child no forwardea o
+  // nunca renderiza un Element. No usamos `isOpen` como trigger
+  // porque sin ref, useFloating no tiene anchor para useHover y el
+  // tooltip nunca se abre — el warn nunca dispararía.
   const warnedNoForwardRefRef = useRef(false);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (warnedNoForwardRefRef.current) return;
-    if (refs.reference.current == null) {
+    const t = setTimeout(() => {
+      if (warnedNoForwardRefRef.current) return;
+      if (refs.reference.current != null) return;
       warnedNoForwardRefRef.current = true;
       const childType = children.type;
       const typeName =
@@ -351,7 +358,10 @@ export function Tooltip({
           `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
           `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
       );
-    }
+    }, 50);
+    return () => {
+      clearTimeout(t);
+    };
   }, [children.type, refs.reference]);
 
   // Inyectar handlers/refs de Floating UI MERGEADOS con los del child:

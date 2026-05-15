@@ -593,20 +593,37 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
   });
 
   // M-07 (RC1 gate review): dev warn cuando el child custom no
-  // forwardea ref. Sin ref, Floating UI no puede medir el trigger.
+  // forwardea ref. El check se difiere hasta que el tooltip intenta
+  // abrirse (`isOpen` true) para evitar false positives con children
+  // que renderizan null inicialmente y montan el DOM más tarde.
   describe("Tooltip con custom component child — M-07", () => {
-    it("custom no-forward dispara dev-warn explicativo", () => {
+    function hasM07Warn(warn: {
+      mock: { calls: unknown[][] };
+    }): boolean {
+      return warn.mock.calls.some(
+        (c) =>
+          typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
+      );
+    }
+
+    it("custom no-forward dispara dev-warn explicativo tras delay", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      // Custom component que ignora props.ref — el ref de Tooltip nunca
-      // llega al nodo DOM real.
       function MyCustom({ children }: { children: ReactNode }) {
         return <div>{children}</div>;
       }
       render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
-      expect(warn).toHaveBeenCalledOnce();
-      const msg = warn.mock.calls[0]?.[0] as string;
+      // Pre-delay: warn NO se ha disparado (check diferido por setTimeout).
+      expect(hasM07Warn(warn)).toBe(false);
+      // Esperar al setTimeout (50ms + buffer) — useFloating tuvo
+      // tiempo de poblar refs, pero como el child no forwardea, sigue null.
+      await new Promise((r) => setTimeout(r, 100));
+      const m07Calls = warn.mock.calls.filter(
+        (c) =>
+          typeof c[0] === "string" && c[0].includes("no expone su nodo DOM"),
+      );
+      expect(m07Calls).toHaveLength(1);
+      const msg = m07Calls[0]?.[0] as string;
       expect(msg).toMatch(/MyCustom/);
-      expect(msg).toMatch(/no expone su nodo DOM via ref/);
       expect(msg).toMatch(/forwardRef/);
       warn.mockRestore();
     });
@@ -626,23 +643,19 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       warn.mockRestore();
     });
 
-    it("DOM intrinsic child (button) NO dispara el warn", () => {
+    it("DOM intrinsic child (button) NO dispara el warn tras delay", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       render(
         <Tooltip text="hint">
           <button>X</button>
         </Tooltip>,
       );
-      // Solo warns relacionados con M-07. Pueden existir otros warns
-      // legítimos (text empty, etc.) pero NO el de no-forward.
-      const m07Calls = warn.mock.calls.filter((c) =>
-        typeof c[0] === "string" ? c[0].includes("no expone su nodo DOM") : false,
-      );
-      expect(m07Calls).toHaveLength(0);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(hasM07Warn(warn)).toBe(false);
       warn.mockRestore();
     });
 
-    it("forwardRef (React 19 ref-as-prop) NO dispara el warn", () => {
+    it("forwardRef (React 19 ref-as-prop) NO dispara el warn tras delay", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       function MyForwarded({
         ref,
@@ -660,10 +673,43 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
         );
       }
       render(<Tooltip text="hint"><MyForwarded>X</MyForwarded></Tooltip>);
-      const m07Calls = warn.mock.calls.filter((c) =>
-        typeof c[0] === "string" ? c[0].includes("no expone su nodo DOM") : false,
-      );
-      expect(m07Calls).toHaveLength(0);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(hasM07Warn(warn)).toBe(false);
+      warn.mockRestore();
+    });
+
+    // Codex P2 sobre PR #71: child que renderiza null inicialmente y
+    // luego monta un button (post-effect) NO debe disparar el warn.
+    // Pre-fix: el check post-mount inmediato veía refs null y emitía
+    // un warn falso positivo. Post-fix: el check usa setTimeout(50ms)
+    // dando tiempo a que children lazy completen su ciclo. Si la
+    // microtask que llama setShow(true) corre antes del setTimeout,
+    // el button monta y refs.reference.current se popula a tiempo.
+    it("child que renderiza null inicialmente y luego un button NO dispara false positive", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function DelayedButton({
+        ref,
+        children,
+      }: {
+        ref?: Ref<HTMLButtonElement>;
+        children: ReactNode;
+      }) {
+        const [show, setShow] = useState(false);
+        useState(() => {
+          queueMicrotask(() => {
+            setShow(true);
+          });
+        });
+        if (!show) return null;
+        return <button ref={ref}>{children}</button>;
+      }
+      render(<Tooltip text="hint"><DelayedButton>X</DelayedButton></Tooltip>);
+      // Esperar a que el button monte (microtask) + a que el setTimeout
+      // del warn dispare (50ms). El button ya estará montado y el ref
+      // populated cuando el check corra.
+      await screen.findByText("X");
+      await new Promise((r) => setTimeout(r, 100));
+      expect(hasM07Warn(warn)).toBe(false);
       warn.mockRestore();
     });
   });
