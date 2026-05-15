@@ -4,7 +4,7 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.22`.
+> **Estado**: `1.0.0-beta.23`.
 > Paleta cardinal estable: 7 cardinales con geometría OKLCH dual
 > (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos
 > del tema en ambos modos. El cardinal `info` se llama internamente
