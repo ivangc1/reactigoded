@@ -26,7 +26,20 @@ const meta = {
     text: { control: "text" },
     placement: {
       control: "select",
-      options: ["top", "bottom", "left", "right"],
+      options: [
+        "top",
+        "top-start",
+        "top-end",
+        "right",
+        "right-start",
+        "right-end",
+        "bottom",
+        "bottom-start",
+        "bottom-end",
+        "left",
+        "left-start",
+        "left-end",
+      ],
     },
     variant: {
       control: "select",
@@ -70,6 +83,14 @@ export const PorDefecto: Story = {
 };
 
 export const Placements: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Los 12 placements de Floating UI: 4 sides (`top`, `right`, `bottom`, `left`) × 3 alignments (base, `-start`, `-end`). El `-start`/`-end` controla el offset de la flecha respecto al anchor.",
+      },
+    },
+  },
   decorators: [
     (Story) => (
       <div className="ig-story-frame ig-story-frame--lg">
@@ -78,19 +99,33 @@ export const Placements: Story = {
     ),
   ],
   render: () => (
-    <div className="ig-story-row ig-story-row--gap-lg">
-      <Tooltip text="Arriba" placement="top">
-        <Button variant="secondary">top</Button>
-      </Tooltip>
-      <Tooltip text="Abajo" placement="bottom">
-        <Button variant="secondary">bottom</Button>
-      </Tooltip>
-      <Tooltip text="Izquierda" placement="left">
-        <Button variant="secondary">left</Button>
-      </Tooltip>
-      <Tooltip text="Derecha" placement="right">
-        <Button variant="secondary">right</Button>
-      </Tooltip>
+    <div className="ig-story-stack ig-story-stack--md">
+      <div className="ig-story-row ig-story-row--gap-lg">
+        {(["top-start", "top", "top-end"] as const).map((p) => (
+          <Tooltip key={p} text={p} placement={p}>
+            <Button variant="secondary">{p}</Button>
+          </Tooltip>
+        ))}
+      </div>
+      <div className="ig-story-row ig-story-row--gap-lg">
+        {(["left-start", "left", "left-end"] as const).map((p) => (
+          <Tooltip key={p} text={p} placement={p}>
+            <Button variant="secondary">{p}</Button>
+          </Tooltip>
+        ))}
+        {(["right-start", "right", "right-end"] as const).map((p) => (
+          <Tooltip key={p} text={p} placement={p}>
+            <Button variant="secondary">{p}</Button>
+          </Tooltip>
+        ))}
+      </div>
+      <div className="ig-story-row ig-story-row--gap-lg">
+        {(["bottom-start", "bottom", "bottom-end"] as const).map((p) => (
+          <Tooltip key={p} text={p} placement={p}>
+            <Button variant="secondary">{p}</Button>
+          </Tooltip>
+        ))}
+      </div>
     </div>
   ),
 };

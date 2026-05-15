@@ -27,7 +27,24 @@ import {
 import { cn } from "@/utils/cn";
 import { useFloatingNode } from "../primitives/useFloatingNode";
 
-export type TooltipPlacement = "top" | "bottom" | "left" | "right";
+// M-04 (RC1): los 12 placements de Floating UI. 4 sides × 3 alignments
+// (base, -start, -end). Floating UI ya posiciona vía inline styles —
+// la clase `ig-tooltip-place-${placement}` queda como hook informativo
+// para consumers que quieran reglas CSS dirigidas (no añadimos reglas
+// concretas en el DS porque rompería el contrato "vacías en CSS").
+export type TooltipPlacement =
+  | "top"
+  | "top-start"
+  | "top-end"
+  | "right"
+  | "right-start"
+  | "right-end"
+  | "bottom"
+  | "bottom-start"
+  | "bottom-end"
+  | "left"
+  | "left-start"
+  | "left-end";
 
 export type TooltipVariant =
   | "brand"

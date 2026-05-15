@@ -7,6 +7,32 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **`Tooltip` ampliado a los 12 placements de Floating UI [M-04]**: el
+  type `TooltipPlacement` pasa de 4 (`top` / `bottom` / `left` / `right`)
+  a los **12 valores nativos** de Floating UI — 4 sides × 3 alignments
+  (base, `-start`, `-end`):
+
+  ```ts
+  type TooltipPlacement =
+    | "top" | "top-start" | "top-end"
+    | "right" | "right-start" | "right-end"
+    | "bottom" | "bottom-start" | "bottom-end"
+    | "left" | "left-start" | "left-end";
+  ```
+
+  Sin cambios CSS — las clases `.ig-tooltip-place-*` siguen siendo
+  hooks informativos vacíos (Floating UI posiciona vía inline styles).
+  La nueva clase `.ig-tooltip-place-top-start` y resto se emiten
+  automáticamente.
+
+  Sin breaking — los 4 placements antiguos siguen siendo válidos. Solo
+  amplía el conjunto de opciones permitidas.
+
+  Tests: `describe.each` ampliado a los 12 placements.
+  Stories: nuevo layout 3x3 + alas mostrando los 12 placements simultáneamente.
+
 ### Changed
 
 - **`"use client"` granular por archivo en lugar de global [H-09]**: el
