@@ -9,6 +9,28 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Added
 
+- **`Tooltip` dev-warn cuando custom child no forwardea ref [M-07]**:
+  cuando el `children` del Tooltip es un componente custom que ignora
+  el ref (sin `React.forwardRef` o sin aceptar `ref` como prop normal
+  en React 19), Floating UI no puede medir el trigger ni montar el
+  portal — el tooltip queda inerte al hover/focus pero el sr-only
+  span con `aria-describedby` sigue funcionando. Pre-RC1 el síntoma
+  era silencioso (consumer no sabía por qué el tooltip "no abre").
+
+  Ahora, en development, se emite un warn explicativo una vez por
+  instancia indicando el component name y la solución:
+
+  ```
+  [reactigoded] <Tooltip>: el child <MyCustom> no expone su nodo DOM
+  via ref. El tooltip no puede medir el trigger ni abrirse al hover/
+  focus. Usa React.forwardRef (React <19) o acepta `ref` como prop
+  normal (React 19+) y pásalo al elemento DOM root del componente.
+  aria-describedby sigue funcionando — el SR anuncia el texto del
+  tooltip pero el portal visual no aparece.
+  ```
+
+  No-op en producción (gated por `import.meta.env.DEV`).
+
 - **`useControllableState.setValue` acepta updater function [M-06]**: el
   setter del hook ahora acepta valor directo `T` **o** una función
   updater `(prev: T) => T` — mismo patrón que `useState` de React.

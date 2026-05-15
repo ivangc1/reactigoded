@@ -320,6 +320,40 @@ export function Tooltip({
   const childRef = children.props.ref ?? null;
   const referenceRef = useMergeRefs([refs.setReference, childRef]);
 
+  // M-07 (RC1 gate review): dev warn cuando el child es un custom
+  // component que NO forwardea ref. Sin ref, Floating UI no puede
+  // medir el trigger ni montar el portal — el tooltip queda inerte
+  // al hover/focus pero el aria-describedby sigue intacto (el sr-only
+  // span funciona). El consumer no tiene señal del fallo. Este warn
+  // explica el síntoma y la solución (`forwardRef` o, React 19+,
+  // aceptar `ref` como prop normal).
+  //
+  // Estrategia: post-mount, verificar que `refs.reference.current` es
+  // un Element. Si es null/undefined tras commit, el cloneElement
+  // inyectó el ref pero el child custom no lo conectó al DOM.
+  const warnedNoForwardRefRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (warnedNoForwardRefRef.current) return;
+    if (refs.reference.current == null) {
+      warnedNoForwardRefRef.current = true;
+      const childType = children.type;
+      const typeName =
+        typeof childType === "string"
+          ? childType
+          : (typeof childType === "function" &&
+              ((childType as { displayName?: string }).displayName ??
+                (childType as { name?: string }).name)) ||
+            "custom component";
+      console.warn(
+        `[reactigoded] <Tooltip>: el child <${typeName}> no expone su nodo DOM via ref. ` +
+          `El tooltip no puede medir el trigger ni abrirse al hover/focus. ` +
+          `Usa React.forwardRef (React <19) o acepta \`ref\` como prop normal (React 19+) y pásalo al elemento DOM root del componente. ` +
+          `aria-describedby sigue funcionando — el SR anuncia el texto del tooltip pero el portal visual no aparece.`,
+      );
+    }
+  }, [children.type, refs.reference]);
+
   // Inyectar handlers/refs de Floating UI MERGEADOS con los del child:
   // - `getReferenceProps(children.props)` pasa los props existentes,
   //   así Floating UI fusiona `onMouseEnter`/`onFocus`/`onBlur`/etc.

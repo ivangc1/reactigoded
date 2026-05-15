@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRef, useState, type ReactNode } from "react";
+import { createRef, useState, type ReactNode, type Ref } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -589,6 +589,82 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       // Ancestor también se cerró en cascada (recibió bubble dismiss
       // por estar registrado como FloatingNode padre del Tooltip).
       expect(onAncestorClose).toHaveBeenCalled();
+    });
+  });
+
+  // M-07 (RC1 gate review): dev warn cuando el child custom no
+  // forwardea ref. Sin ref, Floating UI no puede medir el trigger.
+  describe("Tooltip con custom component child — M-07", () => {
+    it("custom no-forward dispara dev-warn explicativo", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      // Custom component que ignora props.ref — el ref de Tooltip nunca
+      // llega al nodo DOM real.
+      function MyCustom({ children }: { children: ReactNode }) {
+        return <div>{children}</div>;
+      }
+      render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
+      expect(warn).toHaveBeenCalledOnce();
+      const msg = warn.mock.calls[0]?.[0] as string;
+      expect(msg).toMatch(/MyCustom/);
+      expect(msg).toMatch(/no expone su nodo DOM via ref/);
+      expect(msg).toMatch(/forwardRef/);
+      warn.mockRestore();
+    });
+
+    it("custom no-forward: aria-describedby SÍ se setea (sr-only sigue funcionando)", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function MyCustom(props: { children: ReactNode; [k: string]: unknown }) {
+        return <div data-testid="root" {...props} />;
+      }
+      render(<Tooltip text="hint"><MyCustom>X</MyCustom></Tooltip>);
+      const root = screen.getByTestId("root");
+      const id = root.getAttribute("aria-describedby");
+      expect(id).toBeTruthy();
+      const srOnly = id ? document.getElementById(id) : null;
+      expect(srOnly).not.toBeNull();
+      expect(srOnly).toHaveTextContent("hint");
+      warn.mockRestore();
+    });
+
+    it("DOM intrinsic child (button) NO dispara el warn", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      render(
+        <Tooltip text="hint">
+          <button>X</button>
+        </Tooltip>,
+      );
+      // Solo warns relacionados con M-07. Pueden existir otros warns
+      // legítimos (text empty, etc.) pero NO el de no-forward.
+      const m07Calls = warn.mock.calls.filter((c) =>
+        typeof c[0] === "string" ? c[0].includes("no expone su nodo DOM") : false,
+      );
+      expect(m07Calls).toHaveLength(0);
+      warn.mockRestore();
+    });
+
+    it("forwardRef (React 19 ref-as-prop) NO dispara el warn", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      function MyForwarded({
+        ref,
+        children,
+        ...rest
+      }: {
+        ref?: Ref<HTMLButtonElement>;
+        children: ReactNode;
+        [k: string]: unknown;
+      }) {
+        return (
+          <button ref={ref} {...rest}>
+            {children}
+          </button>
+        );
+      }
+      render(<Tooltip text="hint"><MyForwarded>X</MyForwarded></Tooltip>);
+      const m07Calls = warn.mock.calls.filter((c) =>
+        typeof c[0] === "string" ? c[0].includes("no expone su nodo DOM") : false,
+      );
+      expect(m07Calls).toHaveLength(0);
+      warn.mockRestore();
     });
   });
 });
