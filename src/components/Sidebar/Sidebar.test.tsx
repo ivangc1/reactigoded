@@ -108,10 +108,10 @@ describe("Sidebar — toggle (uncontrolled)", () => {
     ).toHaveAttribute("aria-controls", "my-sidebar");
   });
 
-  it("dispara onValueChange en cada toggle", () => {
+  it("dispara onCollapsedChange en cada toggle", () => {
     const onChange = vi.fn();
     render(
-      <Sidebar onValueChange={onChange}>
+      <Sidebar onCollapsedChange={onChange}>
         <SidebarFooter>
           <SidebarToggle />
         </SidebarFooter>
@@ -131,7 +131,7 @@ describe("Sidebar — controlled", () => {
       return (
         <>
           <button onClick={() => { setCollapsed(false); }}>externo</button>
-          <Sidebar collapsed={collapsed} onValueChange={setCollapsed}>
+          <Sidebar collapsed={collapsed} onCollapsedChange={setCollapsed}>
             <SidebarFooter>
               <SidebarToggle />
             </SidebarFooter>

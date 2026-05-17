@@ -5,7 +5,7 @@ import { createContext, useContext } from "react";
 export interface SidebarContextValue {
   /** Si la sidebar está colapsada (modo "rail" sólo iconos). */
   collapsed: boolean;
-  /** Cambia el estado y dispara `onValueChange`. */
+  /** Cambia el estado y dispara `onCollapsedChange`. */
   setCollapsed: (next: boolean) => void;
   /**
    * Id del `<aside>` (útil para que `<SidebarToggle>` referencie su
