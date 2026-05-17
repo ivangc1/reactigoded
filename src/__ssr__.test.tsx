@@ -23,6 +23,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { renderToString } from "react-dom/server";
+import { hydrateRoot, type Root } from "react-dom/client";
 import {
   Accordion,
   AccordionContent,
@@ -475,6 +476,136 @@ describe("SSR — renderToString por componente del DS", () => {
       // Cualquier render en server NO debe contener side-effects de
       // DOM mutation (data-theme se aplica solo en useEffect del cliente).
       expect(html).not.toContain("data-theme=");
+    });
+  }
+});
+
+/**
+ * H-08 (beta.24 gate review): además del `renderToString` por
+ * componente, validamos el ciclo COMPLETO de SSR — server → hidratación
+ * cliente — sobre componentes representativos del DS. Esto cubre la
+ * categoría de bug que `renderToString` solo no caza:
+ *
+ *   1. **Hydration mismatch**: el HTML server difiere del primer paint
+ *      cliente. React emite warning + reconstruye el subtree, perdiendo
+ *      estado y eventos handler. `onRecoverableError` lo expone como
+ *      error capturable en tests.
+ *   2. **useId mismatch**: si el componente usa `useId()` pero el
+ *      orden de tree es no-determinístico entre server y cliente, los
+ *      IDs divergen. React 19 garantiza determinismo si el tree es
+ *      idéntico — este test confirma que NUESTROS componentes lo son.
+ *   3. **DOM mutation post-hydrate**: el server escribió un HTML, pero
+ *      el primer render cliente lo sobreescribe (effect síncrono mal
+ *      diseñado). Catch: comparar `innerHTML` antes y después de
+ *      hidratar.
+ *
+ * Selección 4 componentes representativos (no toda la suite — los 38
+ * `renderToString` cases ya cubren server-safety; hidratación es un
+ * spot check del ciclo completo):
+ *
+ *   - **Button**: golden path simple, sin context ni useId. Si esto
+ *     falla, algo está roto a nivel infraestructura.
+ *   - **Card (compound)**: contenedor con children compound (Header,
+ *     Body, Footer). Caso típico de layout server-rendered.
+ *   - **Accordion (controlled state)**: tiene estado interno
+ *     (`open`/`closed`) + `useId()` para aria-controls. Stress test del
+ *     server snapshot ↔ client hydrate sync.
+ *   - **Tabs (compound + useId)**: usa `useId()` extensivamente para
+ *     trigger/panel pairing. Caso histórico de mismatch en DSs que
+ *     no aíslan el ID counter correctamente.
+ *
+ * Componentes que NO se incluyen (decisión consciente):
+ *   - **Dialog / Menu / Tooltip / Toast**: client-only por design
+ *     (portales, "use client" granular, FUI). El consumer NO los
+ *     server-renderiza; meterlos en hydrateRoot tests probaría algo
+ *     que no es invariante del DS.
+ *   - **ThemeToggle / Switch indeterminate**: usan
+ *     `useSyncExternalStore` con server snapshot fijo. Su SSR es
+ *     trivial (renderToString ya lo cubre) y el ciclo de hidratación
+ *     pasaría sin información — añadir es ruido.
+ */
+const HYDRATE_CASES: { name: string; jsx: () => ReactElement }[] = [
+  { name: "Button", jsx: () => <Button>Aceptar</Button> },
+  {
+    name: "Card (compound)",
+    jsx: () => (
+      <Card>
+        <CardHeader title="Título" />
+        <CardBody>cuerpo</CardBody>
+        <CardFooter>pie</CardFooter>
+      </Card>
+    ),
+  },
+  {
+    name: "Accordion (controlled state)",
+    jsx: () => (
+      <Accordion type="single" defaultValue="a">
+        <AccordionItem value="a">
+          <AccordionHeader>A</AccordionHeader>
+          <AccordionContent>contenido a</AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    ),
+  },
+  {
+    name: "Tabs (compound + useId)",
+    jsx: () => (
+      <Tabs defaultValue="a">
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">contenido</TabsContent>
+      </Tabs>
+    ),
+  },
+];
+
+describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
+  for (const c of HYDRATE_CASES) {
+    it(`${c.name}: hidrata sin mismatch ni DOM mutation`, () => {
+      // 1. Server render → HTML estático.
+      // eslint-disable-next-line testing-library/render-result-naming-convention -- `serverHtml` viene de renderToString, no del `render` de testing-library; la regla no aplica.
+      const serverHtml = renderToString(c.jsx());
+
+      // 2. Montar el HTML en un container DOM real (happy-dom). Esto
+      //    simula lo que el browser recibe del server antes de bootstrap.
+      const container = document.createElement("div");
+      container.innerHTML = serverHtml;
+      document.body.appendChild(container);
+
+      // 3. Snapshot pre-hydrate para detectar mutaciones post-hidratación.
+      const htmlBeforeHydrate = container.innerHTML;
+
+      // 4. Hidratar. `onRecoverableError` captura mismatch warnings que
+      //    React 19 trata como recoverable (vs lanzados). Cualquier
+      //    error aquí indica un bug de hidratación: text mismatch, attr
+      //    mismatch, useId divergente, etc.
+      //
+      //    No envolvemos en `act()` porque `hydrateRoot` commitea
+      //    synchronously y la API de `act` en React 19 tiene un
+      //    overload void cuando el callback retorna void que rompe
+      //    `await` con la regla `@typescript-eslint/await-thenable`.
+      //    Los assertions abajo son síncronas (DOM snapshot + array
+      //    push de errors) y no dependen de effects post-commit.
+      const recoverableErrors: unknown[] = [];
+      const root: Root = hydrateRoot(container, c.jsx(), {
+        onRecoverableError: (err) => {
+          recoverableErrors.push(err);
+        },
+      });
+
+      // 5. Assertions:
+      //    - No errores recoverables (no mismatch).
+      //    - DOM intacto post-hidratación (React reuse del HTML server,
+      //      no re-mount).
+      expect(recoverableErrors).toEqual([]);
+      expect(container.innerHTML).toBe(htmlBeforeHydrate);
+
+      // 6. Cleanup: unmount + remove container del documento. Sin esto,
+      //    el React state queda colgado entre tests y los counters de
+      //    useId acumulan ruido entre casos.
+      root.unmount();
+      container.remove();
     });
   }
 });

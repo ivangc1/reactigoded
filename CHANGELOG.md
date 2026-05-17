@@ -216,6 +216,47 @@ Decision docs: `docs/decisions/D9-size-limit-baseline.md` (nuevo),
 `docs/decisions/H-07-state-css-and-future.md` (actualizado con
 pointer al gate).
 
+---
+
+**H-08 — hydrateRoot SSR tests** (B2-PR6):
+
+Extensión de la suite SSR (`src/__ssr__.test.tsx`) con 4 nuevos casos
+que ejercitan el **ciclo completo** server → cliente: `renderToString`
+→ mount en `<div>` DOM → `hydrateRoot` con `onRecoverableError` →
+assert no mismatch + DOM intacto post-hidratación. Cubre la categoría
+de bugs que `renderToString` solo no caza:
+
+1. **Hydration mismatch**: HTML server difiere del primer paint
+   cliente. React reconstruye el subtree y pierde estado/handlers.
+2. **useId divergente**: si la posición de tree es no-determinística
+   entre server y cliente, los IDs no matchean. React 19 garantiza
+   determinismo si el tree es idéntico — este test confirma que los
+   componentes del DS lo son.
+3. **DOM mutation post-hydrate**: effect síncrono mal diseñado
+   sobreescribe el HTML del server.
+
+**Selección de 4 componentes representativos** (no toda la suite — los
+38 `renderToString` cases ya cubren server-safety; hidratación es spot
+check del ciclo completo):
+
+- **Button** — golden path simple, sin context ni useId.
+- **Card (compound)** — contenedor con children compound. Caso layout.
+- **Accordion (controlled state)** — estado `open/closed` interno +
+  `useId()` para aria-controls. Stress test snapshot ↔ hydrate sync.
+- **Tabs (compound + useId)** — `useId()` para trigger/panel pairing.
+  Caso histórico de mismatch en DSs que no aíslan ID counter.
+
+**Componentes excluidos** (decisión consciente, documentada en el
+test): Dialog/Menu/Tooltip/Toast (client-only por design, "use client"
+granular + portales — el consumer NO los server-renderiza),
+ThemeToggle/Switch indeterminate (`useSyncExternalStore` con server
+snapshot fijo, ya cubierto trivialmente por renderToString).
+
+Sin `act()` en el test: `hydrateRoot` commitea sincrónicamente y
+`onRecoverableError` se llama durante el commit; los assertions son
+sincronos (array push + DOM snapshot), no dependen de effects
+post-commit.
+
 ## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
 
 Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la
