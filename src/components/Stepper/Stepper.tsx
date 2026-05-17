@@ -182,27 +182,39 @@ export function Stepper({
     return rawActive;
   }, [rawActive, stepCount]);
 
-  // D5 codex P2 round 2 (sobre `8a35b8f`): persistir el clamp al
-  // estado interno cuando `stepCount` se reduce en modo uncontrolled.
-  // Sin esto, `rawActive` queda stale (el clamp arriba solo afecta el
-  // render, no el state committed). Si el consumer remueve steps
-  // dinámicamente y luego los re-añade, el componente "resurrecta" al
-  // índice viejo en lugar de mantenerse en el último visible.
+  // D5 codex P2 round 2 (sobre `8a35b8f`) + codex P1 round 3 (sobre
+  // `138c032`): persistir el clamp al estado interno cuando
+  // `stepCount` se reduce en modo uncontrolled. Sin esto, `rawActive`
+  // queda stale (el clamp visual solo afecta el render, no el state
+  // committed). Si el consumer remueve steps dinámicamente y luego
+  // los re-añade, el componente "resurrecta" al índice viejo en lugar
+  // de mantenerse en el último visible.
   //
-  // Patrón React docs "Resetting all state when a prop changes":
-  // tracking del prop previo en state + reset durante render (NO
-  // useEffect — la regla `react-hooks/set-state-in-effect` lo prohíbe,
-  // y un effect introduciría flash visual del valor stale antes del
-  // commit del clamp).
-  // https://react.dev/learn/you-might-not-need-an-effect#resetting-all-state-when-a-prop-changes
+  // El clamp NO es una interacción del usuario — es sincronización
+  // forzada por cambio de prop (stepCount). Por eso usamos
+  // `setActive(..., { silent: true })`: actualiza el state interno
+  // sin disparar `onActiveChange` (que está reservado para
+  // interacciones reales). Esto cierra los dos vectores:
+  //
+  //   - Codex P1 round 3: render-time `setActive(...)` SIN `silent`
+  //     invocaba `onActiveChange` durante render. Si el consumer hace
+  //     setState en su parent dentro del callback → warning Strict
+  //     Mode + re-render duplicado.
+  //   - Patrón canónico React docs "Resetting state when a prop
+  //     changes": render-time reset es correcto si el setter solo
+  //     toca state interno. La `silent` flag del hook
+  //     `useControllableState` está diseñada exactamente para esto
+  //     (auto-selects internos, rehidrataciones desde storage, y
+  //     ahora prop-driven sync).
   //
   // Solo aplica en uncontrolled — en controlled el consumer es dueño
   // del valor y debe sincronizarlo con stepCount externamente.
+  // https://react.dev/learn/you-might-not-need-an-effect#resetting-all-state-when-a-prop-changes
   const [prevStepCount, setPrevStepCount] = useState(stepCount);
   if (prevStepCount !== stepCount) {
     setPrevStepCount(stepCount);
     if (!isControlled && stepCount > 0 && rawActive > stepCount - 1) {
-      setActive(stepCount - 1);
+      setActive(stepCount - 1, { silent: true });
     }
   }
 
