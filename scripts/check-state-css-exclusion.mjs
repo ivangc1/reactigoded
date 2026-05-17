@@ -101,18 +101,20 @@ if (!existsSync(STATE_FRAGMENTS_DIR)) {
  * escape `\:` literal (el escape vive en el byte stream del archivo
  * CSS final, no se resuelve hasta el parsing del browser).
  *
- * Ignoramos `other.css` (red de seguridad del build script para
- * reglas sin pseudo detectable — su contenido es heterogéneo y
- * puede no tener el patrón class-prefix).
+ * Incluye `other.css` (codex P2 sobre `9e2258b`): el build script
+ * `build-state-css-fragments.mjs` bucketea ahí cualquier selector
+ * cuya pseudo no esté en `KNOWN_PSEUDOS` (red de seguridad para
+ * pseudos futuras autogeneradas). Excluirlo crearía un hueco
+ * exactly en el caso que este gate quiere cubrir. Si `other.css`
+ * tiene reglas sin el patrón `prefix\:ig-`, el regex simplemente
+ * no matchea — no añade falsos positivos al set de prefijos.
  */
 function discoverPrefixesFromFragments(dir) {
   const prefixes = new Set();
   // Pattern: `.<prefix>\:ig-` donde <prefix> es secuencia de [a-z0-9-].
   // El `\\:` en JS regex matchea el `\:` literal en el CSS final.
   const prefixRe = /\.([a-z][a-z0-9-]*)\\:ig-/g;
-  const files = readdirSync(dir).filter(
-    (f) => f.endsWith(".css") && f !== "other.css",
-  );
+  const files = readdirSync(dir).filter((f) => f.endsWith(".css"));
   for (const file of files) {
     const content = readFileSync(join(dir, file), "utf8");
     let match;
