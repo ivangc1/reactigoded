@@ -169,4 +169,37 @@ describe("Avatar — fallback aria-label preserva alt (codex P2 post-audit)", ()
     fireEvent.error(container.querySelector("img")!);
     expect(wrapper?.getAttribute("aria-label")).toBe("custom");
   });
+
+  // H-01 RC1 gate review beta.24 (audit EXC-A2-1 verificado): img
+  // falla SIN initials pero CON alt. Pre-fix gap: showInitials=false →
+  // fallbackAccessibleName se omitía → wrapper silencioso aunque alt
+  // estaba presente. Post-fix: aria-label fallback aplica siempre que
+  // imgFailed && alt, independiente de initials.
+  it("H-01: img falla SIN initials pero CON alt → wrapper queda con role=img + aria-label=alt", () => {
+    const { container } = render(
+      <Avatar src="invalid://broken.url" alt="Iván Goded" />,
+    );
+    const wrapper = container.querySelector(".ig-avatar");
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    fireEvent.error(img!);
+    // H-01 fix: aún sin initials, el alt preservado como accessible name.
+    expect(wrapper?.getAttribute("role")).toBe("img");
+    expect(wrapper?.getAttribute("aria-label")).toBe("Iván Goded");
+    // Sin initials: no hay span de fallback visual. Decisión consciente
+    // del consumer (no pasó initials). El SR sigue anunciando algo
+    // significativo gracias al alt-as-aria-label.
+    expect(container.querySelector("span[aria-hidden]")).toBeNull();
+  });
+
+  it("H-01: img falla SIN initials Y SIN alt → wrapper silencioso (decisión consciente)", () => {
+    const { container } = render(<Avatar src="invalid://broken.url" alt="" />);
+    const wrapper = container.querySelector(".ig-avatar");
+    const img = container.querySelector("img");
+    fireEvent.error(img!);
+    // Sin alt ni initials ni ariaLabel: consumer no proporcionó nombre.
+    // Wrapper silencioso es comportamiento esperado.
+    expect(wrapper?.hasAttribute("role")).toBe(false);
+    expect(wrapper?.hasAttribute("aria-label")).toBe(false);
+  });
 });
