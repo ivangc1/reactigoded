@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { Dialog } from "./Dialog";
+import { DialogContent } from "./DialogContent";
+import { DialogTrigger } from "./DialogTrigger";
 import { DialogHeader } from "./DialogHeader";
 import { DialogBody } from "./DialogBody";
 import { DialogFooter } from "./DialogFooter";
@@ -15,60 +17,52 @@ const meta = {
     docs: {
       description: {
         component:
-          "Dialog sobre `<dialog>` HTML nativo. Foco-trap, ESC y top-layer son nativos del navegador. Compón con `DialogHeader`, `DialogBody`, `DialogFooter`, `DialogClose`.",
+          "Dialog compound (D6 beta.24) — `<Dialog>` es el Provider del estado, `<DialogContent>` es el `<dialog>` HTML nativo con focus-trap/ESC/top-layer del browser, `<DialogTrigger>` abre el modal sin necesidad de useState consumer en uncontrolled. Compón con `DialogHeader`, `DialogBody`, `DialogFooter`, `DialogClose`. Nota: `DialogTrigger` y `DialogClose` son `<button>` planos — para estilarlos como `<Button>` del DS, pasa la clase `ig-btn ig-btn-brand` (o las que apliquen) via `className` (un patrón `asChild` viene en 1.1).",
       },
     },
   },
-  argTypes: {
-    size: {
-      control: "select",
-      options: ["sm", "md", "lg", "xl", "full"],
-    },
-    backdrop: {
-      control: "select",
-      options: ["default", "blur", "dark", "light", "none"],
-    },
-    closeOnBackdrop: { control: "boolean" },
-    closeOnEsc: { control: "boolean" },
-  },
-  args: {
-    open: false,
-    size: "md",
-    backdrop: "default",
-    closeOnBackdrop: true,
-    closeOnEsc: true,
-  },
+  args: { defaultOpen: false, children: null },
 } satisfies Meta<typeof Dialog>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {
-  render: (args) => {
-    const [open, setOpen] = useState(false);
-    return (
-      <>
-        <Button onClick={() => { setOpen(true); }}>Abrir modal</Button>
-        <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-          <DialogHeader>
-            <h2>Confirmar acción</h2>
-            <DialogClose onClick={() => { setOpen(false); }} />
-          </DialogHeader>
-          <DialogBody>
-            <p>
-              ¿Seguro que quieres continuar? Esta acción no se puede deshacer.
-            </p>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => { setOpen(false); }}>
-              Cancelar
-            </Button>
-            <Button onClick={() => { setOpen(false); }}>Aceptar</Button>
-          </DialogFooter>
-        </Dialog>
-      </>
-    );
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Modo uncontrolled (D6): `DialogTrigger` abre, `DialogClose` cierra, todo via contexto. Cero useState consumer.",
+      },
+    },
   },
+  render: () => (
+    <Dialog defaultOpen={false}>
+      <DialogTrigger className="ig-btn ig-btn-brand">Abrir modal</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <h2>Confirmar acción</h2>
+          <DialogClose />
+        </DialogHeader>
+        <DialogBody>
+          <p>
+            ¿Seguro que quieres continuar? Esta acción no se puede deshacer.
+          </p>
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose
+            aria-label="Cancelar"
+            className="ig-btn ig-btn-secondary"
+          >
+            Cancelar
+          </DialogClose>
+          <DialogClose aria-label="Aceptar" className="ig-btn ig-btn-brand">
+            Aceptar
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
 };
 
 export const Sizes: Story = {
@@ -87,16 +81,19 @@ export const Sizes: Story = {
         </div>
         <Dialog
           open={size !== null}
-          onOpenChange={() => { setSize(null); }}
-          size={size ?? "md"}
+          onOpenChange={() => {
+            setSize(null);
+          }}
         >
-          <DialogHeader>
-            <h2>Tamaño: {size}</h2>
-            <DialogClose onClick={() => { setSize(null); }} />
-          </DialogHeader>
-          <DialogBody>
-            <p>Dialog de tamaño {size}.</p>
-          </DialogBody>
+          <DialogContent size={size ?? "md"}>
+            <DialogHeader>
+              <h2>Tamaño: {size}</h2>
+              <DialogClose />
+            </DialogHeader>
+            <DialogBody>
+              <p>Dialog de tamaño {size}.</p>
+            </DialogBody>
+          </DialogContent>
         </Dialog>
       </>
     );
@@ -104,24 +101,30 @@ export const Sizes: Story = {
 };
 
 export const BackdropBlur: Story = {
-  args: { backdrop: "blur" },
-  render: (args) => {
-    const [open, setOpen] = useState(false);
-    return (
-      <>
-        <Button onClick={() => { setOpen(true); }}>Dialog con backdrop blur</Button>
-        <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-          <DialogHeader>
-            <h2>Backdrop con blur</h2>
-            <DialogClose onClick={() => { setOpen(false); }} />
-          </DialogHeader>
-          <DialogBody>
-            <p>Detrás del modal hay un blur de 8px.</p>
-          </DialogBody>
-        </Dialog>
-      </>
-    );
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "El `backdrop` se aplica como prop de `DialogContent`. Aquí `blur`: detrás del modal hay un blur de 8px.",
+      },
+    },
   },
+  render: () => (
+    <Dialog defaultOpen={false}>
+      <DialogTrigger className="ig-btn ig-btn-brand">
+        Dialog con backdrop blur
+      </DialogTrigger>
+      <DialogContent backdrop="blur">
+        <DialogHeader>
+          <h2>Backdrop con blur</h2>
+          <DialogClose />
+        </DialogHeader>
+        <DialogBody>
+          <p>Detrás del modal hay un blur de 8px.</p>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  ),
 };
 
 export const Loading: Story = {
@@ -129,88 +132,90 @@ export const Loading: Story = {
     docs: {
       description: {
         story:
-          "`loading={true}` aplica `ig-dialog-loading` al `<dialog>` y expone `aria-busy=\"true\"`. Útil para indicar que el contenido aún se está procesando (envío de formulario, fetch).",
+          "`loading={true}` en `DialogContent` aplica `ig-dialog-loading` + `aria-busy=\"true\"`. Útil mientras procesa un envío de formulario.",
       },
     },
   },
   render: () => {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    return (
-      <>
-        <Button
-          onClick={() => {
-            setOpen(true);
-            setLoading(false);
-          }}
-        >
-          Abrir modal con loading
-        </Button>
-        <Dialog
-          open={open}
-          loading={loading}
-          onOpenChange={() => {
-            setOpen(false);
-          }}
-        >
-          <DialogHeader>
-            <h2>Procesando…</h2>
-            <DialogClose
-              onClick={() => {
-                setOpen(false);
-              }}
-            />
-          </DialogHeader>
-          <DialogBody>
-            <p>
-              Pulsa el botón para simular un envío de 2 segundos. El modal queda
-              en estado <code>loading</code>.
-            </p>
-          </DialogBody>
-          <DialogFooter>
-            <Button
-              loading={loading}
-              onClick={() => {
-                setLoading(true);
-                setTimeout(() => {
-                  setLoading(false);
-                  setOpen(false);
-                }, 2000);
-              }}
-            >
-              Confirmar
-            </Button>
-          </DialogFooter>
+    const Demo = () => {
+      const [loading, setLoading] = useState(false);
+      return (
+        <Dialog defaultOpen={false}>
+          <DialogTrigger
+            className="ig-btn ig-btn-brand"
+            onClick={() => {
+              setLoading(false);
+            }}
+          >
+            Abrir modal con loading
+          </DialogTrigger>
+          <DialogContent loading={loading}>
+            <DialogHeader>
+              <h2>Procesando…</h2>
+              <DialogClose />
+            </DialogHeader>
+            <DialogBody>
+              <p>
+                Pulsa el botón para simular un envío de 2 segundos. El modal
+                queda en estado <code>loading</code>.
+              </p>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                loading={loading}
+                onClick={() => {
+                  setLoading(true);
+                  setTimeout(() => {
+                    setLoading(false);
+                  }, 2000);
+                }}
+              >
+                Confirmar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
-      </>
-    );
+      );
+    };
+    return <Demo />;
   },
 };
 
 export const NoCloseOnBackdrop: Story = {
-  args: { closeOnBackdrop: false, closeOnEsc: false },
-  render: (args) => {
-    const [open, setOpen] = useState(false);
-    return (
-      <>
-        <Button onClick={() => { setOpen(true); }}>Dialog "obligatorio"</Button>
-        <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-          <DialogHeader>
-            <h2>Confirmación obligatoria</h2>
-          </DialogHeader>
-          <DialogBody>
-            <p>
-              Este modal no se cierra con ESC ni clicando fuera. Solo con el
-              botón.
-            </p>
-          </DialogBody>
-          <DialogFooter>
-            <Button onClick={() => { setOpen(false); }}>Entendido</Button>
-          </DialogFooter>
-        </Dialog>
-      </>
-    );
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`closeOnBackdrop={false}` + `closeOnEsc={false}` en `DialogContent` bloquean cierre por click fuera y ESC. Solo el botón cierra.",
+      },
+    },
   },
+  render: () => (
+    <Dialog defaultOpen={false}>
+      <DialogTrigger className="ig-btn ig-btn-brand">
+        Dialog "obligatorio"
+      </DialogTrigger>
+      <DialogContent closeOnBackdrop={false} closeOnEsc={false}>
+        <DialogHeader>
+          <h2>Confirmación obligatoria</h2>
+        </DialogHeader>
+        <DialogBody>
+          <p>
+            Este modal no se cierra con ESC ni clicando fuera. Solo con el
+            botón.
+          </p>
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose
+            aria-label="Entendido"
+            className="ig-btn ig-btn-brand"
+          >
+            Entendido
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
 };
 
 export const OpenInteraction: Story = {
@@ -218,34 +223,26 @@ export const OpenInteraction: Story = {
     docs: {
       description: {
         story:
-          "Click en el botón llama a `dialog.showModal()` y el dialog gana atributo `open`.",
+          "Click en `DialogTrigger` llama a `dialog.showModal()` via contexto y el dialog gana atributo `open`. Play test valida el ciclo completo en uncontrolled.",
       },
     },
   },
-  render: (args) => {
-    const Demo = () => {
-      const [open, setOpen] = useState(false);
-      return (
-        <>
-          <Button onClick={() => { setOpen(true); }}>Abrir</Button>
-          <Dialog {...args} open={open} onOpenChange={() => { setOpen(false); }}>
-            <DialogHeader>
-              <h2>Diálogo de prueba</h2>
-            </DialogHeader>
-            <DialogBody>Contenido</DialogBody>
-          </Dialog>
-        </>
-      );
-    };
-    return <Demo />;
-  },
+  render: () => (
+    <Dialog defaultOpen={false}>
+      <DialogTrigger>Abrir</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <h2>Diálogo de prueba</h2>
+        </DialogHeader>
+        <DialogBody>Contenido</DialogBody>
+      </DialogContent>
+    </Dialog>
+  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Abrir" }));
-    // El <dialog> es accesible en el body con role=dialog tras showModal().
     const dialog = await canvas.findByRole("dialog");
     await expect(dialog).toHaveAttribute("open");
-    // aria-labelledby debe apuntar al DialogHeader.
     const labelledBy = dialog.getAttribute("aria-labelledby");
     await expect(labelledBy).toBeTruthy();
   },
@@ -263,23 +260,23 @@ export const AllStates: Story = {
     },
   },
   render: () => (
-    <Dialog open size="md">
-      <DialogHeader>
-        Confirmar acción
-        <DialogClose />
-      </DialogHeader>
-      <DialogBody>
-        ¿Seguro que quieres continuar? Esta acción afecta a 3 elementos.
-      </DialogBody>
-      <DialogFooter>
-        <Button variant="secondary">Cancelar</Button>
-        <Button variant="brand">Aceptar</Button>
-      </DialogFooter>
+    <Dialog defaultOpen>
+      <DialogContent size="md">
+        <DialogHeader>
+          Confirmar acción
+          <DialogClose />
+        </DialogHeader>
+        <DialogBody>
+          ¿Seguro que quieres continuar? Esta acción afecta a 3 elementos.
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary">Cancelar</Button>
+          <Button variant="brand">Aceptar</Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   ),
   play: async () => {
-    // <dialog> se monta en top-layer del documento, no necesariamente
-    // dentro de canvasElement. Querying global es seguro.
     await new Promise((resolve) => setTimeout(resolve, 100));
     const dialog = document.querySelector("dialog[open].ig-dialog");
     await expect(dialog).toBeTruthy();
