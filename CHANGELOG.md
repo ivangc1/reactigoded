@@ -103,6 +103,91 @@ localmente.
 
 ---
 
+**D6 — Dialog Full compound refactor** (B2-PR2):
+
+**BREAKING**. `Dialog` pasa de ser un componente monolítico (era el
+`<dialog>` HTML nativo con children directos) a Provider compound
+Radix-style. La lógica del modal real vive en el nuevo `<DialogContent>`;
+`<DialogTrigger>` (nuevo) abre el modal con ARIA disclosure correcto.
+
+API nueva:
+
+```tsx
+<Dialog
+  open?={x}                    // controlled (opcional, era obligatorio)
+  defaultOpen?={false}         // uncontrolled (nuevo)
+  onOpenChange?={fn}
+>
+  <DialogTrigger>Abrir</DialogTrigger>   // nuevo, aria-haspopup/-controls/-expanded
+  <DialogContent                          // nuevo, el <dialog> real
+    size? backdrop? closeOnBackdrop?
+    closeOnEsc? loading? ref? className?
+  >
+    <DialogHeader />
+    <DialogBody />
+    <DialogClose />                       // ahora auto-cierra via contexto
+  </DialogContent>
+</Dialog>
+```
+
+**Migration mecánica** consumer:
+
+```diff
+- <Dialog open={x} onOpenChange={fn} size="md">
+-   <DialogHeader />
+-   <DialogBody>texto</DialogBody>
+-   <DialogClose onClick={() => setOpen(false)} />
+- </Dialog>
++ <Dialog open={x} onOpenChange={fn}>
++   <DialogContent size="md">
++     <DialogHeader />
++     <DialogBody>texto</DialogBody>
++     <DialogClose />
++   </DialogContent>
++ </Dialog>
+```
+
+Opcional: para casos sencillos, eliminar `useState` externo + `Button`
++ `onClick` y usar `<DialogTrigger>` + `defaultOpen`:
+
+```diff
+- const [open, setOpen] = useState(false);
+- <Button onClick={() => setOpen(true)}>Abrir</Button>
+- <Dialog open={open} onOpenChange={setOpen}>
+-   <DialogHeader />
+- </Dialog>
++ <Dialog defaultOpen={false}>
++   <DialogTrigger className="ig-btn ig-btn-brand">Abrir</DialogTrigger>
++   <DialogContent>
++     <DialogHeader />
++   </DialogContent>
++ </Dialog>
+```
+
+Cambios técnicos:
+- `Dialog` ahora es Provider puro (sin DOM). `useControllableState`
+  interno con `SUPPRESS_NO_HANDLER_WARN` en modo controlled-presentational
+  (`active` sin callback, decisión consciente del consumer).
+- `DialogContent` hereda TODAS las props visuales antiguas de `Dialog`:
+  `size`, `backdrop`, `closeOnBackdrop`, `closeOnEsc`, `loading`, `ref`,
+  `className`, `onPointerDown`/`onClick` chained. H-02 drag-out parity
+  preservado.
+- `DialogTrigger` es `<button>` plano con `aria-haspopup="dialog"` +
+  `aria-controls={contentId}` + `aria-expanded={open}` automáticos.
+  Chainea `onClick` consumer; `preventDefault` bloquea apertura.
+- `DialogClose` consume el contexto y llama `setOpen(false)` automático.
+  Sigue siendo tolerante fuera de `<Dialog>` (no rompe, simplemente no
+  cierra nada — responsabilidad del consumer via `onClick`).
+- Alias backward-compat de tipos: `DialogSize` y `DialogBackdrop` ahora
+  son alias de `DialogContentSize` / `DialogContentBackdrop`. Consumers
+  que importaban los tipos del barrel siguen funcionando.
+- Prop `onClose` (deprecated en B-02 RC1) sigue disparando en cierres
+  via wrapper en setOpen; eliminada en 2.0.
+
+Decision doc: `docs/decisions/D6-dialog-compound.md`.
+
+---
+
 ### Fixed (non-breaking, beta.24)
 
 **H-03 — Progress CSP-friendly via CSS custom property** (B2-PR5):

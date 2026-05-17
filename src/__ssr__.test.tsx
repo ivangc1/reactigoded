@@ -60,6 +60,7 @@ import {
   Dialog,
   DialogBody,
   DialogClose,
+  DialogContent,
   DialogFooter,
   DialogHeader,
   Navbar,
@@ -236,18 +237,21 @@ const cases: SsrCase[] = [
     expects: "ig-input-group",
   },
   {
-    name: "Dialog (open=false)",
+    name: "Dialog (compound, open=false)",
     jsx: () => (
       <Dialog open={false} onOpenChange={() => {}}>
-        <DialogHeader title="x" />
-        <DialogBody>cuerpo</DialogBody>
-        <DialogFooter>pie</DialogFooter>
-        <DialogClose />
+        <DialogContent>
+          <DialogHeader title="x" />
+          <DialogBody>cuerpo</DialogBody>
+          <DialogFooter>pie</DialogFooter>
+          <DialogClose />
+        </DialogContent>
       </Dialog>
     ),
-    // Dialog open=false NO debe emitir contenido — verificamos que no lanza
-    // y el HTML está vacío o sin clase.
-    expects: "",
+    // Dialog (D6 compound) renderea el <dialog> en estado cerrado vía
+    // DialogContent. El SSR emite la clase base; el `open` HTML attr
+    // queda ausente (controlado por dialog.showModal() en cliente).
+    expects: "ig-dialog",
   },
   {
     name: "Navbar (compound)",

@@ -5,6 +5,7 @@ import { Tooltip } from "./Tooltip";
 import { Button } from "@/components/Button";
 import {
   Dialog,
+  DialogContent,
   DialogBody,
   DialogClose,
   DialogFooter,
@@ -308,55 +309,51 @@ export const TooltipDentroDeModal: Story = {
           >
             Abrir Dialog
           </Button>
+          {/* D6 (beta.24): Dialog compound — Provider + DialogContent.
+              El ref del <dialog> se forwardea via DialogContent (no
+              via Dialog Provider, que solo renderiza contexto). */}
           <Dialog
-            ref={dialogRef}
             open={open}
             onOpenChange={() => {
               setOpen(false);
             }}
-            size="md"
           >
-            <DialogHeader>
-              Confirmar acción
-              <DialogClose
-                onClick={() => {
-                  setOpen(false);
-                }}
-              />
-            </DialogHeader>
-            <DialogBody>
-              <p>
-                El Tooltip de abajo recibe{" "}
-                <code>{"container={dialogRef.current}"}</code>. Su
-                portal se monta dentro del top-layer del{" "}
-                <code>{"<dialog>"}</code> y aparece visible por encima
-                del backdrop. Hover o focus en el botón.
-              </p>
-              <Tooltip
-                text="Esta acción no se puede deshacer"
-                placement="top"
-                container={dialogRef.current}
-              >
-                <Button variant="danger">Eliminar permanente</Button>
-              </Tooltip>
-            </DialogBody>
-            <DialogFooter>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setOpen(false);
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  setOpen(false);
-                }}
-              >
-                Aceptar
-              </Button>
-            </DialogFooter>
+            <DialogContent ref={dialogRef} size="md">
+              <DialogHeader>
+                Confirmar acción
+                <DialogClose />
+              </DialogHeader>
+              <DialogBody>
+                <p>
+                  El Tooltip de abajo recibe{" "}
+                  <code>{"container={dialogRef.current}"}</code>. Su
+                  portal se monta dentro del top-layer del{" "}
+                  <code>{"<dialog>"}</code> y aparece visible por encima
+                  del backdrop. Hover o focus en el botón.
+                </p>
+                <Tooltip
+                  text="Esta acción no se puede deshacer"
+                  placement="top"
+                  container={dialogRef.current}
+                >
+                  <Button variant="danger">Eliminar permanente</Button>
+                </Tooltip>
+              </DialogBody>
+              <DialogFooter>
+                <DialogClose
+                  aria-label="Cancelar"
+                  className="ig-btn ig-btn-secondary"
+                >
+                  Cancelar
+                </DialogClose>
+                <DialogClose
+                  aria-label="Aceptar"
+                  className="ig-btn ig-btn-brand"
+                >
+                  Aceptar
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
           </Dialog>
         </>
       );
