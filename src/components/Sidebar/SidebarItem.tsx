@@ -1,3 +1,5 @@
+"use client";
+
 import type {
   AnchorHTMLAttributes,
   ButtonHTMLAttributes,
@@ -5,6 +7,7 @@ import type {
   Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useSidebar } from "./SidebarContext";
 
 interface CommonProps {
   /** Icono al inicio (siempre visible, incluso colapsada). */
@@ -32,12 +35,28 @@ export type SidebarItemProps = AnchorItemProps | ButtonItemProps;
  * `<button>` si no. El icono permanece visible en modo colapsado y el texto
  * lo oculta el CSS automáticamente.
  *
- * Cuando `children` es un string se aplica como `aria-label` automático para
- * que el item siga teniendo nombre accesible en modo colapsado (donde el
- * texto está oculto). Si pasas un `children` no-string sin `aria-label`,
- * añádelo tú.
+ * **D4 (RC1 gate review)**: `aria-label` se aplica condicionalmente:
+ * - **Sidebar expandida**: el texto del item está en el a11y tree
+ *   (visible + parseado por SR como nombre accesible). NO se aplica
+ *   `aria-label` automático — duplicaría el nombre (anti-pattern ARIA
+ *   APG: "if visible text serves as accessible name, do not add
+ *   aria-label").
+ * - **Sidebar colapsada**: CSS `.ig-sidebar-collapsed .ig-sidebar-text`
+ *   con `display: none` saca el texto del a11y tree. SIN `aria-label`,
+ *   el item queda sin nombre accesible (icono es `aria-hidden`). Por
+ *   eso aplicamos `aria-label = children` cuando collapsed y children
+ *   es string.
+ *
+ * Override explícito de `aria-label` siempre tiene prioridad sobre
+ * cualquier fallback automático.
+ *
+ * SidebarItem es client component porque consume `useSidebar()` para
+ * detectar el estado collapsed. Debe estar dentro de `<Sidebar>` —
+ * `useSidebar` lanza si no hay ancestor (D11.4 regla DS-wide).
  */
 export function SidebarItem(props: SidebarItemProps) {
+  const { collapsed } = useSidebar();
+
   if (props.href !== undefined) {
     const {
       icon,
@@ -49,7 +68,8 @@ export function SidebarItem(props: SidebarItemProps) {
       ...rest
     } = props;
     const fallbackLabel =
-      ariaLabel ?? (typeof children === "string" ? children : undefined);
+      ariaLabel ??
+      (collapsed && typeof children === "string" ? children : undefined);
     return (
       <a
         {...rest}
@@ -83,7 +103,8 @@ export function SidebarItem(props: SidebarItemProps) {
     ...rest
   } = props;
   const fallbackLabel =
-    ariaLabel ?? (typeof children === "string" ? children : undefined);
+    ariaLabel ??
+    (collapsed && typeof children === "string" ? children : undefined);
   return (
     <button
       {...rest}

@@ -18,13 +18,13 @@ export interface PaginationProps
   /**
    * Página actual (1-based) en modo **controlled**. Si se pasa, el
    * consumer es responsable de actualizar la prop en respuesta a
-   * `onValueChange`. Si se omite, el componente arranca en `defaultPage`
+   * `onPageChange`. Si se omite, el componente arranca en `defaultPage`
    * y maneja el state internamente.
    */
-  currentPage?: number;
+  page?: number;
   /**
    * Página inicial (1-based) en modo **uncontrolled**. Default `1`.
-   * Ignorado si `currentPage` está definido.
+   * Ignorado si `page` está definido.
    */
   defaultPage?: number;
   /** Número total de páginas (>=1). */
@@ -36,7 +36,7 @@ export interface PaginationProps
    * componente actualiza su state interno) y útil para reaccionar al
    * cambio (fetch de datos, sync con URL, etc.).
    */
-  onValueChange?: (page: number) => void;
+  onPageChange?: (page: number) => void;
   /** Color de la página activa. */
   variant?: PaginationVariant;
   /**
@@ -107,27 +107,24 @@ function buildPages(
  * elipsis cuando hay muchas) y botón "siguiente". La página activa lleva
  * `aria-current="page"`. Cada página tiene `aria-label="Página N"`.
  *
- * Soporta **controlled** (`currentPage` + `onValueChange`) y **uncontrolled**
- * (`defaultPage`, opcional `onValueChange` para reaccionar). Idéntico
+ * Soporta **controlled** (`page` + `onPageChange`) y **uncontrolled**
+ * (`defaultPage`, opcional `onPageChange` para reaccionar). Idéntico
  * patrón a otros componentes con state del DS (Tabs, Accordion, etc.).
  *
  * @example
  * // Uncontrolled — el componente maneja el state internamente
- * <Pagination totalPages={20} defaultPage={1} onValueChange={fetchPage} />
+ * <Pagination totalPages={20} defaultPage={1} onPageChange={fetchPage} />
  *
- * // Controlled — el consumer mantiene currentPage
- * <Pagination
- *   totalPages={20}
- *   currentPage={page}
- *   onValueChange={setPage}
- * />
+ * // Controlled — el consumer mantiene page
+ * const [page, setPage] = useState(1);
+ * <Pagination totalPages={20} page={page} onPageChange={setPage} />
  */
 export function Pagination({
-  currentPage,
+  page: pageProp,
   defaultPage = 1,
   totalPages,
   siblingCount = 1,
-  onValueChange,
+  onPageChange,
   variant,
   prevLabel = "Anterior",
   nextLabel = "Siguiente",
@@ -156,7 +153,7 @@ export function Pagination({
 
   // beta.20: Pagination soporta controlled + uncontrolled vía
   // useControllableState. En uncontrolled, el state interno arranca en
-  // defaultPage y onValueChange (si existe) actúa como side-effect.
+  // defaultPage y onPageChange (si existe) actúa como side-effect.
   //
   // Codex P2 post-audit sobre PR #19: clamp defaultPage AL ENTRAR al
   // state, no solo en render. Pre-fix: si defaultPage=10 con totalPages=3,
@@ -170,9 +167,9 @@ export function Pagination({
     preClampedSafeTotal,
   );
   const { value: page, setValue: setPage } = useControllableState<number>({
-    value: currentPage,
+    value: pageProp,
     defaultValue: sanitizedDefaultPage,
-    onChange: onValueChange,
+    onChange: onPageChange,
   });
 
   // Clamps en render: el componente jamás debe renderizar páginas fuera
@@ -191,15 +188,15 @@ export function Pagination({
   // page interno fuera de rango (ej: estabas en página 5, totalPages
   // baja a 3 → debes quedarte en 3, no volver a 5 si vuelve a subir).
   // Solo aplica en uncontrolled — en controlled el consumer decide.
-  // silent: true para NO disparar onValueChange en este sync interno
+  // silent: true para NO disparar onPageChange en este sync interno
   // (sería ruido para el consumer; el clamp es decisión del componente,
   // no acción del usuario).
   useEffect(() => {
-    if (currentPage !== undefined) return;
+    if (pageProp !== undefined) return;
     if (page !== safeCurrent) {
       setPage(safeCurrent, { silent: true });
     }
-  }, [currentPage, page, safeCurrent, setPage]);
+  }, [pageProp, page, safeCurrent, setPage]);
 
   // Dev-only warning si tuvimos que clamp-ear (input fuera de rango).
   // En useEffect (no durante render) por la regla react-hooks/refs.
@@ -209,18 +206,18 @@ export function Pagination({
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (warnedRef.current) return;
-    const isControlled = currentPage !== undefined;
+    const isControlled = pageProp !== undefined;
     const outOfRange =
       isControlled
-        ? currentPage !== safeCurrent || totalPages !== safeTotal
+        ? pageProp !== safeCurrent || totalPages !== safeTotal
         : totalPages !== safeTotal;
     if (outOfRange) {
       warnedRef.current = true;
       console.warn(
-        `[reactigoded] <Pagination currentPage=${String(currentPage)} totalPages=${String(totalPages)}> fuera de rango. Clamped a currentPage=${String(safeCurrent)}, totalPages=${String(safeTotal)}.`,
+        `[reactigoded] <Pagination page=${String(pageProp)} totalPages=${String(totalPages)}> fuera de rango. Clamped a page=${String(safeCurrent)}, totalPages=${String(safeTotal)}.`,
       );
     }
-  }, [currentPage, totalPages, safeCurrent, safeTotal]);
+  }, [pageProp, totalPages, safeCurrent, safeTotal]);
 
   const pages = buildPages(safeCurrent, safeTotal, safeSiblings);
   const canPrev = safeCurrent > 1;

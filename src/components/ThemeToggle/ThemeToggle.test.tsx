@@ -71,13 +71,13 @@ describe("ThemeToggle", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
   });
 
-  it("modo controlado: respeta theme y dispara onValueChange", async () => {
+  it("modo controlado: respeta theme y dispara onThemeChange", async () => {
     const user = userEvent.setup();
-    const onValueChange = vi.fn();
-    render(<ThemeToggle theme="dark" onValueChange={onValueChange} />);
+    const onThemeChange = vi.fn();
+    render(<ThemeToggle theme="dark" onThemeChange={onThemeChange} />);
     expect(screen.getByRole("switch")).toBeChecked();
     await user.click(screen.getByRole("switch"));
-    expect(onValueChange).toHaveBeenCalledWith("light");
+    expect(onThemeChange).toHaveBeenCalledWith("light");
     expect(screen.getByRole("switch")).toBeChecked();
   });
 
