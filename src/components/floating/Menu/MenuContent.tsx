@@ -6,12 +6,28 @@ import {
   FloatingPortal,
   useMergeRefs,
 } from "@floating-ui/react";
-import type { HTMLAttributes, Ref } from "react";
+import type { HTMLAttributes, Ref, RefObject } from "react";
 import { cn } from "@/utils/cn";
 import { useMenu } from "./MenuContext";
 
 export interface MenuContentProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
+  /**
+   * **D2 + H-04 paralelo (RC1 gate review beta.24)**: target HTMLElement
+   * para el `<FloatingPortal>`. Default `document.body`.
+   *
+   * **Caso típico — Menu dentro de Dialog**: `<Dialog>` usa
+   * `<dialog>.showModal()` que crea un top-layer del browser. Si el
+   * portal del Menu queda en `document.body`, aparece *detrás* del
+   * backdrop del dialog (invisible al usuario). Pasar el ref del
+   * dialog como container ancla el portal al top-layer del dialog y
+   * el menu se renderiza visible sobre el backdrop. Patrón canónico
+   * idéntico al de Tooltip (gate review H-04, decision C-02).
+   *
+   * Acepta `HTMLElement` directo o un `RefObject` (Floating UI resuelve
+   * ambos).
+   */
+  container?: HTMLElement | RefObject<HTMLElement | null> | null;
 }
 
 /**
@@ -81,6 +97,8 @@ export function MenuContent({
   className,
   children,
   ref,
+  container,
+  style: consumerStyle,
   ...rest
 }: MenuContentProps) {
   const {
@@ -106,6 +124,13 @@ export function MenuContent({
   const side = parseSide(context.placement);
   const align = parseAlign(context.placement);
 
+  // Codex P2 post-D2: merge consumer style con floatingStyles. Pre-fix
+  // `style={floatingStyles}` sobreescribía silenciosamente el style del
+  // consumer (width/maxHeight/CSS vars custom). Pattern Radix: consumer
+  // base + FUI positioning gana (top/left/position autoritativos para
+  // collision detection correcta).
+  const mergedStyle = { ...consumerStyle, ...floatingStyles };
+
   const inner = (
     <FloatingFocusManager
       context={context}
@@ -122,7 +147,7 @@ export function MenuContent({
         data-side={side}
         data-align={align}
         data-state="open"
-        style={floatingStyles}
+        style={mergedStyle}
         className={cn("ig-menu-content", className)}
       >
         {children}
@@ -131,11 +156,22 @@ export function MenuContent({
   );
 
   // <FloatingPortal> escapa ancestor overflow:hidden (problema pre-D2).
+  // Codex P1 post-D2: `container` prop permite anclar el portal a otro
+  // root distinto de document.body — caso crítico es Menu-dentro-de-Dialog
+  // (showModal top-layer): portal a body queda detrás del backdrop,
+  // unusable. Spread condicional (NO `root={container ?? null}`):
+  // exactOptionalPropertyTypes prohíbe `undefined` explícito en JSX
+  // prop. Patrón idéntico al H-04 fix de Tooltip.
+  //
   // <FloatingNode> wraps por fuera del Portal (React tree, no DOM tree)
   // para que cascade dismiss del FloatingTree registre este menu como
   // child del ancestor — el portal mueve DOM placement, no jerarquía
   // de tree React.
-  const portaled = <FloatingPortal>{inner}</FloatingPortal>;
+  const portaled = (
+    <FloatingPortal {...(container ? { root: container } : {})}>
+      {inner}
+    </FloatingPortal>
+  );
 
   return nodeId === undefined ? (
     portaled

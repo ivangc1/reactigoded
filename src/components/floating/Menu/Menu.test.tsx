@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Menu } from "./Menu";
 import { MenuTrigger } from "./MenuTrigger";
@@ -583,5 +583,49 @@ describe("MenuItem — href + Space (H-19, WAI-ARIA APG)", () => {
     fireEvent.keyDown(item, { key: "Enter" });
     fireEvent.click(item);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Menu — codex post-D2 fixes", () => {
+  it("P1: container prop ancla el portal a un root distinto de document.body", () => {
+    function Harness({ children }: { children: ReactNode }) {
+      const ref = useRef<HTMLDivElement>(null);
+      return (
+        <>
+          <div ref={ref} data-testid="custom-portal-root" />
+          <Menu defaultOpen>
+            <MenuTrigger>x</MenuTrigger>
+            <MenuContent container={ref}>{children}</MenuContent>
+          </Menu>
+        </>
+      );
+    }
+    render(<Harness><MenuItem>Editar</MenuItem></Harness>);
+    const customRoot = screen.getByTestId("custom-portal-root");
+    const menu = screen.getByRole("menu");
+    // El menu debe ser descendant del custom root, no de document.body.
+    expect(customRoot.contains(menu)).toBe(true);
+    // Y NO debe estar como child directo de document.body (el portal
+    // default lo pondría como direct child de body).
+    expect(menu.parentElement).not.toBe(document.body);
+  });
+
+  it("P2: consumer style merge con floatingStyles (custom width sobrevive)", () => {
+    render(
+      <Menu defaultOpen>
+        <MenuTrigger>x</MenuTrigger>
+        <MenuContent style={{ width: "300px", maxHeight: "400px" }}>
+          <MenuItem>Editar</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    const menu = screen.getByRole("menu");
+    // Consumer styles preservados.
+    expect(menu).toHaveStyle({ width: "300px", maxHeight: "400px" });
+    // FUI positioning también presente (top/left/position via floatingStyles
+    // inline). En jsdom no podemos asertar valor exacto (no layout), pero la
+    // presencia del attribute style con position confirma que floatingStyles
+    // se mergeó sobre el consumer style.
+    expect(menu.getAttribute("style") ?? "").toMatch(/position/);
   });
 });
