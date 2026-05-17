@@ -722,4 +722,55 @@ describe("Stepper — modo uncontrolled (D5 beta.24)", () => {
       expect(d).not.toHaveAttribute("tabindex");
     }
   });
+
+  // Codex P2 round 2 sobre 8a35b8f: persistir el clamp al state
+  // interno cuando stepCount se reduce. Sin esto, rawActive queda
+  // stale (el clamp solo afecta el render) y al re-añadir steps el
+  // componente "resurrecta" al idx viejo.
+  it("uncontrolled: shrink stepCount actualiza state interno (no resurrección)", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [count, setCount] = useState(5);
+      const steps = Array.from({ length: count }).map((_, i) => <Step key={i} />);
+      return (
+        <>
+          <Stepper defaultActive={0}>{steps}</Stepper>
+          <button
+            type="button"
+            data-testid="shrink"
+            onClick={() => {
+              setCount(2);
+            }}
+          >
+            shrink
+          </button>
+          <button
+            type="button"
+            data-testid="grow"
+            onClick={() => {
+              setCount(5);
+            }}
+          >
+            grow
+          </button>
+        </>
+      );
+    }
+    const { container } = render(<Harness />);
+    // Mover active al último step (idx=4) via click.
+    const dots = screen.getAllByRole("button", { name: /paso/i });
+    await user.click(dots[4]!);
+    let current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("data-step-index")).toBe("4");
+    // Shrink a 2 steps: el clamp visible debe ser idx=1 (último).
+    await user.click(screen.getByTestId("shrink"));
+    current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("data-step-index")).toBe("1");
+    // Grow back a 5 steps: NO debe resurrecer al idx=4 stale. El
+    // state interno fue persistido al clamp (idx=1) durante el
+    // shrink.
+    await user.click(screen.getByTestId("grow"));
+    current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("data-step-index")).toBe("1");
+  });
 });

@@ -9,6 +9,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type HTMLAttributes,
   type KeyboardEvent,
   type ReactElement,
@@ -180,6 +181,30 @@ export function Stepper({
     if (rawActive > lastIdx) return lastIdx;
     return rawActive;
   }, [rawActive, stepCount]);
+
+  // D5 codex P2 round 2 (sobre `8a35b8f`): persistir el clamp al
+  // estado interno cuando `stepCount` se reduce en modo uncontrolled.
+  // Sin esto, `rawActive` queda stale (el clamp arriba solo afecta el
+  // render, no el state committed). Si el consumer remueve steps
+  // dinámicamente y luego los re-añade, el componente "resurrecta" al
+  // índice viejo en lugar de mantenerse en el último visible.
+  //
+  // Patrón React docs "Resetting all state when a prop changes":
+  // tracking del prop previo en state + reset durante render (NO
+  // useEffect — la regla `react-hooks/set-state-in-effect` lo prohíbe,
+  // y un effect introduciría flash visual del valor stale antes del
+  // commit del clamp).
+  // https://react.dev/learn/you-might-not-need-an-effect#resetting-all-state-when-a-prop-changes
+  //
+  // Solo aplica en uncontrolled — en controlled el consumer es dueño
+  // del valor y debe sincronizarlo con stepCount externamente.
+  const [prevStepCount, setPrevStepCount] = useState(stepCount);
+  if (prevStepCount !== stepCount) {
+    setPrevStepCount(stepCount);
+    if (!isControlled && stepCount > 0 && rawActive > stepCount - 1) {
+      setActive(stepCount - 1);
+    }
+  }
 
   // Dev warn diferenciado, solo una vez por componente. Patrón Slider:
   // `import.meta.env.DEV` (Vite, sin Node types) + warnedRef para no
