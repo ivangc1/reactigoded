@@ -142,6 +142,16 @@ export const Interaction: Story = {
           "Click en el trigger abre el menú (`aria-expanded=\"true\"`); ↓ mueve foco al primer item.",
       },
     },
+    a11y: {
+      // D2 (RC1 gate review beta.24): Floating UI FloatingFocusManager inyecta
+      // focus-guard spans con tabindex=0 + aria-hidden=true para trap inicial
+      // y tab cycling. Patrón canónico FUI/Radix — axe flag-ea como
+      // aria-hidden-focus pero es comportamiento intencional documentado.
+      // Suppression scoped al pattern específico, no global.
+      config: {
+        rules: [{ id: "aria-hidden-focus", enabled: false }],
+      },
+    },
   },
   render: (args) => (
     <div style={{ minHeight: 240 }}>
@@ -209,6 +219,12 @@ export const HoverItemAndDanger: Story = {
         dark: { theme: "dark" },
       },
     },
+    a11y: {
+      // D2: ver Interaction story para razón. FUI focus guards canon.
+      config: {
+        rules: [{ id: "aria-hidden-focus", enabled: false }],
+      },
+    },
   },
   render: () => (
     <Menu defaultOpen>
@@ -222,14 +238,14 @@ export const HoverItemAndDanger: Story = {
       </MenuContent>
     </Menu>
   ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    // hover en item normal
-    const item = canvas.getByTestId("hover-item");
+  play: async () => {
+    // D2 post-portal: MenuContent + items viven en document.body (portal),
+    // NO en canvasElement. Query global via within(document.body).
+    const root = within(document.body);
+    const item = root.getByTestId("hover-item");
     await userEvent.hover(item);
     await new Promise((r) => setTimeout(r, 30));
-    // hover en item danger
-    const danger = canvas.getByTestId("hover-danger");
+    const danger = root.getByTestId("hover-danger");
     await userEvent.hover(danger);
     await new Promise((r) => setTimeout(r, 50));
   },
@@ -243,6 +259,12 @@ export const AllStates: Story = {
       modes: {
         light: { theme: "light" },
         dark: { theme: "dark" },
+      },
+    },
+    a11y: {
+      // D2: ver Interaction story para razón. FUI focus guards canon.
+      config: {
+        rules: [{ id: "aria-hidden-focus", enabled: false }],
       },
     },
   },
@@ -302,9 +324,13 @@ export const AllStates: Story = {
     </div>
   ),
   play: async ({ canvasElement }) => {
+    // 4 wrappers .ig-menu siguen en canvas (containers del trigger).
     const dropdowns = canvasElement.querySelectorAll(".ig-menu");
     await expect(dropdowns.length).toBe(4);
-    const opens = canvasElement.querySelectorAll(".ig-menu-open");
+    // D2 post-portal: MenuContent (role=menu) vive en document.body.
+    // 3 de los 4 Menus son defaultOpen → 3 role=menu en portal global.
+    // Pre-D2 contábamos `.ig-menu-open` en canvas; clase eliminada por D2.
+    const opens = document.body.querySelectorAll('[role="menu"]');
     await expect(opens.length).toBe(3);
   },
 };

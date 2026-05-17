@@ -131,7 +131,7 @@ export function Menu({
         ? "bottom-end"
         : "bottom-start";
 
-  const { refs, context } = useFloating({
+  const { refs, context, floatingStyles } = useFloating({
     ...(nodeId !== undefined ? { nodeId } : {}),
     open,
     // setOpen viene de useControllableState con firma
@@ -210,6 +210,7 @@ export function Menu({
       setReference: refs.setReference,
       setFloating: refs.setFloating,
       context,
+      floatingStyles,
       nodeId,
     }),
     [
@@ -225,23 +226,23 @@ export function Menu({
       refs.setReference,
       refs.setFloating,
       context,
+      floatingStyles,
       nodeId,
     ],
   );
 
+  // D2 (RC1 gate review beta.24): modifier classes `.ig-menu-up`,
+  // `.ig-menu-right`, `.ig-menu-open` ELIMINADAS. Pre-D2 controlaban
+  // positioning + visibility CSS-driven (overflow:hidden ancestor
+  // clipaba el menu, sin flip/shift aplicado). Post-D2:
+  //   - positioning via `floatingStyles` inline aplicado en MenuContent.
+  //   - data-side/data-align attributes en MenuContent para CSS hooks.
+  //   - visibility via unmount-on-close en MenuContent (no CSS hide).
+  // El wrapper `.ig-menu` sigue siendo container del trigger (positioning
+  // base) pero NO maneja content positioning ni visibility.
   return (
     <MenuContext.Provider value={ctxValue}>
-      <div
-        ref={ref}
-        className={cn(
-          "ig-menu",
-          placement === "right" && "ig-menu-right",
-          direction === "up" && "ig-menu-up",
-          open && "ig-menu-open",
-          className,
-        )}
-        {...rest}
-      >
+      <div ref={ref} className={cn("ig-menu", className)} {...rest}>
         {children}
       </div>
     </MenuContext.Provider>

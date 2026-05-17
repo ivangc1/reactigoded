@@ -9,6 +9,38 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Changed (BREAKING — pre-RC1, beta.24)
 
+**D2 + D7 — Menu Full FUI portal + namespace reorg** (B1-PR3):
+
+- **Menu file move**: `src/components/Menu/` → `src/components/floating/Menu/`.
+  Public API root barrel `reactigoded` sin cambio (símbolo `Menu` se
+  exporta idéntico). Internal cross-component imports actualizados.
+- **Menu Full FUI portal**: `<FloatingPortal>` + `floatingStyles` inline +
+  `data-side` / `data-align` / `data-state` attributes (split Radix-style).
+  Unmount-on-close (no más CSS-hidden).
+- **Modifier classes eliminadas**: `.ig-menu-right`, `.ig-menu-up`,
+  `.ig-menu-open`, `:focus-within` JS-less fallback. Consumers que las
+  stylizaban en su CSS deben migrar a `[data-side]` / `[data-align]`
+  attribute selectors en MenuContent.
+- **Menu requires JS**: alineado con Tooltip/Dialog/Accordion. No más
+  CSS-only fallback `:focus-within`.
+- **floating/ namespace agrupado**: `src/components/floating/index.ts`
+  nuevo barrel re-exporta `./primitives + ./Tooltip + ./Menu`. En
+  `src/components/index.ts` los 3 wildcards floating sueltos se colapsan
+  a uno (`export * from "./floating"`). Sin cambio para consumer.
+- **useFloatingNode internal definitive**: retirado del wildcard
+  re-export de `floating/primitives/index.ts`. JSDoc declaraba @example
+  interno pero export * lo exponía. Internal consumers ya importan via
+  path directo `@/components/floating/primitives/useFloatingNode`.
+  Consumers que (accidentalmente) lo importaban desde `"reactigoded"`
+  deben removerlo — uso público era unintended.
+
+Decision docs: `docs/decisions/D2-menu-portal.md`,
+`docs/decisions/D7-floating-namespace.md`,
+`src/components/floating/README.md`. C-03 doc status actualizado
+"diferida a 1.1.0" → "DONE en beta.24".
+
+---
+
 C.2 DS-wide rename pattern: callbacks aligned al prop name local cuando
 el prop tiene nombre de dominio (no "value" arbitrario). Sub-patrón DS
 articulado en `docs/decisions/D3-callback-rename-cw.md` y

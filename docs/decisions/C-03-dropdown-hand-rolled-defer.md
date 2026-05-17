@@ -1,7 +1,8 @@
 # C-03 — Hand-rolled Menu vs Floating UI
 
-**Fecha**: 2026-05-10
-**Estado**: **diferida a 1.1.0** como decisión consciente
+**Fecha**: 2026-05-10 → **resuelto 2026-05-17 (post-D2 RC1 gate review beta.24)**
+**Estado**: ✅ **DONE en beta.24**. Migración completa a FUI primitive realizada
+en B1-PR3 (D2 + D7).
 
 ## Contexto
 
@@ -20,9 +21,32 @@ $ grep -cE "useFloating|useFocus|useHover|useDismiss|@floating-ui" src/component
 
 `Menu` es 100% hand-rolled. `Tooltip` (post-RC1 en subfamilia `floating/`) sí usa `@floating-ui/react`. La preocupación del review: si el roadmap añade `floating/menu/MenuContent`, el DS publica RC1 con dos arquitecturas paralelas para componentes hermanos (overlay/menu).
 
-## Decisión
+## Decisión original (2026-05-10): diferir a 1.1.0
 
-**Diferir migración a 1.1.0**. Mantener Menu hand-rolled en RC1.
+Pre-D2: mantener Menu hand-rolled en RC1, migrar a FUI en 1.1.0.
+
+## Decisión revisada (2026-05-17, post-D2 gate review beta.24): MIGRAR PRE-RC1
+
+D2 ejecutado en B1-PR3:
+- `<FloatingPortal>` wrap MenuContent (escapa ancestor overflow:hidden).
+- `floatingStyles` inline aplicado (flip+shift+offset visible).
+- `data-side`/`data-align`/`data-state` attributes para CSS hooks.
+- `<FloatingFocusManager>` con `returnFocus`.
+- `<FloatingNode>` para cascade dismiss via FloatingTree.
+- Unmount-on-close (no más CSS-hidden + `:focus-within` fallback).
+- Path move: `src/components/Menu/` → `src/components/floating/Menu/` (D7.1).
+
+Razón del cambio respecto al diferimento original: bajo gate review
+beta.24 (cierre Bloque 0), CONV-3 + EXC-A1-17 + audit A2 BLOCKER
+explícito sobre "Menu importa FUI pero no usa portal" forzaron
+re-evaluar. Sin amortiguadores de tiempo, la migración era el camino
+correcto pre-rc.1 — diferimento era "marketing de deuda técnica"
+(documentar limitación como feature).
+
+Tests nuevos cubren flip/shift/portal/cascade behavior (3 stories
+cruzadas Tooltip ya cubrían integración con FloatingTree).
+
+### Decisión original conservada como contexto histórico:
 
 ### Razonamiento
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type RefObject } from "react";
+import { createContext, useContext, type CSSProperties, type RefObject } from "react";
 import type {
   FloatingContext,
   useFloating,
@@ -45,6 +45,17 @@ export interface MenuContextValue {
   setFloating: ReturnType<typeof useFloating>["refs"]["setFloating"];
   /** Context FUI para `<FloatingFocusManager>` en MenuContent. */
   context: FloatingContext;
+  /**
+   * D2 (RC1 gate review beta.24): `floatingStyles` inline (top/left/
+   * position) computado por `useFloating` con middleware flip+shift+offset
+   * aplicado. MenuContent los aplica via `style={floatingStyles}` en lugar
+   * de descartarlos como en C-03 (donde positioning era CSS-driven via
+   * `.ig-menu-up`/`.ig-menu-right` modifier classes). Combinado con
+   * data-side/data-align attributes, el consumer puede hookear estilos
+   * visuales (transform-origin, border-radius edge cases) por placement
+   * sin tocar geometría.
+   */
+  floatingStyles: CSSProperties;
   /** nodeId para envolver el content en `<FloatingNode>` (cascade dismiss). */
   nodeId: string | undefined;
 }
