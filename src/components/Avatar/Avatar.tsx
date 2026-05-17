@@ -122,17 +122,27 @@ export function Avatar(props: AvatarProps) {
       : false;
   const showImg = src && !imgFailed;
 
-  // Codex P2 post-audit sobre PR #36: cuando la imagen falla y caemos
-  // a initials, los descendants quedan con aria-hidden="true" → el
-  // avatar pierde el `alt` que era su único accessible name. Si el
-  // consumer pasó `src`+`alt` y luego la URL falla, el SR queda mudo.
-  // Fix: cuando estamos en fallback de imagen, exponer `alt` (o el
-  // ariaLabel del consumer, con prioridad) como aria-label del wrapper
-  // con role="img". Para avatares puramente decorativos (initials sin
-  // alt ni ariaLabel) el avatar sigue siendo silencioso — decisión
-  // consciente del consumer al no pasar nombre.
+  // Codex P2 post-audit sobre PR #36 + H-01 RC1 gate review beta.24:
+  // cuando la imagen falla, el avatar puede perder su accessible name.
+  // Pre-fix tenía dos gaps:
+  //   (a) img falla CON initials: descendants con aria-hidden=true → SR
+  //       mudo. Fix codex P2 (PR #75) cubrió este caso.
+  //   (b) img falla SIN initials: showInitials=false, el avatar queda
+  //       silencioso visualmente Y sin accessible name. H-01 gate review
+  //       beta.24 verificó este caso como bug real (audit EXC-A2-1).
+  //
+  // Fix beta.24: el fallback aria-label se aplica siempre que `imgFailed`
+  // sea true y `alt` esté presente, INDEPENDIENTE de si hay initials.
+  // Reasoning: alt era el único accessible name del avatar pre-fail. Si
+  // la URL falla, ese alt debe preservarse en el wrapper para que el SR
+  // anuncie algo significativo (ej. "Iván, imagen" en lugar de silencio).
+  // ariaLabel explícito siempre gana sobre alt.
+  //
+  // Para avatares puramente decorativos (initials sin alt ni ariaLabel)
+  // el avatar sigue siendo silencioso — decisión consciente del consumer
+  // al no pasar nombre.
   const fallbackAccessibleName =
-    ariaLabel ?? (showInitials && src && alt ? alt : undefined);
+    ariaLabel ?? (imgFailed && src && alt ? alt : undefined);
   const effectiveRole = fallbackAccessibleName ? "img" : undefined;
 
   return (
