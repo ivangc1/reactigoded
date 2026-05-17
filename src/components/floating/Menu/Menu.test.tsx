@@ -10,29 +10,39 @@ import { MenuLabel } from "./MenuLabel";
 import { useMenu } from "./MenuContext";
 
 describe("Menu — uncontrolled", () => {
-  it("aplica ig-menu y modifica clases por placement/direction", () => {
-    const { container, rerender } = render(
-      <Menu>
+  it("D2: aplica data-side/data-align/data-state al MenuContent según placement/direction default", () => {
+    render(
+      <Menu defaultOpen>
         <MenuTrigger>x</MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
       </Menu>,
     );
-    const root = container.querySelector(".ig-menu");
-    expect(root).not.toBeNull();
-    expect(root).not.toHaveClass("ig-menu-right");
-    expect(root).not.toHaveClass("ig-menu-up");
-
-    rerender(
-      <Menu placement="right" direction="up">
-        <MenuTrigger>x</MenuTrigger>
-      </Menu>,
-    );
-    const root2 = container.querySelector(".ig-menu");
-    expect(root2).toHaveClass("ig-menu-right");
-    expect(root2).toHaveClass("ig-menu-up");
+    // Default: placement="left" + direction="down" → fuiPlacement="bottom-start".
+    const content = screen.getByRole("menu");
+    expect(content).toHaveAttribute("data-side", "bottom");
+    expect(content).toHaveAttribute("data-align", "start");
+    expect(content).toHaveAttribute("data-state", "open");
   });
 
-  it("trigger toggleea y aplica .open + aria-expanded", () => {
-    const { container } = render(
+  it("D2: placement='right' + direction='up' → data-side='top', data-align='end'", () => {
+    render(
+      <Menu defaultOpen placement="right" direction="up">
+        <MenuTrigger>x</MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    // fuiPlacement="top-end".
+    const content = screen.getByRole("menu");
+    expect(content).toHaveAttribute("data-side", "top");
+    expect(content).toHaveAttribute("data-align", "end");
+  });
+
+  it("trigger toggleea y MenuContent se monta/desmonta + aria-expanded", () => {
+    render(
       <Menu>
         <MenuTrigger>Abrir</MenuTrigger>
         <MenuContent>
@@ -41,21 +51,22 @@ describe("Menu — uncontrolled", () => {
       </Menu>,
     );
     const trigger = screen.getByRole("button", { name: /abrir/i });
-    const root = container.querySelector(".ig-menu");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(root).not.toHaveClass("ig-menu-open");
+    // D2: unmount-on-close. Pre-D2 MenuContent siempre en DOM oculto via
+    // CSS. Post-D2: si !open, MenuContent retorna null → no en DOM.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(root).toHaveClass("ig-menu-open");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(root).not.toHaveClass("ig-menu-open");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("click fuera cierra el menu", () => {
-    const { container } = render(
+  it("click fuera cierra el menu (MenuContent desmontado)", () => {
+    render(
       <div>
         <Menu defaultOpen>
           <MenuTrigger>Abrir</MenuTrigger>
@@ -66,14 +77,15 @@ describe("Menu — uncontrolled", () => {
         <button>Fuera</button>
       </div>,
     );
-    const root = container.querySelector(".ig-menu");
-    expect(root).toHaveClass("ig-menu-open");
+    // D2: MenuContent montado cuando open (no más CSS-hidden).
+    expect(screen.getByRole("menu")).toBeInTheDocument();
     // C-03 (RC1): tras migración a FUI, useDismiss usa `pointerdown` por
     // defecto, no `mousedown`. Comportamiento observable (outside click
     // cierra) preservado; cambio de evento es detalle de implementación
     // del primitive.
     fireEvent.pointerDown(screen.getByRole("button", { name: /fuera/i }));
-    expect(root).not.toHaveClass("ig-menu-open");
+    // D2: tras close, MenuContent desmontado (no en DOM).
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("ESC cierra el menu y devuelve foco al trigger", () => {

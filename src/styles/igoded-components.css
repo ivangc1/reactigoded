@@ -8297,20 +8297,24 @@ ESTRUCTURA:
   </div>
 </div>
 
-CÓMO USAR:
-1. Contenedor ig-menu con position: relative
-2. Trigger (botón) con ig-menu-trigger
-3. Menú con ig-menu-content (hidden por defecto)
-4. Items con ig-menu-item
-5. JS para toggle clase 'open' en el contenedor (o usa :focus-within)
+CÓMO USAR (post-D2 beta.24, full FUI portal):
+1. Contenedor ig-menu envuelve trigger.
+2. Trigger (botón) con ig-menu-trigger.
+3. <MenuContent> renderiza en portal (document.body) con positioning
+   automático via Floating UI flip+shift+offset middleware. No CSS
+   modifier classes para placement.
+4. Items con ig-menu-item.
+5. JS-driven visibility — unmount-on-close (MenuContent retorna null si
+   !open). NO CSS :focus-within fallback pre-D2 (eliminado).
 
-POSICIONES:
-- ig-menu-right: alineado a la derecha
-- ig-menu-up: abre hacia arriba
+POSICIONES (post-D2): atributos en MenuContent expuestos para CSS hooks:
+- data-side="top|bottom|left|right" (side resuelto post-flip).
+- data-align="start|end|center" (align resuelto post-shift).
+- data-state="open" (solo cuando montado).
 
 ESTADOS:
-- ig-menu-item-active: item actualmente seleccionado
-- ig-menu-item-danger: acciones destructivas (eliminar, etc.)
+- ig-menu-item-active: item actualmente seleccionado.
+- ig-menu-item-danger: acciones destructivas (eliminar, etc.).
 
 CUÁNDO USAR:
 - Menús de acciones (•••)
@@ -8328,43 +8332,34 @@ CUÁNDO USAR:
   cursor: pointer;
 }
 
+/*
+ * D2 (RC1 gate review beta.24): MenuContent renderizado en FloatingPortal
+ * (document.body) con positioning inline via floatingStyles. Reglas
+ * pre-D2 sobre `.ig-menu .ig-menu-content` asumían adjacency parent→child
+ * que el portal rompe — top/left vienen de inline style FUI; CSS solo
+ * provee visual base (color, padding, shadow, border, radius).
+ *
+ * Modifier classes ELIMINADAS:
+ *   - .ig-menu-right .ig-menu-content (positioning right-aligned).
+ *   - .ig-menu-up .ig-menu-content (positioning up-opening).
+ *   - .ig-menu.ig-menu-open .ig-menu-content (CSS-driven visibility).
+ *   - .ig-menu:focus-within .ig-menu-content (JS-less fallback).
+ *
+ * Reemplazo: positioning automático via FUI flip+shift+offset
+ * middleware. Visibility via unmount-on-close (MenuContent retorna null
+ * si !open). Consumer puede hookear placement via attribute selectors:
+ *   .ig-menu-content[data-side="top"] { transform-origin: bottom center; }
+ *   .ig-menu-content[data-align="end"] { border-top-right-radius: 0; }
+ *   .ig-menu-content[data-state="open"] { animation: fade-in 150ms; }
+ */
 .ig-menu-content {
-  position: absolute;
-  top: 100%;
-  left: 0;
   z-index: var(--ig-z-dropdown);
   min-width: 180px;
   padding: var(--ig-space-1);
-  margin-top: var(--ig-space-1);
   background-color: var(--ig-menu-bg);
   border: 1px solid var(--ig-menu-border);
   border-radius: var(--ig-menu-radius);
   box-shadow: var(--ig-menu-shadow);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(calc(-1 * var(--ig-space-2)));
-  transition: var(--ig-transition-fast);
-}
-
-.ig-menu-right .ig-menu-content {
-  left: auto;
-  right: 0;
-}
-
-.ig-menu-up .ig-menu-content {
-  top: auto;
-  bottom: 100%;
-  margin-top: 0;
-  margin-bottom: var(--ig-space-1);
-  transform: translateY(var(--ig-space-2));
-}
-
-/* Mostrar con clase o focus-within */
-.ig-menu.ig-menu-open .ig-menu-content,
-.ig-menu:focus-within .ig-menu-content {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
 }
 
 .ig-menu-item {
