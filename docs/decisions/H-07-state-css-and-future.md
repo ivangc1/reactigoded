@@ -57,6 +57,16 @@ Coste alto pero mantenimiento mucho menor (deja que el motor de Tailwind genere 
 
 4. **Cero código modificado**: state.css, fragments, package.json#exports, vite.lib.config.ts, size budgets — todos intactos.
 
+## Gate ejecutable (D9 beta.24)
+
+`scripts/check-state-css-exclusion.mjs` + `npm run test:state-css-exclusion`, encadenado en `verify:unit` post-build. Verifica que ningún string literal con prefijo `hover:ig-`, `focus:ig-`, `active:ig-`, `disabled:ig-`, `checked:ig-`, `default:ig-`, `empty:ig-`, `first-child:ig-`, `last-child:ig-` aparezca en `dist/index.js` ni `dist/index.cjs`.
+
+Razón del gate: si un componente del DS empieza accidentalmente a referenciar utilities de `state.css` (713 KB gz standalone) por error, el bundle React crece silenciosamente y el TTI del consumer típico se rompe. El gate caza esto pre-publish.
+
+Si alguna vez el DS decide adoptar utilities de `state.css` internamente (improbable — los componentes usan clases tipo `ig-button`, no utilities `hover:ig-bg-brand`), el gate se actualiza explícitamente en el mismo PR + decision doc.
+
+Detalle en `docs/decisions/D9-size-limit-baseline.md` § "H-07 gate ejecutable".
+
 ## Cierra (parcialmente)
 
 - **H-07** (HIGH del gate review § IV.2): cerrada con A+ en RC1.
