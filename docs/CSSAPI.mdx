@@ -361,11 +361,12 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 </nav>
 ```
 
-> **API React controlled + uncontrolled**: `currentPage` y
-> `onValueChange` son opcionales. Pasa `currentPage`+`onValueChange`
-> para controlled, o `defaultPage` (default 1) para uncontrolled
-> (el componente maneja state interno; `onValueChange` opcional como
-> side-effect). Patrón consistente con Tabs / Accordion / Menu.
+> **API React controlled + uncontrolled** (D3 beta.24):
+> `page` y `onPageChange` son opcionales. Pasa `page`+`onPageChange`
+> para controlled, o `defaultPage` (default 1) para uncontrolled (el
+> componente maneja state interno; `onPageChange` opcional como
+> observer). Patrón consistente DS-wide cerrado en beta.24 (D3/D4/D5/D6):
+> `{prop}?` + `default{Prop}?` + `on{Prop}Change`.
 
 ---
 

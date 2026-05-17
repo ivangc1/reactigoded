@@ -52,7 +52,8 @@ bundle.
 
 Razón: `@floating-ui/react` ocupa ~17 KB gz; bundlearla duplicaba
 la dep si el consumer ya la tenía vía Radix/Headless UI/otra DS.
-Externalizarla mantiene el bundle de reactigoded en ~14 KB gz.
+Externalizarla mantiene el bundle ESM de reactigoded en ~16 KB gz
+(budget 20 KB con headroom para crecimiento, D9 beta.24).
 
 ## CSS imports
 
@@ -108,7 +109,7 @@ import "reactigoded/styles/all.css";
 | Tokens + a11y baseline, mis componentes           | `tokens.css` + `base.css`                  |
 | Tema custom, mismas clases del DS                 | `design.css` + override `:root`            |
 
-> El `<dialog>` de `<Modal>` y los componentes con flex/transition usan
+> El `<dialog>` de `<Dialog>` / `<AlertDialog>` y los componentes con flex/transition usan
 > `var(--ig-*)` definidos en `design.css`. **Si solo importas `state.css` o
 > `reset.css`, los componentes no tendrán estilo.**
 
@@ -157,10 +158,12 @@ del sistema; asegúrate de que ya lo tienes en tu propia capa.
 ```tsx
 import {
   Button,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalClose,
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogClose,
   Toast,
   ToastProvider,
   useToast,
@@ -189,21 +192,20 @@ function Page() {
 
 | Categoría | Componentes |
 |---|---|
-| **Acciones** | `Button`, `Chip`, `Pagination` |
+| **Acciones** | `Button`, `IconButton`, `Chip`, `Pagination` |
 | **Display** | `Avatar`, `AvatarGroup`, `Badge`, `Card` (+`CardHeader`/`Body`/`Footer`/`Image`/`Divider`), `Divider`, `Skeleton`, `Spinner`, `Timeline`+`TimelineItem` |
-| **Feedback** | `Alert`, `Progress`, `Toast`+`ToastProvider`+`useToast`, `Tooltip` |
+| **Feedback** | `Alert`, `AlertDialog`+`AlertDialogTrigger`+`AlertDialogContent`+`AlertDialogHeader`+`AlertDialogBody`+`AlertDialogFooter`+`AlertDialogClose`, `Dialog`+`DialogTrigger`+`DialogContent`+`DialogHeader`+`DialogBody`+`DialogFooter`+`DialogClose`, `Progress`, `Toast`+`ToastProvider`+`useToast`, `Tooltip`, `FloatingTreeRoot` |
 | **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `NativeSelect`, `Slider`, `Switch`, `Textarea`, `ThemeToggle` |
-| **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `OptionsMenu`+`OptionsMenuTrigger`+`OptionsMenuContent`+`OptionsMenuItem`+`OptionsMenuDivider`+`OptionsMenuHeader`, `Modal`+`ModalHeader`+`ModalBody`+`ModalFooter`+`ModalClose`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabList`+`Tab`+`TabPanel`+`TabsContent` |
+| **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `Menu`+`MenuTrigger`+`MenuContent`+`MenuItem`+`MenuSeparator`+`MenuLabel`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabsList`+`TabsTrigger`+`TabsContent` |
 
-Hooks públicos: `useTheme`, `useToast`, `useControllableState`.
+Hooks públicos: `useTheme`, `useToast`, `useControllableState` + el componente helper `FloatingTreeRoot` (anidación de floats). Detalle completo en la sección [Hooks públicos del DS](#hooks-públicos-del-ds) (D11 beta.24).
 
-> **B-04 (RC1)**: los context hooks `useAccordion`, `useAccordionItem`,
-> `useOptionsMenu`, `useSidebar`, `useTabs` quedaron retirados del API
-> público pre-RC1. Su shape estaba acoplada a internals del compound
-> y exponerlos como públicos firmaría una API que bloquearía refactor
-> a Floating UI post-RC1 (ver `docs/decisions/C-03-dropdown-hand-rolled-defer.md`).
-> Si necesitas leer el state interno de uno de estos compounds desde
-> un componente custom, abre un issue con el caso de uso.
+> **D11 / B-04 (RC1+beta.24)**: los context hooks internos (`useAccordion`,
+> `useTabs`, etc.) quedan retirados del API público. Su shape está
+> acoplada a internals del compound; exponerlos firmaría una API que
+> bloquearía refactor a Floating UI. JSDoc marca explícitamente
+> `@public` / `@internal` (D11). Detalle en
+> `docs/decisions/D11-hooks-disposition.md`.
 
 ## API CSS pública
 
@@ -230,9 +232,9 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 | `Checkbox`              | `.ig-checkbox`            | variants color, sizes                                                                   |
 | `Chip`                  | `.ig-chip`                | variants color, `-close`                                                                |
 | `Divider`               | `.ig-divider`             | variants color, `-vertical`, `-dashed`, `-with-text`                                    |
-| `OptionsMenu`              | `.ig-options-menu`            | `-trigger`, `-menu`, `-item`, `-divider`, `-header`, `-open`                            |
+| `Menu`                  | `.ig-menu`                | `-trigger`, `-content`, `-item`, `-separator`, `-label` *(portal real via Floating UI, D2/D7 beta.24)* |
 | `Input` / `Textarea` / `NativeSelect` | `.ig-input` · `.ig-textarea` · `.ig-native-select` | `-error`, `-success`, `-addon`, `-group`, `-textarea-auto`, `-select-auto` |
-| `Modal`                 | `.ig-dialog` *(<dialog> nativo)* | `-header`, `-body`, `-footer`, `-close`, sizes `-sm`…`-xl`/`-full`, `-backdrop-blur`/`-dark`/`-light`/`-no-backdrop`, `-show`, `-loading` |
+| `Dialog` / `AlertDialog` | `.ig-dialog` *(<dialog> nativo)* | `-header`, `-body`, `-footer`, `-close`, sizes `-sm`…`-xl`/`-full`, `-backdrop-blur`/`-dark`/`-light`/`-no-backdrop`, `-loading`. `AlertDialog` aplica `role="alertdialog"` + `closeOnBackdrop=false` default (D8 beta.24) |
 | `Navbar`                | `.ig-navbar`              | `-brand`, `-nav`, `-actions`, `-link`, `-menu-button`, `-sticky`/`-fixed`               |
 | `Pagination`            | `.ig-pagination`          | variants color, `-active`                                                               |
 | `Progress`              | `.ig-progress`            | `-bar`, variants color, sizes                                                           |
@@ -259,8 +261,10 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 
 ### Controlled vs. uncontrolled
 
-Componentes con estado (`Accordion`, `Alert`, `OptionsMenu`, `Sidebar`,
-`Slider`, `Switch`, `Tabs`, `ThemeToggle`, `Rating`) soportan ambos modos:
+Componentes con estado (`Accordion`, `Dialog`, `AlertDialog`, `Menu`,
+`Pagination`, `Rating`, `Sidebar`, `Slider`, `Stepper`, `Switch`, `Tabs`,
+`ThemeToggle`) soportan ambos modos. Convención DS-wide cerrada en
+beta.24 (D3/D4/D5/D6): `{prop}?` + `default{Prop}?` + `on{Prop}Change`.
 
 ```tsx
 // Uncontrolled — el componente gestiona su estado.
@@ -271,9 +275,34 @@ const [tab, setTab] = useState("perfil");
 <Tabs value={tab} onValueChange={setTab}>…</Tabs>
 ```
 
-`Modal` es **controlled-only** (siempre necesita `open`+`onClose`).
-`Pagination` soporta tanto controlled (`currentPage`+`onValueChange`) como
-uncontrolled (`defaultPage`, `onValueChange` opcional) desde 1.0.0-beta.20.
+Convención completa por componente:
+
+| Componente | Controlled | Uncontrolled | Callback |
+|---|---|---|---|
+| Accordion | `value` | `defaultValue` | `onValueChange` |
+| Dialog / AlertDialog | `open` | `defaultOpen` | `onOpenChange` |
+| Pagination | `page` | `defaultPage` | `onPageChange` |
+| Rating | `value` | `defaultValue` | `onValueChange` |
+| Sidebar | `collapsed` | `defaultCollapsed` | `onCollapsedChange` |
+| Slider | `value` | `defaultValue` | `onValueChange` |
+| Stepper | `active` | `defaultActive` | `onActiveChange` |
+| Switch | `checked` | `defaultChecked` | `onCheckedChange` |
+| Tabs | `value` | `defaultValue` | `onValueChange` |
+| ThemeToggle | `theme` | `defaultTheme` | `onThemeChange` |
+
+`Dialog` y `AlertDialog` (D6/D8 beta.24) además aceptan
+`<DialogTrigger>` / `<AlertDialogTrigger>` para abrir sin necesidad de
+gestionar `open` externamente:
+
+```tsx
+<Dialog defaultOpen={false}>
+  <DialogTrigger className="ig-btn ig-btn-brand">Abrir</DialogTrigger>
+  <DialogContent>
+    <DialogHeader>Título <DialogClose /></DialogHeader>
+    <DialogBody>Contenido</DialogBody>
+  </DialogContent>
+</Dialog>
+```
 
 ### Tema light/dark
 
@@ -351,8 +380,9 @@ en [`docs/decisions/D11-hooks-disposition.md`](docs/decisions/D11-hooks-disposit
 />
 ```
 
-- `Modal` usa `<dialog>` HTML nativo (focus trap, ESC, top-layer y
-  `aria-modal` automáticos).
+- `Dialog` / `AlertDialog` usan `<dialog>` HTML nativo (focus trap,
+  ESC, top-layer y `aria-modal` automáticos). `AlertDialog` aplica
+  `role="alertdialog"` + `closeOnBackdrop=false` por defecto (D8).
 - `Tooltip` inyecta `aria-describedby` en el child y un `<span role="tooltip">`
   sr-only para lectores de pantalla.
 
@@ -367,9 +397,9 @@ en [`docs/decisions/D11-hooks-disposition.md`](docs/decisions/D11-hooks-disposit
   detrás de guards `typeof document !== "undefined"`. En server caen
   a defaults sensatos sin crashear; en cliente recuperan el estado
   real evitando hydration mismatches.
-- `<Modal>` no llama `showModal()` en server (el `<dialog>` se queda
-  con `display:none` hasta que el efecto cliente lo abre — sin
-  flash).
+- `<Dialog>` / `<AlertDialog>` no llaman `showModal()` en server (el
+  `<dialog>` queda con `display:none` hasta que el efecto cliente lo
+  abre — sin flash).
 - `<Toast>` se renderiza inline en SSR (no portal) hasta que
   `document.body` está disponible.
 - Los effects (`useEffect`, `useLayoutEffect`) corren solo en
