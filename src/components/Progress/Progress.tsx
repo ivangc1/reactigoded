@@ -1,4 +1,4 @@
-import type { HTMLAttributes, Ref } from "react";
+import type { CSSProperties, HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export type ProgressVariant =
@@ -89,6 +89,13 @@ export function Progress({
   const safeValue = Number.isNaN(value) ? 0 : value;
   const clamped = Math.min(Math.max(safeValue, 0), safeMax);
   const percent = (clamped / safeMax) * 100;
+  // H-03 (beta.24): cuantizar a entero 0..100 antes de emitir el
+  // custom property. Sin esto, inputs como value=1 max=3 emiten
+  // `33.33333333333333%`, fuera del conjunto finito de 101 valores
+  // que un CSP con `'unsafe-hashes'` puede pre-hashear (codex P2
+  // sobre PR #81). El round es visualmente imperceptible (paso 1%
+  // sobre la barra) y matchea el `aria-label` que ya redondea.
+  const percentInt = Math.round(percent);
   // 1.0.0-beta.4: aria-label del rest (HTML std). Si no llega, resolver
   // por prioridad: aria-label > formatLabel(percent) > loadingLabel
   // (en indeterminate) > fallback español "X por ciento completado"
@@ -121,13 +128,30 @@ export function Progress({
     >
       <div
         className="ig-progress-bar"
-        // M-08 (RC1): inline style necesario porque `width` depende
-        // de `value` runtime (0-100%), no es expressable como clase
-        // estática. Consumer con CSP estricto sin `'unsafe-inline'`
-        // debe aceptar `style-src 'self' 'unsafe-inline'` o usar
-        // CSS-in-JS con nonce. Excepción legítima documentada en
-        // gate review § IV.3 M-08.
-        style={indeterminate ? undefined : { width: `${String(percent)}%` }}
+        // H-03 (beta.24 gate review): el `width` runtime ya no se
+        // emite como propiedad CSS arbitraria en el style attribute.
+        // En su lugar pasamos un único custom property
+        // `--ig-progress-percent` que la regla `.ig-progress-bar` del
+        // stylesheet consume via `width: var(--ig-progress-percent, 0%)`.
+        // Beneficios CSP:
+        //   - El style attribute ya no contiene propiedades
+        //     visuales arbitrarias (`width: …`), solo un canal de
+        //     datos tipado por convención del DS.
+        //   - Auditores CSP modernos (CSP Evaluator, Lighthouse)
+        //     tratan `style="--var: value"` como data passthrough,
+        //     distinto a inline rules.
+        //   - El consumer puede gatear el DS detrás de un CSP que
+        //     restrinja `style-src` con `'unsafe-hashes'` sobre el
+        //     conjunto finito de valores `--ig-progress-percent`
+        //     emitidos. Imposible con `width: 50%` arbitrario.
+        // Patrón canónico Radix/Mantine/MUI Joy para valores dinámicos.
+        style={
+          indeterminate
+            ? undefined
+            : ({
+                "--ig-progress-percent": `${String(percentInt)}%`,
+              } as CSSProperties)
+        }
       />
     </div>
   );

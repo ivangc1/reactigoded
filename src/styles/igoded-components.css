@@ -7687,8 +7687,16 @@ QUÉ ES: Barra de progreso para mostrar porcentajes de completado.
 
 ESTRUCTURA:
 <div class="ig-progress">
-  <div class="ig-progress-bar" style="width: 60%"></div>
+  <div class="ig-progress-bar" style="--ig-progress-percent: 60%"></div>
 </div>
+
+NOTA H-03 (CSP-friendly): el porcentaje se setea como custom
+property `--ig-progress-percent`. La regla `.ig-progress-bar` ya
+consume la variable via `width: var(--ig-progress-percent, 0%)`. El
+patrón equivalente `style="width: 60%"` también funciona (specificity
+del inline style gana), pero un CSP con `'unsafe-hashes'` sobre el
+conjunto finito de valores `--ig-progress-percent` requiere el
+formato custom-property.
 
 VARIANTES (6 colores):
 - ig-progress-brand: vitreus (principal)
@@ -7714,6 +7722,13 @@ MODIFICADORES:
 
 .ig-progress-bar {
   height: 100%;
+  /* H-03 (beta.24): width consume el custom property
+     `--ig-progress-percent` que `Progress.tsx` setea en el style
+     attribute con el valor runtime. Si la variable no está asignada
+     (modo indeterminate no emite style attribute), cae al fallback
+     `0%` y la regla `.ig-progress-indeterminate .ig-progress-bar`
+     con `width: 30% !important` toma el control. */
+  width: var(--ig-progress-percent, 0%);
   background-color: var(--ig-progress-fill);
   border-radius: var(--ig-rounded-full);
   transition: width var(--ig-duration-300) ease;

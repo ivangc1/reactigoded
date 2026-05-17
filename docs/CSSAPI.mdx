@@ -382,13 +382,21 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 ```html
 <div class="ig-progress ig-progress-success" role="progressbar"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="70">
-  <div class="ig-progress-bar" style="width: 70%"></div>
+  <div class="ig-progress-bar" style="--ig-progress-percent: 70%"></div>
 </div>
 
 <div class="ig-progress ig-progress-indeterminate" role="progressbar" aria-label="Cargando">
   <div class="ig-progress-bar"></div>
 </div>
 ```
+
+> **H-03 (beta.24, CSP):** el porcentaje runtime se setea como custom
+> property `--ig-progress-percent`. La regla `.ig-progress-bar` ya
+> consume la variable con `width: var(--ig-progress-percent, 0%)`. El
+> patrón equivalente `style="width: 70%"` también funciona (specificity
+> del inline style gana), pero un CSP con `'unsafe-hashes'` sobre el
+> conjunto finito de valores `--ig-progress-percent` requiere el
+> formato custom-property.
 
 ---
 
