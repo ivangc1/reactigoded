@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 22.12.0
           cache: npm
 
       - name: Install dependencies
@@ -48,6 +48,17 @@ jobs:
         # selector. Patrón histórico: bug Stepper beta.20 con
         # `.ig-step-active`. Allowlist en scripts/scope-leak-allowlist.json.
         run: npm run test:scope-leaks
+
+      - name: Hex drift guard (--strict)
+        # B-02 (gate review beta.24): detecta hex literales hardcoded
+        # que han quedado stale tras recalibración de tokens cardinales.
+        # Patrón histórico: beta.16 recalibró vitreus/axis/cinis, ~10-15
+        # hex stale quedaron silenciosamente en stories/docs hasta
+        # detección manual en beta.18. Sin este gate, ningún test los
+        # caza. Allowlist en scripts/hex-drift-allowlist.json para hex
+        # intencionalmente cercanos a tokens (Storybook chrome, ejemplos
+        # docs históricos).
+        run: npm run test:hex-drift
 
       - name: Build (lib + dts + styles)
         run: npm run build
@@ -90,7 +101,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 22.12.0
           cache: npm
 
       - name: Install dependencies

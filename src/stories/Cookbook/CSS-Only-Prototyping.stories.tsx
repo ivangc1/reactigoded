@@ -49,7 +49,7 @@ const DEMO_HTML = `<!DOCTYPE html>
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       padding: 2rem;
       margin: 0;
-      background: #fafafa;
+      background: #faf9fc;
     }
     .demo {
       display: flex;
@@ -69,11 +69,11 @@ const DEMO_HTML = `<!DOCTYPE html>
       font-weight: 500;
       transition: all 150ms ease;
     }
-    .ig-bg-vitreus { background: #053a40; color: #fafafa; }
-    .ig-bg-axis    { background: #2c6e7a; color: #fafafa; }
-    .ig-bg-laurus  { background: #4a7c59; color: #fafafa; }
-    .ig-bg-malum   { background: #8b1e3f; color: #fafafa; }
-    .ig-text-cinis { color: #1a1a1a; }
+    .ig-bg-vitreus { background: #053a40; color: #faf9fc; }
+    .ig-bg-axis    { background: #2c6e7a; color: #faf9fc; }
+    .ig-bg-laurus  { background: #4a7c59; color: #faf9fc; }
+    .ig-bg-malum   { background: #8b1e3f; color: #faf9fc; }
+    .ig-text-cinis { color: #0c1515; }
     .ig-p-4 { padding: 1rem; }
     .ig-rounded { border-radius: 0.5rem; }
     /* state.css fragments inline (versión reducida para el iframe demo) */
@@ -129,7 +129,7 @@ const DEMO_HTML = `<!DOCTYPE html>
   <p style="color:#555;font-size:14px;max-width:560px;">
     En producción importa solo los fragments que necesitas:
   </p>
-  <pre style="background:#1a1a1a;color:#3ae2f7;padding:1rem;border-radius:6px;font-size:13px;overflow:auto;"><code>&lt;!-- Solo el variant que usas (50 KB gz cada uno) --&gt;
+  <pre style="background:#0c1515;color:#3ae2f7;padding:1rem;border-radius:6px;font-size:13px;overflow:auto;"><code>&lt;!-- Solo el variant que usas (50 KB gz cada uno) --&gt;
 &lt;link rel="stylesheet" href="reactigoded/styles/state/hover.css" /&gt;
 &lt;link rel="stylesheet" href="reactigoded/styles/state/focus-visible.css" /&gt;
 
