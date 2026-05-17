@@ -210,6 +210,8 @@ function isDerivedOptions<T>(
  *   setDerivedValue: (next) => writeStoredTheme(storageKey, next),
  *   onChange: onValueChange,
  * });
+ *
+ * @public
  */
 export function useControllableState<T>(
   options: UseControllableStateOptions<T>,

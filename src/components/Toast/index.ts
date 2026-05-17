@@ -7,4 +7,5 @@ export type {
   ToastOptions,
   ToastEntry,
   ToastContextValue,
+  UseToastReturn,
 } from "./ToastContext";
