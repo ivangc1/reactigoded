@@ -16,26 +16,52 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
+import { useControllableState } from "@/hooks/useControllableState";
 import type { StepProps } from "./Step";
 
 export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   /**
-   * Índice (0-based) del step activo. Steps anteriores se marcan
-   * completos; el de este índice lleva `aria-current="step"`.
+   * Índice (0-based) del step activo en **modo controlled**. Steps
+   * anteriores se marcan completos; el de este índice lleva
+   * `aria-current="step"`.
    *
-   * **Stepper es presentational por defecto**: la prop es requerida y
-   * refleja el estado actual que el consumer mantenga. No hay modo
-   * "uncontrolled" — si pasas un valor inicial sin actualizarlo, el
-   * stepper queda congelado para siempre.
+   * **D5 (beta.24)**: `active` ahora es opcional. Patrón controlled/
+   * uncontrolled DS-wide alineado con Pagination, Sidebar, Tabs,
+   * Switch, Accordion:
    *
-   * Cuando se pasa `onActiveChange`, el Stepper se vuelve **interactive**
-   * (focus + keyboard nav). Sigue siendo el consumer quien aplica el
-   * cambio actualizando esta prop.
+   *   - Pasas `active` → controlled. Tu app gestiona el estado y este
+   *     debe actualizarse en respuesta a `onActiveChange`. Si lo dejas
+   *     congelado, el Stepper se queda congelado (consciente).
+   *   - Omites `active` (y opcionalmente pasas `defaultActive`) →
+   *     uncontrolled. El Stepper mantiene su propio estado interno y
+   *     `onActiveChange` actúa como observer (callback opcional).
+   *
+   * En modo controlled SIN `onActiveChange` el Stepper queda
+   * presentational (sin keyboard nav ni clicks activos). En modo
+   * uncontrolled siempre es interactive — `defaultActive` solo describe
+   * el valor inicial; sin un mecanismo para mutarlo el componente sería
+   * un display estático sin razón de ser.
    */
-  active: number;
+  active?: number;
+  /**
+   * Valor inicial en **modo uncontrolled** (cuando `active` es
+   * undefined). Por defecto `0`. Ignorado en modo controlled.
+   */
+  defaultActive?: number;
   /**
    * Callback cuando el usuario navega o activa por teclado / click.
-   * Si está definido, el Stepper entra en **modo interactive**:
+   * Dispara en ambos modos:
+   *
+   *   - **Controlled** (`active` definido): el callback es el único
+   *     mecanismo para que el consumer actualice `active`. Si está
+   *     omitido en controlled, el Stepper queda presentational
+   *     (consumer no puede observar cambios → sin sentido habilitar
+   *     interactive).
+   *   - **Uncontrolled** (`active` undefined): el callback actúa como
+   *     observer. El Stepper actualiza su estado interno aunque el
+   *     consumer no pase callback.
+   *
+   * Interactive mode (focus + keyboard nav):
    * - Cada step lleva `role="button"` + `tabIndex` roving.
    * - ArrowLeft / ArrowUp → step anterior.
    * - ArrowRight / ArrowDown → step siguiente.
@@ -43,9 +69,9 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
    * - End → último step.
    * - Enter / Space → activa el step focuseado.
    *
-   * El callback recibe el índice 0-based del step destino. El consumer
-   * decide si lo aplica (puede rechazar saltos hacia adelante en un
-   * wizard, p.ej.).
+   * El callback recibe el índice 0-based del step destino. En modo
+   * controlled el consumer decide si lo aplica (puede rechazar saltos
+   * hacia adelante en un wizard, p.ej.).
    */
   onActiveChange?: (next: number) => void;
   /** Si true, usa el layout con labels debajo (`ig-stepper-labeled`). */
@@ -91,6 +117,7 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
  */
 export function Stepper({
   active,
+  defaultActive,
   onActiveChange,
   labeled = false,
   className,
@@ -99,30 +126,68 @@ export function Stepper({
   ...rest
 }: StepperProps) {
   const steps = Children.toArray(children).filter(isValidElement);
-  const interactive = onActiveChange !== undefined;
   const stepCount = steps.length;
+  const isControlled = active !== undefined;
 
-  // B-05 (gate review): clamp `active` a un índice válido.
-  // Sin esto, valores fuera de rango (active=999, -1, NaN) hacían que
-  // ningún Step recibiera `active=true` → todos `tabIndex=-1` → tablist
-  // sin tab stop → keyboard inaccessible. Patrón Pagination/Slider del
-  // propio DS: cálculo puro + dev warn separado en useEffect.
+  // D5 (beta.24): wiring controlled/uncontrolled estándar DS-wide.
+  // - Controlled (`active` definido): forward a `onActiveChange` igual
+  //   que antes, consumer responsable de la transición.
+  // - Uncontrolled (`active` undefined): estado interno gestionado por
+  //   `useControllableState`, `onActiveChange` actúa como observer.
+  //
+  // `useControllableState` ya emite dev-warn de "controlled without
+  // onChange" — patrón DS-wide. La lógica de "Stepper presentational
+  // si controlled sin onActiveChange" se preserva más abajo con la
+  // computación de `interactive`.
+  const { value: rawActive, setValue: setActive } = useControllableState<number>(
+    {
+      value: active,
+      defaultValue: defaultActive ?? 0,
+      onChange: onActiveChange,
+    },
+  );
+
+  // Interactive mode:
+  // - Controlled + onActiveChange → interactive (consumer aplica
+  //   transiciones via su state).
+  // - Uncontrolled → interactive (estado interno + opcional observer
+  //   `onActiveChange`).
+  // - Controlled SIN onActiveChange → presentational. Sin callback el
+  //   consumer no puede aplicar la transición; habilitar keyboard nav
+  //   sería confuso (focus se moverá visualmente pero nada cambia).
+  const interactive = !isControlled || onActiveChange !== undefined;
+
+  // B-05 (gate review): clamp `active` (controlled o internal) a un
+  // índice válido. Sin esto, valores fuera de rango (active=999, -1,
+  // NaN) hacían que ningún Step recibiera `active=true` → todos
+  // `tabIndex=-1` → tablist sin tab stop → keyboard inaccessible.
+  // Patrón Pagination/Slider del propio DS: cálculo puro + dev warn
+  // separado en useEffect.
   const clampedActive = useMemo(() => {
     if (stepCount === 0) return 0;
     const lastIdx = stepCount - 1;
-    if (!Number.isFinite(active)) return 0;
-    if (active < 0) return 0;
-    if (active > lastIdx) return lastIdx;
-    return active;
-  }, [active, stepCount]);
+    if (!Number.isFinite(rawActive)) return 0;
+    if (rawActive < 0) return 0;
+    if (rawActive > lastIdx) return lastIdx;
+    return rawActive;
+  }, [rawActive, stepCount]);
 
   // Dev warn diferenciado, solo una vez por componente. Patrón Slider:
   // `import.meta.env.DEV` (Vite, sin Node types) + warnedRef para no
   // spamear el mismo warn en re-renders. Side effect aislado en
   // useEffect, no dentro de render/useMemo.
+  //
+  // El warn aplica solo en modo controlled — en uncontrolled, los
+  // valores out-of-range no pueden llegar (`setActive` siempre recibe
+  // un idx válido del propio Stepper). Si igual ocurriera por un
+  // `defaultActive` inválido (consumer pasa `defaultActive={999}`),
+  // el clamp aplica silenciosamente al inicial — sin warn, es
+  // configuración estática, no un bug recurrente que vale spam de
+  // consola.
   const warnedRef = useRef(false);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
+    if (!isControlled) return;
     if (warnedRef.current) return;
     if (stepCount === 0) return;
     const lastIdx = stepCount - 1;
@@ -142,7 +207,7 @@ export function Stepper({
         `[reactigoded] <Stepper active=${String(active)}> > ${String(lastIdx)} (último step); clamping a ${String(lastIdx)}.`,
       );
     }
-  }, [active, stepCount]);
+  }, [active, isControlled, stepCount]);
 
   // 1.0.0-beta.4: aria-label del rest (HTML std) en vez de prop ariaLabel.
   const { "aria-label": ariaLabelOverride, ...divRest } = rest;
@@ -230,18 +295,22 @@ export function Stepper({
       // Marca intent de focus; el effect post-commit lo aplicará
       // cuando React termine de actualizar los tabIndex roving.
       focusTargetIdxRef.current = nextIdx;
-      onActiveChange(nextIdx);
+      // D5: `setActive` resuelve a (a) controlled → forward a
+      // onActiveChange; (b) uncontrolled → actualizar state interno
+      // + dispatch a onActiveChange como observer. Mismo callsite,
+      // ambos modos.
+      setActive(nextIdx);
     },
-    [clampedActive, interactive, onActiveChange, stepCount],
+    [clampedActive, interactive, setActive, stepCount],
   );
 
   const handleActivate = useCallback(
     (idx: number) => {
       if (!interactive) return;
       if (idx === clampedActive) return;
-      onActiveChange(idx);
+      setActive(idx);
     },
-    [clampedActive, interactive, onActiveChange],
+    [clampedActive, interactive, setActive],
   );
 
   // Callback ref que combina rootRef interno (focus management H-25) con

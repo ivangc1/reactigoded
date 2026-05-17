@@ -257,6 +257,49 @@ Sin `act()` en el test: `hydrateRoot` commitea sincrónicamente y
 sincronos (array push + DOM snapshot), no dependen de effects
 post-commit.
 
+---
+
+**D5 — Stepper `defaultActive` + modo uncontrolled** (B2-PR1):
+
+Cierra el último componente con estado público del DS que rompía el
+patrón controlled/uncontrolled DS-wide. Pre-D5, `active` era
+obligatorio; consumers debían crear `useState` externo incluso para
+casos sencillos. Ahora alineado con Accordion/Pagination/Sidebar/
+Tabs/Switch/Slider/Rating/ThemeToggle.
+
+API (no breaking — `active` deja de ser obligatorio):
+
+```ts
+export interface StepperProps {
+  active?: number;                // ← era obligatorio
+  defaultActive?: number;         // ← nuevo (default 0)
+  onActiveChange?: (next: number) => void; // ← sin cambio
+}
+```
+
+Semántica de modos:
+| Props pasados | Modo | Interactive |
+|---|---|---|
+| `active=N` | Controlled | NO (sin callback no hay vector de cambio) |
+| `active=N, onActiveChange=fn` | Controlled | SÍ |
+| `defaultActive=N` (o nada) | Uncontrolled | SÍ (estado interno) |
+| `defaultActive=N, onActiveChange=fn` | Uncontrolled + observer | SÍ |
+
+Implementación: `useControllableState<number>` interno. Keyboard
+handlers + click invocan `setActive(nextIdx)` que resuelve a:
+- Controlled: forward a `onActiveChange`.
+- Uncontrolled: actualizar state interno + dispatch a `onActiveChange`
+  como observer.
+
+7 tests nuevos en `Stepper.test.tsx` cubren todos los modos +
+regression guard "controlled sin callback queda presentational".
+Story `Uncontrolled` añadida con play test que valida estado
+interno via click sin useState externo.
+
+Decision doc: `docs/decisions/D5-stepper-defaultactive.md`. Cierra
+la simetría del DS — todos los componentes con estado interno ahora
+siguen el mismo patrón `{prop}?` + `default{Prop}?` + `on{Prop}Change`.
+
 ## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
 
 Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la

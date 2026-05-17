@@ -124,6 +124,43 @@ export const Interactivo: Story = {
   },
 };
 
+export const Uncontrolled: Story = {
+  args: { labeled: true, "aria-label": "Demo uncontrolled" },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "D5 (beta.24): modo uncontrolled. Sin `active` prop, el Stepper gestiona su propio estado. `defaultActive` setea el valor inicial; `onActiveChange` (opcional) actúa como observer. Interactive por defecto: keyboard nav + click activan steps sin necesidad de useState externo.",
+      },
+    },
+  },
+  render: (args) => (
+    <Stepper {...args} defaultActive={0}>
+      <Step label="Datos" />
+      <Step label="Pago" />
+      <Step label="Confirmación" />
+    </Stepper>
+  ),
+  play: async ({ canvasElement }) => {
+    // D5 invariant: uncontrolled siempre es interactive — dots son
+    // role=button focuseables sin necesidad de onActiveChange.
+    const dots = canvasElement.querySelectorAll<HTMLElement>(
+      '.ig-step[role="button"]',
+    );
+    await expect(dots).toHaveLength(3);
+    // Estado inicial defaultActive=0.
+    let current = canvasElement.querySelector('[aria-current="step"]');
+    await expect(current?.getAttribute("data-step-index")).toBe("0");
+    // Click en el step 2: el estado interno avanza sin callback consumer.
+    const step2 = dots[2];
+    if (!step2) throw new Error("step 2 not rendered");
+    step2.focus();
+    await userEvent.click(step2);
+    current = canvasElement.querySelector('[aria-current="step"]');
+    await expect(current?.getAttribute("data-step-index")).toBe("2");
+  },
+};
+
 export const AllStates: Story = {
   parameters: {
     layout: "padded",
