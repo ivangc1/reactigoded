@@ -174,6 +174,48 @@ Hooks family-specific (`useToast`, `FloatingTreeRoot`) viven en
 `src/components/<Family>/` y se exportan via la barrel chain de la
 familia. Razonamiento detallado: `docs/decisions/D11-hooks-disposition.md`.
 
+---
+
+**D9 — size-limit re-baseline + budget creep policy + H-07 gate ejecutable** (B2-PR7):
+
+Re-baseline de los budgets `size-limit` del JS bundle tras los cambios
+de beta.24 (Menu Full FUI portal, callback renames, Avatar fallback,
+Progress CSP, hooks disposition). El margen ESM había caído a 0.18 KB
+(1.1%) — funcionalmente cero, cualquier PR mediano rompía CI por scope
+creep accidental. CSS budgets se mantienen en su zona 23-30% headroom
+post-H-13 (sin drift en beta.24).
+
+**Nuevos budgets JS** (25-30% headroom paralelo, política H-13):
+
+| Entry | Real beta.24 | Anterior | **Nuevo** | Headroom |
+|---|---|---|---|---|
+| JS ESM (gzip) | 15.82 KB | 16 KB | **20 KB** | 26.4% |
+| JS CJS (gzip) | 14.06 KB | 15 KB | **18 KB** | 28.0% |
+
+CSS budgets sin cambio.
+
+**Budget creep policy** documentada (`D9-size-limit-baseline.md`):
+- Headroom target 25-30%.
+- Subir budget solo por feature documentada o dep upstream con
+  justificación + cálculo de nuevo budget en el mismo PR.
+- NO subir budget por refactor, dep bumps cosméticos, comodidad de
+  iteración o "CI falla, fix rápido".
+
+**H-07 gate ejecutable**: `scripts/check-state-css-exclusion.mjs` +
+`npm run test:state-css-exclusion`, encadenado en `verify:unit`
+post-build. Verifica que ninguna utility de `state.css` (clases con
+prefijo `hover:ig-`, `focus:ig-`, `active:ig-`, `disabled:ig-`,
+`checked:ig-`, `default:ig-`, `empty:ig-`, `first-child:ig-`,
+`last-child:ig-`) aparezca en `dist/index.js` ni `dist/index.cjs`. Si
+un componente del DS empezara accidentalmente a referenciarlas (713 KB
+gz standalone), el gate explota pre-publish. Cierra el vector de
+escape que H-07 había dejado como deuda (decisión "conservar" sin
+gate ejecutable de invariante).
+
+Decision docs: `docs/decisions/D9-size-limit-baseline.md` (nuevo),
+`docs/decisions/H-07-state-css-and-future.md` (actualizado con
+pointer al gate).
+
 ## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
 
 Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la
