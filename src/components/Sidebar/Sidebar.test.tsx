@@ -182,6 +182,69 @@ describe("SidebarItem", () => {
     fireEvent.click(btn);
     expect(onClick).toHaveBeenCalledOnce();
   });
+
+  it("D4: sidebar expandida NO aplica aria-label fallback (text in a11y tree)", () => {
+    render(
+      <Sidebar>
+        <SidebarNav>
+          <SidebarItem href="/">Inicio</SidebarItem>
+        </SidebarNav>
+      </Sidebar>,
+    );
+    const link = screen.getByRole("link", { name: /inicio/i });
+    // Expandido: nombre accesible viene del text content "Inicio",
+    // NO de aria-label. ARIA APG: no duplicar nombre accesible.
+    expect(link).not.toHaveAttribute("aria-label");
+  });
+
+  it("D4: sidebar colapsada SÍ aplica aria-label fallback (text removed from a11y tree)", () => {
+    render(
+      <Sidebar defaultCollapsed>
+        <SidebarNav>
+          <SidebarItem href="/">Inicio</SidebarItem>
+        </SidebarNav>
+      </Sidebar>,
+    );
+    const link = screen.getByRole("link", { name: /inicio/i });
+    // Colapsado: CSS oculta .ig-sidebar-text (display:none), removido
+    // del a11y tree. aria-label="Inicio" es la única fuente de
+    // nombre accesible para SR.
+    expect(link).toHaveAttribute("aria-label", "Inicio");
+  });
+
+  it("D4: aria-label explícito tiene prioridad sobre fallback (ambos estados)", () => {
+    const { rerender } = render(
+      <Sidebar>
+        <SidebarNav>
+          <SidebarItem href="/" aria-label="Go home">
+            Inicio
+          </SidebarItem>
+        </SidebarNav>
+      </Sidebar>,
+    );
+    let link = screen.getByRole("link", { name: /go home/i });
+    expect(link).toHaveAttribute("aria-label", "Go home");
+
+    rerender(
+      <Sidebar defaultCollapsed>
+        <SidebarNav>
+          <SidebarItem href="/" aria-label="Go home">
+            Inicio
+          </SidebarItem>
+        </SidebarNav>
+      </Sidebar>,
+    );
+    link = screen.getByRole("link", { name: /go home/i });
+    expect(link).toHaveAttribute("aria-label", "Go home");
+  });
+
+  it("D4: SidebarItem fuera de Sidebar lanza error (useSidebar throw)", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<SidebarItem href="/">x</SidebarItem>)).toThrow(
+      /dentro de <Sidebar>/,
+    );
+    consoleError.mockRestore();
+  });
 });
 
 describe("SidebarHeader / Divider / Section / Nav / Footer", () => {
