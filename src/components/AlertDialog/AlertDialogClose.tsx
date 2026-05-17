@@ -1,6 +1,12 @@
 "use client";
 
 import type { ButtonHTMLAttributes, Ref } from "react";
+// Deep import a `DialogContext` (no expuesto en el barrel de Dialog).
+// Intencional: AlertDialog es una family que se construye sobre la
+// infraestructura de Dialog (D6) y consume su contexto como
+// "cross-component infrastructure" del DS — mismo patrón que las
+// floating primitives en `floating/Menu/` y `floating/Tooltip/`
+// importan `useFloatingNode` via path directo (no via barrel root).
 import { useDialogContextOptional } from "@/components/Dialog/DialogContext";
 
 export interface AlertDialogCloseProps
