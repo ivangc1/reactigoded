@@ -609,3 +609,168 @@ describe("Stepper — regresión scope CSS step-active (beta.20)", () => {
     });
   });
 });
+
+// D5 (beta.24 gate review): modo uncontrolled. Patrón DS-wide
+// (Pagination, Sidebar, Tabs, Switch, Accordion). Sin `active` prop,
+// Stepper mantiene su propio estado interno y `onActiveChange` actúa
+// como observer (opcional).
+describe("Stepper — modo uncontrolled (D5 beta.24)", () => {
+  it("sin `active` arranca en `defaultActive` (default 0)", () => {
+    const { container } = render(
+      <Stepper>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    // Step 0 (idx=0) lleva aria-current="step".
+    const stepWithCurrent = container.querySelector('[aria-current="step"]');
+    expect(stepWithCurrent).not.toBeNull();
+    expect(stepWithCurrent?.getAttribute("data-step-index")).toBe("0");
+  });
+
+  it("`defaultActive` setea el valor inicial uncontrolled", () => {
+    const { container } = render(
+      <Stepper defaultActive={2}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const stepWithCurrent = container.querySelector('[aria-current="step"]');
+    expect(stepWithCurrent?.getAttribute("data-step-index")).toBe("2");
+  });
+
+  it("uncontrolled SIEMPRE es interactive (dots focuseables sin onActiveChange)", () => {
+    const { container } = render(
+      <Stepper defaultActive={1}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = container.querySelectorAll<HTMLElement>(
+      '.ig-step[role="button"]',
+    );
+    expect(dots).toHaveLength(3);
+    expect(dots[0]).toHaveAttribute("tabindex", "-1");
+    expect(dots[1]).toHaveAttribute("tabindex", "0");
+    expect(dots[2]).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("ArrowRight actualiza el estado interno sin callback del consumer", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <Stepper defaultActive={0}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[0]?.focus();
+    await user.keyboard("{ArrowRight}");
+    const stepWithCurrent = container.querySelector('[aria-current="step"]');
+    expect(stepWithCurrent?.getAttribute("data-step-index")).toBe("1");
+  });
+
+  it("click en step actualiza el estado interno sin callback del consumer", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <Stepper defaultActive={0}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    await user.click(dots[2]!);
+    const stepWithCurrent = container.querySelector('[aria-current="step"]');
+    expect(stepWithCurrent?.getAttribute("data-step-index")).toBe("2");
+  });
+
+  it("`onActiveChange` en uncontrolled actúa como observer", async () => {
+    const user = userEvent.setup();
+    const onActiveChange = vi.fn();
+    render(
+      <Stepper defaultActive={0} onActiveChange={onActiveChange}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = screen.getAllByRole("button");
+    dots[0]?.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(onActiveChange).toHaveBeenCalledWith(1);
+  });
+
+  it("controlled sin `onActiveChange` queda presentational (sin keyboard nav)", () => {
+    // Regression guard: en controlled-only sin callback, los dots NO
+    // son focuseables — habilitarlos sin mecanismo para aplicar la
+    // transición sería confuso.
+    const { container } = render(
+      <Stepper active={1}>
+        <Step />
+        <Step />
+        <Step />
+      </Stepper>,
+    );
+    const dots = container.querySelectorAll(".ig-step");
+    for (const d of dots) {
+      expect(d).not.toHaveAttribute("role", "button");
+      expect(d).not.toHaveAttribute("tabindex");
+    }
+  });
+
+  // Codex P2 round 2 sobre 8a35b8f: persistir el clamp al state
+  // interno cuando stepCount se reduce. Sin esto, rawActive queda
+  // stale (el clamp solo afecta el render) y al re-añadir steps el
+  // componente "resurrecta" al idx viejo.
+  it("uncontrolled: shrink stepCount actualiza state interno (no resurrección)", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [count, setCount] = useState(5);
+      const steps = Array.from({ length: count }).map((_, i) => <Step key={i} />);
+      return (
+        <>
+          <Stepper defaultActive={0}>{steps}</Stepper>
+          <button
+            type="button"
+            data-testid="shrink"
+            onClick={() => {
+              setCount(2);
+            }}
+          >
+            shrink
+          </button>
+          <button
+            type="button"
+            data-testid="grow"
+            onClick={() => {
+              setCount(5);
+            }}
+          >
+            grow
+          </button>
+        </>
+      );
+    }
+    const { container } = render(<Harness />);
+    // Mover active al último step (idx=4) via click.
+    const dots = screen.getAllByRole("button", { name: /paso/i });
+    await user.click(dots[4]!);
+    let current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("data-step-index")).toBe("4");
+    // Shrink a 2 steps: el clamp visible debe ser idx=1 (último).
+    await user.click(screen.getByTestId("shrink"));
+    current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("data-step-index")).toBe("1");
+    // Grow back a 5 steps: NO debe resurrecer al idx=4 stale. El
+    // state interno fue persistido al clamp (idx=1) durante el
+    // shrink.
+    await user.click(screen.getByTestId("grow"));
+    current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("data-step-index")).toBe("1");
+  });
+});
