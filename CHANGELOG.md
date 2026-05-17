@@ -7,6 +7,68 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed (BREAKING — pre-RC1, beta.24)
+
+C.2 DS-wide rename pattern: callbacks aligned al prop name local cuando
+el prop tiene nombre de dominio (no "value" arbitrario). Sub-patrón DS
+articulado en `docs/decisions/D3-callback-rename-cw.md` y
+`docs/decisions/D4-sidebar-api.md`.
+
+**Pagination** — prop rename + callback rename:
+- `currentPage?: number` → `page?: number`.
+- `defaultPage` queda.
+- `onValueChange?: (page: number) => void` →
+  `onPageChange?: (page: number) => void`.
+- Param signature `(page: number)` queda.
+
+Migration consumer:
+```diff
+- <Pagination currentPage={p} onValueChange={setP} totalPages={N} />
++ <Pagination page={p} onPageChange={setP} totalPages={N} />
+```
+
+**Stepper** — callback rename solo:
+- Prop `active` queda. Callback `onValueChange` → `onActiveChange`.
+- Param signature `(next: number)` queda.
+
+```diff
+- <Stepper active={s} onValueChange={setS}>...</Stepper>
++ <Stepper active={s} onActiveChange={setS}>...</Stepper>
+```
+
+**ThemeToggle** — callback rename solo:
+- Props `theme` + `defaultTheme` quedan. Callback `onValueChange` →
+  `onThemeChange`.
+
+```diff
+- <ThemeToggle theme={t} onValueChange={setT} />
++ <ThemeToggle theme={t} onThemeChange={setT} />
+```
+
+**Sidebar** — callback rename + SidebarItem a11y refactor:
+- Props `collapsed` + `defaultCollapsed` quedan. Callback `onValueChange`
+  → `onCollapsedChange`.
+- CSS class `.ig-sidebar-collapsed` queda. ARIA `aria-expanded={!collapsed}`
+  queda (encapsulado en SidebarToggle).
+- **SidebarItem** ahora consume `useSidebar()` context para aplicar
+  `aria-label` condicionalmente: aplicado solo en estado collapsed
+  (ARIA APG fix — eliminado anti-pattern de nombre accesible duplicado
+  en estado expanded).
+- **SidebarItem pasa a `"use client"`** (consume context). Sale de
+  candidatos `@server-safe` D1 P1.
+- **SidebarItem REQUIERE estar dentro de `<Sidebar>`** (D11.4 regla
+  DS-wide: hooks que requieren ancestor lanzan).
+
+`useSidebar` JSDoc reescrito eliminando `@example PersistSidebar`
+(anti-pattern declaraba uso público mientras bundle no expone el hook
+desde B-04 RC1). Pointer a README sección "Persisting Sidebar state"
+(a añadir en B1-PR1 sweep) para patrón consumer-facing con controlled
+mode external + guard SSR-safe en localStorage.
+
+**Componentes aligned (sin cambios)**: Accordion, Rating, Slider, Tabs
+— sus props se llaman `value`, callbacks `onValueChange` son aligned
+localmente.
+
 ## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
 
 Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la
