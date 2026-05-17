@@ -16,7 +16,7 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
   /** Inyectado por `Stepper` cuando usa layout labeled. */
   labeled?: boolean;
   /**
-   * Inyectado por `Stepper` cuando es interactivo (`onValueChange`
+   * Inyectado por `Stepper` cuando es interactivo (`onActiveChange`
    * definido). Convierte el dot en un `<button>` semántico vía
    * `role="button"` + `tabIndex` (roving) + handlers click/keydown.
    * @internal
@@ -25,7 +25,7 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
   /**
    * Inyectado por `Stepper` cuando es interactivo. Llamado al click
    * o al activar por teclado (Enter/Space). Stepper interpreta la
-   * activación y dispara `onValueChange` con el índice 0-based.
+   * activación y dispara `onActiveChange` con el índice 0-based.
    * @internal
    */
   onActivate?: () => void;
@@ -42,7 +42,7 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
  * Step — un paso de un `Stepper`. No se usa suelto: pasa los `Step`s como
  * children del `Stepper` y este se encarga de inyectar `index`/`active`/`complete`.
  *
- * Cuando el Stepper padre es interactivo (`onValueChange` definido),
+ * Cuando el Stepper padre es interactivo (`onActiveChange` definido),
  * el dot del Step lleva `role="button"` + `tabIndex` roving y soporta
  * activación por teclado (Enter/Space) y navegación (ArrowKey/Home/End).
  */
