@@ -188,6 +188,55 @@ Decision doc: `docs/decisions/D6-dialog-compound.md`.
 
 ---
 
+**D8 — AlertDialog family** (B2-PR3):
+
+Nueva familia para confirmaciones destructivas / acciones que demandan
+atención consciente. Hereda toda la infraestructura compound de Dialog
+(D6); el único componente con comportamiento propio es
+`<AlertDialogContent>`. Los demás (`AlertDialog`, `AlertDialogTrigger`,
+`AlertDialogHeader/Body/Footer/Close`) son aliases directos de los
+equivalentes Dialog — cero overhead, cero divergence.
+
+```tsx
+<AlertDialog defaultOpen={false}>
+  <AlertDialogTrigger className="ig-btn ig-btn-danger">
+    Borrar permanentemente
+  </AlertDialogTrigger>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <h2>Confirmar borrado</h2>
+    </AlertDialogHeader>
+    <AlertDialogBody>Esta acción es irreversible.</AlertDialogBody>
+    <AlertDialogFooter>
+      <AlertDialogClose className="ig-btn ig-btn-secondary">
+        Cancelar
+      </AlertDialogClose>
+      <AlertDialogClose className="ig-btn ig-btn-danger">
+        Sí, borrar
+      </AlertDialogClose>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+```
+
+Diferencias de `AlertDialogContent` vs `DialogContent`:
+
+1. **`role="alertdialog"`** (override del `role="dialog"` automático del
+   `<dialog>` HTML). WAI-ARIA APG: indica que el modal demanda atención
+   consciente del usuario.
+2. **`closeOnBackdrop={false}` por defecto** (vs `true` en
+   `DialogContent`). Click outside NO cierra — el usuario debe pulsar
+   Cancel o Confirm explícitamente. Override por consumer si su caso
+   es más suave: `<AlertDialogContent closeOnBackdrop />`.
+
+`closeOnEsc` sigue `true` (atajo ergonómico universal).
+
+7 tests cubren las diferencias D8 + composición end-to-end. Decision
+doc: `docs/decisions/D8-alert-dialog.md`. No breaking — D8 es API
+nueva pura.
+
+---
+
 ### Fixed (non-breaking, beta.24)
 
 **H-03 — Progress CSP-friendly via CSS custom property** (B2-PR5):
