@@ -46,6 +46,23 @@ describe("Progress", () => {
     expect(bar).toHaveStyle("--ig-progress-percent: 100%");
   });
 
+  // H-03 codex P2 sobre PR #81: porcentaje runtime se cuantiza a
+  // entero 0..100 antes de emitir. Sin esto, value=1 max=3 emitía
+  // `33.33333333333333%`, fuera del conjunto hashable que un CSP
+  // con `'unsafe-hashes'` puede pre-computar. El round matchea
+  // el `aria-label` que ya redondea.
+  it("cuantiza porcentaje fraccional a entero (codex P2 #81)", () => {
+    render(<Progress value={1} max={3} data-testid="p" />);
+    const bar = screen.getByTestId("p").firstChild as HTMLElement;
+    expect(bar).toHaveStyle("--ig-progress-percent: 33%");
+    // aria-valuenow sigue siendo el raw clamped (no el porcentaje),
+    // así que NO se redondea aquí — sólo se redondea el porcentaje
+    // visual cuando se proyecta al 0..100.
+    const el = screen.getByRole("progressbar");
+    expect(el).toHaveAttribute("aria-valuenow", "1");
+    expect(el).toHaveAttribute("aria-valuemax", "3");
+  });
+
   // H-03 guard: indeterminate NO emite style attribute (la regla
   // `.ig-progress-indeterminate .ig-progress-bar { width: 30% !important }`
   // toma el control en CSS, no en JS).

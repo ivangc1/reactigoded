@@ -22,14 +22,17 @@ Esto rompe CSP estricto sin `'unsafe-inline'` en `style-src`. M-08 (RC1) lo hab�
 
 ## Decisión
 
-Sustituir el style attribute con propiedad arbitraria por un único **CSS custom property** consumido por la regla del stylesheet:
+Sustituir el style attribute con propiedad arbitraria por un único **CSS custom property** consumido por la regla del stylesheet, **cuantizado al conjunto finito 0%..100% paso 1%**:
 
 ```tsx
 // Progress.tsx
+const percentInt = Math.round((clamped / safeMax) * 100); // 0..100
 style={
   indeterminate
     ? undefined
-    : ({ "--ig-progress-percent": `${String(percent)}%` } as CSSProperties)
+    : ({
+        "--ig-progress-percent": `${String(percentInt)}%`,
+      } as CSSProperties)
 }
 ```
 
@@ -45,7 +48,7 @@ style={
 
 El style attribute deja de contener propiedades visuales arbitrarias. Auditores CSP modernos (CSP Evaluator, Lighthouse) y políticas con `'unsafe-hashes'` pueden tratar `style="--var: value"` distinto a inline rules visuales:
 
-1. **`'unsafe-hashes'` viable**: el conjunto de valores `--ig-progress-percent` emitido es finito y predecible (0% .. 100%, paso entero). Un CSP puede hashear los 101 valores posibles. Imposible con `width: X%` arbitrario porque el style attribute mezcla la propiedad y el valor en una única declaración.
+1. **`'unsafe-hashes'` viable**: el conjunto de valores `--ig-progress-percent` emitido es finito y predecible (0% .. 100%, paso entero — el componente cuantiza con `Math.round` antes de emitir). Un CSP puede hashear los 101 valores posibles. Imposible con `width: X%` arbitrario porque (a) el style attribute mezcla propiedad y valor en una única declaración, (b) sin cuantización inputs como `value=1, max=3` producirían `33.33333333333333%`, fuera del conjunto hashable. La cuantización es un invariante que se testea (Progress.test.tsx).
 2. **Separation of concerns**: la lógica visual (qué hacer con el porcentaje) vive en stylesheet, NO en el componente. El componente solo pasa datos.
 3. **Patrón canónico DS modernos**: Radix UI Progress, Mantine, MUI Joy usan exactamente esto.
 
@@ -61,9 +64,9 @@ Sin cambio: cuando `indeterminate`, `Progress.tsx` no emite style attribute. La 
 
 `Progress.test.tsx`:
 
-- `emite porcentaje como --ig-progress-percent en bar interno` — assert `bar.style.getPropertyValue("--ig-progress-percent")`.
-- `H-03 guard: el style attribute NO contiene width: literal` — assert `bar.style.width === ""`.
-- `indeterminate NO emite --ig-progress-percent inline` — guard que la rama indeterminate no contamina el style attribute.
+- `emite porcentaje como --ig-progress-percent en bar interno` — assert `toHaveStyle("--ig-progress-percent: 25%")` + regex guard sobre style attribute (no `width:` literal).
+- `cuantiza porcentaje fraccional a entero (codex P2 #81)` — input `value=1 max=3` debe emitir `--ig-progress-percent: 33%` (no `33.333…%`). Garantiza el invariante de hashability.
+- `indeterminate NO emite --ig-progress-percent inline` — guard que la rama indeterminate no emite style attribute.
 
 ## Documentación CSS-only consumer
 

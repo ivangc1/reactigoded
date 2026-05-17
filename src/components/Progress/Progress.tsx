@@ -89,6 +89,13 @@ export function Progress({
   const safeValue = Number.isNaN(value) ? 0 : value;
   const clamped = Math.min(Math.max(safeValue, 0), safeMax);
   const percent = (clamped / safeMax) * 100;
+  // H-03 (beta.24): cuantizar a entero 0..100 antes de emitir el
+  // custom property. Sin esto, inputs como value=1 max=3 emiten
+  // `33.33333333333333%`, fuera del conjunto finito de 101 valores
+  // que un CSP con `'unsafe-hashes'` puede pre-hashear (codex P2
+  // sobre PR #81). El round es visualmente imperceptible (paso 1%
+  // sobre la barra) y matchea el `aria-label` que ya redondea.
+  const percentInt = Math.round(percent);
   // 1.0.0-beta.4: aria-label del rest (HTML std). Si no llega, resolver
   // por prioridad: aria-label > formatLabel(percent) > loadingLabel
   // (en indeterminate) > fallback español "X por ciento completado"
@@ -141,7 +148,9 @@ export function Progress({
         style={
           indeterminate
             ? undefined
-            : ({ "--ig-progress-percent": `${String(percent)}%` } as CSSProperties)
+            : ({
+                "--ig-progress-percent": `${String(percentInt)}%`,
+              } as CSSProperties)
         }
       />
     </div>
