@@ -13,12 +13,12 @@
     },
     {
       "class": "ig-menu-item-active",
-      "file": "src/components/Menu/MenuItem.tsx",
+      "file": "src/components/floating/Menu/MenuItem.tsx",
       "reason": "Emitida en `<a>` y `<button>` por if/else mutuamente excluyente. En runtime solo se renderea uno; no es scope-leak. Renombrado en cascada: ig-dropdown-item-active → ig-options-menu-item-active (PR #58, B-01 original) → ig-menu-item-active (PR #63, B-01 redefinido + C-03)."
     },
     {
       "class": "ig-menu-item-danger",
-      "file": "src/components/Menu/MenuItem.tsx",
+      "file": "src/components/floating/Menu/MenuItem.tsx",
       "reason": "Mismo patrón que ig-menu-item-active: ramas exclusivas link/button del mismo componente. Renombrado en cascada (mismos PRs)."
     },
     {
