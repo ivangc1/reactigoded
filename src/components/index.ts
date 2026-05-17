@@ -15,7 +15,6 @@ export * from "./Card";
 export * from "./Checkbox";
 export * from "./Chip";
 export * from "./Divider";
-export * from "./Menu";
 export * from "./Input";
 export * from "./Dialog";
 export * from "./Navbar";
@@ -36,5 +35,6 @@ export * from "./Textarea";
 export * from "./ThemeToggle";
 export * from "./Timeline";
 export * from "./Toast";
-export * from "./floating/primitives";
-export * from "./floating/Tooltip";
+// D7.5: namespace floating/ agrupado en un solo wildcard.
+// Members: primitives + Tooltip + Menu (post-D7.1 file move).
+export * from "./floating";
