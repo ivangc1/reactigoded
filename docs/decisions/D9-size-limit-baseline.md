@@ -76,7 +76,13 @@ El budget se aprueba en el mismo PR que lo cambia. No requiere comité — pero 
 
 `scripts/check-state-css-exclusion.mjs` + `npm run test:state-css-exclusion` añadido a `verify:unit` pipeline post-build.
 
-Invariante: ninguna utility de `state.css` (clases con prefijo `hover:ig-`, `focus:ig-`, `active:ig-`, `disabled:ig-`, `checked:ig-`, `default:ig-`, `empty:ig-`, `first-child:ig-`, `last-child:ig-`) puede aparecer como string literal en `dist/index.js` ni `dist/index.cjs`. Si un componente del DS empieza accidentalmente a referenciarlas, el gate explota pre-publish.
+Invariante: ninguna utility de `state.css` puede aparecer como string literal en `dist/index.js` ni `dist/index.cjs`. La lista de prefijos NO está hardcodeada — el script la descubre dinámicamente leyendo cada `dist/styles/state/*.css` y extrayendo el prefijo real usado en las clases (regex sobre el escape `\:` literal). Esto cubre automáticamente cualquier pseudo nueva que `build-state-css-fragments.mjs` empiece a emitir (focus-visible, focus-within, group-hover, peer-*, target, etc.).
+
+Codex P1+P2 sobre PR #83 corrigieron dos bugs del primer commit:
+1. Lista hardcodeada de 9 prefijos era incompleta (faltaban focus-visible, focus-within, group-hover, peer-*, target, etc.).
+2. Names mal mapeados: el fragment file `first-child.css` contiene clases con prefijo `first:ig-` (Tailwind-style shorthand del selector `:first-child`); buscar `first-child:ig-` no matcheaba nada real.
+
+Run típico actual: **38 prefixes checked** (active, checked, default, disabled, empty, even, first, first-of-type, focus, focus-visible, focus-within, group-active, group-focus, group-focus-within, group-hover, hover, in-range, indeterminate, invalid, last, last-of-type, odd, only, optional, out-of-range, peer-checked, peer-disabled, peer-focus, peer-hover, peer-invalid, peer-required, peer-valid, placeholder-shown, read-only, read-write, required, target, valid).
 
 Razón del gate: H-07 (RC1) decidió conservar `state.css` standalone como opt-in CSS-only para HTML-utility-first prototyping (story canónica `CSS-Only-Prototyping.stories.tsx`). El módulo standalone pesa 713 KB gzip — si entrara al bundle React por error, el TTI del consumer típico se rompería. El gate cierra ese vector de escape.
 

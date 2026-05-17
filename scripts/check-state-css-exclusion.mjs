@@ -20,25 +20,38 @@
  * crece silenciosamente y este script lo caza pre-publish.
  *
  * ─── Heurística ────────────────────────────────────────────────
- * Las utilities de `state.css` usan el patrón `prefix\:ig-…` en
- * source CSS (escape de `:` para que el selector parsee), que
- * compila a `prefix:ig-…` en la cadena final del CSS. En JS las
- * clases nunca llevan el escape — si un consumer pasara una de
- * estas clases como `className`, aparecería como literal
- * `"hover:ig-…"`. Por tanto el gate busca exactamente esos
- * prefijos en el bundle JS.
+ * Los prefijos NO son una lista hardcodeada. Se derivan dinámicamente
+ * leyendo cada `dist/styles/state/*.css` y extrayendo el prefijo real
+ * usado en las clases:
  *
- * Prefijos cubiertos (un fragmento por pseudo-class en
- * `dist/styles/state/`):
- *   hover, focus, active, disabled, checked, default, empty,
- *   first-child, last-child.
+ *   .first\:ig-caret-…:first-child{…}   →  prefijo "first"
+ *   .hover\:ig-bg-brand:hover{…}        →  prefijo "hover"
+ *   .focus-visible\:ig-ring-…:focus-visible{…}  →  prefijo "focus-visible"
+ *   .ig-group:hover .group-hover\:ig-… {…}      →  prefijo "group-hover"
+ *
+ * Esto cierra dos errores del check inicial (codex P1+P2 sobre PR #83):
+ *
+ *   1. Lista hardcodeada incompleta: faltaban focus-visible,
+ *      focus-within, group-hover, peer-*, target, etc. Cualquier
+ *      pseudo nueva que `build-state-css-fragments.mjs` empiece a
+ *      emitir queda cubierta automáticamente.
+ *   2. Names mal mapeados: el archivo `first-child.css` contiene
+ *      clases con prefijo `first:ig-` (Tailwind-style shorthand
+ *      del selector `:first-child`). Buscar `first-child:ig-` no
+ *      matchea ninguna clase real. Derivar del CSS source elimina
+ *      la asimetría file-name vs class-name.
+ *
+ * En las clases CSS source el `\:` es un escape para que el `:` sea
+ * parte del nombre de clase, NO un pseudo-class. En JS strings el
+ * literal final es `prefix:ig-…` SIN escape — ese es el patrón que
+ * grepamos en `dist/index.js` y `dist/index.cjs`.
  *
  * ─── Contrato de invocación ────────────────────────────────────
  * • **Invoker**: `npm run test:state-css-exclusion`, encadenado en
  *   `verify:unit` pipeline. CI lo invoca como gate.
- * • **Entorno requerido**: `dist/index.js` + `dist/index.cjs`
- *   (asume build previo; `verify:unit` corre `npm run build`
- *   antes de este gate).
+ * • **Entorno requerido**: `dist/index.js` + `dist/index.cjs` +
+ *   `dist/styles/state/*.css` (asume build previo; `verify:unit`
+ *   corre `npm run build` antes de este gate).
  * • **Fallback / errores**: ERROR (exit 1) si encuentra cualquier
  *   match. No hay allowlist: una sola coincidencia ya rompe el
  *   invariante de H-07.
@@ -49,9 +62,9 @@
  *
  * No acepta flags — el invariante es binario (match = fail).
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -60,27 +73,9 @@ const BUNDLES = [
   resolve(repoRoot, "dist/index.js"),
   resolve(repoRoot, "dist/index.cjs"),
 ];
+const STATE_FRAGMENTS_DIR = resolve(repoRoot, "dist/styles/state");
 
-// Prefijos de state.css (cada uno corresponde a un fragmento publicado
-// en `dist/styles/state/<prefix>.css`).
-const STATE_PREFIXES = [
-  "hover",
-  "focus",
-  "active",
-  "disabled",
-  "checked",
-  "default",
-  "empty",
-  "first-child",
-  "last-child",
-];
-
-// `${prefix}:ig-` — patrón literal en JS strings (sin escape de `:`).
-const PATTERNS = STATE_PREFIXES.map((prefix) => `${prefix}:ig-`);
-
-let allOk = true;
-const violations = [];
-
+// Pre-flight: bundles + fragments existen.
 for (const bundlePath of BUNDLES) {
   if (!existsSync(bundlePath)) {
     console.error(
@@ -90,13 +85,68 @@ for (const bundlePath of BUNDLES) {
     );
     process.exit(1);
   }
+}
+if (!existsSync(STATE_FRAGMENTS_DIR)) {
+  console.error(
+    `ERROR: dir de fragments no existe: ${STATE_FRAGMENTS_DIR}\n` +
+      `→ ejecuta \`npm run build\` antes de este gate.`,
+  );
+  process.exit(1);
+}
 
+/**
+ * Extrae el set de prefijos reales usados en los fragmentos
+ * `dist/styles/state/*.css`. Cada fragmento contiene reglas tipo
+ * `.{prefix}\:ig-…{...}` — extraemos `{prefix}` con regex sobre el
+ * escape `\:` literal (el escape vive en el byte stream del archivo
+ * CSS final, no se resuelve hasta el parsing del browser).
+ *
+ * Ignoramos `other.css` (red de seguridad del build script para
+ * reglas sin pseudo detectable — su contenido es heterogéneo y
+ * puede no tener el patrón class-prefix).
+ */
+function discoverPrefixesFromFragments(dir) {
+  const prefixes = new Set();
+  // Pattern: `.<prefix>\:ig-` donde <prefix> es secuencia de [a-z0-9-].
+  // El `\\:` en JS regex matchea el `\:` literal en el CSS final.
+  const prefixRe = /\.([a-z][a-z0-9-]*)\\:ig-/g;
+  const files = readdirSync(dir).filter(
+    (f) => f.endsWith(".css") && f !== "other.css",
+  );
+  for (const file of files) {
+    const content = readFileSync(join(dir, file), "utf8");
+    let match;
+    while ((match = prefixRe.exec(content)) !== null) {
+      const prefix = match[1];
+      if (prefix) prefixes.add(prefix);
+    }
+  }
+  return [...prefixes].sort();
+}
+
+const STATE_PREFIXES = discoverPrefixesFromFragments(STATE_FRAGMENTS_DIR);
+
+if (STATE_PREFIXES.length === 0) {
+  console.error(
+    `ERROR: no se detectó ningún prefijo de state.css en ${STATE_FRAGMENTS_DIR}.\n` +
+      `→ probable corrupción del build o regex desfasado. Revisa los ` +
+      `fragments manualmente.`,
+  );
+  process.exit(1);
+}
+
+// `${prefix}:ig-` — patrón literal en JS strings (sin escape de `:`).
+const PATTERNS = STATE_PREFIXES.map((prefix) => `${prefix}:ig-`);
+
+let allOk = true;
+const violations = [];
+
+for (const bundlePath of BUNDLES) {
   const content = readFileSync(bundlePath, "utf8");
 
   for (const pattern of PATTERNS) {
     if (content.includes(pattern)) {
       allOk = false;
-      // Encontrar la posición + un fragmento de contexto para el reporte.
       const idx = content.indexOf(pattern);
       const start = Math.max(0, idx - 40);
       const end = Math.min(content.length, idx + pattern.length + 40);
@@ -113,7 +163,7 @@ for (const bundlePath of BUNDLES) {
 
 if (allOk) {
   console.log(
-    `✓ state.css excluded from JS bundles (${BUNDLES.length} bundles, ${PATTERNS.length} prefixes checked)`,
+    `✓ state.css excluded from JS bundles (${String(BUNDLES.length)} bundles, ${String(PATTERNS.length)} prefixes checked: ${STATE_PREFIXES.join(", ")})`,
   );
   process.exit(0);
 }
