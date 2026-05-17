@@ -12,11 +12,21 @@ describe("Progress", () => {
     expect(el).toHaveAttribute("aria-valuenow", "40");
   });
 
-  it("calcula porcentaje en width del bar interno", () => {
+  // H-03 (beta.24): porcentaje runtime se emite como custom property
+  // `--ig-progress-percent` (consumido por la regla `.ig-progress-bar`
+  // del stylesheet via `width: var(--ig-progress-percent, 0%)`), no
+  // como `style="width: …"` arbitrario. Mantiene CSP estricto sin
+  // perder driveability runtime.
+  it("emite porcentaje como --ig-progress-percent en bar interno", () => {
     render(<Progress value={25} data-testid="p" />);
     const bar = screen.getByTestId("p").firstChild as HTMLElement;
     expect(bar).toHaveClass("ig-progress-bar");
-    expect(bar).toHaveStyle({width:"25%"});
+    expect(bar).toHaveStyle("--ig-progress-percent: 25%");
+    // H-03 guard: el style attribute NO contiene `width:` literal.
+    // Inspeccionamos el atributo crudo (vs property access) para
+    // tener un assert insensible al stylesheet (jsdom no aplica
+    // la regla `.ig-progress-bar { width: var(...) }` en tests).
+    expect(bar.getAttribute("style") ?? "").not.toMatch(/\bwidth\s*:/);
   });
 
   it("respeta max custom", () => {
@@ -25,7 +35,7 @@ describe("Progress", () => {
     expect(el).toHaveAttribute("aria-valuemax", "10");
     expect(el).toHaveAttribute("aria-valuenow", "5");
     const bar = screen.getByTestId("p").firstChild as HTMLElement;
-    expect(bar).toHaveStyle({width:"50%"});
+    expect(bar).toHaveStyle("--ig-progress-percent: 50%");
   });
 
   it("clampa value fuera de rango", () => {
@@ -33,7 +43,17 @@ describe("Progress", () => {
     const el = screen.getByRole("progressbar");
     expect(el).toHaveAttribute("aria-valuenow", "100");
     const bar = screen.getByTestId("p").firstChild as HTMLElement;
-    expect(bar).toHaveStyle({width:"100%"});
+    expect(bar).toHaveStyle("--ig-progress-percent: 100%");
+  });
+
+  // H-03 guard: indeterminate NO emite style attribute (la regla
+  // `.ig-progress-indeterminate .ig-progress-bar { width: 30% !important }`
+  // toma el control en CSS, no en JS).
+  it("indeterminate NO emite --ig-progress-percent inline", () => {
+    render(<Progress indeterminate data-testid="p" />);
+    const bar = screen.getByTestId("p").firstChild as HTMLElement;
+    // Sin style attribute (React omite el attribute cuando style={undefined}).
+    expect(bar).not.toHaveAttribute("style");
   });
 
   it("indeterminate omite aria-valuenow y aplica clase", () => {

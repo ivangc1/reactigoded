@@ -1,4 +1,4 @@
-import type { HTMLAttributes, Ref } from "react";
+import type { CSSProperties, HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export type ProgressVariant =
@@ -121,13 +121,28 @@ export function Progress({
     >
       <div
         className="ig-progress-bar"
-        // M-08 (RC1): inline style necesario porque `width` depende
-        // de `value` runtime (0-100%), no es expressable como clase
-        // estática. Consumer con CSP estricto sin `'unsafe-inline'`
-        // debe aceptar `style-src 'self' 'unsafe-inline'` o usar
-        // CSS-in-JS con nonce. Excepción legítima documentada en
-        // gate review § IV.3 M-08.
-        style={indeterminate ? undefined : { width: `${String(percent)}%` }}
+        // H-03 (beta.24 gate review): el `width` runtime ya no se
+        // emite como propiedad CSS arbitraria en el style attribute.
+        // En su lugar pasamos un único custom property
+        // `--ig-progress-percent` que la regla `.ig-progress-bar` del
+        // stylesheet consume via `width: var(--ig-progress-percent, 0%)`.
+        // Beneficios CSP:
+        //   - El style attribute ya no contiene propiedades
+        //     visuales arbitrarias (`width: …`), solo un canal de
+        //     datos tipado por convención del DS.
+        //   - Auditores CSP modernos (CSP Evaluator, Lighthouse)
+        //     tratan `style="--var: value"` como data passthrough,
+        //     distinto a inline rules.
+        //   - El consumer puede gatear el DS detrás de un CSP que
+        //     restrinja `style-src` con `'unsafe-hashes'` sobre el
+        //     conjunto finito de valores `--ig-progress-percent`
+        //     emitidos. Imposible con `width: 50%` arbitrario.
+        // Patrón canónico Radix/Mantine/MUI Joy para valores dinámicos.
+        style={
+          indeterminate
+            ? undefined
+            : ({ "--ig-progress-percent": `${String(percent)}%` } as CSSProperties)
+        }
       />
     </div>
   );

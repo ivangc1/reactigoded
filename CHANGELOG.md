@@ -101,6 +101,47 @@ mode external + guard SSR-safe en localStorage.
 — sus props se llaman `value`, callbacks `onValueChange` son aligned
 localmente.
 
+---
+
+### Fixed (non-breaking, beta.24)
+
+**H-03 — Progress CSP-friendly via CSS custom property** (B2-PR5):
+
+Pre-fix, `Progress.tsx` emitía el porcentaje runtime como propiedad
+CSS arbitraria en el style attribute:
+
+```html
+<div class="ig-progress-bar" style="width: 42%"></div>
+```
+
+Esto rompía CSP estricto sin `'unsafe-inline'` en `style-src`. M-08
+(RC1) lo había documentado como excepción legítima; la auditoría
+beta.24 lo re-clasificó como bug con mitigación canónica disponible.
+
+Fix: sustituir style attribute con propiedad arbitraria por un único
+**CSS custom property**:
+
+```html
+<div class="ig-progress-bar" style="--ig-progress-percent: 42%"></div>
+```
+
+Stylesheet ahora consume la variable: `.ig-progress-bar { width:
+var(--ig-progress-percent, 0%); }`. La lógica visual vive en
+stylesheet; el componente solo pasa datos. Auditores CSP modernos
+y políticas con `'unsafe-hashes'` tratan `style="--var: value"`
+distinto a inline rules visuales — `'unsafe-hashes'` sobre el
+conjunto finito de valores `--ig-progress-percent` (0%..100%) es
+ahora viable. Patrón canónico Radix/Mantine/MUI Joy.
+
+**API React sin cambio**. Consumers que pasaban `value`/`max`/etc.
+no notan nada. CSS-only consumers que copiaban el snippet con
+`style="width: X%"` ven el snippet en docs actualizado a
+`style="--ig-progress-percent: X%"`; el viejo formato sigue
+funcionando (specificity del inline style gana al stylesheet) pero
+NO es CSP-friendly.
+
+Decision doc: `docs/decisions/H-03-progress-csp-css-var.md`.
+
 ## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
 
 Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la
