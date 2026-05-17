@@ -187,6 +187,25 @@ describe("DialogContent", () => {
 
     // Codex P2 sobre PR #72: consumer puede pasar onPointerDown/onClick;
     // los wrappers internos los chainean.
+    // Codex P2 sobre PR #86: el handler interno onClose del wrapper
+    // shadowea el del consumer si no se chainea. Patrón paralelo a
+    // onPointerDown/onClick: consumer primero, luego nuestra lógica.
+    it("chain consumer onClose sin shadowearlo", () => {
+      const consumerOnClose = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog open onOpenChange={onOpenChange}>
+          <DialogContent onClose={consumerOnClose} data-testid="m">
+            <DialogBody>x</DialogBody>
+          </DialogContent>
+        </Dialog>,
+      );
+      fireEvent(screen.getByTestId("m"), new Event("close"));
+      expect(consumerOnClose).toHaveBeenCalledOnce();
+      // Y la lógica interna sigue corriendo (setOpen → onOpenChange).
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
     it("chain consumer onPointerDown sin shadowearlo", () => {
       const consumerOnPointerDown = vi.fn();
       render(

@@ -60,10 +60,15 @@ export function DialogContent({
   className,
   children,
   ref,
-  // Codex P2 sobre PR #72: extraer handlers que el consumer pueda
-  // pasar para chainearlos en lugar de shadowear silenciosamente.
+  // Codex P2 sobre PR #72 (DialogContent hereda esos handlers de
+  // PR antiguo) + codex P2 sobre PR #86 (mismo motivo para onClose):
+  // extraer handlers que el consumer pueda pasar para chainearlos
+  // en lugar de shadowear silenciosamente. El consumer puede usar
+  // onClose para analytics, cleanup, etc — nuestro wrapper interno
+  // lo invoca PRIMERO y luego ejecuta su lógica de sync de state.
   onPointerDown: consumerOnPointerDown,
   onClick: consumerOnClick,
+  onClose: consumerOnClose,
   ...rest
 }: DialogContentProps) {
   const { open, setOpen, contentId, headerId } = useDialogContextRequired();
@@ -151,7 +156,12 @@ export function DialogContent({
       )}
       aria-labelledby={ariaLabelledByFromConsumer ?? headerId ?? undefined}
       aria-busy={loading || undefined}
-      onClose={() => {
+      onClose={(e) => {
+        // Codex P2 #86: chainear el onClose del consumer (analytics,
+        // cleanup, etc.) ANTES de nuestra lógica de sync — el consumer
+        // recibe el evento haya venido por sync interno o por user
+        // interaction, mismo contrato que el native `<dialog>` expone.
+        consumerOnClose?.(e);
         // Si el cierre viene de sincronización con state externo, no
         // dispares setOpen otra vez — el state ya está en false.
         if (closingFromSyncRef.current) {
