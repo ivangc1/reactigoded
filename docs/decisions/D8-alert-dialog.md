@@ -45,7 +45,8 @@ Crear una **family AlertDialog** que reusa la infraestructura completa de Dialog
   1. `role="alertdialog"` (override del `role="dialog"` automático del `<dialog>`).
   2. `closeOnBackdrop={false}` por defecto (override del `true` de DialogContent).
   Acepta exactamente las mismas props que `DialogContent`. El consumer puede sobreescribir cualquiera de las dos defaults (`role="dialog"` o `closeOnBackdrop={true}`) — el wrapper solo cambia el default, no fuerza nada.
-- **`AlertDialogHeader/Body/Footer/Close`** (aliases): cero comportamiento propio, mismo DOM y context-handling que sus equivalentes Dialog.
+- **`AlertDialogHeader/Body/Footer`** (aliases): cero comportamiento propio, mismo DOM y context-handling que sus equivalentes Dialog.
+- **`AlertDialogClose`** (componente real, **NO alias** — codex P1 sobre PR #87): `DialogClose` aplica siempre `ig-dialog-close` que estiliza el botón como icono X (2rem, sin fondo, color muted). Aliasar `AlertDialogClose` a él rompía el caso 80/20 del footer: `<AlertDialogClose className="ig-btn ig-btn-danger">Confirmar</AlertDialogClose>` mergeaba ambas clases y renderizaba un CTA con styles de icon-close en conflict. `AlertDialogClose` es ahora un `<button>` unstyled que cierra via contexto — el consumer pasa `className="ig-btn ig-btn-*"` y eso es lo único que aplica. Si el consumer necesita el X del header dentro de un AlertDialog, importa `<DialogClose />` directamente (mismo Provider, mismo contexto, sigue funcionando).
 
 ### Razón de aliases (vs wrappers)
 

@@ -81,20 +81,66 @@ describe("AlertDialog", () => {
     spy.mockRestore();
   });
 
-  it("AlertDialogClose cierra via context (igual que DialogClose)", async () => {
+  it("AlertDialogClose cierra via context (sin styling base, codex P1 #87)", async () => {
     const user = userEvent.setup();
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
     render(
       <AlertDialog defaultOpen>
         <AlertDialogContent>
           <AlertDialogBody>
-            <AlertDialogClose>×</AlertDialogClose>
+            <AlertDialogClose>Aceptar</AlertDialogClose>
           </AlertDialogBody>
         </AlertDialogContent>
       </AlertDialog>,
     );
-    await user.click(screen.getByRole("button", { name: /cerrar/i }));
+    const btn = screen.getByRole("button", { name: "Aceptar" });
+    // Codex P1: AlertDialogClose NO debe aplicar la clase base
+    // `ig-dialog-close` (que estiliza el icono X), porque eso conflict-úa
+    // con `ig-btn-*` que el consumer suele pasar para CTAs Cancel/Confirm.
+    expect(btn).not.toHaveClass("ig-dialog-close");
+    await user.click(btn);
     expect(closeSpy).toHaveBeenCalled();
+    closeSpy.mockRestore();
+  });
+
+  it("AlertDialogClose con className consumer NO se mezcla con ig-dialog-close", () => {
+    render(
+      <AlertDialog defaultOpen>
+        <AlertDialogContent>
+          <AlertDialogBody>
+            <AlertDialogClose className="ig-btn ig-btn-danger">
+              Sí, borrar
+            </AlertDialogClose>
+          </AlertDialogBody>
+        </AlertDialogContent>
+      </AlertDialog>,
+    );
+    const btn = screen.getByRole("button", { name: "Sí, borrar" });
+    expect(btn).toHaveClass("ig-btn");
+    expect(btn).toHaveClass("ig-btn-danger");
+    expect(btn).not.toHaveClass("ig-dialog-close");
+  });
+
+  it("AlertDialogClose.onClick consumer con preventDefault NO cierra", async () => {
+    const user = userEvent.setup();
+    const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
+    render(
+      <AlertDialog defaultOpen>
+        <AlertDialogContent>
+          <AlertDialogBody>
+            <AlertDialogClose
+              onClick={(e) => {
+                e.preventDefault();
+              }}
+            >
+              Aceptar
+            </AlertDialogClose>
+          </AlertDialogBody>
+        </AlertDialogContent>
+      </AlertDialog>,
+    );
+    await user.click(screen.getByRole("button", { name: "Aceptar" }));
+    expect(closeSpy).not.toHaveBeenCalled();
     closeSpy.mockRestore();
   });
 
@@ -111,8 +157,10 @@ describe("AlertDialog", () => {
           </AlertDialogHeader>
           <AlertDialogBody>Esta acción es irreversible.</AlertDialogBody>
           <AlertDialogFooter>
-            <AlertDialogClose aria-label="Cancelar">Cancelar</AlertDialogClose>
-            <AlertDialogClose aria-label="Sí, borrar">
+            <AlertDialogClose className="ig-btn ig-btn-secondary">
+              Cancelar
+            </AlertDialogClose>
+            <AlertDialogClose className="ig-btn ig-btn-danger">
               Sí, borrar
             </AlertDialogClose>
           </AlertDialogFooter>

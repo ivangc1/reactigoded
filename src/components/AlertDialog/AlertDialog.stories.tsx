@@ -9,6 +9,11 @@ import {
   AlertDialogHeader,
   AlertDialogTrigger,
 } from "./index";
+// Codex P1 sobre PR #87: AlertDialogClose deja de ser alias de
+// DialogClose (que estiliza X icon). Para el X del header de un
+// AlertDialog importamos DialogClose directamente — comparten Provider
+// y contexto, sigue cerrando vía setOpen(false).
+import { DialogClose } from "@/components/Dialog";
 
 const meta = {
   title: "Componentes/AlertDialog",
@@ -93,7 +98,7 @@ export const AllStates: Story = {
       <AlertDialogContent size="md">
         <AlertDialogHeader>
           Confirmar borrado
-          <AlertDialogClose />
+          <DialogClose />
         </AlertDialogHeader>
         <AlertDialogBody>
           Esta acción no se puede deshacer. Los datos seleccionados se

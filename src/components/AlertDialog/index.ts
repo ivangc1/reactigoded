@@ -1,15 +1,20 @@
 // D8 (beta.24): AlertDialog family. Hereda la infraestructura compound
-// de Dialog (D6 beta.24): Provider + Trigger + Header/Body/Footer/Close
-// son aliases directos (re-exports renombrados); el único componente
-// con comportamiento propio es `AlertDialogContent`, que aplica
-// `role="alertdialog"` + `closeOnBackdrop={false}` por defecto.
+// de Dialog (D6 beta.24): Provider + Trigger + Header/Body/Footer son
+// aliases directos (re-exports renombrados). Dos componentes tienen
+// comportamiento propio:
 //
-// Razón de aliases (no wrappers): cero overhead, mismo componente bajo
-// el capó significa zero divergence con Dialog. Las primitivas (Trigger,
-// Header, Body, Footer, Close) son agnósticas del role del Content,
-// no necesitan saber si están en Dialog o AlertDialog. La distinción
-// semántica vive en el Content (role) y el patrón de footer (no-cancel
-// silencioso, dos botones explícitos).
+// 1. `AlertDialogContent`: aplica `role="alertdialog"` +
+//    `closeOnBackdrop={false}` por defecto.
+// 2. `AlertDialogClose`: codex P1 sobre PR #87 — NO es alias de
+//    `DialogClose` porque éste aplica `ig-dialog-close` (icono X
+//    compacto). Para footers de AlertDialog (Cancelar/Confirmar) el
+//    consumer pasa `className="ig-btn ig-btn-*"` y necesita que la
+//    base esté limpia. AlertDialogClose es un `<button>` unstyled
+//    que cierra via contexto.
+//
+// Si el consumer necesita el X del header dentro de un AlertDialog,
+// usa `<DialogClose />` directamente — mismo Provider, mismo context,
+// sigue funcionando.
 
 export { Dialog as AlertDialog } from "@/components/Dialog";
 export type { DialogProps as AlertDialogProps } from "@/components/Dialog";
@@ -29,5 +34,5 @@ export type { DialogBodyProps as AlertDialogBodyProps } from "@/components/Dialo
 export { DialogFooter as AlertDialogFooter } from "@/components/Dialog";
 export type { DialogFooterProps as AlertDialogFooterProps } from "@/components/Dialog";
 
-export { DialogClose as AlertDialogClose } from "@/components/Dialog";
-export type { DialogCloseProps as AlertDialogCloseProps } from "@/components/Dialog";
+export { AlertDialogClose } from "./AlertDialogClose";
+export type { AlertDialogCloseProps } from "./AlertDialogClose";
