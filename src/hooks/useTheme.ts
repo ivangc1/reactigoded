@@ -69,6 +69,8 @@ const getServerSnapshot = (): Theme => "dark";
  *   }, [pref, setTheme]);
  *   return null;
  * }
+ *
+ * @public
  */
 export function useTheme(): UseThemeReturn {
   const theme = useSyncExternalStore(

@@ -17,11 +17,20 @@ import { useFloatingNodeId, useFloatingParentNodeId } from "@floating-ui/react";
  * DS. Aísla del consumer el detalle de qué hooks de FUI se llaman
  * para registrarse en el árbol.
  *
+ * D7.4 / D11 (beta.24): este hook NO es público. Retirado del wildcard
+ * re-export de `floating/primitives/index.ts` para que el bundle root
+ * `reactigoded` no lo exponga. Internal consumers (Tooltip / Menu)
+ * importan via path directo `@/components/floating/primitives/useFloatingNode`.
+ * El símbolo `FloatingTreeRoot` SÍ es público — es el entrypoint
+ * canónico para anidación de floats del DS desde el consumer.
+ *
  * @example interno de un componente flotante del DS
  * ```tsx
  * const { nodeId } = useFloatingNode();
  * const { context, ... } = useFloating({ nodeId, ... });
  * ```
+ *
+ * @internal
  */
 export function useFloatingNode(): {
   nodeId: string | undefined;

@@ -310,6 +310,32 @@ script blocking en `<head>` que aplique `data-theme` antes del paint:
 </script>
 ```
 
+### Hooks públicos del DS
+
+El DS expone cuatro símbolos como API pública estable (`@public` en su
+JSDoc). Importables directamente desde `"reactigoded"`:
+
+| Símbolo | Para qué sirve | Return type |
+|---|---|---|
+| `useTheme()` | Lee/escribe el tema activo (`data-theme` en `<html>`). Observer con `useSyncExternalStore`, SSR-safe. | `UseThemeReturn` |
+| `useControllableState()` | Pattern controlled/uncontrolled estándar para componentes con estado. Soporta modo `derive()` para fuentes externas (storage, MediaQuery). | `UseControllableStateReturn<T>` |
+| `useToast()` | Dispara toasts desde cualquier hijo de `<ToastProvider>`. Devuelve `{ toast, dismiss, dismissAll }`. | `UseToastReturn` |
+| `FloatingTreeRoot` | Componente. Envuelve la app si anidas Tooltips/Popovers/Menus del DS y quieres cascade dismiss. Opt-in: sin el wrapper, cada float opera independiente. | — |
+
+```tsx
+import {
+  useTheme,
+  useControllableState,
+  useToast,
+  FloatingTreeRoot,
+  type UseToastReturn,
+} from "reactigoded";
+```
+
+Hooks `useDropdown` / `useTabs` / `useFloatingNode` / `useSidebar` / etc. NO son
+públicos — son detalle de implementación de cada componente. Detalle completo
+en [`docs/decisions/D11-hooks-disposition.md`](docs/decisions/D11-hooks-disposition.md).
+
 ### Accesibilidad
 
 - Todos los componentes interactivos siguen el patrón [WAI-ARIA APG](https://www.w3.org/WAI/ARIA/apg/) más cercano: `role`, `aria-*`, keyboard nav, focus management.

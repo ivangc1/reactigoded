@@ -36,6 +36,19 @@ export interface ToastContextValue {
   dismissAll: () => void;
 }
 
+/**
+ * D11 (beta.24 gate review): alias canónico del return de
+ * `useToast()`. Convención DS-wide `Use{Name}Return` (cf.
+ * `UseThemeReturn`, `UseControllableStateReturn`). El interfaz
+ * underlying `ToastContextValue` queda exportado para consumers que
+ * necesitan tipar el shape del Provider en mocks o adapters, pero
+ * el nombre que el consumer tipea al destructurar `useToast()` es
+ * `UseToastReturn`.
+ *
+ * @public
+ */
+export type UseToastReturn = ToastContextValue;
+
 export const ToastContext = createContext<ToastContextValue | null>(null);
 
 /**
@@ -82,8 +95,10 @@ export const ToastContext = createContext<ToastContextValue | null>(null);
  *
  * @returns `{ toast, dismiss, dismissAll }` — todas estables (memoizadas).
  * @throws Error si se llama fuera de `<ToastProvider>`.
+ *
+ * @public
  */
-export function useToast(): ToastContextValue {
+export function useToast(): UseToastReturn {
   const ctx = useContext(ToastContext);
   if (!ctx) {
     throw new Error("useToast() debe usarse dentro de <ToastProvider>");

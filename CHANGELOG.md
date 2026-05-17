@@ -142,6 +142,38 @@ NO es CSP-friendly.
 
 Decision doc: `docs/decisions/H-03-progress-csp-css-var.md`.
 
+---
+
+**D11 — Disposición pública de hooks del DS** (B2-PR8):
+
+Cierra la disposición canónica de los símbolos hook/factory expuestos
+por `"reactigoded"`. Sin breaking — solo formaliza intención con JSDoc
+tags + un alias adicional + documentación.
+
+- **Nuevo alias `UseToastReturn`** en `src/components/Toast/ToastContext.ts`,
+  re-exportado desde `Toast/index.ts`. Sigue la convención DS-wide
+  `Use{Name}Return` (cf. `UseThemeReturn`, `UseControllableStateReturn`).
+  El interfaz underlying `ToastContextValue` queda exportado para mocks
+  / adapters; el nombre canónico que el consumer tipa al destructurar
+  `useToast()` es `UseToastReturn`.
+- **JSDoc `@public`** en `useTheme`, `useControllableState`, `useToast`,
+  `FloatingTreeRoot`. Declaración de intención: estos cuatro símbolos
+  son API pública estable 1.0.
+- **JSDoc `@internal`** en `useFloatingNode` con pointer explícito a
+  `FloatingTreeRoot` como entrypoint público para anidación de floats.
+  El hook YA estaba retirado del wildcard re-export (D7.4 beta.24); el
+  tag explicita la intención.
+- **README sección "Hooks públicos del DS"** (bajo § Patrones recurrentes)
+  con tabla de los cuatro símbolos públicos + nota explícita de qué
+  hooks NO son públicos (`useDropdown` / `useTabs` / `useFloatingNode`
+  / `useSidebar` / etc.).
+
+Patrón organizacional: hooks generic (`useTheme`, `useControllableState`)
+viven en `src/hooks/` y se exportan explícitamente desde `src/index.ts`.
+Hooks family-specific (`useToast`, `FloatingTreeRoot`) viven en
+`src/components/<Family>/` y se exportan via la barrel chain de la
+familia. Razonamiento detallado: `docs/decisions/D11-hooks-disposition.md`.
+
 ## [1.0.0-beta.23] — 2026-05-16 (RC1 gate review + post-audit codex)
 
 Cierra el playbook RC1 completo: **17 PRs técnicos** ejecutados sobre la

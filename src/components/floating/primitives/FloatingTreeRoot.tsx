@@ -45,6 +45,15 @@ export interface FloatingTreeRootProps {
  * en cascada. Este wrapper expone la primitiva de FUI sin acoplar al
  * design system al import específico de `@floating-ui/react` desde el
  * consumer (le ofrecemos un nombre estable del DS).
+ *
+ * D11 (beta.24 gate review): `FloatingTreeRoot` queda como símbolo
+ * canónico para anidación de floats del DS. El hook subyacente
+ * `useFloatingNode` permanece internal (consumido sólo por Tooltip
+ * / Menu / Popover roadmap del DS via path directo). Si en el
+ * futuro abrimos hooks custom de floats al consumer, este símbolo
+ * sigue siendo el entrypoint.
+ *
+ * @public
  */
 export function FloatingTreeRoot({ children }: FloatingTreeRootProps) {
   return <FloatingTree>{children}</FloatingTree>;
