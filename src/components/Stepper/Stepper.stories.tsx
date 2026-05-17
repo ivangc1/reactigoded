@@ -125,7 +125,6 @@ export const Interactivo: Story = {
 };
 
 export const Uncontrolled: Story = {
-  args: { labeled: true, "aria-label": "Demo uncontrolled" },
   parameters: {
     docs: {
       description: {
@@ -134,8 +133,12 @@ export const Uncontrolled: Story = {
       },
     },
   },
-  render: (args) => (
-    <Stepper {...args} defaultActive={0}>
+  // No spread `args` del meta — el meta default `active: 1` mezclado
+  // con `defaultActive=0` resultaría en controlled-presentational
+  // (active gana, sin callback dots NO son role=button → play test
+  // falla buscando `.ig-step[role="button"]`).
+  render: () => (
+    <Stepper defaultActive={0} labeled aria-label="Demo uncontrolled">
       <Step label="Datos" />
       <Step label="Pago" />
       <Step label="Confirmación" />

@@ -16,7 +16,10 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/utils/cn";
-import { useControllableState } from "@/hooks/useControllableState";
+import {
+  SUPPRESS_NO_HANDLER_WARN,
+  useControllableState,
+} from "@/hooks/useControllableState";
 import type { StepProps } from "./Step";
 
 export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
@@ -129,24 +132,6 @@ export function Stepper({
   const stepCount = steps.length;
   const isControlled = active !== undefined;
 
-  // D5 (beta.24): wiring controlled/uncontrolled estándar DS-wide.
-  // - Controlled (`active` definido): forward a `onActiveChange` igual
-  //   que antes, consumer responsable de la transición.
-  // - Uncontrolled (`active` undefined): estado interno gestionado por
-  //   `useControllableState`, `onActiveChange` actúa como observer.
-  //
-  // `useControllableState` ya emite dev-warn de "controlled without
-  // onChange" — patrón DS-wide. La lógica de "Stepper presentational
-  // si controlled sin onActiveChange" se preserva más abajo con la
-  // computación de `interactive`.
-  const { value: rawActive, setValue: setActive } = useControllableState<number>(
-    {
-      value: active,
-      defaultValue: defaultActive ?? 0,
-      onChange: onActiveChange,
-    },
-  );
-
   // Interactive mode:
   // - Controlled + onActiveChange → interactive (consumer aplica
   //   transiciones via su state).
@@ -156,6 +141,30 @@ export function Stepper({
   //   consumer no puede aplicar la transición; habilitar keyboard nav
   //   sería confuso (focus se moverá visualmente pero nada cambia).
   const interactive = !isControlled || onActiveChange !== undefined;
+
+  // D5 (beta.24): wiring controlled/uncontrolled estándar DS-wide.
+  // - Controlled (`active` definido): forward a `onActiveChange` igual
+  //   que antes, consumer responsable de la transición.
+  // - Uncontrolled (`active` undefined): estado interno gestionado por
+  //   `useControllableState`, `onActiveChange` actúa como observer.
+  //
+  // Codex P2 sobre PR #85: `useControllableState` emite dev-warn de
+  // "controlled without onChange" cuando `value` está definido sin
+  // `onChange`. Para Stepper esto es un falso positivo en modo
+  // controlled-presentational legítimo (`<Stepper active={1}>` sin
+  // callback → display estático sin interactividad, decisión
+  // consciente del consumer, no UI bloqueada). Suprimimos el warn
+  // exactamente en ese caso usando el escape hatch Symbol-keyed
+  // (C-07). Mismo patrón que Rating (readOnly) y Switch.
+  const isPresentationalControlled = isControlled && !interactive;
+  const { value: rawActive, setValue: setActive } = useControllableState<number>(
+    {
+      value: active,
+      defaultValue: defaultActive ?? 0,
+      onChange: onActiveChange,
+      [SUPPRESS_NO_HANDLER_WARN]: isPresentationalControlled,
+    },
+  );
 
   // B-05 (gate review): clamp `active` (controlled o internal) a un
   // índice válido. Sin esto, valores fuera de rango (active=999, -1,
