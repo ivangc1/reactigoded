@@ -24,6 +24,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot, type Root } from "react-dom/client";
+import { act } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -562,7 +563,7 @@ const HYDRATE_CASES: { name: string; jsx: () => ReactElement }[] = [
 
 describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
   for (const c of HYDRATE_CASES) {
-    it(`${c.name}: hidrata sin mismatch ni DOM mutation`, () => {
+    it(`${c.name}: hidrata sin mismatch ni DOM mutation`, async () => {
       // 1. Server render → HTML estático.
       // eslint-disable-next-line testing-library/render-result-naming-convention -- `serverHtml` viene de renderToString, no del `render` de testing-library; la regla no aplica.
       const serverHtml = renderToString(c.jsx());
@@ -576,25 +577,27 @@ describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
       // 3. Snapshot pre-hydrate para detectar mutaciones post-hidratación.
       const htmlBeforeHydrate = container.innerHTML;
 
-      // 4. Hidratar. `onRecoverableError` captura mismatch warnings que
-      //    React 19 trata como recoverable (vs lanzados). Cualquier
-      //    error aquí indica un bug de hidratación: text mismatch, attr
-      //    mismatch, useId divergente, etc.
+      // 4. Hidratar dentro de `act()`. `hydrateRoot` inicia hidratación
+      //    sincrónicamente pero React 19 puede yieldear a microtasks/
+      //    macrotasks durante el matching pass (concurrent mode). El
+      //    `onRecoverableError` para mismatches puede dispararse DESPUÉS
+      //    del `hydrateRoot` initial commit, durante el work
+      //    asíncrono — codex P1 sobre el primer commit caught esto.
       //
-      //    No envolvemos en `act()` porque `hydrateRoot` commitea
-      //    synchronously y la API de `act` en React 19 tiene un
-      //    overload void cuando el callback retorna void que rompe
-      //    `await` con la regla `@typescript-eslint/await-thenable`.
-      //    Los assertions abajo son síncronas (DOM snapshot + array
-      //    push de errors) y no dependen de effects post-commit.
+      //    Truco de typings: el overload `act((() => void)): void` de
+      //    React kicks in cuando el callback retorna void, lo que rompe
+      //    `await`. Retornar el `Root` desde el callback fuerza el
+      //    overload `act<T>(() => T): Promise<T>` que sí es awaitable.
       const recoverableErrors: unknown[] = [];
-      const root: Root = hydrateRoot(container, c.jsx(), {
-        onRecoverableError: (err) => {
-          recoverableErrors.push(err);
-        },
-      });
+      const root: Root = await act(() =>
+        hydrateRoot(container, c.jsx(), {
+          onRecoverableError: (err) => {
+            recoverableErrors.push(err);
+          },
+        }),
+      );
 
-      // 5. Assertions:
+      // 5. Assertions tras hydration settled:
       //    - No errores recoverables (no mismatch).
       //    - DOM intacto post-hidratación (React reuse del HTML server,
       //      no re-mount).
@@ -604,7 +607,14 @@ describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
       // 6. Cleanup: unmount + remove container del documento. Sin esto,
       //    el React state queda colgado entre tests y los counters de
       //    useId acumulan ruido entre casos.
-      root.unmount();
+      //
+      //    Mismo truco que arriba: `return null` para forzar overload
+      //    no-void (callback que retorna void cae al overload `act`
+      //    no awaitable).
+      await act(() => {
+        root.unmount();
+        return null;
+      });
       container.remove();
     });
   }
