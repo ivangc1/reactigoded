@@ -142,6 +142,16 @@ export const Interaction: Story = {
           "Click en el trigger abre el menú (`aria-expanded=\"true\"`); ↓ mueve foco al primer item.",
       },
     },
+    a11y: {
+      // D2 (RC1 gate review beta.24): Floating UI FloatingFocusManager inyecta
+      // focus-guard spans con tabindex=0 + aria-hidden=true para trap inicial
+      // y tab cycling. Patrón canónico FUI/Radix — axe flag-ea como
+      // aria-hidden-focus pero es comportamiento intencional documentado.
+      // Suppression scoped al pattern específico, no global.
+      config: {
+        rules: [{ id: "aria-hidden-focus", enabled: false }],
+      },
+    },
   },
   render: (args) => (
     <div style={{ minHeight: 240 }}>
@@ -209,6 +219,12 @@ export const HoverItemAndDanger: Story = {
         dark: { theme: "dark" },
       },
     },
+    a11y: {
+      // D2: ver Interaction story para razón. FUI focus guards canon.
+      config: {
+        rules: [{ id: "aria-hidden-focus", enabled: false }],
+      },
+    },
   },
   render: () => (
     <Menu defaultOpen>
@@ -243,6 +259,12 @@ export const AllStates: Story = {
       modes: {
         light: { theme: "light" },
         dark: { theme: "dark" },
+      },
+    },
+    a11y: {
+      // D2: ver Interaction story para razón. FUI focus guards canon.
+      config: {
+        rules: [{ id: "aria-hidden-focus", enabled: false }],
       },
     },
   },
