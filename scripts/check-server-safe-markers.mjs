@@ -134,7 +134,7 @@
  *          render (`const f = useCallback(() => window.foo, []); f();`).
  *          Forzar al consumer a inline arrow en JSX event handler o
  *          mover acceso a effect/guard.
- *  16. (este round) DOS findings (P2):
+ *  16. DOS findings (P2):
  *      (a) JSX `on[A-Z]` exempt-eaba TODOS los components. Los
  *          intrinsic HTML elements (`<button onClick>`) sí son real
  *          DOM event handlers post-render, pero los custom components
@@ -151,6 +151,20 @@
  *          exempt. Imports legítimos (e.g., `useEffect` from "react")
  *          solo están en localBindings, no en nonImportBindings →
  *          siguen exempt.
+ *  17. (este round) DOS findings (P1 + P2):
+ *      (a) DEFERRED_HOOKS check NO verificaba el source del import. Un
+ *          `import { useEffect } from "./fake-helper"` (con synchronous
+ *          impl) pasaba como deferred sink. Fix: nuevo `reactImports`
+ *          Set en context, populated by `gatherReactImports` que solo
+ *          incluye nombres con `moduleSpecifier.text === "react"`.
+ *          Check requiere root del callee in reactImports para exempt.
+ *      (b) `requestAnimationFrame` / `requestIdleCallback` movidos de
+ *          DEFERRED_LATER_FNS → CLIENT_GLOBALS. Estos APIs NO existen
+ *          en Node SSR; el call site lanza ReferenceError antes de que
+ *          el callback se defiera. Añadidos también
+ *          `cancelAnimationFrame` y `cancelIdleCallback` por consistencia.
+ *          DEFERRED_LATER_FNS queda solo con timers que sí existen en
+ *          Node: setTimeout, setInterval, setImmediate, queueMicrotask.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -187,6 +201,13 @@ const CLIENT_GLOBALS = new Set([
   "process",
   "Buffer",
   "globalThis",
+  // Browser-only timers (no existen en Node SSR). Codex round 17 P2.2:
+  // tratarlos como client globals para flag-ear cualquier ref bare a
+  // ellos en render path (call site, no solo callback body).
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "requestIdleCallback",
+  "cancelIdleCallback",
 ]);
 
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
@@ -218,21 +239,25 @@ const DEFERRED_HOOKS = new Set([
 ]);
 
 // Browser/JS timers cuyo callback NO corre durante el render server.
+// Solo timers que existen en Node (SSR) — los browser-only no exempt:
+// el call site mismo crash-ea antes de que el callback se defiera.
 //
-// EXCLUIDO intencionalmente:
+// EXCLUIDOS intencionalmente:
 //   - `startTransition`: NO es un timer. React invoca la `action`
 //     SÍNCRONAMENTE en el call site — el "diferimiento" se aplica a
 //     la prioridad del state update, no a la ejecución de la función.
 //     `startTransition(() => window.foo)` ejecuta `window.foo` durante
-//     render, lanza ReferenceError en SSR. Codex round 11 P1 cazó este
-//     bypass cuando intentamos exempt-earlo aquí.
+//     render, lanza ReferenceError en SSR. Codex round 11 P1.
+//   - `requestAnimationFrame` / `requestIdleCallback`: browser-only, no
+//     existen en Node SSR. `requestAnimationFrame(...)` en render path
+//     lanza ReferenceError antes de que el callback se defiera. Movidos
+//     a CLIENT_GLOBALS para que la bare ref también flag-ee. Codex
+//     round 17 P2.2.
 const DEFERRED_LATER_FNS = new Set([
   "setTimeout",
   "setInterval",
   "setImmediate",
   "queueMicrotask",
-  "requestAnimationFrame",
-  "requestIdleCallback",
 ]);
 
 /**
@@ -325,15 +350,24 @@ function isDeferredExecutionContext(fnNode, context) {
       // NON-IMPORT local binding (shadow de un hook/timer real con un
       // function decl, var, let, const, parameter, etc.), NO es el
       // deferred sink — el local puede invocar el callback síncronamente
-      // durante render. Imports legítimos NO están en nonImportBindings
-      // así que `import { useEffect } from "react"` sigue exempt.
+      // durante render.
       if (
         rootIdent !== null &&
         context.nonImportBindings.has(rootIdent)
       ) {
         return false;
       }
-      if (DEFERRED_HOOKS.has(calleeName)) return true;
+      if (DEFERRED_HOOKS.has(calleeName)) {
+        // Codex round 17 P1.1: solo exempt si el binding viene
+        // específicamente de `"react"`. `import { useEffect } from
+        // "./fake-helper"` con synchronous impl NO debe exempt-ear.
+        // El check usa root del callee chain — cubre tanto `useEffect`
+        // bare como `React.useEffect` (`React` debe venir de "react").
+        if (rootIdent !== null && context.reactImports.has(rootIdent)) {
+          return true;
+        }
+        return false;
+      }
       if (DEFERRED_LATER_FNS.has(calleeName)) return true;
     }
   }
@@ -508,6 +542,42 @@ function extractPostStatementBindings(stmt) {
     }
   } else if (ts.isClassDeclaration(stmt) && stmt.name) {
     names.add(stmt.name.text);
+  }
+  return names;
+}
+
+/**
+ * Set de nombres importados específicamente de `"react"`. Codex round
+ * 17 P1.1: los DEFERRED_HOOKS (`useEffect`, `useLayoutEffect`,
+ * `useInsertionEffect`) son hooks de React con semántica garantizada
+ * (callback corre POST-render client-only, nunca en SSR). Pero si el
+ * consumer importa un name con el mismo string desde OTRO módulo
+ * (`import { useEffect } from "./fake-helper"` con synchronous impl),
+ * la garantía se rompe.
+ *
+ * Solo aceptar como deferred sink si el binding viene de `"react"`.
+ * Otros módulos (preact, frameworks alt, mocks/helpers locales) no
+ * exempt.
+ */
+function gatherReactImports(sourceFile) {
+  const names = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue;
+    if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+    if (stmt.moduleSpecifier.text !== "react") continue;
+    const importClause = stmt.importClause;
+    if (!importClause) continue;
+    if (importClause.name) names.add(importClause.name.text);
+    const namedBindings = importClause.namedBindings;
+    if (namedBindings) {
+      if (ts.isNamespaceImport(namedBindings)) {
+        names.add(namedBindings.name.text);
+      } else if (ts.isNamedImports(namedBindings)) {
+        for (const spec of namedBindings.elements) {
+          names.add(spec.name.text);
+        }
+      }
+    }
   }
   return names;
 }
@@ -1046,11 +1116,13 @@ function checkSourceFile(content, relPath) {
   const { all: moduleAll, nonImports: moduleNonImports } =
     gatherModulePreloadedBindings(sourceFile);
   const sourceFileFns = gatherSourceFileFunctionDeclarations(sourceFile);
+  const reactImports = gatherReactImports(sourceFile);
   const baseContext = {
     activeGuards: new Set(),
     isInDeferredBody: false,
     localBindings: moduleAll,
     nonImportBindings: moduleNonImports,
+    reactImports,
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
