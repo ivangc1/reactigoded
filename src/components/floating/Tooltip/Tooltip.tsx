@@ -32,23 +32,33 @@ import {
  * Mapping:
  * - `string` / `number` → `String(node)`
  * - `boolean` / `null` / `undefined` → `""`
- * - `Array` → concat recursivo
+ * - `Array` → concat recursivo con espacio entre nodos (M-04 beta.24)
  * - `ReactElement` → recursión sobre `props.children`
  * - Otros (Portal, función, símbolo) → `""`
+ *
+ * **M-04 (beta.24)**: arrays de nodos se concatenan con `" "` (no `""`)
+ * porque React serializa children mixtos como `["Hello ", <b>World</b>, "!"]`
+ * y el SR debe oír "Hello World!", no "HelloWorld!". Tras concat
+ * normalizamos whitespace (`/\s+/ → " "` + trim) para evitar dobles
+ * espacios cuando los strings adyacentes ya traen el suyo.
  */
-function extractText(node: ReactNode): string {
+function extractTextRaw(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") {
     return String(node);
   }
   if (Array.isArray(node)) {
-    return node.map(extractText).join("");
+    return node.map(extractTextRaw).join(" ");
   }
   if (isValidElement(node)) {
     const children = (node.props as { children?: ReactNode }).children;
-    return extractText(children);
+    return extractTextRaw(children);
   }
   return "";
+}
+
+function extractText(node: ReactNode): string {
+  return extractTextRaw(node).replace(/\s+/g, " ").trim();
 }
 import {
   FloatingNode,
