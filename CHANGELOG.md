@@ -194,8 +194,14 @@ Establece la infraestructura declarativa + ejecutable para SSR / React
 Server Components compatibility. Sin breaking — solo añade marker
 JSDoc + gate script + double-render test.
 
-- **JSDoc `@server-safe`** en 5 componentes pure render: `Button`,
-  `Badge`, `Chip`, `Divider`, `Spinner`.
+- **JSDoc `@server-safe`** en 36 componentes — todos los archivos sin
+  `"use client"` directive en `src/components/`. Includes:
+  `Avatar/AvatarGroup`, `Badge`, `Breadcrumb/BreadcrumbItem`,
+  `Button`/`IconButton`, `Card`+subcomponentes, `Chip`, `Divider`,
+  `Dialog/DialogBody/DialogFooter`, `Input`+`Label`/`Helper`/etc.,
+  `Navbar`+subcomponentes, `Progress`, `Radio`, `Sidebar` (subs
+  presentacionales), `Skeleton`, `Spinner`, `Stepper`/`Step`, `Table`,
+  `Timeline`/`TimelineItem`, `Toast` (item; el Provider es client).
 - **Gate** `scripts/check-server-safe-markers.mjs` +
   `npm run test:server-safe-markers` (encadenado en `verify:unit`):
   enforza que archivos `@server-safe` NO declaren `"use client"` y NO

@@ -5,7 +5,9 @@ export interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** CardFooter — pie de una `Card`. Típicamente acciones o metadata. */
+/** CardFooter — pie de una `Card`. Típicamente acciones o metadata.  *
+ * @server-safe
+ */
 export function CardFooter({
   className,
   children,

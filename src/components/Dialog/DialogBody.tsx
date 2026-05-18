@@ -5,7 +5,9 @@ export interface DialogBodyProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** DialogBody — cuerpo scrollable del modal. */
+/** DialogBody — cuerpo scrollable del modal.  *
+ * @server-safe
+ */
 export function DialogBody({
   className,
   children,

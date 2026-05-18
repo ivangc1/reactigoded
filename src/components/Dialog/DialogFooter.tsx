@@ -5,7 +5,9 @@ export interface DialogFooterProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** DialogFooter — pie del modal con acciones alineadas a la derecha. */
+/** DialogFooter — pie del modal con acciones alineadas a la derecha.  *
+ * @server-safe
+ */
 export function DialogFooter({
   className,
   children,

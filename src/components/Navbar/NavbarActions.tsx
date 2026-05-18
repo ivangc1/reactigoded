@@ -7,6 +7,8 @@ export interface NavbarActionsProps extends HTMLAttributes<HTMLDivElement> {
 
 /**
  * NavbarActions — contenedor de acciones globales (botones, menús de cuenta).
+  *
+ * @server-safe
  */
 export function NavbarActions({
   className,

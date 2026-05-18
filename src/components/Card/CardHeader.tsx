@@ -5,7 +5,9 @@ export interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** CardHeader — cabecera de una `Card`. Suele contener título + acciones. */
+/** CardHeader — cabecera de una `Card`. Suele contener título + acciones.  *
+ * @server-safe
+ */
 export function CardHeader({
   className,
   children,

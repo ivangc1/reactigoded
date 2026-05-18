@@ -45,6 +45,8 @@ export interface IconButtonProps
  *
  * @example // ✗ TS error: aria-label is required
  * <IconButton variant="brand">★</IconButton>
+  *
+ * @server-safe
  */
 export function IconButton({ children, ref, ...rest }: IconButtonProps) {
   // exactOptionalPropertyTypes: pasar `ref` solo si está definido

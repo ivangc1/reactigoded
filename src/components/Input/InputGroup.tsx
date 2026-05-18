@@ -14,6 +14,8 @@ export interface InputGroupProps extends HTMLAttributes<HTMLDivElement> {
  *   <Input type="number" />
  *   <InputAddon>USD</InputAddon>
  * </InputGroup>
+  *
+ * @server-safe
  */
 export function InputGroup({
   className,

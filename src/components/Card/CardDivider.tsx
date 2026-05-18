@@ -5,7 +5,9 @@ export interface CardDividerProps extends HTMLAttributes<HTMLHRElement> {
   ref?: Ref<HTMLHRElement>;
 }
 
-/** CardDivider — separador horizontal entre secciones de una `Card`. */
+/** CardDivider — separador horizontal entre secciones de una `Card`.  *
+ * @server-safe
+ */
 export function CardDivider({ className, ref, ...rest }: CardDividerProps) {
   return (
     <hr ref={ref} className={cn("ig-card-divider", className)} {...rest} />

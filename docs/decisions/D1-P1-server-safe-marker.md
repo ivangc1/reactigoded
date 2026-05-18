@@ -22,17 +22,13 @@ Establecer una infraestructura de dos componentes:
 
 3. **Test double-render idempotence**: dos invocaciones de `renderToString(jsx)` con el mismo JSX deben producir el mismo HTML. Cualquier side-effect en render path (module-level counters, mutación de estado externo) rompe el invariante.
 
-### Componentes marcados Fase 1 (beta.24)
+### Componentes marcados en beta.24
 
-Subset representativo de componentes "puros" sin DOM access:
+**Los 36 archivos sin `"use client"` directive en `src/components/`**, validados por el gate (0 violations):
 
-- `Button`
-- `Badge`
-- `Chip`
-- `Divider`
-- `Spinner`
+- Presentational: `Avatar/AvatarGroup`, `Badge`, `Breadcrumb/BreadcrumbItem`, `Button` + `IconButton`, `Card/CardBody/CardDivider/CardFooter/CardHeader/CardImage`, `Chip`, `Divider`, `Dialog/DialogBody/DialogFooter`, `Input/ErrorText/Helper/InputAddon/InputGroup/Label`, `Navbar/NavbarActions/NavbarBrand/NavbarLink/NavbarMenuButton`, `Progress`, `Radio`, `Sidebar/SidebarDivider/SidebarFooter/SidebarHeader/SidebarSection`, `Skeleton`, `Spinner`, `Stepper/Step`, `Table`, `Timeline/TimelineItem`, `Toast` (el item; el Provider sí es client).
 
-El gate pasa con 5 markers, 0 violations. Componentes adicionales se marcarán incrementalmente post-RC1 conforme se audite cada uno individualmente.
+El gate pasa con 36 markers, 0 violations. Los componentes restantes del DS (Dialog provider/content/trigger/header/close, Menu family, Tooltip, ThemeToggle, Switch, etc.) tienen `"use client"` explícito por design (state interno, portales, FUI) y NO son candidatos a `@server-safe`.
 
 ### Componentes NO candidatos
 
@@ -88,4 +84,3 @@ import { Dialog, DialogTrigger, DialogContent } from "reactigoded";
 
 - **Style injection guard**: hoy no existe componente con `style={{ runtime: x }}` que cause hydration mismatch (Progress migró a CSS var en H-03). Si en el futuro se introducen, el guard será un nuevo check del gate.
 - **useSyncExternalStore audit**: hoy todos los 3 usos (ThemeToggle, useTheme, ToastProvider) tienen `getServerSnapshot` explícito y se han verificado manualmente. Auto-audit sería un nuevo check.
-- **Marker en todos los componentes server-safe restantes**: ~40 archivos más son candidatos. Lo difiero a un PR aparte post-RC1 con audit individual por componente.

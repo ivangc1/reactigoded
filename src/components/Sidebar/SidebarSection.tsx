@@ -8,6 +8,8 @@ export interface SidebarSectionProps extends HTMLAttributes<HTMLDivElement> {
 /**
  * SidebarSection — etiqueta de grupo (estilo "Principal", "Herramientas").
  * Oculta automáticamente cuando la sidebar está colapsada (vía CSS).
+  *
+ * @server-safe
  */
 export function SidebarSection({
   className,

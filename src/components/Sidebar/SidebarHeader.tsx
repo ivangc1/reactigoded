@@ -10,6 +10,8 @@ export interface SidebarHeaderProps extends HTMLAttributes<HTMLDivElement> {
 /**
  * SidebarHeader — cabecera de la sidebar. El icono/logo permanece visible
  * en modo colapsado; el texto (children) lo oculta el CSS automáticamente.
+  *
+ * @server-safe
  */
 export function SidebarHeader({
   icon,

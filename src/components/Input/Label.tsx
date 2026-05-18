@@ -9,6 +9,8 @@ export interface LabelProps extends LabelHTMLAttributes<HTMLLabelElement> {
 
 /**
  * Label — etiqueta para campos de formulario. Asocia con un input via `htmlFor`.
+  *
+ * @server-safe
  */
 export function Label({
   required = false,

@@ -34,6 +34,8 @@ export interface RadioProps
  * <Radio name="plan" value="free" defaultChecked>Free</Radio>
  * <Radio name="plan" value="pro" variant="success">Pro</Radio>
  * <Radio name="plan" value="enterprise" disabled>Enterprise</Radio>
+  *
+ * @server-safe
  */
 export function Radio({
   variant = "brand",

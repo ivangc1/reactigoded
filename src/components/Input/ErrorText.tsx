@@ -10,6 +10,8 @@ export interface ErrorTextProps extends HTMLAttributes<HTMLParagraphElement> {
  * `aria-live="polite"` para anunciar el error a tecnologías asistivas.
  *
  * (Nombrado `ErrorText` en lugar de `Error` para evitar shadow del global.)
+  *
+ * @server-safe
  */
 export function ErrorText({
   className,

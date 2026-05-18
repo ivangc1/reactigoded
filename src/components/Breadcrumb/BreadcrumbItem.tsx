@@ -23,6 +23,8 @@ export type BreadcrumbItemProps = BreadcrumbItemAsCurrent | BreadcrumbItemAsLink
  * BreadcrumbItem — un item de un `Breadcrumb`. Si `current=true`, se
  * renderiza como `<span>` con `aria-current="page"` (no clickable). En caso
  * contrario es un `<a>` con todos los atributos de anchor.
+  *
+ * @server-safe
  */
 export function BreadcrumbItem(props: BreadcrumbItemProps) {
   if (props.current) {

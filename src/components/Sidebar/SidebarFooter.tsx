@@ -5,7 +5,9 @@ export interface SidebarFooterProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** SidebarFooter — sección inferior de la sidebar (suele alojar `SidebarToggle`). */
+/** SidebarFooter — sección inferior de la sidebar (suele alojar `SidebarToggle`).  *
+ * @server-safe
+ */
 export function SidebarFooter({
   className,
   children,

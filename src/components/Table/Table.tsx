@@ -40,6 +40,8 @@ export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
  * `TableHeaderCell` (`<th>`) y `TableCell` (`<td>`), o usar las etiquetas
  * HTML nativas directamente — todas las variantes se aplican vía clases en
  * `<table>`.
+  *
+ * @server-safe
  */
 export function Table({
   className,
