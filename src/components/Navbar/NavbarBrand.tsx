@@ -27,6 +27,8 @@ export type NavbarBrandProps = AsAnchor | AsDiv;
 /**
  * NavbarBrand — área del logo y nombre. Por defecto es `<div>`; si se pasa
  * `href` se renderiza como `<a>` (clicable).
+  *
+ * @server-safe
  */
 export function NavbarBrand(props: NavbarBrandProps) {
   if (props.href !== undefined) {

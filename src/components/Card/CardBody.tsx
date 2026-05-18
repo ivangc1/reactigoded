@@ -5,7 +5,9 @@ export interface CardBodyProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** CardBody — cuerpo principal de una `Card`. */
+/** CardBody — cuerpo principal de una `Card`.  *
+ * @server-safe
+ */
 export function CardBody({
   className,
   children,

@@ -40,6 +40,8 @@ export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
  * </SkeletonContainer>
  *
  * <Skeleton variant="card" style={{ height: 200 }} />
+  *
+ * @server-safe
  */
 export function Skeleton({
   variant = "text",

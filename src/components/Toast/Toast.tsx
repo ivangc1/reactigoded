@@ -70,6 +70,8 @@ export interface ToastProps
  *     </Button>
  *   );
  * }
+  *
+ * @server-safe
  */
 export function Toast({
   variant = "neutral",

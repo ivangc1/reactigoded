@@ -11,6 +11,8 @@ export interface NavbarLinkProps
 /**
  * NavbarLink — link de navegación dentro de `NavbarNav`. Aplica
  * `aria-current="page"` cuando `active` es true.
+  *
+ * @server-safe
  */
 export function NavbarLink({
   className,

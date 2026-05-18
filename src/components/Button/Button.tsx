@@ -66,6 +66,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * <Button variant="success" appearance="outline">OK</Button>
  * <Button appearance="link">Saber más</Button>
  * <Button icon aria-label="Favorito">★</Button>
+ *
+ * @server-safe Renderiza determinísticamente en server (sin DOM access
+ * en render path). Compatible con React Server Components y SSR puro.
  */
 export function Button({
   variant = "brand",

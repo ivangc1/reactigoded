@@ -13,6 +13,8 @@ export interface NavbarMenuButtonProps
 /**
  * NavbarMenuButton — botón hamburguesa que sólo se muestra en mobile vía CSS
  * (`@media max-width: 768px`). Pensado para abrir un menú lateral o drawer.
+  *
+ * @server-safe
  */
 export function NavbarMenuButton({
   className,

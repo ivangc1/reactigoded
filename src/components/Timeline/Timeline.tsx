@@ -17,6 +17,8 @@ export interface TimelineProps extends HTMLAttributes<HTMLDivElement> {
  *   <TimelineItem date="15 Nov 2024" title="Lanzamiento" />
  *   <TimelineItem date="20 Dic 2024" title="Update" dotVariant="success" />
  * </Timeline>
+  *
+ * @server-safe
  */
 export function Timeline({
   className,

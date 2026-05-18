@@ -12,6 +12,8 @@ export interface CardImageProps extends ImgHTMLAttributes<HTMLImageElement> {
 /**
  * CardImage — imagen integrada en una `Card`. Con `top=true` se renderiza
  * pegada al borde superior con esquinas redondeadas a juego.
+  *
+ * @server-safe
  */
 export function CardImage({
   top = false,

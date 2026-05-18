@@ -45,6 +45,8 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
  * Cuando el Stepper padre es interactivo (`onActiveChange` definido),
  * el dot del Step lleva `role="button"` + `tabIndex` roving y soporta
  * activación por teclado (Enter/Space) y navegación (ArrowKey/Home/End).
+  *
+ * @server-safe
  */
 export function Step({
   label,

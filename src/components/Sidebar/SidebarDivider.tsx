@@ -5,7 +5,9 @@ export interface SidebarDividerProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
 }
 
-/** SidebarDivider — separador horizontal entre grupos de items. */
+/** SidebarDivider — separador horizontal entre grupos de items.  *
+ * @server-safe
+ */
 export function SidebarDivider({
   className,
   ref,

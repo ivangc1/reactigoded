@@ -623,3 +623,45 @@ describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
     });
   }
 });
+
+/**
+ * D1-P1 (beta.24 gate review): double-render idempotence sobre los
+ * casos `renderToString`. `renderToString(jsx)` invocado dos veces
+ * con el MISMO jsx debe producir el mismo HTML byte a byte. Si no, el
+ * componente tiene side-effects en render path (module-level
+ * counters, mutación de estado externo, etc.) que rompen el invariante
+ * "render server = función pura".
+ *
+ * useId es el caso típico: en React 19 `useId()` no es determinístico
+ * entre invocaciones independientes de `renderToString`. Para
+ * componentes con useId esperamos el mismo ID en la MISMA invocación
+ * de render server pero NO entre invocaciones distintas — esto es OK
+ * porque el ID se persiste vía DOM y se hidrata correctamente. Para
+ * detectar este caso, usamos una passlist de componentes con useId.
+ *
+ * Componentes con useId (skip double-render strict check porque sus
+ * IDs varían legítimamente entre llamadas distintas a renderToString):
+ *   Accordion, Dialog, Menu, Sidebar, Tabs, Tooltip, Toast.
+ */
+const USES_USE_ID = new Set([
+  "Accordion",
+  "Dialog (compound, open=false)",
+  "Menu (compound)",
+  "Sidebar (compound)",
+  "Tabs (compound)",
+  "Tooltip",
+  "Toast (compound)",
+]);
+
+describe("SSR — double-render idempotence (D1-P1)", () => {
+  for (const c of cases) {
+    if (USES_USE_ID.has(c.name)) continue;
+    it(`${c.name}: dos invocaciones de renderToString producen mismo HTML`, () => {
+      // eslint-disable-next-line testing-library/render-result-naming-convention -- renderToString del server, no del testing-library.
+      const html1 = renderToString(c.jsx());
+      // eslint-disable-next-line testing-library/render-result-naming-convention -- renderToString del server, no del testing-library.
+      const html2 = renderToString(c.jsx());
+      expect(html1).toBe(html2);
+    });
+  }
+});

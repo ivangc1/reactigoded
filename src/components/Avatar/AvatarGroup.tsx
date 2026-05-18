@@ -10,6 +10,8 @@ export interface AvatarGroupProps extends HTMLAttributes<HTMLDivElement> {
  *
  * Coloca avatares directamente como children; el CSS los solapa via offset
  * negativo.
+  *
+ * @server-safe
  */
 export function AvatarGroup({
   className,

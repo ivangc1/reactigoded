@@ -38,6 +38,8 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
  * <Badge variant="success" pill>Activo</Badge>
  * <Badge variant="danger" outline>Bloqueado</Badge>
  * <Badge variant="success" dot>Conectado</Badge>
+ *
+ * @server-safe
  */
 export function Badge({
   variant = "brand",

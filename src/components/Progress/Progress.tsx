@@ -68,6 +68,8 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
  * <Progress value={70} variant="success" />
  * <Progress indeterminate aria-label="Subiendo archivo" />
  * <Progress value={3} max={5} size="lg" />
+  *
+ * @server-safe
  */
 export function Progress({
   value = 0,

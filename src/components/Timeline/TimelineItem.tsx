@@ -38,6 +38,8 @@ export interface TimelineItemProps
  *
  * Por defecto renderiza el patrón `date` + `title` + `description`. Si se
  * pasan children, se usan en lugar del contenido por defecto.
+  *
+ * @server-safe
  */
 export function TimelineItem({
   className,

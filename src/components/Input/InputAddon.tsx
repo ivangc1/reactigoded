@@ -5,7 +5,9 @@ export interface InputAddonProps extends HTMLAttributes<HTMLSpanElement> {
   ref?: Ref<HTMLSpanElement>;
 }
 
-/** InputAddon — prefijo/sufijo decorativo dentro de un `InputGroup`. */
+/** InputAddon — prefijo/sufijo decorativo dentro de un `InputGroup`.  *
+ * @server-safe
+ */
 export function InputAddon({
   className,
   children,
