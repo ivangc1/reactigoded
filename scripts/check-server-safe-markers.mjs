@@ -134,6 +134,23 @@
  *          render (`const f = useCallback(() => window.foo, []); f();`).
  *          Forzar al consumer a inline arrow en JSX event handler o
  *          mover acceso a effect/guard.
+ *  16. (este round) DOS findings (P2):
+ *      (a) JSX `on[A-Z]` exempt-eaba TODOS los components. Los
+ *          intrinsic HTML elements (`<button onClick>`) sí son real
+ *          DOM event handlers post-render, pero los custom components
+ *          (`<MyComp onFoo>`) tienen `onFoo` como prop normal que el
+ *          componente puede invocar síncronamente durante render.
+ *          Restringir exemption a JsxOpeningElement/JsxSelfClosingElement
+ *          con tagName Identifier lowercase first char (intrinsic).
+ *      (b) Deferred sinks (`useEffect`, `setTimeout`, etc.) trustaban
+ *          el callee text directamente. Un local `function useEffect(cb)
+ *          { cb(); }` shadow-eaba el hook real pero pasaba el check.
+ *          Fix: separar `localBindings` (todos los bindings) y
+ *          `nonImportBindings` (excluye imports). Si el root identifier
+ *          del callee está en nonImportBindings = local shadow → NO
+ *          exempt. Imports legítimos (e.g., `useEffect` from "react")
+ *          solo están en localBindings, no en nonImportBindings →
+ *          siguen exempt.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -241,7 +258,7 @@ const DEFERRED_LATER_FNS = new Set([
  * Transparent wrappers (ParenthesizedExpression `(fn)`, JsxExpression
  * `{fn}`) se desenrollan para llegar al parent semántico.
  */
-function isDeferredExecutionContext(fnNode) {
+function isDeferredExecutionContext(fnNode, context) {
   let current = fnNode;
   let parent = current.parent;
   while (
@@ -253,30 +270,69 @@ function isDeferredExecutionContext(fnNode) {
   }
   if (!parent) return false;
 
-  // (1) JSX event handler: <X onFoo={fn}>
+  // (1) JSX event handler RESTRICTED a intrinsic HTML elements:
+  // `<button onClick={fn}>`. Custom components `<MyComp onFoo={fn}>`
+  // pueden invocar `onFoo` síncronamente durante render — NO son
+  // deferred sinks. Distinción: tagName lowercase first char =
+  // intrinsic (string element), uppercase / PropertyAccess / namespaced =
+  // component reference. Codex round 16 P2.1.
   if (ts.isJsxAttribute(parent)) {
-    const name = parent.name;
-    if (ts.isIdentifier(name) && /^on[A-Z]/.test(name.text)) return true;
+    const attrName = parent.name;
+    if (ts.isIdentifier(attrName) && /^on[A-Z]/.test(attrName.text)) {
+      const jsxAttributes = parent.parent;
+      const jsxElement = jsxAttributes?.parent;
+      if (
+        jsxElement &&
+        (ts.isJsxOpeningElement(jsxElement) ||
+          ts.isJsxSelfClosingElement(jsxElement))
+      ) {
+        const tagName = jsxElement.tagName;
+        if (ts.isIdentifier(tagName)) {
+          const first = tagName.text.charAt(0);
+          if (first && first === first.toLowerCase()) {
+            return true;
+          }
+        }
+      }
+    }
   }
 
   // (2) Argumento de CallExpression a sink reconocido.
   if (ts.isCallExpression(parent)) {
-    // Si current es el callee mismo (IIFE), no es deferred.
     if (parent.expression === current) return false;
-    // Verificar que current esté en la lista de arguments.
     const isArg = parent.arguments.some((a) => a === current);
     if (!isArg) return false;
     const callee = parent.expression;
     let calleeName = null;
+    let rootIdent = null;
     if (ts.isIdentifier(callee)) {
       calleeName = callee.text;
+      rootIdent = callee.text;
     } else if (ts.isPropertyAccessExpression(callee)) {
       // Soporte para `React.useEffect`, `window.setTimeout`, etc.
       // (Nota: `window.setTimeout` por sí mismo sería otra violación si
       // está en render path, capturada por el check de access bare.)
       if (ts.isIdentifier(callee.name)) calleeName = callee.name.text;
+      // Encontrar el root identifier de la cadena para chequear shadow.
+      let chain = callee.expression;
+      while (ts.isPropertyAccessExpression(chain)) {
+        chain = chain.expression;
+      }
+      if (ts.isIdentifier(chain)) rootIdent = chain.text;
     }
     if (calleeName !== null) {
+      // Codex round 16 P2.2: si el root identifier del callee es un
+      // NON-IMPORT local binding (shadow de un hook/timer real con un
+      // function decl, var, let, const, parameter, etc.), NO es el
+      // deferred sink — el local puede invocar el callback síncronamente
+      // durante render. Imports legítimos NO están en nonImportBindings
+      // así que `import { useEffect } from "react"` sigue exempt.
+      if (
+        rootIdent !== null &&
+        context.nonImportBindings.has(rootIdent)
+      ) {
+        return false;
+      }
       if (DEFERRED_HOOKS.has(calleeName)) return true;
       if (DEFERRED_LATER_FNS.has(calleeName)) return true;
     }
@@ -463,30 +519,42 @@ function extractPostStatementBindings(stmt) {
  * Para `var` usa `collectVarHoistedRecursive`, que cubre `var` anidados
  * en for-headers top-level (`for (var x = 0; ...)`) y otros constructs
  * que envuelven var declarations.
+ *
+ * Devuelve `{ all, nonImports }`: dos Sets paralelos. `all` incluye
+ * imports + var; `nonImports` solo var. Esto permite distinguir entre
+ * `import { useEffect } from "react"; useEffect(cb)` (legítimo, exempt
+ * como deferred sink) y `function useEffect(cb) { cb(); }; useEffect(cb)`
+ * (shadow local, no es el hook real — codex round 16 P2.2).
  */
 function gatherModulePreloadedBindings(sourceFile) {
-  const names = new Set();
+  const all = new Set();
+  const nonImports = new Set();
   for (const stmt of sourceFile.statements) {
     if (ts.isImportDeclaration(stmt)) {
       const importClause = stmt.importClause;
       if (importClause) {
-        if (importClause.name) names.add(importClause.name.text);
+        if (importClause.name) all.add(importClause.name.text);
         const namedBindings = importClause.namedBindings;
         if (namedBindings) {
           if (ts.isNamespaceImport(namedBindings)) {
-            names.add(namedBindings.name.text);
+            all.add(namedBindings.name.text);
           } else if (ts.isNamedImports(namedBindings)) {
             for (const spec of namedBindings.elements) {
-              names.add(spec.name.text);
+              all.add(spec.name.text);
             }
           }
         }
       }
       continue;
     }
-    collectVarHoistedRecursive(stmt, names);
+    const captured = new Set();
+    collectVarHoistedRecursive(stmt, captured);
+    for (const n of captured) {
+      all.add(n);
+      nonImports.add(n);
+    }
   }
-  return names;
+  return { all, nonImports };
 }
 
 /**
@@ -718,6 +786,25 @@ function checkSourceFile(content, relPath) {
     }
   }
 
+  /**
+   * Helper para extender un context con bindings nuevos. Imports van
+   * solo a `localBindings`; el resto (params, var, let, const, function,
+   * class, catch param, for-init) va a AMBOS sets. Codex round 16 P2.2:
+   * la distinción permite chequear si un callee de deferred sink está
+   * shadow-eado por un local (skip exemption) vs es el import real (exempt).
+   */
+  function addToScope(currentContext, names) {
+    if (!names || names.size === 0) return currentContext;
+    return {
+      ...currentContext,
+      localBindings: new Set([...currentContext.localBindings, ...names]),
+      nonImportBindings: new Set([
+        ...currentContext.nonImportBindings,
+        ...names,
+      ]),
+    };
+  }
+
   // Walk AST con contexto:
   //   activeGuards: Set<api> guards activos por scope de typeof.
   //   isInDeferredBody: estamos dentro de un body que NO corre durante
@@ -769,18 +856,13 @@ function checkSourceFile(content, relPath) {
       ts.isSetAccessorDeclaration(node) ||
       ts.isConstructorDeclaration(node)
     ) {
-      const isDeferred = isDeferredExecutionContext(node);
+      const isDeferred = isDeferredExecutionContext(node, context);
       const fnScopeBindings = gatherFunctionVarHoisted(node);
-      // Acumular con outer scope para que closures vean los bindings
-      // del enclosing function (parámetros + var hoisted).
-      const localBindings =
-        fnScopeBindings.size === 0
-          ? context.localBindings
-          : new Set([...context.localBindings, ...fnScopeBindings]);
+      // Acumular con outer scope. Estas bindings son TODAS non-import
+      // (parameters + var hoisted dentro del fn body).
       const bodyContext = {
-        ...context,
+        ...addToScope(context, fnScopeBindings),
         isInDeferredBody: context.isInDeferredBody || isDeferred,
-        localBindings,
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;
@@ -811,13 +893,7 @@ function checkSourceFile(content, relPath) {
           }
         }
       }
-      let current =
-        blockFns.size > 0
-          ? {
-              ...context,
-              localBindings: new Set([...context.localBindings, ...blockFns]),
-            }
-          : context;
+      let current = addToScope(context, blockFns);
       for (const clause of node.clauses) {
         if (ts.isCaseClause(clause) && clause.expression) {
           visit(clause.expression, current);
@@ -825,15 +901,7 @@ function checkSourceFile(content, relPath) {
         for (const stmt of clause.statements) {
           visit(stmt, current);
           const additions = extractPostStatementBindings(stmt);
-          if (additions.size > 0) {
-            current = {
-              ...current,
-              localBindings: new Set([
-                ...current.localBindings,
-                ...additions,
-              ]),
-            };
-          }
+          current = addToScope(current, additions);
         }
       }
       return;
@@ -847,13 +915,7 @@ function checkSourceFile(content, relPath) {
         catchBindings,
       );
       if (catchBindings.size > 0) {
-        const bodyContext = {
-          ...context,
-          localBindings: new Set([
-            ...context.localBindings,
-            ...catchBindings,
-          ]),
-        };
+        const bodyContext = addToScope(context, catchBindings);
         ts.forEachChild(node, (child) => visit(child, bodyContext));
         return;
       }
@@ -878,13 +940,7 @@ function checkSourceFile(content, relPath) {
             addBindingNamesFromPattern(decl.name, forBindings);
           }
           if (forBindings.size > 0) {
-            const bodyContext = {
-              ...context,
-              localBindings: new Set([
-                ...context.localBindings,
-                ...forBindings,
-              ]),
-            };
+            const bodyContext = addToScope(context, forBindings);
             ts.forEachChild(node, (child) => visit(child, bodyContext));
             return;
           }
@@ -974,38 +1030,28 @@ function checkSourceFile(content, relPath) {
    * (visible solo desde la declaración hacia adelante).
    */
   function visitOrderedStatements(statements, context, preloadedFns) {
-    let current =
-      preloadedFns && preloadedFns.size > 0
-        ? {
-            ...context,
-            localBindings: new Set([
-              ...context.localBindings,
-              ...preloadedFns,
-            ]),
-          }
-        : context;
+    let current = addToScope(context, preloadedFns);
     for (const stmt of statements) {
       visit(stmt, current);
       const additions = extractPostStatementBindings(stmt);
-      if (additions.size > 0) {
-        current = {
-          ...current,
-          localBindings: new Set([...current.localBindings, ...additions]),
-        };
-      }
+      current = addToScope(current, additions);
     }
   }
 
   // Initial scope: imports + var hoisted (module-preloaded).
-  const modulePreloaded = gatherModulePreloadedBindings(sourceFile);
+  // `all` contiene imports + var; `nonImports` solo var. Necesario para
+  // distinguir `import { useEffect } ...; useEffect(cb)` (legítimo, exempt
+  // como deferred sink) de `function useEffect(cb) { cb(); }` (shadow
+  // local, no es el hook real). Codex round 16 P2.2.
+  const { all: moduleAll, nonImports: moduleNonImports } =
+    gatherModulePreloadedBindings(sourceFile);
   const sourceFileFns = gatherSourceFileFunctionDeclarations(sourceFile);
   const baseContext = {
     activeGuards: new Set(),
     isInDeferredBody: false,
-    localBindings: modulePreloaded,
+    localBindings: moduleAll,
+    nonImportBindings: moduleNonImports,
   };
-  // Iterate top-level statements with function pre-load + order-aware
-  // let/const/class accumulation.
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
 }
