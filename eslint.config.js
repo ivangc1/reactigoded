@@ -19,6 +19,10 @@ export default defineConfig([
     "coverage",
     "node_modules",
     "playwright-report",
+    // fixtures/ tiene su propio tsconfig (e.g., fixtures/rsc/tsconfig.json
+    // con customConditions: ["react-server"] + paths a dist/). ESLint
+    // del root no debe parsearlo bajo el tsconfig.json principal.
+    "fixtures",
   ]),
 
   // Base JS (config files)
