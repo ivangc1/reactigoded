@@ -94,7 +94,7 @@
  *      scope; `let`/`const`/`class` se añaden al ENTRAR cada Block;
  *      `catch` param al entrar el CatchClause; `for-init let/const` al
  *      entrar el ForStatement/ForInStatement/ForOfStatement.
- *  13. (este round) DOS findings ortogonales:
+ *  13. DOS findings ortogonales:
  *      (a) En strict ESM, `function` declarations dentro de blocks NO
  *          hoist al function scope — son block-scoped (visible solo en
  *          su block, aunque pre-initialized desde block-entry).
@@ -113,6 +113,27 @@
  *          declarations (block-hoisted within scope), y añadiendo
  *          let/const/class al scope DESPUÉS de visitar cada statement.
  *          Reads anteriores al const ven el outer scope (global).
+ *  14. DOS findings (P2):
+ *      (a) for-init `var x` (en `for`/`for-in`/`for-of`) no se hoist-eaba
+ *          porque el walker chequeaba solo VariableStatement, no
+ *          VariableDeclarationList directo. Fix: chequear
+ *          VariableDeclarationList — cubre ambos sites.
+ *      (b) Switch/case lexical scope no se procesaba — let/const/class
+ *          dentro de cases no se acumulaban. Fix: nuevo branch
+ *          CaseBlock que pre-carga function decls cross-clauses +
+ *          itera clauses en orden, persistiendo scope cross-case.
+ *  15. (este round) DOS findings (P2):
+ *      (a) `"use client"` regex (`/^["']use client["'];?\s*$/m`) perdía
+ *          casos válidos: `"use client"; // comment`, comillas mixtas,
+ *          trailing whitespace, etc. Reemplazo: AST directive prologue
+ *          — walk top-level statements mientras sean
+ *          ExpressionStatement/StringLiteral.
+ *      (b) `useCallback` / `useImperativeHandle` removidos de
+ *          DEFERRED_HOOKS — sus callbacks NO se invocan síncronamente
+ *          por el hook, pero el VALUE returned puede invocarse durante
+ *          render (`const f = useCallback(() => window.foo, []); f();`).
+ *          Forzar al consumer a inline arrow en JSX event handler o
+ *          mover acceso a effect/guard.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -151,9 +172,9 @@ const CLIENT_GLOBALS = new Set([
   "globalThis",
 ]);
 
-// Hooks de React cuyo body NO corre durante el render server. El callback
-// pasado se invoca post-render (mount, commit, dispatch, o invocación
-// explícita por el consumer).
+// Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
+// phase) en client. Los effects no corren en SSR, por tanto sus bodies
+// nunca se ejecutan durante render server — exención safe.
 //
 // EXCLUIDOS intencionalmente:
 //   - useMemo / useState (lazy init) / useRef (lazy init): el factory
@@ -164,15 +185,19 @@ const CLIENT_GLOBALS = new Set([
 //     anti-idiomático y vale la pena que el gate lo flaggee.
 //   - useSyncExternalStore: tiene 3 args; `getServerSnapshot` SÍ corre
 //     en render server. Una exención wholesale del hook abriría un
-//     silent bypass para getServerSnapshot. Si en el futuro un
-//     componente @server-safe usa useSyncExternalStore, debe gestionar
-//     el client access con guard typeof explícito.
+//     silent bypass para getServerSnapshot.
+//   - useCallback / useImperativeHandle: el callback/factory NO se
+//     invoca síncronamente por el hook, pero el VALUE returned puede
+//     invocarse durante render por el consumer:
+//       const f = useCallback(() => window.foo, []);
+//       f();  // ← corre durante render
+//     Codex round 15 P2.2: con exención, este patrón pasaba el gate.
+//     Removidos para forzar al consumer a inline-ar el arrow en JSX
+//     event handler (recognized) o mover el access a un effect / guard.
 const DEFERRED_HOOKS = new Set([
   "useEffect",
   "useLayoutEffect",
   "useInsertionEffect",
-  "useCallback",
-  "useImperativeHandle",
 ]);
 
 // Browser/JS timers cuyo callback NO corre durante el render server.
@@ -665,15 +690,6 @@ function isNonReferencePosition(node) {
 function checkSourceFile(content, relPath) {
   const violations = [];
 
-  // Rule 1: no "use client" directive coexisting con @server-safe.
-  if (/^["']use client["'];?\s*$/m.test(content)) {
-    violations.push({
-      file: relPath,
-      rule: "no-use-client",
-      detail: '@server-safe contradice "use client" en el mismo archivo',
-    });
-  }
-
   const sourceFile = ts.createSourceFile(
     relPath,
     content,
@@ -681,6 +697,26 @@ function checkSourceFile(content, relPath) {
     /* setParentNodes */ true,
     relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
+
+  // Rule 1: no "use client" directive coexisting con @server-safe.
+  // Inspect AST directive prologue: walk top-level statements mientras
+  // sean ExpressionStatement con StringLiteral (prologue cohort per
+  // ES spec). Robusto frente a `"use client"; // comment`, leading
+  // whitespace, otras directivas previas (`"use strict"`), comillas
+  // simples vs dobles. Codex round 15 P2.1: el regex anterior
+  // perdía esos casos.
+  for (const stmt of sourceFile.statements) {
+    if (!ts.isExpressionStatement(stmt)) break;
+    if (!ts.isStringLiteral(stmt.expression)) break;
+    if (stmt.expression.text === "use client") {
+      violations.push({
+        file: relPath,
+        rule: "no-use-client",
+        detail: '@server-safe contradice "use client" en el mismo archivo',
+      });
+      break;
+    }
+  }
 
   // Walk AST con contexto:
   //   activeGuards: Set<api> guards activos por scope de typeof.
