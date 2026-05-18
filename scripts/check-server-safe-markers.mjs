@@ -65,6 +65,22 @@ const CLIENT_API_PATTERN =
 // guard se usa una API DISTINTA a la guarded, no se suprime.
 const GUARD_LOOKBACK_LINES = 8;
 
+/**
+ * Strip de line comments (linea //) y block comments (block /*...*\/) en
+ * una sola línea. Necesario para que el check de `typeof <api>` no
+ * sea falsamente satisfecho por texto dentro de comentarios (codex
+ * P2 round 3 sobre PR #90). Heurística simple — no maneja `//` dentro
+ * de strings, pero en la práctica los strings con `//` son URLs que
+ * no contienen `typeof <api>` (no false positive realista).
+ */
+function stripComments(line) {
+  // Block comments primero (pueden anidar con código).
+  let s = line.replace(/\/\*[\s\S]*?\*\//g, "");
+  const idx = s.indexOf("//");
+  if (idx >= 0) s = s.slice(0, idx);
+  return s;
+}
+
 function listSourceFiles(dir) {
   const result = [];
   for (const entry of readdirSync(dir)) {
@@ -122,21 +138,21 @@ for (const file of allFiles) {
     if (!match) continue;
     const api = match[1];
     if (!api) continue;
-    // Same-line guard: si la propia línea contiene `typeof <api>` no
-    // es violación (puede tener una guard inline ej.
-    // `typeof window !== "undefined" && window.matchMedia(...)`).
-    if (line.includes(`typeof ${api}`)) continue;
-    // Multi-line guard: look-back en las últimas N líneas no-comment
-    // por `typeof <api>`. Cubre patrón canónico:
-    //   if (typeof window !== "undefined") {
-    //     window.matchMedia(...);  // line i
-    //   }
+    // Codex P2 round 3 sobre PR #90: el match del `typeof <api>` debe
+    // hacerse SOBRE LA LÍNEA SIN COMENTARIOS — un comentario como
+    // `window.location.href; // typeof window` no debe contar como
+    // guard. Mismo principio para el look-back multi-línea.
+    const lineCode = stripComments(line);
+    // Same-line guard.
+    if (lineCode.includes(`typeof ${api}`)) continue;
+    // Multi-line guard: look-back en las últimas N líneas con
+    // comments stripped.
     let guarded = false;
     const start = Math.max(0, i - GUARD_LOOKBACK_LINES);
     for (let j = i - 1; j >= start; j--) {
       const prev = lines[j];
       if (!prev) continue;
-      if (prev.includes(`typeof ${api}`)) {
+      if (stripComments(prev).includes(`typeof ${api}`)) {
         guarded = true;
         break;
       }
