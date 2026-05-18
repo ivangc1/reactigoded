@@ -66,12 +66,32 @@
  *   9. `typeof window.foo` ancestor check exempt-eaba el property
  *      access — pero `typeof` solo suprime ReferenceError sobre
  *      identificadores bare, NO sobre property accesses descendientes.
- *  10. (este round) `functionDepth > 1` exempt-eaba TODOS los nested
- *      function bodies, incluido helper `function readEnv() { return
- *      window.x; }` que se invoca síncronamente desde JSX. Reemplazo:
- *      allowlist explícito de sinks de ejecución diferida (JSX event
- *      handlers, useEffect-family, timers). Heurístico depth-based
- *      → flag-based isInDeferredBody.
+ *  10. `functionDepth > 1` exempt-eaba TODOS los nested function bodies,
+ *      incluido helper `function readEnv() { return window.x; }` que se
+ *      invoca síncronamente desde JSX. Reemplazo: allowlist explícito
+ *      de sinks de ejecución diferida.
+ *  11. (este round) DOS findings:
+ *      (a) `startTransition` NO es timer — React invoca la action
+ *          síncronamente. Removido del allowlist diferido.
+ *      (b) Bare identifier reads (`const w = window`, `if (document)`,
+ *          `f(navigator)`) no se chequeaban — el walker solo veía
+ *          PropertyAccess/ElementAccess. Añadido branch para Identifier
+ *          con filtro `isNonReferencePosition` que skipea declaration
+ *          names, property keys, type positions, JSX tag/attribute names,
+ *          binding propertyName de destructure, y operands de typeof.
+ *
+ *          Además se añadió scope tracking minimal (`localBindings` per
+ *          context, acumulada al entrar function-likes) para evitar
+ *          falsos positivos cuando un `CLIENT_GLOBALS` name está
+ *          shadow-eado por un parameter, var local, o import:
+ *
+ *            function fn(window) { return window; }   // OK
+ *            import { document } from "./local";       // OK
+ *            const navigator = ...                     // OK
+ *
+ *          Sin scope resolution completa: catch params, for-loop vars
+ *          y block-scoped lets en inner blocks se sobre-aproximan a
+ *          function-scope (inocuo para nuestro fin).
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -135,6 +155,14 @@ const DEFERRED_HOOKS = new Set([
 ]);
 
 // Browser/JS timers cuyo callback NO corre durante el render server.
+//
+// EXCLUIDO intencionalmente:
+//   - `startTransition`: NO es un timer. React invoca la `action`
+//     SÍNCRONAMENTE en el call site — el "diferimiento" se aplica a
+//     la prioridad del state update, no a la ejecución de la función.
+//     `startTransition(() => window.foo)` ejecuta `window.foo` durante
+//     render, lanza ReferenceError en SSR. Codex round 11 P1 cazó este
+//     bypass cuando intentamos exempt-earlo aquí.
 const DEFERRED_LATER_FNS = new Set([
   "setTimeout",
   "setInterval",
@@ -142,7 +170,6 @@ const DEFERRED_LATER_FNS = new Set([
   "queueMicrotask",
   "requestAnimationFrame",
   "requestIdleCallback",
-  "startTransition",
 ]);
 
 /**
@@ -233,6 +260,113 @@ function listSourceFiles(dir) {
 }
 
 /**
+ * Extrae recursivamente nombres de un BindingName (Identifier u
+ * ObjectBindingPattern / ArrayBindingPattern) y los añade al Set.
+ * Maneja destructure anidado y rest elements.
+ */
+function addBindingNamesFromPattern(node, names) {
+  if (!node) return;
+  if (ts.isIdentifier(node)) {
+    names.add(node.text);
+    return;
+  }
+  if (ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
+    for (const el of node.elements) {
+      if (ts.isBindingElement(el)) {
+        addBindingNamesFromPattern(el.name, names);
+      }
+    }
+  }
+}
+
+/**
+ * Walk recursivo añadiendo nombres declarados al Set. NO desciende en
+ * function-likes anidados (sus bindings son otro scope). Captura:
+ *   - VariableDeclaration (incluyendo destructure anidado)
+ *   - FunctionDeclaration / ClassDeclaration name
+ *   - Recursión en blocks, if, for, try, switch, etc.
+ *
+ * Function declarations + var (hoisting) y let/const (block-scoped) se
+ * tratan uniformemente como visibles en todo el function body. Es una
+ * sobre-aproximación inocua para nuestro fin (evitar falsos positivos
+ * por shadowing de globals).
+ */
+function collectScopeBindings(node, names) {
+  if (ts.isFunctionDeclaration(node)) {
+    if (node.name) names.add(node.name.text);
+    return;
+  }
+  if (ts.isClassDeclaration(node)) {
+    if (node.name) names.add(node.name.text);
+    return;
+  }
+  if (
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    ts.isConstructorDeclaration(node)
+  ) {
+    return;
+  }
+  if (ts.isVariableDeclaration(node)) {
+    addBindingNamesFromPattern(node.name, names);
+  }
+  if (ts.isCatchClause(node) && node.variableDeclaration) {
+    addBindingNamesFromPattern(node.variableDeclaration.name, names);
+  }
+  ts.forEachChild(node, (child) => collectScopeBindings(child, names));
+}
+
+/**
+ * Nombres visibles en el body de una function-like: parameters + body
+ * declarations (hoisted).
+ */
+function gatherFunctionScopeBindings(fnNode) {
+  const names = new Set();
+  if (fnNode.parameters) {
+    for (const param of fnNode.parameters) {
+      addBindingNamesFromPattern(param.name, names);
+    }
+  }
+  if (fnNode.body) {
+    ts.forEachChild(fnNode.body, (child) => collectScopeBindings(child, names));
+  }
+  return names;
+}
+
+/**
+ * Nombres visibles a nivel module-scope: imports + top-level var/let/
+ * const/function/class declarations. Estos shadowizan globals para
+ * todo el archivo.
+ */
+function gatherFileBindings(sourceFile) {
+  const names = new Set();
+  ts.forEachChild(sourceFile, (child) => {
+    if (ts.isImportDeclaration(child)) {
+      const importClause = child.importClause;
+      if (importClause) {
+        if (importClause.name) names.add(importClause.name.text);
+        const namedBindings = importClause.namedBindings;
+        if (namedBindings) {
+          if (ts.isNamespaceImport(namedBindings)) {
+            names.add(namedBindings.name.text);
+          } else if (ts.isNamedImports(namedBindings)) {
+            for (const spec of namedBindings.elements) {
+              names.add(spec.name.text);
+            }
+          }
+        }
+      }
+      return;
+    }
+    collectScopeBindings(child, names);
+  });
+  return names;
+}
+
+/**
  * Si la expresión es `typeof <ident> !== "undefined"` (o `!=`), donde
  * `<ident>` es un client global, devuelve el nombre. Si no, null.
  */
@@ -261,6 +395,155 @@ function extractPositiveTypeofGuard(expr) {
     return operand.text;
   }
   return null;
+}
+
+/**
+ * Devuelve `true` si `node` (Identifier) está en una posición sintáctica
+ * que NO es una referencia de valor en runtime. En esas posiciones, leer
+ * un client global no causa ReferenceError porque el binding no se lee:
+ * es metadata (property names, declaration names, JSX attribute names,
+ * JSX tag names lowercase, TS type positions) o está short-circuited
+ * por `typeof`.
+ *
+ * Codex round 11 P1.2 (bare-ident reads): `const w = window`,
+ * `if (document)`, `f(navigator)` SÍ son refs runtime y lanzan
+ * ReferenceError en SSR. El walker debe flag-earlos. Pero
+ * `obj.window`, `function fn(window) {}`, `typeof window` NO leen el
+ * binding global — son safe.
+ */
+function isNonReferencePosition(node) {
+  const parent = node.parent;
+  if (!parent) return false;
+
+  // 1. Property name in member access: `obj.window`, `obj?.window`.
+  //    En `window.foo`, el Identifier `window` ES la expression
+  //    (parent.expression === node) — eso SÍ es ref. En `obj.window`,
+  //    el Identifier `window` es parent.name — NO es ref.
+  if (
+    (ts.isPropertyAccessExpression(parent) || ts.isQualifiedName(parent)) &&
+    "name" in parent &&
+    parent.name === node
+  ) {
+    return true;
+  }
+
+  // 2. Operand of TypeOfExpression: `typeof window` short-circuita
+  //    ReferenceError sobre identifiers bare.
+  if (ts.isTypeOfExpression(parent) && parent.expression === node) {
+    return true;
+  }
+
+  // 3. TS type-position typeof: `const x: typeof window`. TypeQueryNode.
+  if (ts.isTypeQueryNode(parent) && parent.exprName === node) {
+    return true;
+  }
+
+  // 4. TS type reference: `let x: Buffer`. Types no se leen en runtime.
+  if (ts.isTypeReferenceNode(parent) && parent.typeName === node) {
+    return true;
+  }
+
+  // 5. Key/name de object literal property o type member:
+  //    `{ window: 1 }`, `{ window() {} }`, `interface { window: T }`.
+  //    Excluye ShorthandPropertyAssignment intencionalmente — esa SÍ
+  //    es una ref runtime al binding (`{ window }` ≡ `{ window: window }`).
+  if (
+    (ts.isPropertyAssignment(parent) ||
+      ts.isPropertySignature(parent) ||
+      ts.isMethodDeclaration(parent) ||
+      ts.isMethodSignature(parent) ||
+      ts.isGetAccessorDeclaration(parent) ||
+      ts.isSetAccessorDeclaration(parent) ||
+      ts.isEnumMember(parent)) &&
+    "name" in parent &&
+    parent.name === node
+  ) {
+    return true;
+  }
+
+  // 6. Declaration names: variable, parameter, binding pattern, fn,
+  //    class, interface, type alias, enum, module, type param,
+  //    import/export specifier, etc. NO leen el binding global —
+  //    declaran un binding local (que puede shadow el global).
+  if (
+    (ts.isVariableDeclaration(parent) ||
+      ts.isParameter(parent) ||
+      ts.isBindingElement(parent) ||
+      ts.isFunctionDeclaration(parent) ||
+      ts.isFunctionExpression(parent) ||
+      ts.isArrowFunction(parent) ||
+      ts.isClassDeclaration(parent) ||
+      ts.isClassExpression(parent) ||
+      ts.isInterfaceDeclaration(parent) ||
+      ts.isTypeAliasDeclaration(parent) ||
+      ts.isEnumDeclaration(parent) ||
+      ts.isModuleDeclaration(parent) ||
+      ts.isImportClause(parent) ||
+      ts.isImportSpecifier(parent) ||
+      ts.isExportSpecifier(parent) ||
+      ts.isNamespaceImport(parent) ||
+      ts.isNamespaceExportDeclaration(parent) ||
+      ts.isLabeledStatement(parent) ||
+      ts.isTypeParameterDeclaration(parent)) &&
+    "name" in parent &&
+    parent.name === node
+  ) {
+    return true;
+  }
+
+  // 7. Source-module export key en import/export specifiers
+  //    (propertyName): `import { window as x }` — propertyName es
+  //    metadata para el resolver de imports, no ref runtime.
+  if (
+    (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent)) &&
+    "propertyName" in parent &&
+    parent.propertyName === node
+  ) {
+    return true;
+  }
+
+  // 7b. Destructure source property name: `const { document: doc } = obj`
+  //     — `document` es BindingElement.propertyName, metadata sobre qué
+  //     key del object source extraer, NO ref runtime al binding global.
+  //     El binding local es `doc` (parent.name).
+  if (
+    ts.isBindingElement(parent) &&
+    "propertyName" in parent &&
+    parent.propertyName === node
+  ) {
+    return true;
+  }
+
+  // 8. JSX attribute name: `<x window={y} />` — `window` es el nombre
+  //    del attribute, no ref al global.
+  if (ts.isJsxAttribute(parent) && parent.name === node) {
+    return true;
+  }
+
+  // 9. JSX tag name: `<window />`, `<Buffer />`. Lowercase = string
+  //    literal HTML element (no ref). Uppercase ES ref a binding,
+  //    pero el caso es extremadamente raro y skip pragmático.
+  if (
+    (ts.isJsxOpeningElement(parent) ||
+      ts.isJsxClosingElement(parent) ||
+      ts.isJsxSelfClosingElement(parent)) &&
+    parent.tagName === node
+  ) {
+    return true;
+  }
+
+  // 10. Expression of PropertyAccess/ElementAccess: `window.foo`,
+  //     `window["foo"]`. Ya capturado en (c) sobre el outer
+  //     Property/ElementAccess. Evitar doble flag.
+  if (
+    (ts.isPropertyAccessExpression(parent) ||
+      ts.isElementAccessExpression(parent)) &&
+    parent.expression === node
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 // Nota: NO existe exención "dentro de typeof". Se intentó en el round 8
@@ -353,9 +636,17 @@ function checkSourceFile(content, relPath) {
       ts.isConstructorDeclaration(node)
     ) {
       const isDeferred = isDeferredExecutionContext(node);
+      const fnScopeBindings = gatherFunctionScopeBindings(node);
+      // Acumular con outer scope para que closures vean el binding
+      // shadow del enclosing function.
+      const localBindings =
+        fnScopeBindings.size === 0
+          ? context.localBindings
+          : new Set([...context.localBindings, ...fnScopeBindings]);
       const bodyContext = {
         ...context,
         isInDeferredBody: context.isInDeferredBody || isDeferred,
+        localBindings,
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;
@@ -371,7 +662,9 @@ function checkSourceFile(content, relPath) {
       const expr = node.expression;
       if (ts.isIdentifier(expr) && CLIENT_GLOBALS.has(expr.text)) {
         const api = expr.text;
-        if (!context.isInDeferredBody) {
+        // Si el binding está shadow-eado por una local (parameter, var,
+        // import, etc.), NO es ref al global — skip.
+        if (!context.localBindings.has(api) && !context.isInDeferredBody) {
           if (!context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -388,10 +681,53 @@ function checkSourceFile(content, relPath) {
       }
     }
 
+    // (d) Detectar bare identifier reference a client global. Cubre:
+    //   - `const w = window`
+    //   - `if (document)`
+    //   - `f(navigator)`
+    //   - `{ window }` (ShorthandPropertyAssignment — `{ window: window }`)
+    //   - `arr.push(globalThis)`
+    //   - `return process`
+    //
+    // Cualquier posición sintáctica de read del binding cuenta. Las
+    // posiciones de declaration / property name / type / typeof short-
+    // circuit se filtran via `isNonReferencePosition`. La rama (c) ya
+    // captura `window.foo` / `window["foo"]` sobre el outer Property/
+    // ElementAccess — aquí explícitamente skipeamos para evitar doble
+    // flag (rule 10 de isNonReferencePosition).
+    //
+    // Codex round 11 P1.2: este check faltaba — los reads bare lanzan
+    // ReferenceError igual que property accesses si el binding no existe.
+    if (ts.isIdentifier(node) && CLIENT_GLOBALS.has(node.text)) {
+      const api = node.text;
+      if (
+        !context.localBindings.has(api) &&
+        !isNonReferencePosition(node)
+      ) {
+        if (!context.isInDeferredBody && !context.activeGuards.has(api)) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText =
+            content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail: `referencia bare al binding \`${api}\` sin guard typeof activo: ${lineText}`,
+          });
+        }
+      }
+    }
+
     ts.forEachChild(node, (child) => visit(child, context));
   }
 
-  visit(sourceFile, { activeGuards: new Set(), isInDeferredBody: false });
+  const fileBindings = gatherFileBindings(sourceFile);
+  visit(sourceFile, {
+    activeGuards: new Set(),
+    isInDeferredBody: false,
+    localBindings: fileBindings,
+  });
   return violations;
 }
 
