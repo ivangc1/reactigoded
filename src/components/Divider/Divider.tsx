@@ -39,6 +39,8 @@ export interface DividerProps extends HTMLAttributes<HTMLElement> {
  * <Divider variant="brand" dashed />
  * <Divider>o</Divider>
  * <Divider vertical aria-orientation="vertical" />
+ *
+ * @server-safe
  */
 export function Divider({
   vertical = false,

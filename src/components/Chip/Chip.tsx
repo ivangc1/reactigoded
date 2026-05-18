@@ -48,6 +48,8 @@ export type ChipProps =
  *   React
  * </Chip>
  * <Chip variant="success" onRemove={() => removeTag(id)}>Removible</Chip>
+ *
+ * @server-safe
  */
 export function Chip(props: ChipProps) {
   const {

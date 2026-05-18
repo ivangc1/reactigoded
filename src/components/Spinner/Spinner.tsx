@@ -36,6 +36,8 @@ export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
  * <Spinner />
  * <Spinner variant="success" size="lg" />
  * <Spinner aria-label="Procesando pago…" />
+ *
+ * @server-safe
  */
 export function Spinner({
   variant = "brand",

@@ -188,6 +188,31 @@ Decision doc: `docs/decisions/D6-dialog-compound.md`.
 
 ---
 
+**D1-P1 — `@server-safe` JSDoc marker + suite SSR ejecutable** (D1 server-safe, parte 1/4):
+
+Establece la infraestructura declarativa + ejecutable para SSR / React
+Server Components compatibility. Sin breaking — solo añade marker
+JSDoc + gate script + double-render test.
+
+- **JSDoc `@server-safe`** en 5 componentes pure render: `Button`,
+  `Badge`, `Chip`, `Divider`, `Spinner`.
+- **Gate** `scripts/check-server-safe-markers.mjs` +
+  `npm run test:server-safe-markers` (encadenado en `verify:unit`):
+  enforza que archivos `@server-safe` NO declaren `"use client"` y NO
+  accedan a `document.X`/`window.X`/`navigator.X`/`process.X`/`Buffer.X`
+  sin guard `typeof X !== "undefined"`.
+- **Test double-render idempotence** en `__ssr__.test.tsx`: dos
+  invocaciones de `renderToString(jsx)` con el mismo JSX producen el
+  mismo HTML. Skip components con `useId` (Accordion, Dialog, Menu,
+  Sidebar, Tabs, Tooltip, Toast) por semántica de `useId` entre
+  invocaciones independientes.
+- Decision doc: `docs/decisions/D1-P1-server-safe-marker.md`.
+
+Componentes adicionales se marcarán incrementalmente post-RC1 conforme
+se audite cada uno.
+
+---
+
 **MEDIUMs consolidados beta.24** (B3-PR1):
 
 Batch de fixes individuales identificados en el gate review claudegate3
