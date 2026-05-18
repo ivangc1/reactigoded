@@ -89,9 +89,23 @@
  *            import { document } from "./local";       // OK
  *            const navigator = ...                     // OK
  *
- *          Sin scope resolution completa: catch params, for-loop vars
- *          y block-scoped lets en inner blocks se sobre-aproximan a
- *          function-scope (inocuo para nuestro fin).
+ *  12. (este round) Scope tracking del round 11 era function-scope
+ *      global — TODOS los let/const/class del function body se trataban
+ *      como visibles en toda la función, lo que false-shadow-eaba refs
+ *      fuera del block donde se declaró el local:
+ *
+ *        if (cond) { const window = ...; }
+ *        window.location;  // ← bug: este window ES el global, pero
+ *                          //   el gate lo trataba como shadow del const
+ *                          //   interior.
+ *
+ *      Reemplazo: scope-stack real. Hoist solo `var` + `function` al
+ *      function scope (semántica correcta de JS); `let`/`const`/`class`
+ *      se añaden al ENTRAR cada Block; `catch` param al entrar el
+ *      CatchClause; `for-init let/const` al entrar el ForStatement/
+ *      ForInStatement/ForOfStatement. Como context es inmutable y se
+ *      pasa hacia abajo en recursión, el scope expira naturalmente al
+ *      retornar — los siblings fuera del block reciben el outer scope.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -280,50 +294,64 @@ function addBindingNamesFromPattern(node, names) {
 }
 
 /**
- * Walk recursivo añadiendo nombres declarados al Set. NO desciende en
- * function-likes anidados (sus bindings son otro scope). Captura:
- *   - VariableDeclaration (incluyendo destructure anidado)
- *   - FunctionDeclaration / ClassDeclaration name
- *   - Recursión en blocks, if, for, try, switch, etc.
+ * `var` y `function` declarations son hoisted al function (o module)
+ * scope. Recurre a través de blocks anidados, if/else, try/catch,
+ * for/while bodies, switch — pero NO desciende en nested
+ * function-likes (su contenido es otro scope).
  *
- * Function declarations + var (hoisting) y let/const (block-scoped) se
- * tratan uniformemente como visibles en todo el function body. Es una
- * sobre-aproximación inocua para nuestro fin (evitar falsos positivos
- * por shadowing de globals).
+ * `let`/`const`/`class`/`catch param`/`for-init let` son block-scoped y
+ * se manejan separadamente en `gatherBlockScopedBindings` y branches
+ * del visitor.
+ *
+ * Codex round 12 P1: este split es necesario. Antes el walker
+ * acumulaba TODO let/const/class del function body al function scope,
+ * lo que false-shadow-eaba refs fuera del bloque donde se declaró el
+ * local. Ej: `if (x) { const window = ...; } window.location` —
+ * `window.location` está FUERA del if-block, pero el `const window`
+ * del block interior se trataba como visible en toda la función.
  */
-function collectScopeBindings(node, names) {
-  if (ts.isFunctionDeclaration(node)) {
-    if (node.name) names.add(node.name.text);
-    return;
-  }
-  if (ts.isClassDeclaration(node)) {
-    if (node.name) names.add(node.name.text);
-    return;
-  }
+function collectHoistedRecursive(node, names) {
   if (
     ts.isArrowFunction(node) ||
     ts.isFunctionExpression(node) ||
+    ts.isFunctionDeclaration(node) ||
     ts.isMethodDeclaration(node) ||
     ts.isGetAccessorDeclaration(node) ||
     ts.isSetAccessorDeclaration(node) ||
     ts.isConstructorDeclaration(node)
   ) {
+    // FunctionDeclaration introduce su nombre en el scope ENCLOSING
+    // (no en su propio body) — capturarlo antes del return.
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      names.add(node.name.text);
+    }
     return;
   }
-  if (ts.isVariableDeclaration(node)) {
-    addBindingNamesFromPattern(node.name, names);
+  if (ts.isVariableStatement(node)) {
+    const flags = node.declarationList.flags;
+    const blockScoped =
+      (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+    if (!blockScoped) {
+      // `var` — hoisted.
+      for (const decl of node.declarationList.declarations) {
+        addBindingNamesFromPattern(decl.name, names);
+      }
+    }
+    // Continue walking (el initializer puede tener var anidados).
   }
-  if (ts.isCatchClause(node) && node.variableDeclaration) {
-    addBindingNamesFromPattern(node.variableDeclaration.name, names);
-  }
-  ts.forEachChild(node, (child) => collectScopeBindings(child, names));
+  ts.forEachChild(node, (child) => collectHoistedRecursive(child, names));
 }
 
 /**
- * Nombres visibles en el body de una function-like: parameters + body
- * declarations (hoisted).
+ * Bindings visibles en el body de una function-like:
+ *   - parameters
+ *   - var declarations hoisted desde cualquier nested block (non-fn)
+ *   - function declarations hoisted desde cualquier nested block
+ *
+ * NO incluye let/const/class del body — esos son block-scoped y se
+ * añaden al entrar el body Block (vía gatherBlockScopedBindings).
  */
-function gatherFunctionScopeBindings(fnNode) {
+function gatherFunctionHoistedBindings(fnNode) {
   const names = new Set();
   if (fnNode.parameters) {
     for (const param of fnNode.parameters) {
@@ -331,21 +359,57 @@ function gatherFunctionScopeBindings(fnNode) {
     }
   }
   if (fnNode.body) {
-    ts.forEachChild(fnNode.body, (child) => collectScopeBindings(child, names));
+    ts.forEachChild(fnNode.body, (child) =>
+      collectHoistedRecursive(child, names),
+    );
   }
   return names;
 }
 
 /**
- * Nombres visibles a nivel module-scope: imports + top-level var/let/
- * const/function/class declarations. Estos shadowizan globals para
- * todo el archivo.
+ * Bindings declarados al IMMEDIATE level de un Block:
+ *   - let/const/using/await using declarations
+ *   - class declarations
+ *
+ * NO recurre — let/const en blocks anidados pertenecen al inner block.
+ * NO incluye `var`/`function` — esos son hoisted al function scope.
  */
-function gatherFileBindings(sourceFile) {
+function gatherBlockScopedBindings(blockNode) {
   const names = new Set();
-  ts.forEachChild(sourceFile, (child) => {
-    if (ts.isImportDeclaration(child)) {
-      const importClause = child.importClause;
+  if (!blockNode.statements) return names;
+  for (const stmt of blockNode.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      const flags = stmt.declarationList.flags;
+      const blockScoped =
+        (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+      if (blockScoped) {
+        for (const decl of stmt.declarationList.declarations) {
+          addBindingNamesFromPattern(decl.name, names);
+        }
+      }
+    } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+      names.add(stmt.name.text);
+    }
+  }
+  return names;
+}
+
+/**
+ * Bindings visibles a nivel module:
+ *   - imports
+ *   - top-level var/let/const/function/class declarations (IMMEDIATE,
+ *     NO descendiendo en nested blocks — esos son block-scoped al
+ *     bloque donde se declaran).
+ *
+ * Aunque let/const a nivel module son block-scoped (al module-block),
+ * para nuestros fines son equivalentes a "visibles en todo el archivo
+ * después de la declaración". Los tratamos como hoisted al module.
+ */
+function gatherModuleScopeBindings(sourceFile) {
+  const names = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (ts.isImportDeclaration(stmt)) {
+      const importClause = stmt.importClause;
       if (importClause) {
         if (importClause.name) names.add(importClause.name.text);
         const namedBindings = importClause.namedBindings;
@@ -359,10 +423,16 @@ function gatherFileBindings(sourceFile) {
           }
         }
       }
-      return;
+    } else if (ts.isVariableStatement(stmt)) {
+      for (const decl of stmt.declarationList.declarations) {
+        addBindingNamesFromPattern(decl.name, names);
+      }
+    } else if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+      names.add(stmt.name.text);
+    } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+      names.add(stmt.name.text);
     }
-    collectScopeBindings(child, names);
-  });
+  }
   return names;
 }
 
@@ -636,9 +706,9 @@ function checkSourceFile(content, relPath) {
       ts.isConstructorDeclaration(node)
     ) {
       const isDeferred = isDeferredExecutionContext(node);
-      const fnScopeBindings = gatherFunctionScopeBindings(node);
-      // Acumular con outer scope para que closures vean el binding
-      // shadow del enclosing function.
+      const fnScopeBindings = gatherFunctionHoistedBindings(node);
+      // Acumular con outer scope para que closures vean los bindings
+      // del enclosing function (parámetros, var, fn declarations).
       const localBindings =
         fnScopeBindings.size === 0
           ? context.localBindings
@@ -650,6 +720,78 @@ function checkSourceFile(content, relPath) {
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;
+    }
+
+    // (b.1) Block: añadir bindings let/const/class del IMMEDIATE block
+    // al scope. Naturalmente expira al retornar del recurse — el
+    // sibling fuera del block recibe context original. Round 12 P1 fix:
+    // antes los let/const internos contaminaban todo el function scope.
+    if (ts.isBlock(node)) {
+      const blockBindings = gatherBlockScopedBindings(node);
+      if (blockBindings.size > 0) {
+        const bodyContext = {
+          ...context,
+          localBindings: new Set([
+            ...context.localBindings,
+            ...blockBindings,
+          ]),
+        };
+        ts.forEachChild(node, (child) => visit(child, bodyContext));
+        return;
+      }
+    }
+
+    // (b.2) CatchClause: el catch param es block-scoped al body del catch.
+    if (ts.isCatchClause(node) && node.variableDeclaration) {
+      const catchBindings = new Set();
+      addBindingNamesFromPattern(
+        node.variableDeclaration.name,
+        catchBindings,
+      );
+      if (catchBindings.size > 0) {
+        const bodyContext = {
+          ...context,
+          localBindings: new Set([
+            ...context.localBindings,
+            ...catchBindings,
+          ]),
+        };
+        ts.forEachChild(node, (child) => visit(child, bodyContext));
+        return;
+      }
+    }
+
+    // (b.3) For/ForIn/ForOf con initializer let/const: el binding es
+    // visible en el initializer (condition/incrementor) y el body del
+    // for, no más allá.
+    if (
+      ts.isForStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isForOfStatement(node)
+    ) {
+      const init = node.initializer;
+      if (init && ts.isVariableDeclarationList(init)) {
+        const flags = init.flags;
+        const blockScoped =
+          (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+        if (blockScoped) {
+          const forBindings = new Set();
+          for (const decl of init.declarations) {
+            addBindingNamesFromPattern(decl.name, forBindings);
+          }
+          if (forBindings.size > 0) {
+            const bodyContext = {
+              ...context,
+              localBindings: new Set([
+                ...context.localBindings,
+                ...forBindings,
+              ]),
+            };
+            ts.forEachChild(node, (child) => visit(child, bodyContext));
+            return;
+          }
+        }
+      }
     }
 
     // (c) Detectar acceso a client global. Cubre:
@@ -722,11 +864,11 @@ function checkSourceFile(content, relPath) {
     ts.forEachChild(node, (child) => visit(child, context));
   }
 
-  const fileBindings = gatherFileBindings(sourceFile);
+  const moduleBindings = gatherModuleScopeBindings(sourceFile);
   visit(sourceFile, {
     activeGuards: new Set(),
     isInDeferredBody: false,
-    localBindings: fileBindings,
+    localBindings: moduleBindings,
   });
   return violations;
 }
