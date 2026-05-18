@@ -188,6 +188,38 @@ Decision doc: `docs/decisions/D6-dialog-compound.md`.
 
 ---
 
+**README sweep masivo post-beta.24** (B1-PR1):
+
+`README.md` y `docs/CSSAPI.mdx` tenían drift acumulado de los renames
+y refactors de beta.24. Sweep sistemático:
+
+- **Pagination API** (D3): `currentPage`/`onValueChange` → `page`/
+  `onPageChange` en README sección "Controlled vs uncontrolled" y
+  CSSAPI.mdx § Pagination.
+- **Dialog compound** (D6): tabla de componentes, ejemplos de uso,
+  sección SSR/hydration, CSS API. `Modal*` → `Dialog*` / `DialogContent`
+  / `DialogTrigger` / etc. La línea "Modal es controlled-only" eliminada
+  (ya no aplica: Dialog soporta uncontrolled con DialogTrigger).
+- **AlertDialog family** (D8): añadido a tabla de componentes + tabla
+  CSS API + sección SSR (`role="alertdialog"` + `closeOnBackdrop=false`
+  default mencionado).
+- **Menu rename** (D2/D7): `OptionsMenu*` → `Menu*` (refactor Full FUI
+  beta.24 + namespace reorg).
+- **Tabs subcomponentes**: `TabList`/`Tab`/`TabPanel` → `TabsList`/
+  `TabsTrigger`/`TabsContent` (alineado con exports reales del barrel).
+- **D9 budget claim**: "~14 KB gz" → "~16 KB gz (budget 20 KB ESM con
+  headroom)".
+- **Tabla controlled/uncontrolled DS-wide** añadida bajo § Patrones
+  recurrentes, listando los 10 componentes con la convención
+  `{prop}?` + `default{Prop}?` + `on{Prop}Change` cerrada en beta.24.
+- **D11 hooks disposition**: sección "Hooks públicos del DS" ya
+  existía; el bloque B-04 sobre context hooks privados se renombró a
+  D11 para reflejar la disposición canónica beta.24.
+
+Solo cambios docs. Cero runtime. Verify cold 836/836 sin regresión.
+
+---
+
 **D8 — AlertDialog family** (B2-PR3):
 
 Nueva familia para confirmaciones destructivas / acciones que demandan
