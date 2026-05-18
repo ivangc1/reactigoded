@@ -18,10 +18,9 @@
  *      forma — `.foo`, `?.foo`, `["foo"]`, `?.["foo"]`) deben aparecer
  *      SOLO en uno de estos contextos:
  *
- *      (a) Dentro de un `typeof X` (no es acceso real al binding).
- *      (b) Bajo guard `typeof X !== "undefined"` ACTIVO según scope
+ *      (a) Bajo guard `typeof X !== "undefined"` ACTIVO según scope
  *          (positive typeof, dentro del then-branch del if).
- *      (c) Dentro del body de una función — arrow, function expression,
+ *      (b) Dentro del body de una función — arrow, function expression,
  *          method declaration. Esto cubre callbacks (`onClick`,
  *          `onChange`), event handlers, y bodies de `useEffect` /
  *          `useCallback` / `useMemo`. Justificación: estos cuerpos NO
@@ -30,6 +29,13 @@
  *      Acceso a un client global en el render path top-level (FUERA
  *      de cualquier callback) sin guard activo es la única forma de
  *      violation.
+ *
+ *      NOTA: `typeof X` solo short-circuita ReferenceError sobre el
+ *      identificador BARE. `typeof X.Y` ejecuta la property access
+ *      (lanza si X no existe), por tanto NO es exempt. Si appears
+ *      `typeof window.foo` en código `@server-safe`, el gate lo
+ *      flaggea correctamente — debe quedar bajo guard real o moverse
+ *      a callback body.
  *
  * ─── Implementación ────────────────────────────────────────────
  *
@@ -44,7 +50,11 @@
  *   5. Brace depth tracking necesario (guards fuera de scope).
  *   6. typeof === "undefined" trataba como guard.
  *   7. Optional chaining + bracket access bypass.
- *   8. (este round) multi-line `if (typeof X !==) { }` + callbacks.
+ *   8. multi-line `if (typeof X !==) { }` + callbacks.
+ *   9. (este round) `typeof window.foo` ancestor check exempt-eaba
+ *      el property access — pero `typeof` solo suprime ReferenceError
+ *      sobre identificadores bare, NO sobre property accesses
+ *      descendientes.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -134,18 +144,20 @@ function extractPositiveTypeofGuard(expr) {
   return null;
 }
 
-/**
- * Devuelve `true` si `node` está dentro de un `typeof <expr>` ancestor
- * (en cuyo caso no es un acceso real al binding — `typeof` short-circuit).
- */
-function isInsideTypeof(node) {
-  let parent = node.parent;
-  while (parent) {
-    if (ts.isTypeOfExpression(parent)) return true;
-    parent = parent.parent;
-  }
-  return false;
-}
+// Nota: NO existe exención "dentro de typeof". Se intentó en el round 8
+// (helper `isInsideTypeof` que walkeaba parents), pero codex P1 round 9
+// señaló que `typeof window.document` ejecuta el property access — JS
+// solo suprime ReferenceError sobre el IDENTIFICADOR BARE
+// (`typeof window` → "undefined" si window no existe), no sobre accesos
+// a propiedades de ese identificador. Por tanto cualquier
+// PropertyAccess/ElementAccess detectado por el walker es un acceso
+// real al binding y debe ser chequeado normalmente, esté o no
+// envuelto en `typeof`.
+//
+// El walker solo chequea PropertyAccessExpression y
+// ElementAccessExpression — no chequea reads de Identifier bare —
+// así que `typeof window` solo (sin acceso) ni se detecta ni se
+// flagea, que es el comportamiento correcto.
 
 /**
  * Analiza un source file. Devuelve array de violations.
@@ -227,7 +239,7 @@ function checkSourceFile(content, relPath) {
       const expr = node.expression;
       if (ts.isIdentifier(expr) && CLIENT_GLOBALS.has(expr.text)) {
         const api = expr.text;
-        if (!isInsideTypeof(node) && context.functionDepth <= 1) {
+        if (context.functionDepth <= 1) {
           if (!context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
