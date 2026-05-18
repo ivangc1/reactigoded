@@ -25,7 +25,9 @@ export function Label({
     >
       {children}
       {required && (
-        <span aria-hidden="true" style={{ marginLeft: 4 }}>
+        // M-05 (beta.24): asterisco con clase CSS en lugar de inline
+        // style (CSP-friendly). El margen vive en `.ig-label-required-mark`.
+        <span aria-hidden="true" className="ig-label-required-mark">
           *
         </span>
       )}

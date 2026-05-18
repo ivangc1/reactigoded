@@ -6458,8 +6458,13 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
   color: var(--ig-text-heading);
 }
 
-.ig-label-required::after {
-  content: ' *';
+/* M-05 (beta.24): asterisco rojo del label required ahora vive en
+   `<span class="ig-label-required-mark">*</span>` que renderiza el
+   componente React. Eliminamos el `::after` para evitar doble
+   asterisco visible (CSS `::after` + span JSX renderizaban dos).
+   El span aria-hidden mantiene la a11y (no duplicado en SR). */
+.ig-label-required-mark {
+  margin-left: var(--ig-space-1);
   color: var(--ig-malum);
 }
 
