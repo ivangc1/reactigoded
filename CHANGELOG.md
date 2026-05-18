@@ -207,9 +207,12 @@ por finding:
   inline (CSP issue). Migrado a CSS class `ig-label-required-mark` con
   margin + color del token `--ig-malum`. **Bonus fix**: el CSS
   `.ig-label-required::after` también renderizaba un asterisco — junto
-  al `<span>*</span>` del JSX producía DOBLE asterisco visible. La regla
-  `::after` eliminada; el span del JSX es ahora la fuente única
-  (aria-hidden mantiene a11y).
+  al `<span>*</span>` del JSX producía DOBLE asterisco visible. Fix
+  inicial (eliminar `::after`) rompía el caso CSS-only API (HTML
+  estático sin React perdía el marker — codex P2 round 2). Fix final:
+  `:has(.ig-label-required-mark)` condiciona el `::after` a aplicar
+  SOLO cuando el span React no está, preservando ambas APIs (React +
+  CSS-only) sin doble asterisco.
 - **M-07 (landmark registries)**: `useLandmarkRegistry` +
   `useTopLevelLandmarkCheck` mantienen estado module-level (Map y
   contador). Sin reset entre tests acumulaban entries. Los helpers
