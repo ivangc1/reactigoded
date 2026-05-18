@@ -14,6 +14,45 @@ versionado [SemVer](https://semver.org/lang/es/).
 Plan **claudegate3** (post-RC1 gate review) cierra el bloque D1 con
 4 sub-tasks. Pre-tag de `1.0.0-rc.1` queda únicamente FREEZE-CHECK.
 
+### Added
+
+**`DialogAction` — botón unstyled para CTAs del footer del Dialog**:
+
+Mirror exacto de `AlertDialogClose` para la familia Dialog. Cierra el
+modal via contexto (`setOpen(false)`) pero NO aplica ninguna clase
+base. Diseñado para botones de acción del `DialogFooter` (Cancelar,
+Aceptar, Entendido, etc.) donde el consumer pasa `className="ig-btn
+ig-btn-..."` y espera que esa sea la única clase visual.
+
+**Por qué se añade ahora**: usar `<DialogClose className="ig-btn
+ig-btn-brand">Aceptar</DialogClose>` mezclaba la clase base de
+`DialogClose` (`ig-dialog-close`, que fuerza `2rem × 2rem`, `padding: 0`
+para la "×" del header) con la clase del Button del DS → footer
+descuadrado. `AlertDialogClose` ya tenía esta forma desde D8 (codex P1
+sobre PR #87) pero el Dialog quedó sin el equivalente, así que el
+patrón natural del consumer producía un visual roto.
+
+Migración consumer (no breaking, paralelo a DialogClose):
+
+```tsx
+// Antes (footer descuadrado por clases en conflicto):
+<DialogFooter>
+  <DialogClose className="ig-btn ig-btn-secondary">Cancelar</DialogClose>
+  <DialogClose className="ig-btn ig-btn-brand">Aceptar</DialogClose>
+</DialogFooter>
+
+// Ahora (sizing del Button respetado):
+<DialogFooter>
+  <DialogAction className="ig-btn ig-btn-secondary">Cancelar</DialogAction>
+  <DialogAction className="ig-btn ig-btn-brand">Aceptar</DialogAction>
+</DialogFooter>
+```
+
+`<DialogClose />` queda como el botón "×" del header (sigue intocado).
+Stories actualizadas (Default + Information). Tests añadidos: cierre
+via context, no aplica `ig-dialog-close`, `onClick.preventDefault()`
+bloquea el cierre.
+
 ### Added (beta.24)
 
 **D1-P3 — `reactigoded/server-safe` entry + `react-server` conditional export**:

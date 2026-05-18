@@ -9,6 +9,7 @@ import { DialogHeader } from "./DialogHeader";
 import { DialogBody } from "./DialogBody";
 import { DialogFooter } from "./DialogFooter";
 import { DialogClose } from "./DialogClose";
+import { DialogAction } from "./DialogAction";
 
 // D6 (beta.24): Dialog ahora es el Provider; el `<dialog>` real es
 // DialogContent. Todos los tests usan el patrón compound canónico.
@@ -576,5 +577,71 @@ describe("Dialog subcomponents", () => {
       "aria-labelledby",
       "custom-id",
     );
+  });
+
+  it("DialogAction cierra vía contexto sin styling base (footer CTA)", async () => {
+    // El descubrimiento: usar DialogClose con `className="ig-btn ig-btn-..."`
+    // para CTAs del footer mezclaba `ig-dialog-close` (2rem × 2rem fixed)
+    // con las clases del button → descuadre vertical y horizontal en el
+    // footer. DialogAction es el equivalente unstyled (mirror exacto de
+    // AlertDialogClose) que cierra via context pero NO aplica
+    // `ig-dialog-close`, dejando al consumer la elección visual.
+    const user = userEvent.setup();
+    const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogFooter>
+            <DialogAction>Aceptar</DialogAction>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    const btn = screen.getByRole("button", { name: "Aceptar" });
+    expect(btn).not.toHaveClass("ig-dialog-close");
+    await user.click(btn);
+    expect(closeSpy).toHaveBeenCalled();
+    closeSpy.mockRestore();
+  });
+
+  it("DialogAction con className consumer NO añade ig-dialog-close", () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogFooter>
+            <DialogAction className="ig-btn ig-btn-brand">
+              Confirmar
+            </DialogAction>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    const btn = screen.getByRole("button", { name: "Confirmar" });
+    expect(btn).toHaveClass("ig-btn");
+    expect(btn).toHaveClass("ig-btn-brand");
+    expect(btn).not.toHaveClass("ig-dialog-close");
+  });
+
+  it("DialogAction.onClick consumer con preventDefault NO cierra", async () => {
+    const user = userEvent.setup();
+    const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogFooter>
+            <DialogAction
+              onClick={(e) => {
+                e.preventDefault();
+              }}
+            >
+              Aceptar
+            </DialogAction>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    await user.click(screen.getByRole("button", { name: "Aceptar" }));
+    expect(closeSpy).not.toHaveBeenCalled();
+    closeSpy.mockRestore();
   });
 });
