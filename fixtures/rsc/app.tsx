@@ -30,6 +30,7 @@ import {
   BreadcrumbItem,
   Button,
   CardBody,
+  CardDivider,
   CardFooter,
   CardHeader,
   CardImage,
@@ -73,6 +74,7 @@ export function ServerPage(): React.ReactElement {
       <Button>Click</Button>
       <IconButton aria-label="close">x</IconButton>
       <CardHeader>Header</CardHeader>
+      <CardDivider />
       <CardBody>Body</CardBody>
       <CardFooter>Footer</CardFooter>
       <CardImage src="/x.png" alt="" />
