@@ -20,11 +20,23 @@
  *
  *      (a) Bajo guard `typeof X !== "undefined"` ACTIVO según scope
  *          (positive typeof, dentro del then-branch del if).
- *      (b) Dentro del body de una función — arrow, function expression,
- *          method declaration. Esto cubre callbacks (`onClick`,
- *          `onChange`), event handlers, y bodies de `useEffect` /
- *          `useCallback` / `useMemo`. Justificación: estos cuerpos NO
- *          corren en render server.
+ *      (b) Dentro del body de una función pasada a un sink de ejecución
+ *          diferida reconocido: JSX event handler (`onClick`,
+ *          `onChange`, etc), hook de React diferido (`useEffect`,
+ *          `useLayoutEffect`, `useInsertionEffect`, `useCallback`,
+ *          `useImperativeHandle`), o timer (`setTimeout`,
+ *          `setInterval`, `setImmediate`, `queueMicrotask`,
+ *          `requestAnimationFrame`, `requestIdleCallback`,
+ *          `startTransition`).
+ *
+ *          NOT incluido en (b): `useMemo` / `useState` lazy init /
+ *          `useRef` lazy init (corren durante render server), helpers
+ *          nested (`function readEnv() { return window.x; }` invocada
+ *          desde JSX corre durante render), IIFE (`(() => x)()`),
+ *          y referencias indirectas (`const h = () => ...; <X
+ *          onClick={h}>` — el body del arrow no queda en posición
+ *          sintáctica reconocida; el consumer debe inline-ar o
+ *          envolver en `useCallback`).
  *
  *      Acceso a un client global en el render path top-level (FUERA
  *      de cualquier callback) sin guard activo es la única forma de
@@ -51,10 +63,15 @@
  *   6. typeof === "undefined" trataba como guard.
  *   7. Optional chaining + bracket access bypass.
  *   8. multi-line `if (typeof X !==) { }` + callbacks.
- *   9. (este round) `typeof window.foo` ancestor check exempt-eaba
- *      el property access — pero `typeof` solo suprime ReferenceError
- *      sobre identificadores bare, NO sobre property accesses
- *      descendientes.
+ *   9. `typeof window.foo` ancestor check exempt-eaba el property
+ *      access — pero `typeof` solo suprime ReferenceError sobre
+ *      identificadores bare, NO sobre property accesses descendientes.
+ *  10. (este round) `functionDepth > 1` exempt-eaba TODOS los nested
+ *      function bodies, incluido helper `function readEnv() { return
+ *      window.x; }` que se invoca síncronamente desde JSX. Reemplazo:
+ *      allowlist explícito de sinks de ejecución diferida (JSX event
+ *      handlers, useEffect-family, timers). Heurístico depth-based
+ *      → flag-based isInDeferredBody.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -92,6 +109,108 @@ const CLIENT_GLOBALS = new Set([
   "Buffer",
   "globalThis",
 ]);
+
+// Hooks de React cuyo body NO corre durante el render server. El callback
+// pasado se invoca post-render (mount, commit, dispatch, o invocación
+// explícita por el consumer).
+//
+// EXCLUIDOS intencionalmente:
+//   - useMemo / useState (lazy init) / useRef (lazy init): el factory
+//     corre durante el render server, por tanto accesos a client APIs
+//     dentro son una violation real.
+//   - useReducer: el reducer corre al despachar, técnicamente diferido,
+//     pero acceso a client globals dentro de un reducer es patrón
+//     anti-idiomático y vale la pena que el gate lo flaggee.
+//   - useSyncExternalStore: tiene 3 args; `getServerSnapshot` SÍ corre
+//     en render server. Una exención wholesale del hook abriría un
+//     silent bypass para getServerSnapshot. Si en el futuro un
+//     componente @server-safe usa useSyncExternalStore, debe gestionar
+//     el client access con guard typeof explícito.
+const DEFERRED_HOOKS = new Set([
+  "useEffect",
+  "useLayoutEffect",
+  "useInsertionEffect",
+  "useCallback",
+  "useImperativeHandle",
+]);
+
+// Browser/JS timers cuyo callback NO corre durante el render server.
+const DEFERRED_LATER_FNS = new Set([
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+  "queueMicrotask",
+  "requestAnimationFrame",
+  "requestIdleCallback",
+  "startTransition",
+]);
+
+/**
+ * Devuelve `true` si `fnNode` (ArrowFunction / FunctionExpression /
+ * FunctionDeclaration / Method / Accessor / Constructor) está
+ * sintácticamente colocado como argumento de un sink de ejecución
+ * diferida reconocido — su body NO se invoca durante el render server.
+ *
+ * Sinks reconocidos:
+ *   - JSX event handler: `<X onFoo={fn}>` con nombre matching /^on[A-Z]/.
+ *   - CallExpression a hook diferido: `useEffect(fn, deps)`,
+ *     `useCallback(fn, deps)`, etc. Soporta también `React.useEffect`
+ *     (PropertyAccessExpression como callee).
+ *   - CallExpression a timer diferido: `setTimeout(fn, ms)`, etc.
+ *
+ * NO reconoce IIFE (`(() => …)()`) — el fn está como callee, no como
+ * argumento — esos siguen siendo render path. Tampoco reconoce
+ * referencias indirectas (`const handler = () => …; <X onFoo={handler}>`):
+ * en ese caso el body del arrow no está en posición sintáctica reconocida,
+ * por tanto se chequea. El consumer debe inline-ar el arrow en el prop o
+ * envolverlo en `useCallback`.
+ *
+ * Transparent wrappers (ParenthesizedExpression `(fn)`, JsxExpression
+ * `{fn}`) se desenrollan para llegar al parent semántico.
+ */
+function isDeferredExecutionContext(fnNode) {
+  let current = fnNode;
+  let parent = current.parent;
+  while (
+    parent &&
+    (ts.isParenthesizedExpression(parent) || ts.isJsxExpression(parent))
+  ) {
+    current = parent;
+    parent = parent.parent;
+  }
+  if (!parent) return false;
+
+  // (1) JSX event handler: <X onFoo={fn}>
+  if (ts.isJsxAttribute(parent)) {
+    const name = parent.name;
+    if (ts.isIdentifier(name) && /^on[A-Z]/.test(name.text)) return true;
+  }
+
+  // (2) Argumento de CallExpression a sink reconocido.
+  if (ts.isCallExpression(parent)) {
+    // Si current es el callee mismo (IIFE), no es deferred.
+    if (parent.expression === current) return false;
+    // Verificar que current esté en la lista de arguments.
+    const isArg = parent.arguments.some((a) => a === current);
+    if (!isArg) return false;
+    const callee = parent.expression;
+    let calleeName = null;
+    if (ts.isIdentifier(callee)) {
+      calleeName = callee.text;
+    } else if (ts.isPropertyAccessExpression(callee)) {
+      // Soporte para `React.useEffect`, `window.setTimeout`, etc.
+      // (Nota: `window.setTimeout` por sí mismo sería otra violación si
+      // está en render path, capturada por el check de access bare.)
+      if (ts.isIdentifier(callee.name)) calleeName = callee.name.text;
+    }
+    if (calleeName !== null) {
+      if (DEFERRED_HOOKS.has(calleeName)) return true;
+      if (DEFERRED_LATER_FNS.has(calleeName)) return true;
+    }
+  }
+
+  return false;
+}
 
 function listSourceFiles(dir) {
   const result = [];
@@ -183,15 +302,25 @@ function checkSourceFile(content, relPath) {
   );
 
   // Walk AST con contexto:
-  //   functionDepth: número de funciones anidadas (0 = file root,
-  //                  1 = body de top-level fn = render path,
-  //                  2+ = callback/handler/effect anidado).
   //   activeGuards: Set<api> guards activos por scope de typeof.
+  //   isInDeferredBody: estamos dentro de un body que NO corre durante
+  //                     render — body de handler JSX (onClick, onChange…),
+  //                     useEffect / useLayoutEffect / useCallback, timer
+  //                     (setTimeout, requestAnimationFrame…), etc.
   //
-  // Razón del depth: en React, el body de un component function
-  // (depth 1) ES el render path. Bodies DENTRO del component
-  // (`onClick={() => ...}`, `useEffect(() => ...)`) viven en depth 2+
-  // y NO corren en render server. Flag solo accesos en depth <= 1.
+  // Razón: codex round 10 mostró que el heurístico depth-based del
+  // round 8 era demasiado grueso — `function readEnv() { return
+  // window.foo; }` invocada desde JSX SÍ ejecuta en render server, y
+  // depth>1 la exempt-eaba incorrectamente. Reemplazo: solo exempt-ear
+  // cuando una fn está pasada como argumento a un sink de ejecución
+  // diferida conocido (lista cerrada). Helpers nested arbitrarios
+  // (FunctionDeclaration, IIFE, arrow asignado a variable que pueda
+  // llamarse en render) NO quedan exemptos.
+  //
+  // Lista intencionalmente conservadora: incluir un sink dudoso es
+  // peor que omitir uno legítimo — un omitido produce falso positivo
+  // (que se corrige reescribiendo en el patrón canónico useCallback +
+  // JSX prop directo), uno espurio produce un silent bypass del gate.
   function visit(node, context) {
     // (a) Detectar typeof guards en if-statements: el then-branch
     // hereda el guard activo. El else-branch NO (en else, X está
@@ -210,8 +339,10 @@ function checkSourceFile(content, relPath) {
       }
     }
 
-    // (b) Entrar en función/arrow/method: incrementa depth. Solo
-    // accesos en depth >= 2 quedan exemptos como "callback body".
+    // (b) Entrar en función/arrow/method: encender isInDeferredBody
+    // SI esta function expr es argumento de un sink diferido reconocido.
+    // Si ya estamos en deferred body, los bodies anidados heredan
+    // el flag (un helper dentro de useEffect sigue siendo no-render).
     if (
       ts.isArrowFunction(node) ||
       ts.isFunctionExpression(node) ||
@@ -221,9 +352,10 @@ function checkSourceFile(content, relPath) {
       ts.isSetAccessorDeclaration(node) ||
       ts.isConstructorDeclaration(node)
     ) {
+      const isDeferred = isDeferredExecutionContext(node);
       const bodyContext = {
         ...context,
-        functionDepth: context.functionDepth + 1,
+        isInDeferredBody: context.isInDeferredBody || isDeferred,
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;
@@ -239,7 +371,7 @@ function checkSourceFile(content, relPath) {
       const expr = node.expression;
       if (ts.isIdentifier(expr) && CLIENT_GLOBALS.has(expr.text)) {
         const api = expr.text;
-        if (context.functionDepth <= 1) {
+        if (!context.isInDeferredBody) {
           if (!context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -259,7 +391,7 @@ function checkSourceFile(content, relPath) {
     ts.forEachChild(node, (child) => visit(child, context));
   }
 
-  visit(sourceFile, { activeGuards: new Set(), functionDepth: 0 });
+  visit(sourceFile, { activeGuards: new Set(), isInDeferredBody: false });
   return violations;
 }
 
