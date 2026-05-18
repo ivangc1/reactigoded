@@ -57,13 +57,11 @@ const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 const CLIENT_API_PATTERN =
   /\b(?<!typeof\s)(document|window|navigator|process|Buffer|globalThis)\./;
 
-// Codex P2 sobre PR #90: look-back para detectar guards multi-línea.
-// `if (typeof window !== "undefined") { window.matchMedia(...) }` debe
-// pasar el gate aunque el acceso esté en línea distinta del typeof.
-// Limit conservador de 8 líneas — guards típicos son contiguos al
-// acceso. La heurística no rastrea brace depth: si dentro del block
-// guard se usa una API DISTINTA a la guarded, no se suprime.
-const GUARD_LOOKBACK_LINES = 8;
+// Patrón canónico de typeof guard que abre un block:
+//   `typeof <api> !== "undefined"` o `typeof <api> === "undefined"`.
+// Captura el nombre del API guarded.
+const TYPEOF_GUARD_PATTERN =
+  /typeof\s+(document|window|navigator|process|Buffer|globalThis)\s*[!=]==?\s*["']undefined["']/g;
 
 /**
  * Strip block comments multi-línea (block /*...*\/) del content
@@ -140,54 +138,98 @@ for (const file of allFiles) {
     });
   }
 
-  // Regla 2: no accesos DOM bare. Iteramos línea por línea para
-  // poder reportar el número de línea exacto. La detección honra
-  // guards `typeof X !==` tanto same-line como multi-línea (look-back
-  // de GUARD_LOOKBACK_LINES).
+  // Regla 2: no accesos DOM bare. Iteramos línea por línea con
+  // tracking real de brace depth + guard stack. Codex P1 round 5
+  // sobre PR #90: el look-back de 8 líneas era incorrecto porque no
+  // distinguía guards activos de cerrados:
   //
-  // Pre-stripping: removemos block comments multi-línea del content
-  // antes de split para que ningún `typeof <api>` dentro de un
-  // `/* ... */` cuente como guard real. Line comments `// ...` se
-  // strippan después per-line (necesitamos preservar el código
-  // original para reportar el detail correcto en violations).
+  //   if (typeof window !== "undefined") {
+  //     window.matchMedia();  // ← OK (guard activo)
+  //   }
+  //   window.alert();         // ← FUERA del guard, debería flaggearse
+  //                              pero el look-back veía typeof 3 líneas atrás
+  //
+  // Fix: mantener un stack `guardStack: [{ api, depthOpened }]`. Al
+  // detectar `typeof <api> !== "undefined"` en una línea con `{`,
+  // pushear al stack con depth posterior. Al ver `}`, decrementar
+  // depth y popear guards cuyo `depthOpened` sea mayor al depth
+  // actual. Un acceso es guarded si: (a) misma línea tiene
+  // `typeof <api>`, o (b) algún guard activo en stack matchea api.
+  //
+  // Pre-stripping: block comments multi-línea desaparecen del content
+  // antes de split (codeContent). Line comments `// ...` se strippan
+  // per-line en cada check.
   const codeContent = stripBlockCommentsPreservingLines(content);
   const lines = codeContent.split("\n");
+
+  let depth = 0;
+  const guardStack = []; // [{ api: string, depthOpened: number }]
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
-    // Ignora líneas que son comentarios completos o partes de JSDoc.
     const trimmed = line.trim();
+    // Ignora líneas que son comentarios completos o partes de JSDoc.
     if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
-    const match = CLIENT_API_PATTERN.exec(line);
-    if (!match) continue;
-    const api = match[1];
-    if (!api) continue;
-    // Codex P2 round 3+4 sobre PR #90: el match del `typeof <api>`
-    // debe hacerse SOBRE CÓDIGO SIN COMENTARIOS. Block comments
-    // multi-línea ya se strippan a nivel content (codeContent).
-    // Line comments `//` se strippan per-línea aquí.
+
     const lineCode = stripLineComments(line);
-    // Same-line guard.
-    if (lineCode.includes(`typeof ${api}`)) continue;
-    // Multi-line guard: look-back en las últimas N líneas con
-    // comments stripped.
-    let guarded = false;
-    const start = Math.max(0, i - GUARD_LOOKBACK_LINES);
-    for (let j = i - 1; j >= start; j--) {
-      const prev = lines[j];
-      if (!prev) continue;
-      if (stripLineComments(prev).includes(`typeof ${api}`)) {
-        guarded = true;
-        break;
+
+    // Step 1: detectar acceso bare (sobre código sin line comments).
+    const match = CLIENT_API_PATTERN.exec(lineCode);
+    if (match) {
+      const api = match[1];
+      if (api) {
+        // Guarded si same-line typeof <api> O stack tiene guard activo
+        // para esa misma api.
+        const sameLineGuard = lineCode.includes(`typeof ${api}`);
+        const stackGuard = guardStack.some((g) => g.api === api);
+        if (!sameLineGuard && !stackGuard) {
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: i + 1,
+            detail: `acceso bare a \`${api}\` sin guard typeof activo: ${trimmed.slice(0, 80)}`,
+          });
+        }
       }
     }
-    if (guarded) continue;
-    violations.push({
-      file: relPath,
-      rule: "no-bare-dom-access",
-      line: i + 1,
-      detail: `acceso bare a \`${api}\` sin guard typeof (same-line o look-back ${String(GUARD_LOOKBACK_LINES)} líneas): ${trimmed.slice(0, 80)}`,
-    });
+
+    // Step 2: actualizar guard stack para próximas líneas. Si esta
+    // línea contiene `typeof <api>` Y al menos un `{`, asumimos que
+    // el `{` abre un block guard (heurística común: el `if (typeof
+    // X) { ... }` o la apertura del block sigue inmediatamente).
+    // Capturamos TODAS las APIs guarded en la línea (raro pero
+    // posible: `if (typeof window !== "undefined" && typeof
+    // document !== "undefined") { ... }`).
+    const opens = (lineCode.match(/{/g) ?? []).length;
+    const closes = (lineCode.match(/}/g) ?? []).length;
+
+    if (opens > 0) {
+      // Re-buscar typeof guards en lineCode (reset lastIndex porque
+      // TYPEOF_GUARD_PATTERN es global).
+      TYPEOF_GUARD_PATTERN.lastIndex = 0;
+      let guardMatch;
+      while ((guardMatch = TYPEOF_GUARD_PATTERN.exec(lineCode)) !== null) {
+        const api = guardMatch[1];
+        if (!api) continue;
+        // Push con depthOpened = depth + 1 (porque el `{` aún no se
+        // ha procesado al medir depth actual; depth se actualiza
+        // abajo).
+        guardStack.push({ api, depthOpened: depth + 1 });
+      }
+    }
+
+    // Actualizar depth tras procesar la línea.
+    depth += opens - closes;
+
+    // Pop guards cuyo block ya cerró (depthOpened > depth actual).
+    while (
+      guardStack.length > 0 &&
+      // @ts-ignore — guardStack.at(-1) garantizado no-undefined por length check.
+      guardStack[guardStack.length - 1].depthOpened > depth
+    ) {
+      guardStack.pop();
+    }
   }
 }
 
