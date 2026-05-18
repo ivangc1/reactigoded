@@ -148,6 +148,12 @@ export default defineConfig({
         "react-dom",
         "react/jsx-runtime",
         "@floating-ui/react",
+        // D1-P2 (beta.24): clsx promovido a peer-dep, externalizado.
+        // El consumer debe instalar `clsx@^2.1.0` además de reactigoded.
+        // Ahorra ~500B gz del bundle ESM principal y permite que
+        // consumers que ya usan clsx (Tailwind, shadcn/ui, etc.)
+        // dedupen la dep — un solo módulo en runtime en lugar de dos.
+        "clsx",
       ],
       output: {
         // B-17: garantiza que la directiva "use client" llegue al bundle
@@ -160,10 +166,11 @@ export default defineConfig({
         //
         // H-12 follow-up (codex P1 sobre PR #73): el banner se aplica
         // SOLO al chunk del entry `index`. El subpath `cn` (utility
-        // pura, sin hooks ni browser APIs) y los chunks compartidos
-        // (clsx) son server-safe y NO deben llevar "use client" —
-        // si lo hicieran, RSC (Next.js App Router server files) los
-        // rechazaría, defeating el propósito del subpath.
+        // pura, sin hooks ni browser APIs) es server-safe y NO debe
+        // llevar "use client" — si lo hiciera, RSC (Next.js App Router
+        // server files) lo rechazaría, defeating el propósito del
+        // subpath. clsx ya no es chunk compartido desde beta.24 (es
+        // peer-dep externalizada).
         banner: (chunk) =>
           chunk.name === "index" ? '"use client";' : "",
         globals: {
