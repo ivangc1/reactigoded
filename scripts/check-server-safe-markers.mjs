@@ -323,12 +323,17 @@ function collectVarHoistedRecursive(node, names) {
   ) {
     return;
   }
-  if (ts.isVariableStatement(node)) {
-    const flags = node.declarationList.flags;
+  // Chequear VariableDeclarationList directamente — cubre tanto
+  // VariableStatement (`var x;`) como for-init (`for (var x = 0; ...)`,
+  // `for (var x in obj)`, `for (var x of arr)`). Codex round 14 P2.1:
+  // antes solo se chequeaba VariableStatement, los var en for-headers
+  // pasaban sin hoist.
+  if (ts.isVariableDeclarationList(node)) {
+    const flags = node.flags;
     const blockScoped =
       (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
     if (!blockScoped) {
-      for (const decl of node.declarationList.declarations) {
+      for (const decl of node.declarations) {
         addBindingNamesFromPattern(decl.name, names);
       }
     }
@@ -429,6 +434,10 @@ function extractPostStatementBindings(stmt) {
 /**
  * Imports + top-level var (NO let/const/class — esos son order-aware).
  * Pre-loaded al iniciar la traversal del SourceFile.
+ *
+ * Para `var` usa `collectVarHoistedRecursive`, que cubre `var` anidados
+ * en for-headers top-level (`for (var x = 0; ...)`) y otros constructs
+ * que envuelven var declarations.
  */
 function gatherModulePreloadedBindings(sourceFile) {
   const names = new Set();
@@ -448,16 +457,9 @@ function gatherModulePreloadedBindings(sourceFile) {
           }
         }
       }
-    } else if (ts.isVariableStatement(stmt)) {
-      const flags = stmt.declarationList.flags;
-      const blockScoped =
-        (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
-      if (!blockScoped) {
-        for (const decl of stmt.declarationList.declarations) {
-          addBindingNamesFromPattern(decl.name, names);
-        }
-      }
+      continue;
     }
+    collectVarHoistedRecursive(stmt, names);
   }
   return names;
 }
@@ -756,6 +758,48 @@ function checkSourceFile(content, relPath) {
     if (ts.isBlock(node)) {
       const blockFns = gatherBlockFunctionDeclarations(node);
       visitOrderedStatements(node.statements, context, blockFns);
+      return;
+    }
+
+    // (b.1b) CaseBlock: la spec ES define el body de un switch como un
+    // SOLO lexical scope compartido entre TODOS los CaseClause/DefaultClause.
+    // let/const/class declarados en cualquier case son visibles en los
+    // siguientes cases (TDZ-aware). Function declarations pre-cargadas
+    // del CaseBlock entero. Codex round 14 P2.2.
+    if (ts.isCaseBlock(node)) {
+      const blockFns = new Set();
+      for (const clause of node.clauses) {
+        for (const stmt of clause.statements) {
+          if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+            blockFns.add(stmt.name.text);
+          }
+        }
+      }
+      let current =
+        blockFns.size > 0
+          ? {
+              ...context,
+              localBindings: new Set([...context.localBindings, ...blockFns]),
+            }
+          : context;
+      for (const clause of node.clauses) {
+        if (ts.isCaseClause(clause) && clause.expression) {
+          visit(clause.expression, current);
+        }
+        for (const stmt of clause.statements) {
+          visit(stmt, current);
+          const additions = extractPostStatementBindings(stmt);
+          if (additions.size > 0) {
+            current = {
+              ...current,
+              localBindings: new Set([
+                ...current.localBindings,
+                ...additions,
+              ]),
+            };
+          }
+        }
+      }
       return;
     }
 
