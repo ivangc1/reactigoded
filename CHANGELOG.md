@@ -194,11 +194,15 @@ Batch de fixes individuales identificados en el gate review claudegate3
 sección IV (EXC-A1/A2). Atómicos para bisect-friendliness — un commit
 por finding:
 
-- **M-04 (Tooltip.extractText)**: arrays de nodos React se concatenaban
-  con `join("")` haciendo que el SR oyera "HelloWorld" en lugar de
-  "Hello World" en cases comunes como `<>Hello <b>World</b>!</>`. Fix:
-  separar en `extractTextRaw` (`join(" ")` raw) + `extractText` público
-  que normaliza whitespace con `replace(/\s+/g, " ").trim()`.
+- **M-04 (Tooltip.extractText)**: investigado y descartado tras
+  análisis (codex P2 round 2 sobre PR #89). El finding original asumía
+  que `join("")` rompía spacing en `<>Hello <b>World</b>!</>`, pero
+  JSX YA preserva los espacios en los strings literales adyacentes
+  (`children = ["Hello ", <b>"World"</b>, "!"]`). Inyectar `" "` rompía
+  casos legítimos de tokens contiguos (`<>v<code>1</code>.<code>2</code></>`
+  → "v 1 . 2" en lugar de "v1.2"). El behavior actual `join("")` es
+  correcto — el consumer es dueño de los espacios. Añadido test
+  regression guard "preserva adjacencia de tokens".
 - **M-05 (Label required)**: el asterisco usaba `style={{ marginLeft: 4 }}`
   inline (CSP issue). Migrado a CSS class `ig-label-required-mark` con
   margin + color del token `--ig-malum`. **Bonus fix**: el CSS

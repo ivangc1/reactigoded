@@ -32,33 +32,33 @@ import {
  * Mapping:
  * - `string` / `number` → `String(node)`
  * - `boolean` / `null` / `undefined` → `""`
- * - `Array` → concat recursivo con espacio entre nodos (M-04 beta.24)
+ * - `Array` → concat recursivo (`join("")`)
  * - `ReactElement` → recursión sobre `props.children`
  * - Otros (Portal, función, símbolo) → `""`
  *
- * **M-04 (beta.24)**: arrays de nodos se concatenan con `" "` (no `""`)
- * porque React serializa children mixtos como `["Hello ", <b>World</b>, "!"]`
- * y el SR debe oír "Hello World!", no "HelloWorld!". Tras concat
- * normalizamos whitespace (`/\s+/ → " "` + trim) para evitar dobles
- * espacios cuando los strings adyacentes ya traen el suyo.
+ * **Nota M-04 (codex P2 sobre PR #89 round 2)**: la concat con `""`
+ * (sin separador) es correcta porque JSX ya preserva los espacios en
+ * los strings literales adyacentes a elementos. `<>Hello <b>World</b>!</>`
+ * serializa children como `["Hello ", <b>"World"</b>, "!"]` — el
+ * espacio entre "Hello" y "World" vive al final de "Hello ", no debe
+ * añadirse. Inyectar `" "` rompe casos legítimos de tokens contiguos
+ * como `["v1", ".2"]` → "v1 .2" (debería ser "v1.2") o
+ * `["foo", "@", "bar.com"]` → "foo @ bar.com". El consumer es dueño
+ * de los espacios; el helper solo serializa lo que React entrega.
  */
-function extractTextRaw(node: ReactNode): string {
+function extractText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") {
     return String(node);
   }
   if (Array.isArray(node)) {
-    return node.map(extractTextRaw).join(" ");
+    return node.map(extractText).join("");
   }
   if (isValidElement(node)) {
     const children = (node.props as { children?: ReactNode }).children;
-    return extractTextRaw(children);
+    return extractText(children);
   }
   return "";
-}
-
-function extractText(node: ReactNode): string {
-  return extractTextRaw(node).replace(/\s+/g, " ").trim();
 }
 import {
   FloatingNode,

@@ -498,6 +498,26 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       ).toBe("Press Enter or Space");
     });
 
+    // Codex P2 round 2 sobre PR #89: el wrapper de arrays debe usar
+    // `join("")` (no `join(" ")`). JSX ya preserva los espacios en
+    // los strings literales adyacentes a elementos; inyectar `" "`
+    // rompe casos legítimos donde el consumer concatena tokens que
+    // deben quedar contiguos (versiones, emails, números formateados).
+    it("preserva adjacencia de tokens (no inyecta espacios espurios)", () => {
+      const { container } = render(
+        <Tooltip text={<>Version <code>v1</code>.<code>2</code></>}>
+          <button>x</button>
+        </Tooltip>,
+      );
+      // Esperado: "Version v1.2" — el "." NO debe separarse del "1" o
+      // "2" con espacios. JSX serializa esto como
+      // ["Version ", <code>"v1"</code>, ".", <code>"2"</code>] y
+      // extractText emite "Version " + "v1" + "." + "2" = "Version v1.2".
+      expect(
+        container.querySelector('.ig-sr-only[role="tooltip"]')?.textContent,
+      ).toBe("Version v1.2");
+    });
+
     it("L-02 dev warn NO se dispara con ReactNode no-string (false positive guard)", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       render(
