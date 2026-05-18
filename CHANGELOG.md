@@ -9,6 +9,40 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Changed (BREAKING — pre-RC1, beta.24)
 
+**D1-P2 — clsx promoted from dependency to peerDependency**:
+
+`clsx` (^2.1.0) ahora es **peer-dependency obligatoria**. Antes era una
+dep regular bundleada — el consumer tenía `clsx` instalada de forma
+implícita. A partir de beta.24, el consumer debe instalarla
+explícitamente en su árbol de deps.
+
+Migración:
+
+```bash
+npm install clsx@^2.1.0
+# o
+pnpm add clsx@^2.1.0
+# o
+yarn add clsx@^2.1.0
+```
+
+Razones técnicas:
+
+- **Deduplicación**: la mayoría de consumers (apps con Tailwind, shadcn/ui,
+  proyectos existentes que ya combinan classNames) ya tienen `clsx` en su
+  árbol. Bundle-arla en reactigoded duplica el módulo en runtime sin valor
+  funcional.
+- **Bundle size**: el ESM principal pierde ~500B gz, el CJS un poco más.
+- **Coherencia D1 server-safe**: con `@server-safe` enforced en beta.24,
+  los chunks publicados están auditados — externalizar peer-deps refuerza
+  que el árbol de bundling sea predecible para SSR/RSC consumers.
+
+Decisión documentada inline en `package.json#peerDependencies` y
+`vite.lib.config.ts#rollupOptions.external`. La decisión previa
+(beta.20 "clsx bundleado permanente") queda invalidada por el plan D1.
+
+---
+
 **D2 + D7 — Menu Full FUI portal + namespace reorg** (B1-PR3):
 
 - **Menu file move**: `src/components/Menu/` → `src/components/floating/Menu/`.
