@@ -32,9 +32,19 @@ import {
  * Mapping:
  * - `string` / `number` → `String(node)`
  * - `boolean` / `null` / `undefined` → `""`
- * - `Array` → concat recursivo
+ * - `Array` → concat recursivo (`join("")`)
  * - `ReactElement` → recursión sobre `props.children`
  * - Otros (Portal, función, símbolo) → `""`
+ *
+ * **Nota M-04 (codex P2 sobre PR #89 round 2)**: la concat con `""`
+ * (sin separador) es correcta porque JSX ya preserva los espacios en
+ * los strings literales adyacentes a elementos. `<>Hello <b>World</b>!</>`
+ * serializa children como `["Hello ", <b>"World"</b>, "!"]` — el
+ * espacio entre "Hello" y "World" vive al final de "Hello ", no debe
+ * añadirse. Inyectar `" "` rompe casos legítimos de tokens contiguos
+ * como `["v1", ".2"]` → "v1 .2" (debería ser "v1.2") o
+ * `["foo", "@", "bar.com"]` → "foo @ bar.com". El consumer es dueño
+ * de los espacios; el helper solo serializa lo que React entrega.
  */
 function extractText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";

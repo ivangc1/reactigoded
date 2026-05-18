@@ -188,6 +188,58 @@ Decision doc: `docs/decisions/D6-dialog-compound.md`.
 
 ---
 
+**MEDIUMs consolidados beta.24** (B3-PR1):
+
+Batch de fixes individuales identificados en el gate review claudegate3
+sección IV (EXC-A1/A2). Atómicos para bisect-friendliness — un commit
+por finding:
+
+- **M-04 (Tooltip.extractText)**: investigado y descartado tras
+  análisis (codex P2 round 2 sobre PR #89). El finding original asumía
+  que `join("")` rompía spacing en `<>Hello <b>World</b>!</>`, pero
+  JSX YA preserva los espacios en los strings literales adyacentes
+  (`children = ["Hello ", <b>"World"</b>, "!"]`). Inyectar `" "` rompía
+  casos legítimos de tokens contiguos (`<>v<code>1</code>.<code>2</code></>`
+  → "v 1 . 2" en lugar de "v1.2"). El behavior actual `join("")` es
+  correcto — el consumer es dueño de los espacios. Añadido test
+  regression guard "preserva adjacencia de tokens".
+- **M-05 (Label required)**: el asterisco usaba `style={{ marginLeft: 4 }}`
+  inline (CSP issue). Migrado a CSS class `ig-label-required-mark` con
+  margin + color del token `--ig-malum`. **Bonus fix**: el CSS
+  `.ig-label-required::after` también renderizaba un asterisco — junto
+  al `<span>*</span>` del JSX producía DOBLE asterisco visible. Fix
+  inicial (eliminar `::after`) rompía el caso CSS-only API (HTML
+  estático sin React perdía el marker — codex P2 round 2). Fix final:
+  `:has(.ig-label-required-mark)` condiciona el `::after` a aplicar
+  SOLO cuando el span React no está, preservando ambas APIs (React +
+  CSS-only) sin doble asterisco.
+- **M-07 (landmark registries)**: `useLandmarkRegistry` +
+  `useTopLevelLandmarkCheck` mantienen estado module-level (Map y
+  contador). Sin reset entre tests acumulaban entries. Los helpers
+  `__reset*ForTests` existían pero solo se invocaban manualmente en
+  sus tests dedicados. Centralizados en `src/test/setup.ts` `afterEach`
+  para que todos los tests hereden el cleanup.
+- **M-10 (D-02 doc grep)**: `docs/decisions/D-02-forwardref-migration-done.md`
+  afirmaba `grep -rn "forwardRef" → vacío esperado` pero realidad
+  muestra 11 matches (dev-warn references + test fixtures, no DS-side
+  usage). Refinado al call-form `grep -rn "forwardRef("` que sí
+  retorna 0 y captura el invariante real ("ningún componente del DS
+  INVOCA forwardRef").
+
+Findings descartados sin cambio (audit confirmó OK):
+- **M-06 (useA11yWarnInput)**: hook ya robusto.
+- **M-08 (Toast timers)**: cleanup ya correcto via `afterEach`.
+- **M-09 (Twin act() warning)**: no encontrado en logs.
+- **M-11 (C-03 doc DONE)**: ya marcado tras D2/D7 beta.24.
+- **M-13 (Switch indeterminate)**: ya conforme H-15 WAI-ARIA 1.2.
+- **M-14 (Stepper test consolidation)**: refactor cosmético; deferido
+  a iteración futura — los tests cubren regresiones reales (codex P1+P2
+  históricos) y consolidar pierde trazabilidad por marginal LOC saving.
+
+Verify cold: 836/836 sin regresión.
+
+---
+
 **README sweep masivo post-beta.24** (B1-PR1):
 
 `README.md` y `docs/CSSAPI.mdx` tenían drift acumulado de los renames

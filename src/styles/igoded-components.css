@@ -6458,8 +6458,28 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
   color: var(--ig-text-heading);
 }
 
-.ig-label-required::after {
+/* M-05 (beta.24) — asterisco del Label required:
+   - **React API**: el componente renderiza
+     `<span aria-hidden="true" class="ig-label-required-mark">*</span>`
+     que usa `.ig-label-required-mark` para margen + color (CSP-safe,
+     sin inline style).
+   - **CSS-only API**: el consumer marca el label con
+     `<label class="ig-label ig-label-required">` (sin React, HTML
+     estático en MDX/emails/PDFs). El `::after` abajo inyecta el
+     asterisco visual para ese caso.
+
+   El selector `:has(.ig-label-required-mark)` desactiva el `::after`
+   cuando el span del React ya renderiza el asterisco. Evita el doble
+   asterisco que existía pre-beta.24 (codex P2 round 2 sobre PR #89).
+   `:has` soportado en todos los targets de browserslist (Chrome 105+,
+   Firefox 121+, Safari 15.4+). */
+.ig-label-required:not(:has(.ig-label-required-mark))::after {
   content: ' *';
+  color: var(--ig-malum);
+}
+
+.ig-label-required-mark {
+  margin-left: var(--ig-space-1);
   color: var(--ig-malum);
 }
 
