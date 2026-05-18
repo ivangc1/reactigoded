@@ -45,8 +45,14 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "react-server": "./dist/server-safe.js",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./server-safe": {
+      "types": "./dist/server-safe.d.ts",
+      "import": "./dist/server-safe.js",
+      "require": "./dist/server-safe.cjs"
     },
     "./cn": {
       "types": "./dist/utils/cn.d.ts",
@@ -125,6 +131,12 @@
       "name": "JS bundle CJS (gzip)",
       "path": "dist/index.cjs",
       "limit": "18 KB",
+      "gzip": true
+    },
+    {
+      "name": "JS bundle server-safe ESM (gzip)",
+      "path": "dist/server-safe.js",
+      "limit": "16 KB",
       "gzip": true
     },
     {
