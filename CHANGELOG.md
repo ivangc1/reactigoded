@@ -43,6 +43,68 @@ Sin cambios breaking — el barrel root sigue exportando todos los componentes.
 
 ### Changed (BREAKING — pre-RC1, beta.24)
 
+**D1-P4 — ESM-only package**:
+
+reactigoded ahora es **ESM-only**. La rama CJS de `package.json#exports`
+queda eliminada, junto con los emits `dist/*.cjs` y los campos `main`
++ `module` del manifest. El paquete sigue declarando `"type": "module"`
+(introducido en beta.22).
+
+Migración consumer:
+
+```js
+// Antes (CJS, ya no soportado):
+const { Button } = require("reactigoded");
+
+// Ahora (ESM):
+import { Button } from "reactigoded";
+
+// Si necesitas usarlo desde un CJS file legacy, Node ≥22 soporta
+// require() sincrónico de ESM nativamente:
+const { Button } = require("reactigoded");
+
+// O dynamic import:
+const { Button } = await import("reactigoded");
+```
+
+`package.json#exports` simplificado:
+
+```json
+{
+  ".": {
+    "react-server": {
+      "types": "./dist/server-safe.d.ts",
+      "default": "./dist/server-safe.js"
+    },
+    "default": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "./server-safe": { "types": "...", "default": "./dist/server-safe.js" },
+  "./cn":          { "types": "...", "default": "./dist/cn.js" }
+}
+```
+
+Razones técnicas:
+
+- **Coherencia**: el DS ya era ESM-first (`"type": "module"` desde beta.22),
+  el output CJS era un fallback que pocos consumers usaban.
+- **publint clean**: el warning `pkg.exports["."].require.types` sobre
+  types ESM interpretadas en condición require queda eliminado (no más
+  rama `require`).
+- **Bundle output**: menos artefactos en `dist/` (no `*.cjs`), tamaño
+  total del paquete publicado más ligero.
+- **Tooling moderno**: Vite, Next.js > 13, Astro, Remix, Bun, Deno
+  soportan ESM nativamente. Node 22 LTS (mínimo del DS desde
+  `"engines": { "node": ">=22.12.0" }`) soporta `require()` sincrónico
+  de ESM.
+
+CI workflow actualizado: `dist/index.cjs` removido del check de
+"Bundle has no dev warns".
+
+---
+
 **D1-P2 — clsx promoted from dependency to peerDependency**:
 
 `clsx` (^2.1.0) ahora es **peer-dependency obligatoria**. Antes era una

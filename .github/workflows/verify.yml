@@ -107,7 +107,6 @@ jobs:
         # especiales.
         run: |
           test "$(grep -cF '[reactigoded]' dist/index.js  || true)" = "0"
-          test "$(grep -cF '[reactigoded]' dist/index.cjs || true)" = "0"
 
       - name: Size budgets
         run: npm run verify:size
