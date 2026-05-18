@@ -51,8 +51,19 @@ const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 // Patrones de acceso DOM cliente que NO deben aparecer en código de
 // archivos marcados @server-safe (excepto bajo `typeof` guard o
 // dentro de handlers/effects que no corren en render).
+//
+// Codex P2 sobre PR #90: incluir `globalThis` — mencionado en el doc
+// del gate pero faltante en el regex (silent bypass).
 const CLIENT_API_PATTERN =
-  /\b(?<!typeof\s)(document|window|navigator|process|Buffer)\./;
+  /\b(?<!typeof\s)(document|window|navigator|process|Buffer|globalThis)\./;
+
+// Codex P2 sobre PR #90: look-back para detectar guards multi-línea.
+// `if (typeof window !== "undefined") { window.matchMedia(...) }` debe
+// pasar el gate aunque el acceso esté en línea distinta del typeof.
+// Limit conservador de 8 líneas — guards típicos son contiguos al
+// acceso. La heurística no rastrea brace depth: si dentro del block
+// guard se usa una API DISTINTA a la guarded, no se suprime.
+const GUARD_LOOKBACK_LINES = 8;
 
 function listSourceFiles(dir) {
   const result = [];
@@ -97,7 +108,9 @@ for (const file of allFiles) {
   }
 
   // Regla 2: no accesos DOM bare. Iteramos línea por línea para
-  // poder reportar el número de línea exacto.
+  // poder reportar el número de línea exacto. La detección honra
+  // guards `typeof X !==` tanto same-line como multi-línea (look-back
+  // de GUARD_LOOKBACK_LINES).
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -105,23 +118,36 @@ for (const file of allFiles) {
     // Ignora líneas que son comentarios completos o partes de JSDoc.
     const trimmed = line.trim();
     if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
-    // El regex `CLIENT_API_PATTERN` solo matchea cuando NO está bajo
-    // `typeof X !==`. Como segunda capa, ignoramos también líneas
-    // que claramente tienen guard explícito.
-    if (line.includes("typeof document") || line.includes("typeof window") ||
-        line.includes("typeof navigator") || line.includes("typeof process") ||
-        line.includes("typeof Buffer") || line.includes("typeof globalThis")) {
-      continue;
-    }
     const match = CLIENT_API_PATTERN.exec(line);
-    if (match) {
-      violations.push({
-        file: relPath,
-        rule: "no-bare-dom-access",
-        line: i + 1,
-        detail: `acceso bare a \`${match[1]}\` sin guard typeof: ${trimmed.slice(0, 80)}`,
-      });
+    if (!match) continue;
+    const api = match[1];
+    if (!api) continue;
+    // Same-line guard: si la propia línea contiene `typeof <api>` no
+    // es violación (puede tener una guard inline ej.
+    // `typeof window !== "undefined" && window.matchMedia(...)`).
+    if (line.includes(`typeof ${api}`)) continue;
+    // Multi-line guard: look-back en las últimas N líneas no-comment
+    // por `typeof <api>`. Cubre patrón canónico:
+    //   if (typeof window !== "undefined") {
+    //     window.matchMedia(...);  // line i
+    //   }
+    let guarded = false;
+    const start = Math.max(0, i - GUARD_LOOKBACK_LINES);
+    for (let j = i - 1; j >= start; j--) {
+      const prev = lines[j];
+      if (!prev) continue;
+      if (prev.includes(`typeof ${api}`)) {
+        guarded = true;
+        break;
+      }
     }
+    if (guarded) continue;
+    violations.push({
+      file: relPath,
+      rule: "no-bare-dom-access",
+      line: i + 1,
+      detail: `acceso bare a \`${api}\` sin guard typeof (same-line o look-back ${String(GUARD_LOOKBACK_LINES)} líneas): ${trimmed.slice(0, 80)}`,
+    });
   }
 }
 
