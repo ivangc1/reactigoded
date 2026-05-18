@@ -7,6 +7,13 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+(sin cambios aún — siguiente version será 1.0.0-rc.1 tras FREEZE-CHECK)
+
+## [1.0.0-beta.24] — 2026-05-19 (D1 server-safe infrastructure complete)
+
+Plan **claudegate3** (post-RC1 gate review) cierra el bloque D1 con
+4 sub-tasks. Pre-tag de `1.0.0-rc.1` queda únicamente FREEZE-CHECK.
+
 ### Added (beta.24)
 
 **D1-P3 — `reactigoded/server-safe` entry + `react-server` conditional export**:
