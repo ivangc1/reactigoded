@@ -57,11 +57,34 @@ const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 const CLIENT_API_PATTERN =
   /\b(?<!typeof\s)(document|window|navigator|process|Buffer|globalThis)\./;
 
-// Patrón canónico de typeof guard que abre un block:
-//   `typeof <api> !== "undefined"` o `typeof <api> === "undefined"`.
-// Captura el nombre del API guarded.
+// Patrón canónico de typeof guard que confirma disponibilidad del
+// API client-side. SOLO la forma POSITIVA cuenta:
+//
+//   ✓ typeof <api> !== "undefined"   → guarded (X está disponible)
+//   ✓ typeof <api> != "undefined"    → guarded (variante laxa)
+//   ✗ typeof <api> === "undefined"   → NO es guard. Dentro de ese
+//                                       block, <api> está undefined;
+//                                       accederlo lanza ReferenceError.
+//
+// Codex P1 round 6 sobre PR #90: el patrón anterior `[!=]==?` matcheaba
+// AMBAS formas (negativa y positiva) y falsamente trataba el `===` como
+// guard. Fix: solo `!==`/`!=`.
 const TYPEOF_GUARD_PATTERN =
-  /typeof\s+(document|window|navigator|process|Buffer|globalThis)\s*[!=]==?\s*["']undefined["']/g;
+  /typeof\s+(document|window|navigator|process|Buffer|globalThis)\s*!==?\s*["']undefined["']/g;
+
+/**
+ * Devuelve `true` si la línea contiene una positive typeof guard para
+ * el API dado (`typeof <api> !== "undefined"` o `!= "undefined"`).
+ * Usado para same-line guard check.
+ */
+function hasSameLineGuard(code, api) {
+  // Escape de api innecesario porque viene del set conocido del regex
+  // CLIENT_API_PATTERN — solo letras y `T` mayúscula (Buffer).
+  const re = new RegExp(
+    `typeof\\s+${api}\\s*!==?\\s*["']undefined["']`,
+  );
+  return re.test(code);
+}
 
 /**
  * Strip block comments multi-línea (block /*...*\/) del content
@@ -179,9 +202,11 @@ for (const file of allFiles) {
     if (match) {
       const api = match[1];
       if (api) {
-        // Guarded si same-line typeof <api> O stack tiene guard activo
-        // para esa misma api.
-        const sameLineGuard = lineCode.includes(`typeof ${api}`);
+        // Guarded si same-line tiene POSITIVE typeof guard (`!==`)
+        // O stack tiene guard activo para esa misma api.
+        // Codex P1 round 6 sobre PR #90: `typeof X === "undefined"`
+        // NO es guard — dentro de ese block X está undefined.
+        const sameLineGuard = hasSameLineGuard(lineCode, api);
         const stackGuard = guardStack.some((g) => g.api === api);
         if (!sameLineGuard && !stackGuard) {
           violations.push({
