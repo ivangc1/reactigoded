@@ -134,10 +134,14 @@ export default defineConfig({
         "server-safe": resolve(__dirname, "src/server-safe.ts"),
       },
       name: "Reactigoded",
-      formats: ["es", "cjs"] as const,
-      // Filename por entry: ESM `<name>.js`, CJS `<name>.cjs`.
-      fileName: (format: string, entryName: string) =>
-        `${entryName}.${format === "es" ? "js" : "cjs"}`,
+      // D1-P4 (beta.24): ESM-only. CJS output removido — consumers en
+      // CJS deben migrar (siguen pudiendo hacer dynamic `await import()`
+      // o usar Node ≥22 que soporta `require()` de ESM nativamente). El
+      // paquete tiene `"type": "module"`, ya era ESM-first; D1-P4
+      // simplifica eliminando la rama CJS de exports + dist.
+      formats: ["es"] as const,
+      // Filename por entry: ESM `<name>.js`.
+      fileName: (_format: string, entryName: string) => `${entryName}.js`,
     },
     rollupOptions: {
       // @floating-ui/react: peer-dep externalizada desde post-RC1.
@@ -164,8 +168,8 @@ export default defineConfig({
       ],
       output: {
         // B-17: garantiza que la directiva "use client" llegue al bundle
-        // publicado (dist/index.js + dist/index.cjs), preservada como
-        // primera línea del chunk. Sin esto, el minifier de Rollup la
+        // publicado (dist/index.js), preservada como primera línea del
+        // chunk. Sin esto, el minifier de Rollup la
         // puede tratar como expresión irrelevante y eliminarla. La
         // directiva la añadimos también en src/index.ts para que tsc
         // y los autodocs la vean en source, pero el banner es la única

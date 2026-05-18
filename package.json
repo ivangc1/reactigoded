@@ -39,33 +39,24 @@
   "sideEffects": [
     "**/*.css"
   ],
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "react-server": {
         "types": "./dist/server-safe.d.ts",
         "default": "./dist/server-safe.js"
       },
-      "import": {
+      "default": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.cjs"
       }
     },
     "./server-safe": {
       "types": "./dist/server-safe.d.ts",
-      "import": "./dist/server-safe.js",
-      "require": "./dist/server-safe.cjs"
+      "default": "./dist/server-safe.js"
     },
     "./cn": {
       "types": "./dist/utils/cn.d.ts",
-      "import": "./dist/cn.js",
-      "require": "./dist/cn.cjs"
+      "default": "./dist/cn.js"
     },
     "./styles/tokens.css": "./dist/styles/igoded-tokens.css",
     "./styles/base.css": "./dist/styles/igoded-base.css",
@@ -134,12 +125,6 @@
       "name": "JS bundle ESM (gzip)",
       "path": "dist/index.js",
       "limit": "20 KB",
-      "gzip": true
-    },
-    {
-      "name": "JS bundle CJS (gzip)",
-      "path": "dist/index.cjs",
-      "limit": "18 KB",
       "gzip": true
     },
     {
