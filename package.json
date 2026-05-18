@@ -44,10 +44,18 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "react-server": "./dist/server-safe.js",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "react-server": {
+        "types": "./dist/server-safe.d.ts",
+        "default": "./dist/server-safe.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./server-safe": {
       "types": "./dist/server-safe.d.ts",
