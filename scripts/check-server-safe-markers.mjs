@@ -66,19 +66,36 @@ const CLIENT_API_PATTERN =
 const GUARD_LOOKBACK_LINES = 8;
 
 /**
- * Strip de line comments (linea //) y block comments (block /*...*\/) en
- * una sola línea. Necesario para que el check de `typeof <api>` no
- * sea falsamente satisfecho por texto dentro de comentarios (codex
- * P2 round 3 sobre PR #90). Heurística simple — no maneja `//` dentro
- * de strings, pero en la práctica los strings con `//` son URLs que
- * no contienen `typeof <api>` (no false positive realista).
+ * Strip block comments multi-línea (block /*...*\/) del content
+ * COMPLETO, preservando line numbers (reemplaza contenido por
+ * mismos newlines + espacios). Aplicado una vez antes de split.
+ * Necesario porque codex P2 round 4 detectó silent bypass:
+ *
+ *   /* typeof window *\/  <- comment multi-línea que contiene typeof
+ *   window.alert(...)     <- el look-back falsamente lo veía guarded
+ *
+ * Heurística: regex `/\*[\s\S]*?\*\//g` con replacement que mantiene
+ * solo los newlines del match para no romper números de línea.
  */
-function stripComments(line) {
-  // Block comments primero (pueden anidar con código).
-  let s = line.replace(/\/\*[\s\S]*?\*\//g, "");
-  const idx = s.indexOf("//");
-  if (idx >= 0) s = s.slice(0, idx);
-  return s;
+function stripBlockCommentsPreservingLines(content) {
+  return content.replace(/\/\*[\s\S]*?\*\//g, (match) =>
+    match.replace(/[^\n]/g, " "),
+  );
+}
+
+/**
+ * Strip de line comments (linea //) en una sola línea. Necesario
+ * después del strip de block comments para que checks de `typeof
+ * <api>` no sean falsamente satisfechos por texto en comentarios
+ * `// foo` al final de línea (codex P2 round 3 sobre PR #90).
+ *
+ * Heurística simple — no maneja `//` dentro de strings, pero en la
+ * práctica los strings con `//` son URLs que no contienen
+ * `typeof <api>` (no false positive realista).
+ */
+function stripLineComments(line) {
+  const idx = line.indexOf("//");
+  return idx >= 0 ? line.slice(0, idx) : line;
 }
 
 function listSourceFiles(dir) {
@@ -127,7 +144,14 @@ for (const file of allFiles) {
   // poder reportar el número de línea exacto. La detección honra
   // guards `typeof X !==` tanto same-line como multi-línea (look-back
   // de GUARD_LOOKBACK_LINES).
-  const lines = content.split("\n");
+  //
+  // Pre-stripping: removemos block comments multi-línea del content
+  // antes de split para que ningún `typeof <api>` dentro de un
+  // `/* ... */` cuente como guard real. Line comments `// ...` se
+  // strippan después per-line (necesitamos preservar el código
+  // original para reportar el detail correcto en violations).
+  const codeContent = stripBlockCommentsPreservingLines(content);
+  const lines = codeContent.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
@@ -138,11 +162,11 @@ for (const file of allFiles) {
     if (!match) continue;
     const api = match[1];
     if (!api) continue;
-    // Codex P2 round 3 sobre PR #90: el match del `typeof <api>` debe
-    // hacerse SOBRE LA LÍNEA SIN COMENTARIOS — un comentario como
-    // `window.location.href; // typeof window` no debe contar como
-    // guard. Mismo principio para el look-back multi-línea.
-    const lineCode = stripComments(line);
+    // Codex P2 round 3+4 sobre PR #90: el match del `typeof <api>`
+    // debe hacerse SOBRE CÓDIGO SIN COMENTARIOS. Block comments
+    // multi-línea ya se strippan a nivel content (codeContent).
+    // Line comments `//` se strippan per-línea aquí.
+    const lineCode = stripLineComments(line);
     // Same-line guard.
     if (lineCode.includes(`typeof ${api}`)) continue;
     // Multi-line guard: look-back en las últimas N líneas con
@@ -152,7 +176,7 @@ for (const file of allFiles) {
     for (let j = i - 1; j >= start; j--) {
       const prev = lines[j];
       if (!prev) continue;
-      if (stripComments(prev).includes(`typeof ${api}`)) {
+      if (stripLineComments(prev).includes(`typeof ${api}`)) {
         guarded = true;
         break;
       }
