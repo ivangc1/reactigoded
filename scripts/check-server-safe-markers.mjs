@@ -89,23 +89,30 @@
  *            import { document } from "./local";       // OK
  *            const navigator = ...                     // OK
  *
- *  12. (este round) Scope tracking del round 11 era function-scope
- *      global — TODOS los let/const/class del function body se trataban
- *      como visibles en toda la función, lo que false-shadow-eaba refs
- *      fuera del block donde se declaró el local:
+ *  12. Scope tracking del round 11 era function-scope global. Reemplazo:
+ *      scope-stack real. Hoist solo `var` + `function` al function
+ *      scope; `let`/`const`/`class` se añaden al ENTRAR cada Block;
+ *      `catch` param al entrar el CatchClause; `for-init let/const` al
+ *      entrar el ForStatement/ForInStatement/ForOfStatement.
+ *  13. (este round) DOS findings ortogonales:
+ *      (a) En strict ESM, `function` declarations dentro de blocks NO
+ *          hoist al function scope — son block-scoped (visible solo en
+ *          su block, aunque pre-initialized desde block-entry).
+ *          `if (...) { function window() {} } window.location` ahora
+ *          se flaggea correctamente: el `function window` no shadow-ea
+ *          el global fuera del block.
+ *      (b) `let`/`const`/`class` están en TDZ antes de su declaración.
+ *          El walker pre-cargaba TODOS los let/const del scope al
+ *          entrar, lo que false-shadow-eaba reads anteriores:
  *
- *        if (cond) { const window = ...; }
- *        window.location;  // ← bug: este window ES el global, pero
- *                          //   el gate lo trataba como shadow del const
- *                          //   interior.
+ *            window.location;            // ← FLAG (TDZ throws igual)
+ *            const window = ...;
  *
- *      Reemplazo: scope-stack real. Hoist solo `var` + `function` al
- *      function scope (semántica correcta de JS); `let`/`const`/`class`
- *      se añaden al ENTRAR cada Block; `catch` param al entrar el
- *      CatchClause; `for-init let/const` al entrar el ForStatement/
- *      ForInStatement/ForOfStatement. Como context es inmutable y se
- *      pasa hacia abajo en recursión, el scope expira naturalmente al
- *      retornar — los siblings fuera del block reciben el outer scope.
+ *          Reemplazo: traversal order-aware. `visitOrderedStatements`
+ *          itera statements en orden, pre-cargando solo function
+ *          declarations (block-hoisted within scope), y añadiendo
+ *          let/const/class al scope DESPUÉS de visitar cada statement.
+ *          Reads anteriores al const ven el outer scope (global).
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -294,23 +301,17 @@ function addBindingNamesFromPattern(node, names) {
 }
 
 /**
- * `var` y `function` declarations son hoisted al function (o module)
- * scope. Recurre a través de blocks anidados, if/else, try/catch,
- * for/while bodies, switch — pero NO desciende en nested
- * function-likes (su contenido es otro scope).
+ * `var` declarations: hoisted al function/module scope. Recurre a
+ * través de blocks anidados, if/else, try/catch, for/while bodies,
+ * switch — pero NO en nested function-likes (otro scope).
  *
- * `let`/`const`/`class`/`catch param`/`for-init let` son block-scoped y
- * se manejan separadamente en `gatherBlockScopedBindings` y branches
- * del visitor.
+ * NO incluye `function` declarations: en strict ESM (todos los .ts/.tsx
+ * de un DS) son block-scoped, NO function-hoisted. Codex round 13 P1.1.
  *
- * Codex round 12 P1: este split es necesario. Antes el walker
- * acumulaba TODO let/const/class del function body al function scope,
- * lo que false-shadow-eaba refs fuera del bloque donde se declaró el
- * local. Ej: `if (x) { const window = ...; } window.location` —
- * `window.location` está FUERA del if-block, pero el `const window`
- * del block interior se trataba como visible en toda la función.
+ * NO incluye `let`/`const`/`class`: block-scoped y order-aware (TDZ).
+ * Codex round 13 P1.2.
  */
-function collectHoistedRecursive(node, names) {
+function collectVarHoistedRecursive(node, names) {
   if (
     ts.isArrowFunction(node) ||
     ts.isFunctionExpression(node) ||
@@ -320,11 +321,6 @@ function collectHoistedRecursive(node, names) {
     ts.isSetAccessorDeclaration(node) ||
     ts.isConstructorDeclaration(node)
   ) {
-    // FunctionDeclaration introduce su nombre en el scope ENCLOSING
-    // (no en su propio body) — capturarlo antes del return.
-    if (ts.isFunctionDeclaration(node) && node.name) {
-      names.add(node.name.text);
-    }
     return;
   }
   if (ts.isVariableStatement(node)) {
@@ -332,26 +328,23 @@ function collectHoistedRecursive(node, names) {
     const blockScoped =
       (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
     if (!blockScoped) {
-      // `var` — hoisted.
       for (const decl of node.declarationList.declarations) {
         addBindingNamesFromPattern(decl.name, names);
       }
     }
-    // Continue walking (el initializer puede tener var anidados).
   }
-  ts.forEachChild(node, (child) => collectHoistedRecursive(child, names));
+  ts.forEachChild(node, (child) => collectVarHoistedRecursive(child, names));
 }
 
 /**
- * Bindings visibles en el body de una function-like:
+ * Bindings visibles desde scope-entry en el body de una function-like:
  *   - parameters
  *   - var declarations hoisted desde cualquier nested block (non-fn)
- *   - function declarations hoisted desde cualquier nested block
  *
- * NO incluye let/const/class del body — esos son block-scoped y se
- * añaden al entrar el body Block (vía gatherBlockScopedBindings).
+ * NO incluye `function`/`class`/`let`/`const` del body — esos se manejan
+ * order-aware al iterar las statements del body Block (round 13).
  */
-function gatherFunctionHoistedBindings(fnNode) {
+function gatherFunctionVarHoisted(fnNode) {
   const names = new Set();
   if (fnNode.parameters) {
     for (const param of fnNode.parameters) {
@@ -360,34 +353,27 @@ function gatherFunctionHoistedBindings(fnNode) {
   }
   if (fnNode.body) {
     ts.forEachChild(fnNode.body, (child) =>
-      collectHoistedRecursive(child, names),
+      collectVarHoistedRecursive(child, names),
     );
   }
   return names;
 }
 
 /**
- * Bindings declarados al IMMEDIATE level de un Block:
- *   - let/const/using/await using declarations
- *   - class declarations
+ * Function declarations IMMEDIATE en un Block. En strict ESM, son
+ * block-scoped (no hoisted al function/module scope) pero SÍ están
+ * inicializadas desde el inicio del block (no en TDZ). Por tanto se
+ * pre-cargan al scope al entrar el block, ANTES de iterar statements.
  *
- * NO recurre — let/const en blocks anidados pertenecen al inner block.
- * NO incluye `var`/`function` — esos son hoisted al function scope.
+ * Aplica también al Block que ES el body de una function (allí el
+ * function decl pre-load equivale a la regla normal "fn decls visibles
+ * desde el inicio del fn body").
  */
-function gatherBlockScopedBindings(blockNode) {
+function gatherBlockFunctionDeclarations(blockNode) {
   const names = new Set();
   if (!blockNode.statements) return names;
   for (const stmt of blockNode.statements) {
-    if (ts.isVariableStatement(stmt)) {
-      const flags = stmt.declarationList.flags;
-      const blockScoped =
-        (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
-      if (blockScoped) {
-        for (const decl of stmt.declarationList.declarations) {
-          addBindingNamesFromPattern(decl.name, names);
-        }
-      }
-    } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
       names.add(stmt.name.text);
     }
   }
@@ -395,17 +381,56 @@ function gatherBlockScopedBindings(blockNode) {
 }
 
 /**
- * Bindings visibles a nivel module:
- *   - imports
- *   - top-level var/let/const/function/class declarations (IMMEDIATE,
- *     NO descendiendo en nested blocks — esos son block-scoped al
- *     bloque donde se declaran).
- *
- * Aunque let/const a nivel module son block-scoped (al module-block),
- * para nuestros fines son equivalentes a "visibles en todo el archivo
- * después de la declaración". Los tratamos como hoisted al module.
+ * Function declarations IMMEDIATE en un SourceFile (module). Block-
+ * scoped al module pero pre-initialized (mismo comportamiento que en
+ * Block).
  */
-function gatherModuleScopeBindings(sourceFile) {
+function gatherSourceFileFunctionDeclarations(sourceFile) {
+  const names = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+      names.add(stmt.name.text);
+    }
+  }
+  return names;
+}
+
+/**
+ * Bindings introducidos POR un statement, que pasan a ser visibles
+ * para los SIGUIENTES siblings en el mismo block (no antes).
+ *
+ *   - `let x = ...` / `const x = ...`: visible después de la declaración.
+ *   - `class X {}`: visible después de la declaración (TDZ).
+ *   - `var x = ...` / `function x() {}`: NO se incluyen aquí — ya están
+ *     pre-cargados al inicio del scope (var-hoisted o fn-hoisted).
+ *
+ * Codex round 13 P1.2: `window.location; const window = ...;` el read
+ * inicial es a global (TDZ throw, no shadow). Antes del refactor
+ * los let/const se pre-cargaban a scope-entry, false-shadow-eando reads
+ * anteriores.
+ */
+function extractPostStatementBindings(stmt) {
+  const names = new Set();
+  if (ts.isVariableStatement(stmt)) {
+    const flags = stmt.declarationList.flags;
+    const blockScoped =
+      (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+    if (blockScoped) {
+      for (const decl of stmt.declarationList.declarations) {
+        addBindingNamesFromPattern(decl.name, names);
+      }
+    }
+  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+    names.add(stmt.name.text);
+  }
+  return names;
+}
+
+/**
+ * Imports + top-level var (NO let/const/class — esos son order-aware).
+ * Pre-loaded al iniciar la traversal del SourceFile.
+ */
+function gatherModulePreloadedBindings(sourceFile) {
   const names = new Set();
   for (const stmt of sourceFile.statements) {
     if (ts.isImportDeclaration(stmt)) {
@@ -424,13 +449,14 @@ function gatherModuleScopeBindings(sourceFile) {
         }
       }
     } else if (ts.isVariableStatement(stmt)) {
-      for (const decl of stmt.declarationList.declarations) {
-        addBindingNamesFromPattern(decl.name, names);
+      const flags = stmt.declarationList.flags;
+      const blockScoped =
+        (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+      if (!blockScoped) {
+        for (const decl of stmt.declarationList.declarations) {
+          addBindingNamesFromPattern(decl.name, names);
+        }
       }
-    } else if (ts.isFunctionDeclaration(stmt) && stmt.name) {
-      names.add(stmt.name.text);
-    } else if (ts.isClassDeclaration(stmt) && stmt.name) {
-      names.add(stmt.name.text);
     }
   }
   return names;
@@ -706,9 +732,9 @@ function checkSourceFile(content, relPath) {
       ts.isConstructorDeclaration(node)
     ) {
       const isDeferred = isDeferredExecutionContext(node);
-      const fnScopeBindings = gatherFunctionHoistedBindings(node);
+      const fnScopeBindings = gatherFunctionVarHoisted(node);
       // Acumular con outer scope para que closures vean los bindings
-      // del enclosing function (parámetros, var, fn declarations).
+      // del enclosing function (parámetros + var hoisted).
       const localBindings =
         fnScopeBindings.size === 0
           ? context.localBindings
@@ -722,23 +748,15 @@ function checkSourceFile(content, relPath) {
       return;
     }
 
-    // (b.1) Block: añadir bindings let/const/class del IMMEDIATE block
-    // al scope. Naturalmente expira al retornar del recurse — el
-    // sibling fuera del block recibe context original. Round 12 P1 fix:
-    // antes los let/const internos contaminaban todo el function scope.
+    // (b.1) Block: pre-cargar function declarations (block-scoped pero
+    // pre-initialized desde block-entry, round 13 P1.1), luego iterar
+    // statements en orden añadiendo let/const/class al scope solo
+    // DESPUÉS de visitar cada statement (round 13 P1.2 — los reads
+    // antes de la declaración deben ver el global, no el local en TDZ).
     if (ts.isBlock(node)) {
-      const blockBindings = gatherBlockScopedBindings(node);
-      if (blockBindings.size > 0) {
-        const bodyContext = {
-          ...context,
-          localBindings: new Set([
-            ...context.localBindings,
-            ...blockBindings,
-          ]),
-        };
-        ts.forEachChild(node, (child) => visit(child, bodyContext));
-        return;
-      }
+      const blockFns = gatherBlockFunctionDeclarations(node);
+      visitOrderedStatements(node.statements, context, blockFns);
+      return;
     }
 
     // (b.2) CatchClause: el catch param es block-scoped al body del catch.
@@ -864,12 +882,51 @@ function checkSourceFile(content, relPath) {
     ts.forEachChild(node, (child) => visit(child, context));
   }
 
-  const moduleBindings = gatherModuleScopeBindings(sourceFile);
-  visit(sourceFile, {
+  /**
+   * Itera statements en orden, manteniendo un running scope. Pre-loads
+   * function declarations IMMEDIATE en este scope (pre-initialized desde
+   * scope-entry per ESM semantics) y añade let/const/class al scope
+   * DESPUÉS de visitar cada statement (TDZ-aware order: reads antes de
+   * la declaración ven el outer scope, no el local en TDZ).
+   *
+   * Codex round 13 P1.1 + P1.2: corrige hoisting de function decls en
+   * nested blocks (block-scoped, no function-scoped) y TDZ de let/const
+   * (visible solo desde la declaración hacia adelante).
+   */
+  function visitOrderedStatements(statements, context, preloadedFns) {
+    let current =
+      preloadedFns && preloadedFns.size > 0
+        ? {
+            ...context,
+            localBindings: new Set([
+              ...context.localBindings,
+              ...preloadedFns,
+            ]),
+          }
+        : context;
+    for (const stmt of statements) {
+      visit(stmt, current);
+      const additions = extractPostStatementBindings(stmt);
+      if (additions.size > 0) {
+        current = {
+          ...current,
+          localBindings: new Set([...current.localBindings, ...additions]),
+        };
+      }
+    }
+  }
+
+  // Initial scope: imports + var hoisted (module-preloaded).
+  const modulePreloaded = gatherModulePreloadedBindings(sourceFile);
+  const sourceFileFns = gatherSourceFileFunctionDeclarations(sourceFile);
+  const baseContext = {
     activeGuards: new Set(),
     isInDeferredBody: false,
-    localBindings: moduleBindings,
-  });
+    localBindings: modulePreloaded,
+  };
+  // Iterate top-level statements with function pre-load + order-aware
+  // let/const/class accumulation.
+  visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
 }
 
