@@ -165,6 +165,15 @@
  *          `cancelAnimationFrame` y `cancelIdleCallback` por consistencia.
  *          DEFERRED_LATER_FNS queda solo con timers que sí existen en
  *          Node: setTimeout, setInterval, setImmediate, queueMicrotask.
+ *  18. (este round) P1: DEFERRED_LATER_FNS check trustaba el callee
+ *      text + non-import shadow check (round 16), pero NO verificaba
+ *      que el timer fuera el global real. `import { setTimeout } from
+ *      "./fake-helper"` con synchronous impl pasaba como deferred sink.
+ *      Fix: requerir que el rootIdent del callee NO esté en
+ *      `localBindings` (los timers reales son globals de Node, no se
+ *      declaran ni se importan). Mismo razonamiento que round 17 hooks
+ *      pero con criterio inverso — timers son globals nativos, hooks
+ *      requieren react-import.
  *
  * El regex approach degrada rápido por context-sensitive matching.
  * AST resuelve ambos casos del round 8 directamente.
@@ -368,7 +377,23 @@ function isDeferredExecutionContext(fnNode, context) {
         }
         return false;
       }
-      if (DEFERRED_LATER_FNS.has(calleeName)) return true;
+      if (DEFERRED_LATER_FNS.has(calleeName)) {
+        // Codex round 18 P1: solo exempt si el timer es el GLOBAL real
+        // (no declarado en el archivo). `import { setTimeout } from
+        // "./fake-helper"` con synchronous impl quedaba exempt aunque
+        // el local sí invoca síncronamente. Los timers reales
+        // (setTimeout, setInterval, setImmediate, queueMicrotask) son
+        // globales de Node — no se declaran en el source — así que
+        // `localBindings.has(rootIdent)` === false en uso legítimo.
+        // Cualquier import o local-decl los marca como suspect.
+        if (
+          rootIdent === null ||
+          context.localBindings.has(rootIdent)
+        ) {
+          return false;
+        }
+        return true;
+      }
     }
   }
 
