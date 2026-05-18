@@ -60,8 +60,29 @@ jobs:
         # docs históricos).
         run: npm run test:hex-drift
 
+      - name: Server-safe markers gate (D1-P1)
+        # AST gate sobre componentes marcados `@server-safe`. Verifica
+        # que no acceden client globals en render path, no usan hooks
+        # deferred-only sin guard, no tienen "use client" directive.
+        # Test runner: scripts/check-server-safe-markers.mjs.
+        run: npm run test:server-safe-markers
+
       - name: Build (lib + dts + styles)
         run: npm run build
+
+      - name: Publint gate (D1-P3)
+        # Valida package.json exports + types resolution. Aceptamos
+        # warnings actualmente (1 sobre types ESM en condición require);
+        # D1-P4 (ESM-only) los elimina.
+        run: npm run test:publint
+
+      - name: RSC fixture typecheck (D1-P3)
+        # Compila un Server Component sintético que importa los 36
+        # exports del subset server-safe (resolución vía
+        # customConditions: ["react-server"] + paths a dist/). Si
+        # una regresión rompe la firma o disponibilidad de cualquier
+        # export, este typecheck falla.
+        run: npm run test:rsc-fixture
 
       - name: Bundle has no dev warns (B-07 follow-up, post-RC1 refined)
         # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`

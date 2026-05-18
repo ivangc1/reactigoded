@@ -7,6 +7,40 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added (beta.24)
+
+**D1-P3 — `reactigoded/server-safe` entry + `react-server` conditional export**:
+
+Nuevo subpath export `reactigoded/server-safe` + condicional automático
+`"react-server"` en `package.json#exports["."]` que re-exporta solo los
+36 componentes marcados `@server-safe` (verificados por el gate
+`test:server-safe-markers`).
+
+Consumer pattern (Next.js App Router Server Component, Astro server
+island, Remix loader, etc.):
+
+```tsx
+// app/page.tsx (server, sin "use client")
+import { Button, CardBody, CardHeader } from "reactigoded";
+// → resuelve a dist/server-safe.js via react-server condition
+```
+
+Componentes interactivos (Dialog/Menu/Toast Provider/Tooltip/Switch/
+ThemeToggle) siguen importables desde el barrel root cuando el
+consumer está en Client Component (`"use client"`).
+
+CI gates añadidos:
+
+- `test:publint`: validador de exports config (sustituye attw temporalmente
+  por bug fflate en ARM64 — ver `docs/known-issues.md`).
+- `test:rsc-fixture`: `tsc -p fixtures/rsc/tsconfig.json --noEmit` con
+  `customConditions: ["react-server"]` + paths a `dist/server-safe.d.ts`.
+  Cubre regresiones del subset server-safe.
+- `test:server-safe-markers` (retroactivo de D1-P1): añadido al
+  workflow `verify.yml` que antes solo lo corría localmente.
+
+Sin cambios breaking — el barrel root sigue exportando todos los componentes.
+
 ### Changed (BREAKING — pre-RC1, beta.24)
 
 **D1-P2 — clsx promoted from dependency to peerDependency**:

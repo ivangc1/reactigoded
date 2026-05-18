@@ -125,6 +125,13 @@ export default defineConfig({
       entry: {
         index: resolve(__dirname, "src/index.ts"),
         cn: resolve(__dirname, "src/utils/cn.ts"),
+        // D1-P3 (beta.24): server-safe subset entry para React Server
+        // Components. Re-exporta solo los componentes marcados
+        // `@server-safe` (36 archivos). El consumer Next.js App Router /
+        // Astro islands / Remix server puede importar de este path sin
+        // necesidad de `"use client"`. Resolución automática via
+        // condición `react-server` en package.json#exports.
+        "server-safe": resolve(__dirname, "src/server-safe.ts"),
       },
       name: "Reactigoded",
       formats: ["es", "cjs"] as const,
