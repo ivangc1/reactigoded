@@ -54,8 +54,21 @@ const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 //
 // Codex P2 sobre PR #90: incluir `globalThis` — mencionado en el doc
 // del gate pero faltante en el regex (silent bypass).
+//
+// Codex P1 round 7 sobre PR #90: el regex solo matcheaba property dot
+// access (`window.foo`) y se perdían formas equivalentes que también
+// lanzan `ReferenceError` cuando el global no existe en server:
+//   - `window?.foo` (optional chaining)
+//   - `window["foo"]` (bracket access)
+//   - `window?.["foo"]` (optional bracket access)
+// Optional chaining `?.` NO previene el ReferenceError del identifier
+// lookup — primero se resuelve el binding, después el `?.`. Si el
+// binding no existe (SSR sin `window` global), throw.
+//
+// El follow-up se captura como non-capturing group para que `match[1]`
+// siga siendo solo el nombre del API.
 const CLIENT_API_PATTERN =
-  /\b(?<!typeof\s)(document|window|navigator|process|Buffer|globalThis)\./;
+  /\b(?<!typeof\s)(document|window|navigator|process|Buffer|globalThis)(?:\.|\?\.|\[)/;
 
 // Patrón canónico de typeof guard que confirma disponibilidad del
 // API client-side. SOLO la forma POSITIVA cuenta:
