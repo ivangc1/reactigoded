@@ -9099,27 +9099,33 @@ CUÁNDO USAR:
 
 .ig-star {
   font-size: var(--ig-rating-size);
-  /* Mismo color base que filled para que el solid char `★` sea
-   * legible contra el fondo en TODOS los temas. El estado vacío se
-   * comunica via opacity, no via color secundario.
-   *
-   * Razón: pre-beta.24 usábamos `--ig-rating-empty` (neutral-600) que
-   * en light mode (#685080, purple-gray) sobre near-white (#faf9fc)
-   * leía como difuminado, especialmente con el glifo `☆` outline cuya
-   * antialiasing acentúa la sensación de pálido. Cambiamos al patrón
-   * canónico (Material UI / Mantine / shadcn): mismo glifo solid en
-   * ambos estados, diferenciado por opacity. La opacity baja
-   * conserva el color base intacto (sin desaturación), evitando
-   * blends con el fondo. */
   color: var(--ig-rating-filled);
-  opacity: 0.32;
   cursor: pointer;
-  transition: var(--ig-transition-fast);
   line-height: 1;
 }
 
-.ig-star-filled,
-.ig-star.filled {
+/* Mismo color base que filled para que el solid char `★` sea legible
+ * contra el fondo en TODOS los temas. El estado vacío se comunica via
+ * opacity en el GLIFO (no en el button), para no atenuar el focus
+ * indicator (`button:focus-visible { box-shadow: ... }`) cuando la
+ * estrella vacía es el tab stop del roving (codex P2 round 2 PR #94).
+ *
+ * Razón: pre-beta.24 usábamos `--ig-rating-empty` (neutral-600) que
+ * en light mode (#685080, purple-gray) sobre near-white (#faf9fc)
+ * leía como difuminado, especialmente con el glifo `☆` outline cuya
+ * antialiasing acentúa la sensación de pálido. Cambiamos al patrón
+ * canónico (Material UI / Mantine / shadcn): mismo glifo solid en
+ * ambos estados, diferenciado por opacity. La opacity baja
+ * conserva el color base intacto (sin desaturación), evitando
+ * blends con el fondo. */
+.ig-star-glyph {
+  display: inline-block;
+  opacity: 0.32;
+  transition: opacity var(--ig-transition-fast);
+}
+
+.ig-star-filled .ig-star-glyph,
+.ig-star.filled .ig-star-glyph {
   opacity: 1;
 }
 
