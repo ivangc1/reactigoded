@@ -55,17 +55,25 @@ bloquea el cierre.
 
 ### Fixed
 
-**Rating — distinción visual filled/empty robusta**:
+**Rating — distinción visual filled/empty robusta + contraste light mode**:
 
-El glifo ahora cambia de forma según el estado:
+Patrón canónico Material UI / Mantine / shadcn: ambos estados usan
+el mismo glifo `★` solid; la diferenciación es por **opacity** sobre
+el mismo color base (`--ig-rating-filled`):
 
-- Estrella seleccionada (o en preview hover) → `★` (solid).
-- Estrella vacía → `☆` (outline).
+- Vacía: ★ a opacity 0.32 sobre `--ig-rating-filled`.
+- Llena: ★ a opacity 1.
 
-El color sigue cambiando también (`--ig-rating-filled` vs
-`--ig-rating-empty`). Combinar diferencia de **forma + color** hace
-la distinción robusta frente a temas con contraste reducido entre los
-dos tokens (e.g., en modo light donde ambos colores son oscuros).
+Por qué este patrón:
+
+- El glifo solid (`★`) tiene antialiasing más visible que el outline
+  (`☆`) sobre fondos near-white. En light mode el ☆ outline en
+  `--ig-rating-empty` (#685080 sobre #faf9fc) leía casi como bg.
+- Mantener el mismo color base preserva el matiz coherente (cobre
+  rutilus) en ambos estados. La opacity baja conserva el hue sin
+  desaturarlo, evitando blend con el fondo.
+- La diferencia visual filled vs empty es ahora ratio 3:1 (1.0 vs
+  0.32), independiente del tema activo.
 
 Limpieza adicional: removidas reglas CSS-only que duplicaban el hover
 preview (`.ig-rating:not(.ig-rating-readonly):hover .ig-star` y
@@ -76,6 +84,10 @@ specificity (0,5,0) que sobreescribía el estado, produciendo
 visual inconsistente cuando el cursor permanecía sobre el rating
 tras el click. Ahora el `ig-star-filled` class (estado JSX) es la
 única fuente de verdad.
+
+`--ig-rating-empty` token mantenido en `igoded-tokens.css` por
+backward-compat con consumers que lo extendieran, pero el CSS del
+componente ya no lo referencia.
 
 ### Added (beta.24)
 

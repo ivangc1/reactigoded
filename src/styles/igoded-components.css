@@ -9099,7 +9099,20 @@ CUÁNDO USAR:
 
 .ig-star {
   font-size: var(--ig-rating-size);
-  color: var(--ig-rating-empty);
+  /* Mismo color base que filled para que el solid char `★` sea
+   * legible contra el fondo en TODOS los temas. El estado vacío se
+   * comunica via opacity, no via color secundario.
+   *
+   * Razón: pre-beta.24 usábamos `--ig-rating-empty` (neutral-600) que
+   * en light mode (#685080, purple-gray) sobre near-white (#faf9fc)
+   * leía como difuminado, especialmente con el glifo `☆` outline cuya
+   * antialiasing acentúa la sensación de pálido. Cambiamos al patrón
+   * canónico (Material UI / Mantine / shadcn): mismo glifo solid en
+   * ambos estados, diferenciado por opacity. La opacity baja
+   * conserva el color base intacto (sin desaturación), evitando
+   * blends con el fondo. */
+  color: var(--ig-rating-filled);
+  opacity: 0.32;
   cursor: pointer;
   transition: var(--ig-transition-fast);
   line-height: 1;
@@ -9107,18 +9120,11 @@ CUÁNDO USAR:
 
 .ig-star-filled,
 .ig-star.filled {
-  color: var(--ig-rating-filled);
+  opacity: 1;
 }
 
 /* Hover preview lo gestiona JSX vía `setHover` aplicando `ig-star-filled`
- * a las primeras N estrellas del display (hover ?? value). Antes había
- * reglas CSS-only que duplicaban este preview vía `:hover` selectors,
- * pero su specificity (0,5,0 para el sibling `~`) sobreescribía la
- * clase aplicada por estado, generando inconsistencias post-click
- * cuando el mouse quedaba sobre el rating. La forma del glifo (`★`
- * filled vs `☆` outline) se decide en JSX por la misma razón:
- * diferencia visual de SHAPE + color, robusta frente a temas donde
- * ambos colores tienen contraste reducido. */
+ * a las primeras N estrellas del display (hover ?? value). */
 
 /* Solo lectura */
 .ig-rating-readonly .ig-star {
