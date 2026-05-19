@@ -13,6 +13,16 @@ export interface DialogCloseProps
  * DialogClose — botón "×" para cerrar el modal. Renderiza un `×` por defecto
  * y aplica `aria-label="Cerrar"` automáticamente; ambos pueden sobrescribirse.
  *
+ * Diseñado para ser la "×" del `DialogHeader`. Aplica la clase
+ * `ig-dialog-close` que fuerza dimensiones de icon-button (2rem × 2rem,
+ * sin padding). Pasar `className="ig-btn ig-btn-..."` para usarlo como
+ * CTA de footer NO funciona — las dos clases colisionan en sizing y
+ * el botón sale descuadrado.
+ *
+ * Para CTAs del footer (Cancelar, Aceptar, Entendido, etc.) usa
+ * `<DialogAction>` (unstyled, mismo contexto, cierra igual via
+ * `setOpen(false)`).
+ *
  * **D6 (beta.24)**: si vive dentro de `<Dialog>` consume el contexto y
  * llama a `setOpen(false)` automáticamente — el consumer no necesita
  * conectar `onClick` para cerrar. Si pasa un `onClick` propio, se

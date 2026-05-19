@@ -216,7 +216,12 @@ export function Rating({
               if (!readOnly) setHover(v);
             }}
           >
-            ★
+            {/* Glifo wrapped en span para aislar la opacity (estado vacío)
+             * del button focusable: opacity en el button compone también
+             * el focus-ring del :focus-visible (codex P2 PR #94). */}
+            <span aria-hidden className="ig-star-glyph">
+              ★
+            </span>
           </button>
         );
       })}

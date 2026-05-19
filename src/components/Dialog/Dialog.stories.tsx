@@ -8,6 +8,7 @@ import { DialogHeader } from "./DialogHeader";
 import { DialogBody } from "./DialogBody";
 import { DialogFooter } from "./DialogFooter";
 import { DialogClose } from "./DialogClose";
+import { DialogAction } from "./DialogAction";
 import { Button } from "@/components/Button";
 
 const meta = {
@@ -50,15 +51,12 @@ export const PorDefecto: Story = {
           </p>
         </DialogBody>
         <DialogFooter>
-          <DialogClose
-            aria-label="Cancelar"
-            className="ig-btn ig-btn-secondary"
-          >
+          <DialogAction className="ig-btn ig-btn-secondary">
             Cancelar
-          </DialogClose>
-          <DialogClose aria-label="Aceptar" className="ig-btn ig-btn-brand">
+          </DialogAction>
+          <DialogAction className="ig-btn ig-btn-brand">
             Aceptar
-          </DialogClose>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -206,12 +204,9 @@ export const NoCloseOnBackdrop: Story = {
           </p>
         </DialogBody>
         <DialogFooter>
-          <DialogClose
-            aria-label="Entendido"
-            className="ig-btn ig-btn-brand"
-          >
+          <DialogAction className="ig-btn ig-btn-brand">
             Entendido
-          </DialogClose>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

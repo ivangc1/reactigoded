@@ -9099,25 +9099,62 @@ CUÁNDO USAR:
 
 .ig-star {
   font-size: var(--ig-rating-size);
-  color: var(--ig-rating-empty);
+  color: var(--ig-rating-filled);
   cursor: pointer;
-  transition: var(--ig-transition-fast);
   line-height: 1;
 }
 
-.ig-star-filled,
-.ig-star.filled {
-  color: var(--ig-rating-filled);
+/* Mismo color base que filled para que el solid char `★` sea legible
+ * contra el fondo en TODOS los temas. El estado vacío se comunica via
+ * opacity.
+ *
+ * Patrón canónico Material UI / Mantine / shadcn. La opacity baja
+ * conserva el hue intacto (sin desaturación), evitando blends con el
+ * fondo.
+ *
+ * Hay DOS caminos de markup que cubre el componente:
+ *
+ *   (A) API CSS-only documentada arriba en el comentario del bloque
+ *       Rating: `<span class="ig-star">★</span>`. Sin glyph wrapper,
+ *       sin button focusable. La opacity se aplica DIRECTAMENTE al
+ *       elemento `.ig-star`. No hay riesgo de atenuar focus-ring porque
+ *       los `<span>` no son focusable por defecto.
+ *
+ *   (B) API React JSX (`<Rating />`): `<button class="ig-star">
+ *       <span class="ig-star-glyph">★</span></button>`. La opacity se
+ *       aplica al `<span>` interno, NO al button. Razón: el button
+ *       focusable hereda `box-shadow: var(--ig-focus-ring)` del reset
+ *       cuando recibe focus-visible (roving tabindex hace que la
+ *       primera estrella vacía sea tab stop cuando value=0); opacity
+ *       en el button compone el focus-ring también, atenuándolo al
+ *       32% (codex P2 round 2 PR #94).
+ *
+ * El selector `:has(.ig-star-glyph)` distingue los dos caminos: si el
+ * `.ig-star` tiene hijo `.ig-star-glyph`, no aplicamos opacity al
+ * propio `.ig-star` (camino B); en su lugar va al glyph. `:has()` está
+ * en browserslist target del DS (Chrome 105+, Firefox 121+, Safari
+ * 15.4+, Edge 105+). */
+
+/* Camino A: span directo sin glyph wrapper. */
+.ig-star:not(.ig-star-filled):not(.ig-star.filled):not(:has(.ig-star-glyph)) {
+  opacity: 0.32;
+  transition: opacity var(--ig-transition-fast);
 }
 
-/* Hover effect - highlight estrellas al pasar el cursor */
-.ig-rating:not(.ig-rating-readonly):hover .ig-star {
-  color: var(--ig-rating-filled);
+/* Camino B: glyph wrapper aislado del button focusable. */
+.ig-star-glyph {
+  display: inline-block;
+  opacity: 0.32;
+  transition: opacity var(--ig-transition-fast);
 }
 
-.ig-rating:not(.ig-rating-readonly) .ig-star:hover ~ .ig-star {
-  color: var(--ig-rating-empty);
+.ig-star-filled .ig-star-glyph,
+.ig-star.filled .ig-star-glyph {
+  opacity: 1;
 }
+
+/* Hover preview lo gestiona JSX vía `setHover` aplicando `ig-star-filled`
+ * a las primeras N estrellas del display (hover ?? value). */
 
 /* Solo lectura */
 .ig-rating-readonly .ig-star {

@@ -7,6 +7,88 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+(sin cambios aún — siguiente version será 1.0.0-rc.1 tras FREEZE-CHECK)
+
+## [1.0.0-beta.24] — 2026-05-19 (D1 server-safe infrastructure complete)
+
+Plan **claudegate3** (post-RC1 gate review) cierra el bloque D1 con
+4 sub-tasks. Pre-tag de `1.0.0-rc.1` queda únicamente FREEZE-CHECK.
+
+### Added
+
+**`DialogAction` — botón unstyled para CTAs del footer del Dialog**:
+
+Mirror exacto de `AlertDialogClose` para la familia Dialog. Cierra el
+modal via contexto (`setOpen(false)`) pero NO aplica ninguna clase
+base. Diseñado para botones de acción del `DialogFooter` (Cancelar,
+Aceptar, Entendido, etc.) donde el consumer pasa `className="ig-btn
+ig-btn-..."` y espera que esa sea la única clase visual.
+
+**Por qué se añade ahora**: usar `<DialogClose className="ig-btn
+ig-btn-brand">Aceptar</DialogClose>` mezclaba la clase base de
+`DialogClose` (`ig-dialog-close`, que fuerza `2rem × 2rem`, `padding: 0`
+para la "×" del header) con la clase del Button del DS → footer
+descuadrado. `AlertDialogClose` ya tenía esta forma desde D8 (codex P1
+sobre PR #87) pero el Dialog quedó sin el equivalente, así que el
+patrón natural del consumer producía un visual roto.
+
+Migración consumer (no breaking, paralelo a DialogClose):
+
+```tsx
+// Antes (footer descuadrado por clases en conflicto):
+<DialogFooter>
+  <DialogClose className="ig-btn ig-btn-secondary">Cancelar</DialogClose>
+  <DialogClose className="ig-btn ig-btn-brand">Aceptar</DialogClose>
+</DialogFooter>
+
+// Ahora (sizing del Button respetado):
+<DialogFooter>
+  <DialogAction className="ig-btn ig-btn-secondary">Cancelar</DialogAction>
+  <DialogAction className="ig-btn ig-btn-brand">Aceptar</DialogAction>
+</DialogFooter>
+```
+
+`<DialogClose />` queda como el botón "×" del header (sigue intocado).
+Stories actualizadas (Default + Information). Tests añadidos: cierre
+via context, no aplica `ig-dialog-close`, `onClick.preventDefault()`
+bloquea el cierre.
+
+### Fixed
+
+**Rating — distinción visual filled/empty robusta + contraste light mode**:
+
+Patrón canónico Material UI / Mantine / shadcn: ambos estados usan
+el mismo glifo `★` solid; la diferenciación es por **opacity** sobre
+el mismo color base (`--ig-rating-filled`):
+
+- Vacía: ★ a opacity 0.32 sobre `--ig-rating-filled`.
+- Llena: ★ a opacity 1.
+
+Por qué este patrón:
+
+- El glifo solid (`★`) tiene antialiasing más visible que el outline
+  (`☆`) sobre fondos near-white. En light mode el ☆ outline en
+  `--ig-rating-empty` (#685080 sobre #faf9fc) leía casi como bg.
+- Mantener el mismo color base preserva el matiz coherente (cobre
+  rutilus) en ambos estados. La opacity baja conserva el hue sin
+  desaturarlo, evitando blend con el fondo.
+- La diferencia visual filled vs empty es ahora ratio 3:1 (1.0 vs
+  0.32), independiente del tema activo.
+
+Limpieza adicional: removidas reglas CSS-only que duplicaban el hover
+preview (`.ig-rating:not(.ig-rating-readonly):hover .ig-star` y
+`.ig-rating:not(.ig-rating-readonly) .ig-star:hover ~ .ig-star`).
+Eran redundantes — `setHover` en JSX ya aplica `ig-star-filled` a las
+estrellas en el preview. La regla con sibling combinator `~` tenía
+specificity (0,5,0) que sobreescribía el estado, produciendo
+visual inconsistente cuando el cursor permanecía sobre el rating
+tras el click. Ahora el `ig-star-filled` class (estado JSX) es la
+única fuente de verdad.
+
+`--ig-rating-empty` token mantenido en `igoded-tokens.css` por
+backward-compat con consumers que lo extendieran, pero el CSS del
+componente ya no lo referencia.
+
 ### Added (beta.24)
 
 **D1-P3 — `reactigoded/server-safe` entry + `react-server` conditional export**:

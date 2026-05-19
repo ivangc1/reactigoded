@@ -22,6 +22,8 @@ export { DialogFooter } from "./DialogFooter";
 export type { DialogFooterProps } from "./DialogFooter";
 export { DialogClose } from "./DialogClose";
 export type { DialogCloseProps } from "./DialogClose";
+export { DialogAction } from "./DialogAction";
+export type { DialogActionProps } from "./DialogAction";
 // DialogContext + DialogContextValue son detalles internos: el contexto
 // solo lo consumen los subcomponentes (Header/Body/Footer/Close/Content/
 // Trigger) para auto-registrar `headerId` y wire del open state.
