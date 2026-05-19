@@ -53,6 +53,30 @@ Stories actualizadas (Default + Information). Tests añadidos: cierre
 via context, no aplica `ig-dialog-close`, `onClick.preventDefault()`
 bloquea el cierre.
 
+### Fixed
+
+**Rating — distinción visual filled/empty robusta**:
+
+El glifo ahora cambia de forma según el estado:
+
+- Estrella seleccionada (o en preview hover) → `★` (solid).
+- Estrella vacía → `☆` (outline).
+
+El color sigue cambiando también (`--ig-rating-filled` vs
+`--ig-rating-empty`). Combinar diferencia de **forma + color** hace
+la distinción robusta frente a temas con contraste reducido entre los
+dos tokens (e.g., en modo light donde ambos colores son oscuros).
+
+Limpieza adicional: removidas reglas CSS-only que duplicaban el hover
+preview (`.ig-rating:not(.ig-rating-readonly):hover .ig-star` y
+`.ig-rating:not(.ig-rating-readonly) .ig-star:hover ~ .ig-star`).
+Eran redundantes — `setHover` en JSX ya aplica `ig-star-filled` a las
+estrellas en el preview. La regla con sibling combinator `~` tenía
+specificity (0,5,0) que sobreescribía el estado, produciendo
+visual inconsistente cuando el cursor permanecía sobre el rating
+tras el click. Ahora el `ig-star-filled` class (estado JSX) es la
+única fuente de verdad.
+
 ### Added (beta.24)
 
 **D1-P3 — `reactigoded/server-safe` entry + `react-server` conditional export**:

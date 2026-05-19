@@ -9110,14 +9110,15 @@ CUÁNDO USAR:
   color: var(--ig-rating-filled);
 }
 
-/* Hover effect - highlight estrellas al pasar el cursor */
-.ig-rating:not(.ig-rating-readonly):hover .ig-star {
-  color: var(--ig-rating-filled);
-}
-
-.ig-rating:not(.ig-rating-readonly) .ig-star:hover ~ .ig-star {
-  color: var(--ig-rating-empty);
-}
+/* Hover preview lo gestiona JSX vía `setHover` aplicando `ig-star-filled`
+ * a las primeras N estrellas del display (hover ?? value). Antes había
+ * reglas CSS-only que duplicaban este preview vía `:hover` selectors,
+ * pero su specificity (0,5,0 para el sibling `~`) sobreescribía la
+ * clase aplicada por estado, generando inconsistencias post-click
+ * cuando el mouse quedaba sobre el rating. La forma del glifo (`★`
+ * filled vs `☆` outline) se decide en JSX por la misma razón:
+ * diferencia visual de SHAPE + color, robusta frente a temas donde
+ * ambos colores tienen contraste reducido. */
 
 /* Solo lectura */
 .ig-rating-readonly .ig-star {

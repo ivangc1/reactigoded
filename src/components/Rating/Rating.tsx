@@ -216,7 +216,7 @@ export function Rating({
               if (!readOnly) setHover(v);
             }}
           >
-            ★
+            {filled ? "★" : "☆"}
           </button>
         );
       })}
