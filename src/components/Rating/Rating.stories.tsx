@@ -86,7 +86,28 @@ export const FocusVisibleStar: Story = {
 };
 
 export const ClickEstrella: Story = {
-  args: { value: 0 },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Demo interactiva en modo **uncontrolled** (`defaultValue`): el click persiste el valor en el estado interno del componente, así la estrella pulsada se queda marcada. Si se usara `value` (controlled) sin un handler que actualice el estado del padre, el click dispararía `onValueChange` pero el valor volvería al prop fijo — ver story `Controlado` para el patrón controlled con `useState`.",
+      },
+    },
+  },
+  // Uncontrolled: defaultValue (no value) para que el click se quede.
+  // Render explícito para no heredar `value: 3` del meta args. El
+  // spread condicional de onValueChange satisface exactOptionalPropertyTypes
+  // (el tipo inferido de args.onValueChange es `Mock | undefined`).
+  render: (args) => (
+    <Rating
+      defaultValue={0}
+      max={5}
+      aria-label="Pulsa para puntuar"
+      {...(args.onValueChange
+        ? { onValueChange: args.onValueChange }
+        : {})}
+    />
+  ),
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("radio", { name: "4 estrellas" }));
