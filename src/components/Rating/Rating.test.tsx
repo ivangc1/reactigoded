@@ -20,6 +20,24 @@ describe("Rating", () => {
     expect(screen.getByRole("radio", { name: "1 estrella" })).toBeInTheDocument();
   });
 
+  it("getStarLabel sobrescribe el aria-label por estrella (D12 i18n)", () => {
+    render(
+      <Rating
+        value={0}
+        max={5}
+        getStarLabel={(n) => `${String(n)} of 5 stars`}
+      />,
+    );
+    expect(
+      screen.getByRole("radio", { name: "1 of 5 stars" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "5 of 5 stars" }),
+    ).toBeInTheDocument();
+    // Default ES se queda como fallback cuando getStarLabel no se pasa
+    // (verificado en los tests previos "1 estrella" / "N estrellas").
+  });
+
   it("dispara onValueChange con el valor pulsado (controlled)", async () => {
     const onValueChange = vi.fn();
     render(<Rating value={0} onValueChange={onValueChange} />);

@@ -36,6 +36,7 @@ export function DialogClose({
   className,
   children,
   type = "button",
+  // i18n: ES default deliberado (D12). Override: aria-label (HTML std).
   "aria-label": ariaLabel = "Cerrar",
   onClick: consumerOnClick,
   ref,

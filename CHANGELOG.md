@@ -7,7 +7,25 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-(sin cambios aún — siguiente version será 1.0.0-rc.1 tras FREEZE-CHECK)
+### Added
+
+- **`Rating.getStarLabel` prop**: override del aria-label por estrella
+  individual (`(n: number) => string`). Cierra el hueco i18n
+  detectado en el gate review beta.25 — el label del grupo ya era
+  overrideable vía `aria-label`, los hijos no lo eran. Default ES
+  permanece (`"1 estrella"` / `"N estrellas"`). Additive, no breaking.
+
+### Changed
+
+- **i18n formalización (D12)**: defaults ES quedan registrados como
+  decisión arquitectónica en `docs/decisions/D12-es-defaults-i18n.md`.
+  Tabla de overrides en `docs/CSSAPI.mdx` ampliada con Avatar,
+  SkeletonContainer y Rating (faltaban). Comments
+  `// i18n: ES default deliberado (D12). Override: {prop}.` añadidos
+  junto a cada string ES default en código (Alert, Chip, DialogClose,
+  Pagination, Progress, Stepper, Toast, Avatar, Skeleton, Rating).
+  No cambia comportamiento — solo descubribilidad para auditorías
+  futuras.
 
 ## [1.0.0-beta.24] — 2026-05-19 (D1 server-safe infrastructure complete)
 

@@ -57,6 +57,7 @@ export function Alert({
   title,
   dismissible = false,
   onClose,
+  // i18n: ES default deliberado (D12). Override: closeLabel.
   closeLabel = "Cerrar",
   open,
   defaultOpen = true,

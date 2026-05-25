@@ -7,6 +7,7 @@ import { cn } from "@/utils/cn";
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type AvatarStatus = "online" | "offline" | "busy" | "away";
 
+// i18n: ES default deliberado (D12). Override: statusLabel.
 const STATUS_LABEL_ES: Record<AvatarStatus, string> = {
   online: "en línea",
   offline: "sin conexión",

@@ -33,6 +33,16 @@ export interface RatingProps
    * tecnologías asistivas.
    */
   describedBy?: string | string[];
+  /**
+   * Override del `aria-label` por estrella individual. Recibe el valor
+   * 1..max y devuelve la cadena. Default ES: `"1 estrella"` / `"N estrellas"`.
+   * Cierra el hueco i18n del componente — el grupo ya era overrideable
+   * vía `aria-label`, los hijos no lo eran (ver `docs/decisions/D12-es-defaults-i18n.md`).
+   *
+   * @example
+   * <Rating max={5} getStarLabel={(n) => `${n} of 5 stars`} />
+   */
+  getStarLabel?: (value: number) => string;
   ref?: Ref<HTMLDivElement>;
 }
 
@@ -71,6 +81,7 @@ export function Rating({
   size = "md",
   onValueChange,
   describedBy,
+  getStarLabel,
   className,
   ref,
   ...rest
@@ -172,6 +183,7 @@ export function Rating({
       {...divRest}
       ref={ref}
       role="radiogroup"
+      // i18n: ES default deliberado (D12). Override: aria-label (HTML std).
       aria-label={ariaLabelOverride ?? "Puntuación"}
       aria-describedby={describedByValue}
       aria-readonly={readOnly || undefined}
@@ -195,7 +207,11 @@ export function Rating({
             type="button"
             role="radio"
             aria-checked={v === value}
-            aria-label={`${String(v)} ${v === 1 ? "estrella" : "estrellas"}`}
+            // i18n: ES default deliberado (D12). Override: getStarLabel.
+            aria-label={
+              getStarLabel?.(v) ??
+              `${String(v)} ${v === 1 ? "estrella" : "estrellas"}`
+            }
             // En modo readOnly NO usamos `disabled` (rompe el patrón APG
             // del radiogroup: SR no anuncia el valor seleccionado de un
             // radio disabled; aria-readonly del contenedor es la forma
