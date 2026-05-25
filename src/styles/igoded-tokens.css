@@ -2284,8 +2284,14 @@ Ejemplo: --ig-alert-padding o --ig-tooltip-bg.
   --ig-stepper-dot-bg-active: var(--ig-axis);
   --ig-stepper-dot-bg-complete: var(--ig-laurus);
 
-  /* === RATING === */
-  --ig-rating-empty: var(--ig-neutral-600);
+  /* === RATING ===
+   * `--ig-rating-empty` se eliminó en beta.25: no había consumers que
+   * lo overrideen y la asimetría con `--ig-rating-filled` (que SÍ es
+   * customizable porque apunta al cardinal `rutilus`) era ruido en la
+   * surface API. El color empty consume la capa semántica de foreground
+   * atenuado (`var(--ig-text-muted)` en `.ig-star`) — pasa WCAG 1.4.11
+   * ≥3:1 vs `--ig-bg-base` en ambos temas (light 6.67:1, dark 5.90:1).
+   */
   --ig-rating-filled: var(--ig-rutilus);
   --ig-rating-size: 1.5rem;
   --ig-rating-gap: var(--ig-space-1);

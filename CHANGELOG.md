@@ -26,6 +26,24 @@ versionado [SemVer](https://semver.org/lang/es/).
   Pagination, Progress, Stepper, Toast, Avatar, Skeleton, Rating).
   No cambia comportamiento — solo descubribilidad para auditorías
   futuras.
+- **Rating contraste empty (gate review beta.25 HIGH)**: el estado
+  empty se comunicaba via `opacity: 0.32` sobre el color filled. Codex
+  midió en igoded.es 1.885:1 light / 2.165:1 dark — ambos `< 3:1`
+  (WCAG 1.4.11 para UI components). La opacity también atenuaba el
+  focus-ring del button focusable. Reemplazo: capa semántica de
+  foreground atenuado (`.ig-star { color: var(--ig-text-muted) }`),
+  que pasa ≥3:1 en ambos temas (light 6.67:1, dark 5.90:1) y deja el
+  focus-ring intacto al 100% contraste.
+
+### Removed
+
+- **`--ig-rating-empty` (token público)**: muerto desde beta.24 (la
+  implementación lo abandonó por opacity-based). Sin consumers reales
+  pre-1.0.0, lo eliminamos para reducir surface API. La asimetría con
+  `--ig-rating-filled` (que sí queda público porque permite override
+  del cardinal `rutilus`) es deliberada: el empty se inline a
+  `--ig-neutral-500` por ser un color flat sin justificación de
+  customización individual.
 
 ## [1.0.0-beta.24] — 2026-05-19 (D1 server-safe infrastructure complete)
 
