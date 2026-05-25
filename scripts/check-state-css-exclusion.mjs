@@ -2,9 +2,11 @@
 /**
  * check-state-css-exclusion.mjs — H-07/D9 gate
  *
- * Verifica que `dist/index.js` y `dist/index.cjs` (los bundles React
- * publicados al consumer típico) NO contengan referencias a las
- * utilities pseudo-class del `state.css`. Estas utilities son CSS-only
+ * Verifica que `dist/index.js` (el bundle React ESM publicado al
+ * consumer) NO contenga referencias a las utilities pseudo-class del
+ * `state.css`. Desde D1-P4 (beta.24) el paquete es ESM-only — antes
+ * el array incluía también `dist/index.cjs`, que ya no se emite.
+ * Estas utilities son CSS-only
  * opt-in para HTML-utility-first prototyping (story canónica
  * `CSS-Only-Prototyping.stories.tsx`); jamás deberían filtrarse al
  * bundle JS porque (a) son 713 KB gzip standalone, suficiente para
@@ -44,14 +46,14 @@
  * En las clases CSS source el `\:` es un escape para que el `:` sea
  * parte del nombre de clase, NO un pseudo-class. En JS strings el
  * literal final es `prefix:ig-…` SIN escape — ese es el patrón que
- * grepamos en `dist/index.js` y `dist/index.cjs`.
+ * grepamos en `dist/index.js`.
  *
  * ─── Contrato de invocación ────────────────────────────────────
  * • **Invoker**: `npm run test:state-css-exclusion`, encadenado en
  *   `verify:unit` pipeline. CI lo invoca como gate.
- * • **Entorno requerido**: `dist/index.js` + `dist/index.cjs` +
- *   `dist/styles/state/*.css` (asume build previo; `verify:unit`
- *   corre `npm run build` antes de este gate).
+ * • **Entorno requerido**: `dist/index.js` + `dist/styles/state/*.css`
+ *   (asume build previo; `verify:unit` corre `npm run build` antes de
+ *   este gate).
  * • **Fallback / errores**: ERROR (exit 1) si encuentra cualquier
  *   match. No hay allowlist: una sola coincidencia ya rompe el
  *   invariante de H-07.
@@ -69,10 +71,7 @@ import { dirname, resolve, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
 
-const BUNDLES = [
-  resolve(repoRoot, "dist/index.js"),
-  resolve(repoRoot, "dist/index.cjs"),
-];
+const BUNDLES = [resolve(repoRoot, "dist/index.js")];
 const STATE_FRAGMENTS_DIR = resolve(repoRoot, "dist/styles/state");
 
 // Pre-flight: bundles + fragments existen.
