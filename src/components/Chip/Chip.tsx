@@ -57,6 +57,7 @@ export function Chip(props: ChipProps) {
     size = "md",
     selected = false,
     onRemove,
+    // i18n: ES default deliberado (D12). Override: removeLabel.
     removeLabel = "Eliminar",
     children,
     className,

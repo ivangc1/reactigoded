@@ -87,6 +87,7 @@ export interface SkeletonContainerProps
  * </SkeletonContainer>
  */
 export function SkeletonContainer({
+  // i18n: ES default deliberado (D12). Override: label.
   label = "Cargando contenido…",
   children,
   className,

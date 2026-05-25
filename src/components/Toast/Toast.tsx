@@ -80,6 +80,7 @@ export function Toast({
   icon,
   dismissible = true,
   onClose,
+  // i18n: ES default deliberado (D12). Override: closeLabel.
   closeLabel = "Cerrar",
   className,
   children,

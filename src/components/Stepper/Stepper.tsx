@@ -382,6 +382,7 @@ export function Stepper({
       {...divRest}
       ref={setRefs}
       role="group"
+      // i18n: ES default deliberado (D12). Override: aria-label (HTML std).
       aria-label={ariaLabelOverride ?? "Progreso"}
       className={cn(labeled ? "ig-stepper-labeled" : "ig-stepper", className)}
     >

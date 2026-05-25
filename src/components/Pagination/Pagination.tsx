@@ -126,6 +126,7 @@ export function Pagination({
   siblingCount = 1,
   onPageChange,
   variant,
+  // i18n: ES default deliberado (D12). Override: prevLabel / nextLabel.
   prevLabel = "Anterior",
   nextLabel = "Siguiente",
   prevAriaLabel,

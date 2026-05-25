@@ -77,6 +77,7 @@ export function Progress({
   variant,
   size = "md",
   indeterminate = false,
+  // i18n: ES default deliberado (D12). Override: loadingLabel / formatLabel.
   loadingLabel = "Cargando",
   formatLabel,
   className,

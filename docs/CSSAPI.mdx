@@ -737,7 +737,9 @@ tema vive en `data-theme="light|dark"` aplicado a `<html>`.
 
 ## i18n y a11y strings
 
-El DS expone strings user-facing (a11y labels y texto visible mínimo) con **defaults en español** porque la audience inicial — InfiniteRol y consumers hispanohablantes — no necesita configuración para empezar. **No es descuido**: la decisión está registrada y se reevaluará en 1.1.0 si la demanda real lo justifica. Cada componente acepta override por prop o por `aria-label` HTML estándar — la migración i18n para apps anglo o multiidioma es trivial.
+El DS expone strings user-facing (a11y labels y texto visible mínimo) con **defaults en español** porque la audience inicial — InfiniteRol y consumers hispanohablantes — no necesita configuración para empezar. **No es descuido**: la decisión está registrada en [`docs/decisions/D12-es-defaults-i18n.md`](./decisions/D12-es-defaults-i18n.md) y se reevaluará en 1.1.0 si la demanda real lo justifica. Cada componente acepta override por prop o por `aria-label` HTML estándar — la migración i18n para apps anglo o multiidioma es trivial.
+
+> **Nota para reviewers/auditores**: los defaults ES son una decisión deliberada (D12). **NO** reportarlos como hallazgo i18n pendiente. Si añades un componente nuevo con string user-facing, sigue el patrón: default ES + prop override + marker `// i18n: ES default deliberado (D12). Override: <prop>.` junto a la línea del default.
 
 ### Componentes con override de a11y label
 
@@ -750,6 +752,10 @@ El DS expone strings user-facing (a11y labels y texto visible mínimo) con **def
 | `Progress` | "Cargando" / "X por ciento completado" | `loadingLabel`, `formatLabel` |
 | `Stepper` | "Progreso" | `aria-label` (HTML estándar) |
 | `Toast` | "Cerrar" | `closeLabel` |
+| `Avatar` (status) | "en línea" / "sin conexión" / "ocupado" / "ausente" | `statusLabel` |
+| `SkeletonContainer` | "Cargando contenido…" | `label` |
+| `Rating` (grupo) | "Puntuación" | `aria-label` (HTML estándar) |
+| `Rating` (por estrella) | "1 estrella" / "N estrellas" | `getStarLabel` |
 
 ### Patrón de uso para apps multiidioma
 
