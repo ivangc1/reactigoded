@@ -89,18 +89,41 @@ export const Uncontrolled: Story = {
 };
 
 export const PageClickInteraction: Story = {
-  args: { page: 3, totalPages: 10, siblingCount: 1 },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Demo interactiva en modo **uncontrolled** (`defaultPage`): los clicks persisten el valor en el estado interno del componente, así la página seleccionada avanza visualmente. Si se usara `page` (controlled) sin un handler que actualice el estado del padre, el click dispararía `onPageChange` pero el valor volvería al prop fijo — patrón fixed paralelo al de Rating ClickEstrella (commit ca175e0). Ver `Controlled` para el patrón controlled con `useState`.",
+      },
+    },
+  },
+  // Uncontrolled: defaultPage (no page) para que los clicks se queden.
+  // Render explícito para no heredar `page: 3` del meta args. El spread
+  // condicional de onPageChange satisface exactOptionalPropertyTypes
+  // (el tipo inferido de args.onPageChange es `Mock | undefined`).
+  render: (args) => (
+    <Pagination
+      defaultPage={3}
+      totalPages={10}
+      siblingCount={1}
+      {...(args.onPageChange ? { onPageChange: args.onPageChange } : {})}
+    />
+  ),
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    // La página activa lleva aria-current="page".
+    // La página activa inicial lleva aria-current="page".
     const active = canvas.getByRole("button", { current: "page" });
     await expect(active).toHaveAccessibleName(/3/);
     // Click en página 4 (sibling visible con page=3 y siblingCount=1).
     await userEvent.click(canvas.getByRole("button", { name: /página 4/i }));
     await expect(args.onPageChange).toHaveBeenCalledWith(4);
-    // Click en "Siguiente" (avanza a 4).
+    // Tras el click, la página activa pasa a 4 (uncontrolled persiste).
+    await expect(
+      canvas.getByRole("button", { current: "page" }),
+    ).toHaveAccessibleName(/4/);
+    // Click en "Siguiente" (avanza a 5).
     await userEvent.click(canvas.getByRole("button", { name: /siguiente/i }));
-    await expect(args.onPageChange).toHaveBeenCalledWith(4);
+    await expect(args.onPageChange).toHaveBeenCalledWith(5);
   },
 };
 
