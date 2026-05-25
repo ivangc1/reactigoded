@@ -231,7 +231,9 @@ const CLIENT_GLOBALS = new Set([
   "IntersectionObserver",
   "ResizeObserver",
   "MutationObserver",
-  "PerformanceObserver",
+  // PerformanceObserver NO va aqui: es global en Node >=22.12.0 (engine
+  // minimo del paquete) — anadirlo genera falsos positivos para codigo
+  // server-safe que use la API legitima de Node. Codex P2 round 2 sobre #99.
   "XMLHttpRequest",
   "indexedDB",
   "caches",
