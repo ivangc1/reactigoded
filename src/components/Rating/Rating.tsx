@@ -201,6 +201,12 @@ export function Rating({
         const v = i + 1;
         const filled = v <= display;
         const isFocusable = v === focusableValue;
+        // Button sin children: el glifo (★ filled / ☆ empty) lo aporta CSS
+        // via `.ig-star::before { content }` controlado por la clase de
+        // estado. Decisión arquitectónica del canal de forma (issue #102,
+        // WCAG 1.4.1 nivel A): glifo decorativo en pseudoelemento +
+        // aria-label semántico = el rating viaja por dos canales (forma +
+        // color) y la verdad para AT viaja solo por ARIA.
         return (
           <button
             key={v}
@@ -231,14 +237,7 @@ export function Rating({
             onMouseEnter={() => {
               if (!readOnly) setHover(v);
             }}
-          >
-            {/* Glifo wrapped en span para aislar la opacity (estado vacío)
-             * del button focusable: opacity en el button compone también
-             * el focus-ring del :focus-visible (codex P2 PR #94). */}
-            <span aria-hidden className="ig-star-glyph">
-              ★
-            </span>
-          </button>
+          />
         );
       })}
     </div>

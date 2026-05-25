@@ -115,6 +115,29 @@ export const ClickEstrella: Story = {
   },
 };
 
+export const GrayscaleSimulation: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Simulación grayscale (`filter: grayscale(100%)`) sobre el rating para validar el **canal de forma** sin canal de color (issue #102, WCAG 1.4.1 nivel A). Las estrellas filled (★ U+2605) deben seguir siendo visualmente distintas de las empty (☆ U+2606) por **SHAPE** — si lo único que las diferenciara fuera el hue, en grayscale colapsarían a luminancias casi iguales (rutilus vs text-muted miden 1.85:1 light / 1.88:1 dark sin canal de forma). Aproxima también lo que ven los usuarios con acromatopsia o monitor monocromo, y predice el comportamiento bajo `forced-colors: active`.",
+      },
+    },
+    chromatic: {
+      modes: {
+        light: { theme: "light" },
+        dark: { theme: "dark" },
+      },
+    },
+  },
+  args: { value: 3, max: 5, readOnly: true },
+  render: (args) => (
+    <div style={{ filter: "grayscale(100%)" }}>
+      <Rating {...args} aria-label="Rating grayscale (validación canal forma)" />
+    </div>
+  ),
+};
+
 export const AllStates: Story = {
   parameters: {
     layout: "padded",
