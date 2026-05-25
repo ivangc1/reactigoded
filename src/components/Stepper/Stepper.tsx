@@ -21,7 +21,7 @@ import {
   SUPPRESS_NO_HANDLER_WARN,
   useControllableState,
 } from "@/hooks/useControllableState";
-import type { StepProps } from "./Step";
+import type { StepInternalProps, StepProps } from "./Step";
 
 export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
   /**
@@ -389,7 +389,7 @@ export function Stepper({
       {steps.map((step, idx) => {
         // En modo presentational omitimos los handlers (no los pasamos
         // como `undefined`) por exactOptionalPropertyTypes.
-        const interactiveProps: Partial<StepProps> = interactive
+        const interactiveProps: Partial<StepInternalProps> = interactive
           ? {
               onActivate: () => {
                 handleActivate(idx);
@@ -397,14 +397,17 @@ export function Stepper({
               onStepKeyDown: handleStepKeyDown,
             }
           : {};
-        const enriched = cloneElement(step as ReactElement<StepProps>, {
-          index: idx + 1,
-          active: idx === clampedActive,
-          complete: idx < clampedActive,
-          labeled,
-          interactive,
-          ...interactiveProps,
-        });
+        const enriched = cloneElement(
+          step as ReactElement<StepProps & StepInternalProps>,
+          {
+            index: idx + 1,
+            active: idx === clampedActive,
+            complete: idx < clampedActive,
+            labeled,
+            interactive,
+            ...interactiveProps,
+          },
+        );
         if (labeled) return <Fragment key={idx}>{enriched}</Fragment>;
         return (
           <Fragment key={idx}>

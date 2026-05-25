@@ -15,27 +15,38 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
   complete?: boolean;
   /** Inyectado por `Stepper` cuando usa layout labeled. */
   labeled?: boolean;
+  ref?: Ref<HTMLDivElement>;
+}
+
+/**
+ * Props que `Stepper` inyecta a cada `Step` vía `cloneElement`. Deliberadamente
+ * NO viven en `StepProps` (público) — antes de beta.25 lo estaban con marker
+ * `@internal`, pero `stripInternal` las borraba de la interface emitida mientras
+ * la firma de `Step({...})` seguía destructurándolas, dejando un `.d.ts`
+ * autocontradictorio (codex BLOCKER 3 / Step.d.ts:28 — TS2339 contra
+ * consumidores con `skipLibCheck: false`). Al sacarlas a un tipo interno que
+ * NO se reexporta del barrel, el `.d.ts` público queda coherente.
+ *
+ * @internal
+ */
+export interface StepInternalProps {
   /**
    * Inyectado por `Stepper` cuando es interactivo (`onActiveChange`
    * definido). Convierte el dot en un `<button>` semántico vía
    * `role="button"` + `tabIndex` (roving) + handlers click/keydown.
-   * @internal
    */
   interactive?: boolean;
   /**
    * Inyectado por `Stepper` cuando es interactivo. Llamado al click
    * o al activar por teclado (Enter/Space). Stepper interpreta la
    * activación y dispara `onActiveChange` con el índice 0-based.
-   * @internal
    */
   onActivate?: () => void;
   /**
    * Inyectado por `Stepper` cuando es interactivo. Maneja
    * ArrowLeft/Right/Up/Down/Home/End para navegar entre steps.
-   * @internal
    */
   onStepKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
-  ref?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -48,19 +59,25 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
   *
  * @server-safe
  */
-export function Step({
-  label,
-  index,
-  active = false,
-  complete = false,
-  labeled = false,
-  interactive = false,
-  onActivate,
-  onStepKeyDown,
-  className,
-  ref,
-  ...rest
-}: StepProps) {
+export function Step(props: StepProps) {
+  // Destructuring en el body (no en el parámetro) para que el `.d.ts` emita
+  // `Step(props: StepProps)` limpio. Si estas internal estuvieran en la firma
+  // del parámetro, `stripInternal` borraba la prop de `StepProps` pero
+  // tsc dejaba el nombre en la firma — `Step.d.ts` autocontradictorio
+  // (codex BLOCKER 3). Ver `StepInternalProps` arriba.
+  const {
+    label,
+    index,
+    active = false,
+    complete = false,
+    labeled = false,
+    interactive = false,
+    onActivate,
+    onStepKeyDown,
+    className,
+    ref,
+    ...rest
+  } = props as StepProps & StepInternalProps;
   const ariaCurrent = active ? "step" : undefined;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
