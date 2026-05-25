@@ -217,7 +217,54 @@ const CLIENT_GLOBALS = new Set([
   "cancelAnimationFrame",
   "requestIdleCallback",
   "cancelIdleCallback",
+  // beta.25 BLOCKER 4 (gate review CONV-2): catálogo Claude ampliado.
+  // Browser-only que NO existen como global en Node >=22.12.0 (engine
+  // mínimo declarado). Acceder a bare en render server lanza
+  // ReferenceError exactamente igual que `window`. Verificación caso a
+  // caso antes de añadir (algunos como `URL`, `Blob`, `crypto`, `fetch`,
+  // `EventTarget` SÍ existen como global en Node y NO se añaden).
+  "localStorage",
+  "sessionStorage",
+  "location",
+  "history",
+  "screen",
+  "IntersectionObserver",
+  "ResizeObserver",
+  "MutationObserver",
+  "PerformanceObserver",
+  "XMLHttpRequest",
+  "indexedDB",
+  "caches",
+  "FileReader",
+  "getComputedStyle",
+  "alert",
+  "confirm",
+  "prompt",
 ]);
+
+// Sinks de evaluación dinámica. NO son "browser globals" — existen
+// también en Node — pero PERMITEN bypassear el análisis estático del
+// gate evaluando código arbitrario desde un string en runtime. Usados
+// para escape hatches reconocidos en bypasses del gate (codex round
+// del cruce beta.25 + Claude):
+//   - `eval("window.foo")` — eval directo.
+//   - `Function("return window")()` — Function constructor.
+//   - `new Function("return window")()` — idem con `new`.
+//   - `Reflect.construct(Function, ["return window"])()` — wrapper.
+//   - `globalThis.constructor.constructor("...")` — chain access.
+//
+// Los dos primeros se cazan directamente añadiendo `eval` y `Function`
+// como bare identifiers (rama d) y como callee de CallExpression
+// (rama c via el OUTER PropertyAccess no aplica aquí, pero el Identifier
+// como callee SI es read position). Los wrapper patterns 3 y 4 se
+// cazan transitivamente: `Reflect.construct(Function, ...)` flagea
+// `Function` como arg identifier (rama d); `globalThis.constructor.X`
+// flagea `globalThis` como base PropertyAccess (rama c).
+//
+// El error message distingue el rule name (`no-dynamic-eval-sink` vs
+// `no-bare-dom-access`) para que el fix recommendation sea apropiada:
+// con eval/Function NO se puede "guard con typeof" — hay que refactor.
+const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
 // phase) en client. Los effects no corren en SSR, por tanto sus bodies
@@ -1043,7 +1090,7 @@ function checkSourceFile(content, relPath) {
       }
     }
 
-    // (c) Detectar acceso a client global. Cubre:
+    // (c) Detectar acceso a client global o dynamic eval sink. Cubre:
     //   - PropertyAccessExpression (`x.y`, `x?.y`)
     //   - ElementAccessExpression (`x[y]`, `x?.[y]`)
     if (
@@ -1051,22 +1098,28 @@ function checkSourceFile(content, relPath) {
       ts.isElementAccessExpression(node)
     ) {
       const expr = node.expression;
-      if (ts.isIdentifier(expr) && CLIENT_GLOBALS.has(expr.text)) {
+      if (ts.isIdentifier(expr)) {
         const api = expr.text;
-        // Si el binding está shadow-eado por una local (parameter, var,
-        // import, etc.), NO es ref al global — skip.
-        if (!context.localBindings.has(api) && !context.isInDeferredBody) {
-          if (!context.activeGuards.has(api)) {
-            const start = node.getStart(sourceFile);
-            const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-            const lineText =
-              content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-            violations.push({
-              file: relPath,
-              rule: "no-bare-dom-access",
-              line: line + 1,
-              detail: `acceso bare a \`${api}\` sin guard typeof activo: ${lineText}`,
-            });
+        const isClientGlobal = CLIENT_GLOBALS.has(api);
+        const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
+        if (isClientGlobal || isEvalSink) {
+          // Si el binding está shadow-eado por una local (parameter, var,
+          // import, etc.), NO es ref al global — skip.
+          if (!context.localBindings.has(api) && !context.isInDeferredBody) {
+            if (!context.activeGuards.has(api)) {
+              const start = node.getStart(sourceFile);
+              const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+              const lineText =
+                content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+              violations.push({
+                file: relPath,
+                rule: isEvalSink ? "no-dynamic-eval-sink" : "no-bare-dom-access",
+                line: line + 1,
+                detail: isEvalSink
+                  ? `acceso a \`${api}.*\` (dynamic eval sink — bypassea el AST gate): ${lineText}`
+                  : `acceso bare a \`${api}\` sin guard typeof activo: ${lineText}`,
+              });
+            }
           }
         }
       }
@@ -1089,23 +1142,29 @@ function checkSourceFile(content, relPath) {
     //
     // Codex round 11 P1.2: este check faltaba — los reads bare lanzan
     // ReferenceError igual que property accesses si el binding no existe.
-    if (ts.isIdentifier(node) && CLIENT_GLOBALS.has(node.text)) {
+    if (ts.isIdentifier(node)) {
       const api = node.text;
-      if (
-        !context.localBindings.has(api) &&
-        !isNonReferencePosition(node)
-      ) {
-        if (!context.isInDeferredBody && !context.activeGuards.has(api)) {
-          const start = node.getStart(sourceFile);
-          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-          const lineText =
-            content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-          violations.push({
-            file: relPath,
-            rule: "no-bare-dom-access",
-            line: line + 1,
-            detail: `referencia bare al binding \`${api}\` sin guard typeof activo: ${lineText}`,
-          });
+      const isClientGlobal = CLIENT_GLOBALS.has(api);
+      const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
+      if (isClientGlobal || isEvalSink) {
+        if (
+          !context.localBindings.has(api) &&
+          !isNonReferencePosition(node)
+        ) {
+          if (!context.isInDeferredBody && !context.activeGuards.has(api)) {
+            const start = node.getStart(sourceFile);
+            const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+            const lineText =
+              content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+            violations.push({
+              file: relPath,
+              rule: isEvalSink ? "no-dynamic-eval-sink" : "no-bare-dom-access",
+              line: line + 1,
+              detail: isEvalSink
+                ? `referencia a \`${api}\` (dynamic eval sink — bypassea el AST gate): ${lineText}`
+                : `referencia bare al binding \`${api}\` sin guard typeof activo: ${lineText}`,
+            });
+          }
         }
       }
     }
@@ -1153,43 +1212,59 @@ function checkSourceFile(content, relPath) {
   return violations;
 }
 
-// ─── Main ──────────────────────────────────────────────────────
+// ─── Exports (para tests) ──────────────────────────────────────
+//
+// `checkSourceFile`, `CLIENT_GLOBALS` y `DYNAMIC_EVAL_SINKS` se exportan
+// para que `scripts/__test__/server-safe-gate.test.mjs` pueda validar
+// que cada bypass conocido (eval, Function, Reflect.construct, etc.)
+// realmente lo caza el gate sobre fixtures inline. El runtime CLI sigue
+// idéntico — solo se ejecuta cuando este archivo es invocado como
+// entrypoint (`node scripts/check-server-safe-markers.mjs`).
+export { CLIENT_GLOBALS, DYNAMIC_EVAL_SINKS, checkSourceFile };
 
-const allFiles = [
-  ...listSourceFiles(COMPONENTS_DIR),
-  ...listSourceFiles(HOOKS_DIR),
-];
+// ─── Main (solo si se invoca como CLI) ─────────────────────────
 
-const markedFiles = allFiles.filter((f) =>
-  readFileSync(f, "utf8").includes("@server-safe"),
-);
+const isCliEntry =
+  import.meta.url === new URL(`file://${process.argv[1]}`).href;
 
-const allViolations = [];
-for (const file of markedFiles) {
-  const content = readFileSync(file, "utf8");
-  const relPath = relative(repoRoot, file);
-  allViolations.push(...checkSourceFile(content, relPath));
-}
+if (isCliEntry) {
+  const allFiles = [
+    ...listSourceFiles(COMPONENTS_DIR),
+    ...listSourceFiles(HOOKS_DIR),
+  ];
 
-if (allViolations.length === 0) {
-  console.log(
-    `✓ @server-safe invariant holds (${String(markedFiles.length)} files marked, 0 violations) [AST]`,
+  const markedFiles = allFiles.filter((f) =>
+    readFileSync(f, "utf8").includes("@server-safe"),
   );
-  process.exit(0);
-}
 
-console.error(
-  `\n${String(allViolations.length)} @server-safe violation(s) detected:\n`,
-);
-for (const v of allViolations) {
-  const loc = v.line !== undefined ? `:${String(v.line)}` : "";
-  console.error(`  [${v.rule}] ${v.file}${loc}`);
-  console.error(`    ${v.detail}`);
+  const allViolations = [];
+  for (const file of markedFiles) {
+    const content = readFileSync(file, "utf8");
+    const relPath = relative(repoRoot, file);
+    allViolations.push(...checkSourceFile(content, relPath));
+  }
+
+  if (allViolations.length === 0) {
+    console.log(
+      `✓ @server-safe invariant holds (${String(markedFiles.length)} files marked, 0 violations) [AST]`,
+    );
+    process.exit(0);
+  }
+
+  console.error(
+    `\n${String(allViolations.length)} @server-safe violation(s) detected:\n`,
+  );
+  for (const v of allViolations) {
+    const loc = v.line !== undefined ? `:${String(v.line)}` : "";
+    console.error(`  [${v.rule}] ${v.file}${loc}`);
+    console.error(`    ${v.detail}`);
+  }
+  console.error(
+    `\nFix options:\n` +
+      `  - Remove @server-safe marker if the component genuinely needs client APIs.\n` +
+      `  - Guard the access with \`typeof X !== "undefined"\` if it's truly conditional.\n` +
+      `  - Move the access inside useEffect/event handler (no render side-effect).\n` +
+      `  - For dynamic eval sinks (eval/Function): no guard available — refactor.\n`,
+  );
+  process.exit(1);
 }
-console.error(
-  `\nFix options:\n` +
-    `  - Remove @server-safe marker if the component genuinely needs client APIs.\n` +
-    `  - Guard the access with \`typeof X !== "undefined"\` if it's truly conditional.\n` +
-    `  - Move the access inside useEffect/event handler (no render side-effect).\n`,
-);
-process.exit(1);
