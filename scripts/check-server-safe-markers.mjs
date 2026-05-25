@@ -194,7 +194,7 @@
  * No acepta flags — invariante binario.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, resolve, join, relative } from "node:path";
 import ts from "typescript";
 
@@ -1224,8 +1224,14 @@ export { CLIENT_GLOBALS, DYNAMIC_EVAL_SINKS, checkSourceFile };
 
 // ─── Main (solo si se invoca como CLI) ─────────────────────────
 
+// Detección CLI-entry robusta frente a `process.argv[1]` relativo
+// (caso normal cuando npm invoca el script: `node scripts/check-...mjs`
+// resuelve `argv[1]` al string literal pasado, NO al path absoluto).
+// `pathToFileURL` normaliza ambos casos (relativo y absoluto) al
+// mismo file URL absoluto que `import.meta.url`. Codex P1 sobre PR #99.
 const isCliEntry =
-  import.meta.url === new URL(`file://${process.argv[1]}`).href;
+  process.argv[1] !== undefined &&
+  pathToFileURL(process.argv[1]).href === import.meta.url;
 
 if (isCliEntry) {
   const allFiles = [
