@@ -70,6 +70,15 @@ jobs:
       - name: Build (lib + dts + styles)
         run: npm run build
 
+      - name: state.css exclusion gate (H-07/D9)
+        # Verifica que dist/index.js no arrastra utilities pseudo-class
+        # del state.css (713 KB gzip standalone). Si un componente del
+        # DS empieza a referenciar clases con prefijo `hover:ig-`,
+        # `focus:ig-`, etc., este gate lo caza pre-publish. Antes de
+        # beta.25 el script existía en verify:unit pero NO en CI; el
+        # cruce de gate reviews (Codex + Claude) lo cazó.
+        run: npm run test:state-css-exclusion
+
       - name: Publint gate (D1-P3)
         # Valida package.json exports + types resolution. Aceptamos
         # warnings actualmente (1 sobre types ESM en condición require);
