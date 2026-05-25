@@ -7,6 +7,17 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+(sin cambios aún)
+
+## [1.0.0-beta.25] — 2026-05-25 (gate review cruce cycle complete)
+
+Plan **claudegate4** + cruce de gate reviews independientes (GPT Codex +
+Claude Opus 4.7 v2 + Opus 4.7 genérico) cierra los 5 blockers + 2 HIGH del
+cruce sobre `1.0.0-beta.24`. 8 PRs mergeados (#96–#101 + #103), 2 fallos
+WCAG cerrados (1.4.11 AA + 1.4.1 A), 2 codex P1/P2 cazados sobre mis
+propios fixes, 1 hallazgo nuevo (alias `@/` en `.d.ts`) descubierto y
+resuelto durante el ciclo, 1 decision doc nuevo (D12 i18n).
+
 ### Added
 
 - **`Rating.getStarLabel` prop**: override del aria-label por estrella
@@ -54,9 +65,9 @@ versionado [SemVer](https://semver.org/lang/es/).
   implementación lo abandonó por opacity-based). Sin consumers reales
   pre-1.0.0, lo eliminamos para reducir surface API. La asimetría con
   `--ig-rating-filled` (que sí queda público porque permite override
-  del cardinal `rutilus`) es deliberada: el empty se inline a
-  `--ig-neutral-500` por ser un color flat sin justificación de
-  customización individual.
+  del cardinal `rutilus`) es deliberada: el empty consume la capa
+  semántica de foreground atenuado (`--ig-text-muted`) por ser un
+  color flat sin justificación de customización individual.
 
 ## [1.0.0-beta.24] — 2026-05-19 (D1 server-safe infrastructure complete)
 
