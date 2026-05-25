@@ -9066,24 +9066,34 @@ DOS MODOS:
 
 ESTRUCTURA:
 <div class="ig-rating">
-  <span class="ig-star ig-star-filled">★</span>
-  <span class="ig-star ig-star-filled">★</span>
-  <span class="ig-star ig-star-filled">★</span>
-  <span class="ig-star">★</span>
-  <span class="ig-star">★</span>
+  <span class="ig-star ig-star-filled" aria-hidden="true"></span>
+  <span class="ig-star ig-star-filled" aria-hidden="true"></span>
+  <span class="ig-star ig-star-filled" aria-hidden="true"></span>
+  <span class="ig-star" aria-hidden="true"></span>
+  <span class="ig-star" aria-hidden="true"></span>
 </div>
 
 \3c !-- Solo lectura -->
 <div class="ig-rating ig-rating-readonly">
-  <span class="ig-star ig-star-filled">★</span>
+  <span class="ig-star ig-star-filled" aria-hidden="true"></span>
   ...
 </div>
 
 CÓMO USAR:
 1. Contenedor con ig-rating
-2. 5 elementos ig-star (o los que quieras)
-3. Añadir ig-star-filled a las estrellas llenas
-4. Añadir ig-rating-readonly si solo muestra (no interactivo)
+2. 5 elementos ig-star vacíos (el glifo lo aporta CSS via ::before)
+3. Añadir ig-star-filled a las estrellas llenas (filled = ★, empty = ☆)
+4. aria-hidden="true" porque la verdad semántica del rating viaja por el
+   contenedor (role + aria) — los glifos son decorativos
+5. Añadir ig-rating-readonly si solo muestra (no interactivo)
+
+DIFERENCIACIÓN (a11y crítica):
+- **Forma** (★ U+2605 filled vs ☆ U+2606 empty) + **color** (rutilus
+  vs text-muted). Dos canales independientes. Sobrevive a daltonismo,
+  forced-colors y escala de grises (issue #102, WCAG 1.4.1 nivel A).
+- Glifo state-driven via `content` en `::before` para que la regla
+  CSS-only no obligue al consumer a meter el carácter correcto en
+  su HTML — la clase decide la forma.
 
 CUÁNDO USAR:
 - Reseñas de productos
@@ -9099,32 +9109,43 @@ CUÁNDO USAR:
 
 .ig-star {
   font-size: var(--ig-rating-size);
-  /* empty: --ig-text-muted, no un token propio ni el primitivo de escala.
-   * La intención "atenuado/secundario" coincide con "estrella no
-   * seleccionada". Revisar SOLO si en el futuro aparece una capa icon-*
-   * con contraste propio. Pasa WCAG 1.4.11 ≥3:1 vs --ig-bg-base con
-   * margen amplio (light 6.67:1, dark 5.90:1). */
+  /* COLOR — canal 1 (WCAG 1.4.11 AA, ≥3:1 vs --ig-bg-base con margen):
+   * empty consume `--ig-text-muted` (capa semántica de foreground
+   * atenuado — coincide con "estrella no seleccionada"). Pasa light
+   * 6.67:1, dark 5.90:1.
+   *
+   * FORMA — canal 2 (WCAG 1.4.1 A — issue #102): el `::before` con
+   * `content` separa la distinción del color. Filled = ★ (U+2605
+   * BLACK STAR, solid). Empty = ☆ (U+2606 WHITE STAR, outline). Glifos
+   * con code points distintos → sobreviven a `forced-colors: active`
+   * y a escala de grises por SHAPE, no solo color.
+   *
+   * Glifo decorativo: la verdad semántica del rating viaja por
+   * `role="radiogroup"` + `aria-checked` + label por estrella. El
+   * `::before` no recibe foco ni aparece en accessibility tree —
+   * tradicionalmente los SR ignoran el `content` de pseudoelementos;
+   * `aria-hidden` en el span/button reafirma. */
   color: var(--ig-text-muted);
   cursor: pointer;
   line-height: 1;
   transition: color var(--ig-transition-fast);
 }
 
-/* Estado filled — aplica el cardinal `rutilus` (token `--ig-rating-filled`).
- * Cubre ambos caminos de markup: CSS-only (`.ig-star.filled`) y JSX
- * (`.ig-star-filled` del button). El span wrapper interno `.ig-star-glyph`
- * del camino JSX hereda color del button parent automáticamente — sin
- * estilos propios.
- *
- * Cambio raíz del cruce beta.25: pre-beta.25 el empty se comunicaba via
- * `opacity: 0.32` sobre el color filled (codex midió 1.885:1 light /
- * 2.165:1 dark — ambos < WCAG 1.4.11 ≥3:1 para UI components). La opacity
- * también atenuaba el focus-ring del button focusable. Reemplazo: color
- * flat real en empty (neutral-500) que pasa contraste y deja el focus-ring
- * intacto al 100%. */
+.ig-star::before {
+  content: "\2606"; /* ☆ U+2606 WHITE STAR (empty default) */
+}
+
+/* Filled — color cardinal `rutilus` + glifo ★ U+2605 BLACK STAR.
+ * Cubre ambos caminos: CSS-only (`.ig-star.filled`) y JSX
+ * (`.ig-star-filled` del button). */
 .ig-star-filled,
 .ig-star.filled {
   color: var(--ig-rating-filled);
+}
+
+.ig-star-filled::before,
+.ig-star.filled::before {
+  content: "\2605"; /* ★ U+2605 BLACK STAR (filled) */
 }
 
 /* Hover preview lo gestiona JSX vía `setHover` aplicando `ig-star-filled`

@@ -20,6 +20,28 @@ describe("Rating", () => {
     expect(screen.getByRole("radio", { name: "1 estrella" })).toBeInTheDocument();
   });
 
+  it("canal de forma: button NO contiene glifo literal — viene de CSS ::before (WCAG 1.4.1, #102)", () => {
+    render(<Rating value={3} max={5} />);
+    // Pre-canal-de-forma: `<button><span>★</span></button>`. Post: button vacío.
+    // El glifo (★ filled / ☆ empty) lo aporta `.ig-star::before { content }`
+    // controlado por la clase de estado. Pseudo-elementos NO entran al accessibility
+    // tree → el valor del rating viaja solo por aria-label (verdad para AT).
+    for (const star of screen.getAllByRole("radio")) {
+      expect(star).toHaveTextContent("");
+      expect(star.children).toHaveLength(0);
+    }
+  });
+
+  it("canal de forma: clase `ig-star-filled` aplicada solo a las primeras N (state-driven)", () => {
+    render(<Rating value={2} max={5} />);
+    const stars = screen.getAllByRole("radio");
+    expect(stars[0]).toHaveClass("ig-star-filled");
+    expect(stars[1]).toHaveClass("ig-star-filled");
+    expect(stars[2]).not.toHaveClass("ig-star-filled");
+    expect(stars[3]).not.toHaveClass("ig-star-filled");
+    expect(stars[4]).not.toHaveClass("ig-star-filled");
+  });
+
   it("getStarLabel sobrescribe el aria-label por estrella (D12 i18n)", () => {
     render(
       <Rating
