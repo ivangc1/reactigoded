@@ -84,6 +84,21 @@ jobs:
         # export, este typecheck falla.
         run: npm run test:rsc-fixture
 
+      - name: Consumer types typecheck (beta.25 B3 + B3.alias-leak)
+        # Simula a un consumer enterprise con `skipLibCheck: false`
+        # sobre los .d.ts publicados. Caza dos clases de bug:
+        #   1. .d.ts autocontradictorios (Step.d.ts pre-B3:
+        #      destructuring de props @internal que stripInternal había
+        #      borrado). Codex BLOCKER 3 del gate review beta.25.
+        #   2. Alias `@/...` no resueltos en .d.ts (AlertDialog/
+        #      ThemeToggle pre-B3.alias-leak). tsc emite paths sin
+        #      resolver; `tsc-alias` corre en `build` para reescribir
+        #      a relative. Este gate caza regresiones del approach.
+        # Diferencia clave con test:rsc-fixture: `skipLibCheck: false`
+        # (vs true), valida CADA .d.ts referenciado como lo haría un
+        # consumer real.
+        run: npm run test:consumer-types
+
       - name: Bundle has no dev warns (B-07 follow-up, post-RC1 refined)
         # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`
         # para que esbuild/Vite los hagan DCE en producción. Si una
