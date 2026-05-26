@@ -66,12 +66,11 @@ export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
  * - `useFloatingNode`: registro en el tree para anidación.
  * - `<FloatingFocusManager>`: focus trap + return al trigger al cerrar.
  *
- * **Positioning**: actualmente CSS-driven (la clase `.ig-menu-open` +
- * `.ig-menu-right`/`.ig-menu-up` controla layout). FUI computa
- * `floatingStyles` internamente para el caso futuro (overflow:hidden
- * de ancestor) pero no se aplican porque el patrón actual del DS es
- * inline-positioned. Si en 1.1+ aparece overflow-clipping reportado,
- * se activa `FloatingPortal` y `floatingStyles` como opt-in.
+ * **Positioning**: FUI completo desde D2/beta.24. `MenuContent` se monta
+ * en `<FloatingPortal>` y aplica `floatingStyles` inline con
+ * `flip`/`shift`/`offset`; además expone `data-side`/`data-align` para
+ * hooks CSS de animación o edge styling. El wrapper `.ig-menu` conserva
+ * solo el trigger/contexto, no posiciona ni muestra el content.
  *
  * Modo controlado: pasa `open` + `onOpenChange`. Modo no controlado: omite `open`.
  *
