@@ -50,9 +50,29 @@ describe("server-safe gate — CLIENT_GLOBALS catálogo ampliado (beta.25)", () 
     ["caches", `caches.open("v1");`],
     ["FileReader", `const r = new FileReader();`],
     ["getComputedStyle", `const s = getComputedStyle(document.body);`],
+    ["getSelection", `const s = getSelection();`],
+    ["matchMedia", `const m = matchMedia("(prefers-color-scheme: dark)");`],
+    ["scrollTo", `scrollTo(0, 0);`],
+    ["scrollBy", `scrollBy(0, 10);`],
     ["alert", `alert("hi");`],
     ["confirm", `confirm("ok?");`],
     ["prompt", `prompt("name?");`],
+    ["print", `print();`],
+    ["open", `open("/docs");`],
+    ["close", `close();`],
+    ["EventSource", `const es = new EventSource("/events");`],
+    ["Notification", `new Notification("hi");`],
+    ["visualViewport", `const h = visualViewport.height;`],
+    ["Animation", `const a = new Animation();`],
+    ["KeyframeEffect", `const k = new KeyframeEffect(document.body, []);`],
+    ["DOMParser", `const p = new DOMParser();`],
+    ["XPathEvaluator", `const x = new XPathEvaluator();`],
+    ["Image", `const img = new Image();`],
+    ["Audio", `const audio = new Audio();`],
+    ["Worker", `const worker = new Worker("/worker.js");`],
+    ["SharedWorker", `const worker = new SharedWorker("/worker.js");`],
+    ["customElements", `customElements.define("x-probe", class extends HTMLElement {});`],
+    ["speechSynthesis", `speechSynthesis.cancel();`],
   ])(
     "caza acceso bare a `%s` en render path",
     (api, body) => {
@@ -65,6 +85,9 @@ describe("server-safe gate — CLIENT_GLOBALS catálogo ampliado (beta.25)", () 
   it("CLIENT_GLOBALS exporta el catálogo completo con browser-only adds", () => {
     expect(CLIENT_GLOBALS.has("localStorage")).toBe(true);
     expect(CLIENT_GLOBALS.has("screen")).toBe(true);
+    expect(CLIENT_GLOBALS.has("matchMedia")).toBe(true);
+    expect(CLIENT_GLOBALS.has("DOMParser")).toBe(true);
+    expect(CLIENT_GLOBALS.has("Worker")).toBe(true);
     expect(CLIENT_GLOBALS.has("IntersectionObserver")).toBe(true);
     // Sanity: existentes no removidos.
     expect(CLIENT_GLOBALS.has("window")).toBe(true);

@@ -108,6 +108,15 @@ jobs:
         # consumer real.
         run: npm run test:consumer-types
 
+      - name: Consumer types typecheck (NodeNext ESM)
+        # Gate v4/beta.26: el fixture Bundler anterior no detectaba
+        # specifiers relativos sin extensión en `.d.ts` publicados.
+        # Consumers ESM con `moduleResolution: NodeNext` sí los rechazan
+        # (TS2834). Este gate fuerza `skipLibCheck:false` + NodeNext para
+        # cubrir el modo ESM estricto que ATTW habría auditado si no
+        # crasheara en este entorno.
+        run: npm run test:consumer-types:nodenext
+
       - name: Bundle has no dev warns (B-07 follow-up, post-RC1 refined)
         # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`
         # para que esbuild/Vite los hagan DCE en producción. Si una
