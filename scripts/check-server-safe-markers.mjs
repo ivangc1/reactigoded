@@ -193,15 +193,16 @@
  *
  * No acepta flags — invariante binario.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, resolve, join, relative } from "node:path";
+import { dirname, resolve, join, relative, sep as pathSep } from "node:path";
 import ts from "typescript";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
 const COMPONENTS_DIR = resolve(repoRoot, "src/components");
 const HOOKS_DIR = resolve(repoRoot, "src/hooks");
+const SRC_ROOT = resolve(repoRoot, "src");
 
 const CLIENT_GLOBALS = new Set([
   "document",
@@ -916,19 +917,346 @@ function isNonReferencePosition(node) {
 // así que `typeof window` solo (sin acceso) ni se detecta ni se
 // flagea, que es el comportamiento correcto.
 
+// ─── Cross-module smuggling (beta.26 HIGH-2) ──────────────────────
+//
+// Hasta beta.25 inclusive, el gate solo analizaba el archivo marcado
+// `@server-safe`. Un componente marcado podía importar un util que
+// internamente accediera `window.X` y el gate no lo veía — silent bypass
+// detectado en cruce reviews beta.25 (Claude HIGH-4).
+//
+// El walker recursivo de imports sigue:
+//   - `import { X } from "./foo"` / `from "@/utils/foo"` (value imports).
+//   - `export { X } from "./bar"` y `export * from "./barrel"` (barrels —
+//     un `@server-safe` que entra por barrel toca el mismo riesgo).
+//
+// EXCLUSIONES:
+//   - `import type { X } from "..."` — no genera runtime. El check sería
+//     ruido y arriesga falsos positivos sobre `.d.ts` puros con `declare`.
+//   - Bare specifiers que no matcheen alias `@/` (`react`, `clsx`,
+//     `@floating-ui/react`, `node:*`) — peer deps / built-ins son
+//     responsabilidad del consumer, no del DS.
+//   - `import("./foo")` dynamic — Node lo soporta legítimamente en SSR.
+//     **HUECO CONOCIDO**: el módulo cargado dinámicamente PUEDE tocar
+//     client globals en su top-level y petar al resolverse en server. No
+//     se cubre en esta iteración (más raro y costoso) — documentado aquí
+//     para que la próxima auditoría no lo reporte como bug sorpresa. Si
+//     se materializa, ampliar el extractor para seguir también el target.
+//
+// RESOLUCIÓN:
+//   - Relativos (`./foo`, `../foo`): resuelven contra el directorio del
+//     importer con cascada `.ts → .tsx → /index.ts → /index.tsx`.
+//   - Alias (`@/foo`): resuelven via `compilerOptions.paths` del
+//     `tsconfig.json` (`@/* → ./src/*`). Misma cascada.
+//   - Si un import relativo/alias NO resuelve a archivo dentro de `src/`,
+//     el gate FALLA RUIDOSAMENTE con `unresolved-import`. Skip silencioso
+//     reproduce el bypass que este gate cierra — peor que un falso
+//     positivo.
+//
+// PERFORMANCE:
+//   - `parseCache: Map<absPath, { sourceFile, content }>` evita re-parsear
+//     un util compartido por N componentes (sin cache, el coste cae a
+//     O(N·M)).
+//   - `visited: Set<absPath>` corta ciclos de imports.
+//
+// REPORTING:
+//   - Las violations transitivas llevan `.chain` con la cadena completa
+//     de imports (paths relativos a repo root): `Rating.tsx → utils/format.ts →
+//     utils/inner.ts`. El path absoluto del container no le sirve a nadie.
+
+const RESOLUTION_EXT_CASCADE = [".ts", ".tsx", "/index.ts", "/index.tsx"];
+
+/**
+ * Lee `compilerOptions.paths` del tsconfig.json del repo. Solo soporta
+ * patterns wildcard (`"@/*": ["./src/*"]`) — el patrón único que usa
+ * este repo. Pattern sin wildcard se ignoran (raro y no presente).
+ *
+ * Devuelve array compilado: `[{ prefix: "@/", targetPrefix: "src/" }, ...]`.
+ */
+function loadTsconfigPaths() {
+  const tsconfigPath = resolve(repoRoot, "tsconfig.json");
+  const text = readFileSync(tsconfigPath, "utf8");
+  // tsconfig.json admite comentarios → usar el parser de tsc, no JSON.parse.
+  const parsed = ts.parseConfigFileTextToJson(tsconfigPath, text);
+  if (parsed.error) {
+    throw new Error(
+      `[server-safe-gate] tsconfig.json parse error: ${ts.flattenDiagnosticMessageText(parsed.error.messageText, "\n")}`,
+    );
+  }
+  const paths = parsed.config?.compilerOptions?.paths;
+  const compiled = [];
+  if (paths && typeof paths === "object") {
+    for (const [pattern, targets] of Object.entries(paths)) {
+      if (!pattern.endsWith("/*")) continue;
+      if (!Array.isArray(targets) || targets.length === 0) continue;
+      const target = targets[0];
+      if (typeof target !== "string" || !target.endsWith("/*")) continue;
+      // Normalizar target: "./src/*" → "src/" (sin leading ./)
+      const targetPrefix = target.slice(0, -1).replace(/^\.\//, "");
+      compiled.push({
+        prefix: pattern.slice(0, -1), // "@/*" → "@/"
+        targetPrefix,
+      });
+    }
+  }
+  return compiled;
+}
+
+let cachedTsconfigPaths = null;
+function getTsconfigPaths() {
+  if (cachedTsconfigPaths === null) {
+    cachedTsconfigPaths = loadTsconfigPaths();
+  }
+  return cachedTsconfigPaths;
+}
+
+/**
+ * Devuelve el primer candidato existente aplicando la cascada de
+ * extensiones, o `null` si ninguno existe. `fileExists` se inyecta para
+ * permitir virtual FS en tests.
+ */
+function tryResolveFile(noExtAbsPath, fileExists) {
+  for (const ext of RESOLUTION_EXT_CASCADE) {
+    const candidate = `${noExtAbsPath}${ext}`;
+    if (fileExists(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Resuelve un module specifier a uno de tres resultados:
+ *   - `{ kind: "internal", absPath }`: archivo dentro de `src/`. Sigue.
+ *   - `{ kind: "external" }`: peer dep / built-in / archivo fuera de src.
+ *     No sigue. Responsabilidad del consumer (o del repo, pero fuera del
+ *     scope del gate de componentes/hooks).
+ *   - `{ kind: "unresolvable", reason }`: relativo o alias que no resuelve
+ *     a ningún archivo. El gate falla ruidosamente — un skip silencioso
+ *     aquí reproduce el bypass que este gate cierra.
+ */
+function resolveImportPath(
+  specifier,
+  importerAbsPath,
+  tsconfigPaths,
+  fileExists = existsSync,
+  rootsOverride,
+) {
+  // `repoRoot` y `srcRoot` se inyectan para que el orquestador pueda
+  // resolver contra un root virtual en tests (la cache real apunta al
+  // disco físico, los tests usan `/repo` simulado). El default es el
+  // path físico del proyecto.
+  const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
+  const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
+
+  // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
+  if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
+    for (const { prefix, targetPrefix } of tsconfigPaths) {
+      if (specifier.startsWith(prefix)) {
+        const tail = specifier.slice(prefix.length);
+        const noExt = resolve(projectRoot, targetPrefix + tail);
+        const resolved = tryResolveFile(noExt, fileExists);
+        if (resolved) {
+          return { kind: "internal", absPath: resolved };
+        }
+        return {
+          kind: "unresolvable",
+          reason: `alias \`${specifier}\` no resolvió en ${relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
+        };
+      }
+    }
+    // No alias match → peer/built-in. No seguimos.
+    return { kind: "external" };
+  }
+  // Relative.
+  const importerDir = dirname(importerAbsPath);
+  const noExt = resolve(importerDir, specifier);
+  const resolved = tryResolveFile(noExt, fileExists);
+  if (resolved) {
+    // Solo seguimos dentro de src/ (proxy para "archivo del DS, no
+    // node_modules, no scripts/ ni fixtures/ ni dist/").
+    const rel = relative(srcRoot, resolved);
+    const inSrc = !rel.startsWith("..") && !rel.startsWith(pathSep);
+    if (inSrc) return { kind: "internal", absPath: resolved };
+    return { kind: "external" };
+  }
+  return {
+    kind: "unresolvable",
+    reason: `relativo \`${specifier}\` no resolvió en ${relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
+  };
+}
+
+/**
+ * Extrae referencias a otros módulos desde un SourceFile:
+ *   - `import [type] { X } from "..."` (con `isTypeOnly` clause-level).
+ *   - `export [type] { X } from "..."` y `export * from "..."` (barrels).
+ *
+ * Cada ref lleva `{ specifier, kind, modulePos }`. `kind` es
+ * `"value"` o `"type-only"`. Los `import("...")` dynamic NO se incluyen
+ * — son hueco conocido documentado en el header del archivo.
+ */
+function extractModuleReferences(sourceFile) {
+  const refs = [];
+  for (const stmt of sourceFile.statements) {
+    if (ts.isImportDeclaration(stmt)) {
+      if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+      const isTypeOnly = stmt.importClause?.isTypeOnly === true;
+      refs.push({
+        specifier: stmt.moduleSpecifier.text,
+        kind: isTypeOnly ? "type-only" : "value",
+        modulePos: stmt.moduleSpecifier.getStart(sourceFile),
+      });
+      continue;
+    }
+    if (
+      ts.isExportDeclaration(stmt) &&
+      stmt.moduleSpecifier &&
+      ts.isStringLiteral(stmt.moduleSpecifier)
+    ) {
+      const isTypeOnly = stmt.isTypeOnly === true;
+      refs.push({
+        specifier: stmt.moduleSpecifier.text,
+        kind: isTypeOnly ? "type-only" : "value",
+        modulePos: stmt.moduleSpecifier.getStart(sourceFile),
+      });
+      continue;
+    }
+  }
+  return refs;
+}
+
+/**
+ * Formatea una cadena de imports para mensaje de error. `chain` es un
+ * array de paths relativos a repo root, en orden de descenso (entrada
+ * primero, archivo con violation último).
+ */
+function formatChain(chain) {
+  if (!chain || chain.length === 0) return "";
+  return chain.join(" → ");
+}
+
+/**
+ * Orquestador recursivo: analiza `entryAbsPath` y todos sus value-imports
+ * transitivos dentro de `src/`. Devuelve violations con `.chain` anotada
+ * cuando vienen de un archivo descendiente.
+ *
+ * Opciones:
+ *   - `tsconfigPaths`: alias compilados. Default: `getTsconfigPaths()`.
+ *   - `readFile(absPath) → string`: inyectable para tests con virtual FS.
+ *   - `fileExists(absPath) → boolean`: idem.
+ *   - `parseCache`: `Map<absPath, { sourceFile, content }>`. Comparte entre
+ *     entradas para amortizar utils compartidos.
+ *   - `visited`: `Set<absPath>` para cortar ciclos.
+ *   - `chain`: cadena acumulada de paths relativos (interno, no setear).
+ */
+function checkFileWithImports(entryAbsPath, options = {}) {
+  const {
+    tsconfigPaths = getTsconfigPaths(),
+    readFile = (p) => readFileSync(p, "utf8"),
+    fileExists = existsSync,
+    parseCache = new Map(),
+    visited = new Set(),
+    chain = [],
+    // `repoRoot` / `srcRoot` se inyectan para tests con virtual FS. En
+    // producción no se setean — defaults a los paths físicos del repo.
+    repoRoot: optsRepoRoot,
+    srcRoot: optsSrcRoot,
+  } = options;
+
+  const effectiveRepoRoot = optsRepoRoot ?? repoRoot;
+  const effectiveSrcRoot =
+    optsSrcRoot ?? (optsRepoRoot ? resolve(optsRepoRoot, "src") : SRC_ROOT);
+
+  const violations = [];
+  if (visited.has(entryAbsPath)) return violations;
+  visited.add(entryAbsPath);
+
+  const relRaw = relative(effectiveRepoRoot, entryAbsPath);
+  const relPath = relRaw.split(pathSep).join("/");
+
+  let cached = parseCache.get(entryAbsPath);
+  if (!cached) {
+    const content = readFile(entryAbsPath);
+    const sourceFile = ts.createSourceFile(
+      relPath,
+      content,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+    cached = { sourceFile, content };
+    parseCache.set(entryAbsPath, cached);
+  }
+
+  // Per-file analysis. Las violations heredan la chain del caller; el
+  // archivo donde aparece la violation se añade al final.
+  const fileViolations = checkSourceFile(
+    cached.content,
+    relPath,
+    cached.sourceFile,
+  );
+  const fullChain = chain.length > 0 ? [...chain, relPath] : null;
+  for (const v of fileViolations) {
+    violations.push(fullChain ? { ...v, chain: fullChain } : v);
+  }
+
+  // Seguir refs (imports + barrels).
+  const refs = extractModuleReferences(cached.sourceFile);
+  for (const ref of refs) {
+    if (ref.kind === "type-only") continue;
+    const resolution = resolveImportPath(
+      ref.specifier,
+      entryAbsPath,
+      tsconfigPaths,
+      fileExists,
+      { repoRoot: effectiveRepoRoot, srcRoot: effectiveSrcRoot },
+    );
+    if (resolution.kind === "external") continue;
+    if (resolution.kind === "unresolvable") {
+      violations.push({
+        file: relPath,
+        rule: "unresolved-import",
+        detail: resolution.reason,
+        ...(fullChain ? { chain: fullChain } : {}),
+      });
+      continue;
+    }
+    const childChain = [...chain, relPath];
+    const childViolations = checkFileWithImports(resolution.absPath, {
+      tsconfigPaths,
+      readFile,
+      fileExists,
+      parseCache,
+      visited,
+      chain: childChain,
+      repoRoot: effectiveRepoRoot,
+      srcRoot: effectiveSrcRoot,
+    });
+    violations.push(...childViolations);
+  }
+
+  return violations;
+}
+
 /**
  * Analiza un source file. Devuelve array de violations.
+ *
+ * @param {string} content - Source text.
+ * @param {string} relPath - Path relativo (para reporting).
+ * @param {ts.SourceFile} [preparsedSourceFile] - SourceFile ya parseado
+ *   (opcional). Si se omite, se parsea aquí. El orquestador
+ *   `checkFileWithImports` lo pre-parsea y comparte vía cache para evitar
+ *   re-parsear utils importados desde N componentes.
  */
-function checkSourceFile(content, relPath) {
+function checkSourceFile(content, relPath, preparsedSourceFile) {
   const violations = [];
 
-  const sourceFile = ts.createSourceFile(
-    relPath,
-    content,
-    ts.ScriptTarget.Latest,
-    /* setParentNodes */ true,
-    relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const sourceFile =
+    preparsedSourceFile ??
+    ts.createSourceFile(
+      relPath,
+      content,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
 
   // Rule 1: no "use client" directive coexisting con @server-safe.
   // Inspect AST directive prologue: walk top-level statements mientras
@@ -1237,12 +1565,29 @@ function checkSourceFile(content, relPath) {
 // ─── Exports (para tests) ──────────────────────────────────────
 //
 // `checkSourceFile`, `CLIENT_GLOBALS` y `DYNAMIC_EVAL_SINKS` se exportan
-// para que `scripts/__test__/server-safe-gate.test.mjs` pueda validar
-// que cada bypass conocido (eval, Function, Reflect.construct, etc.)
-// realmente lo caza el gate sobre fixtures inline. El runtime CLI sigue
-// idéntico — solo se ejecuta cuando este archivo es invocado como
-// entrypoint (`node scripts/check-server-safe-markers.mjs`).
-export { CLIENT_GLOBALS, DYNAMIC_EVAL_SINKS, checkSourceFile };
+// para que `src/_audit/server-safe-gate.test.ts` pueda validar que cada
+// bypass conocido (eval, Function, Reflect.construct, etc.) realmente lo
+// caza el gate sobre fixtures inline.
+//
+// `checkFileWithImports`, `resolveImportPath`, `extractModuleReferences`
+// añadidos en beta.26 HIGH-2 para validar el cierre de smuggling cross-
+// módulo (Claude HIGH-4 del cruce beta.25). Los tests construyen virtual
+// FS con fixtures multi-archivo (componente entry + util sucio + barrel)
+// y comprueban que el orquestador caza la violation con chain completa.
+//
+// El runtime CLI sigue invocando primero `listSourceFiles` + filtro
+// `@server-safe`, pero luego usa `checkFileWithImports` (no
+// `checkSourceFile` directamente) para que el smuggling cross-módulo se
+// chequee también en CI.
+export {
+  CLIENT_GLOBALS,
+  DYNAMIC_EVAL_SINKS,
+  checkSourceFile,
+  checkFileWithImports,
+  resolveImportPath,
+  extractModuleReferences,
+  getTsconfigPaths,
+};
 
 // ─── Main (solo si se invoca como CLI) ─────────────────────────
 
@@ -1265,16 +1610,26 @@ if (isCliEntry) {
     readFileSync(f, "utf8").includes("@server-safe"),
   );
 
+  // Cache compartida cross-entries: un util importado por N componentes
+  // se parsea y analiza UNA vez. Sin esto, el coste pasa de O(N+M) a
+  // O(N·M) (N = marked entries, M = utils tocados). Codex/Claude HIGH-2
+  // del cruce beta.25.
+  const parseCache = new Map();
+  // `visited` se RECREA por entry: si visit-eamos un util al chequear el
+  // primer entry, lo skipearíamos en los siguientes y perderíamos
+  // reporting de la cadena correcta (cada entry necesita ver el path
+  // completo desde sí mismo). Lo que SÍ se comparte es el parseCache.
   const allViolations = [];
   for (const file of markedFiles) {
-    const content = readFileSync(file, "utf8");
-    const relPath = relative(repoRoot, file);
-    allViolations.push(...checkSourceFile(content, relPath));
+    const visited = new Set();
+    allViolations.push(
+      ...checkFileWithImports(file, { parseCache, visited }),
+    );
   }
 
   if (allViolations.length === 0) {
     console.log(
-      `✓ @server-safe invariant holds (${String(markedFiles.length)} files marked, 0 violations) [AST]`,
+      `✓ @server-safe invariant holds (${String(markedFiles.length)} files marked, 0 violations, ${String(parseCache.size)} files analyzed transitively) [AST]`,
     );
     process.exit(0);
   }
@@ -1285,6 +1640,9 @@ if (isCliEntry) {
   for (const v of allViolations) {
     const loc = v.line !== undefined ? `:${String(v.line)}` : "";
     console.error(`  [${v.rule}] ${v.file}${loc}`);
+    if (v.chain && v.chain.length > 1) {
+      console.error(`    via: ${formatChain(v.chain)}`);
+    }
     console.error(`    ${v.detail}`);
   }
   console.error(
@@ -1292,7 +1650,13 @@ if (isCliEntry) {
       `  - Remove @server-safe marker if the component genuinely needs client APIs.\n` +
       `  - Guard the access with \`typeof X !== "undefined"\` if it's truly conditional.\n` +
       `  - Move the access inside useEffect/event handler (no render side-effect).\n` +
-      `  - For dynamic eval sinks (eval/Function): no guard available — refactor.\n`,
+      `  - For dynamic eval sinks (eval/Function): no guard available — refactor.\n` +
+      `  - For transitive violations (with \`via:\` chain): refactor the offending\n` +
+      `    util to be server-safe, OR move the call into a deferred sink in the\n` +
+      `    importer (useEffect / handler), OR break the import.\n` +
+      `  - For unresolved-import: fix the path. The gate fails loudly here to\n` +
+      `    prevent silent bypass — an import we cannot follow is an import we\n` +
+      `    cannot vouch for.\n`,
   );
   process.exit(1);
 }
