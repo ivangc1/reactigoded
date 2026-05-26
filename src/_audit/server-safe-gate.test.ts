@@ -281,6 +281,90 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     ]);
   });
 
+  it("inline `import { type X }` puro NO sigue (codex P2 round 1 sobre #106)", () => {
+    // verbatimModuleSyntax (en este repo) emite el JS preservando el
+    // `type` modifier. TS elide la import completa si TODOS los
+    // specifiers son `type`. Sin chequear specifier-level, mi código
+    // anterior traversaba el módulo.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { type DirtyA, type DirtyB } from "./dirty-types";
+        export function Probe(_a: DirtyA, _b: DirtyB) { return null; }
+      `,
+      "/repo/src/components/Probe/dirty-types.ts": `
+        export type DirtyA = { w: number };
+        export type DirtyB = { h: number };
+        const _side = window.innerWidth;
+      `,
+    });
+    const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    const leak = v.find((x) => x.file.endsWith("Probe/dirty-types.ts"));
+    expect(leak).toBeUndefined();
+  });
+
+  it("mixed `import { Value, type X }` SÍ sigue (algún specifier runtime)", () => {
+    // Si CUALQUIER specifier es value, el módulo se carga en runtime →
+    // hay que seguirlo. Test asegura que el "purely type-only" check
+    // NO se confunde por la presencia de algunos `type` modifiers.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { runtime, type Shape } from "./mixed";
+        export function Probe(_s: Shape) { return <span>{runtime()}</span>; }
+      `,
+      "/repo/src/components/Probe/mixed.ts": `
+        export type Shape = { x: number };
+        export function runtime() { return document.title; }
+      `,
+    });
+    const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    const hit = v.find((x) => x.file.endsWith("Probe/mixed.ts"));
+    expect(hit).toBeDefined();
+  });
+
+  it("inline `export { type X } from` puro NO sigue (codex P2 round 1)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import type { Re } from "./barrel";
+        export function Probe(_r: Re) { return null; }
+      `,
+      "/repo/src/components/Probe/barrel.ts": `
+        export { type Re } from "./types";
+      `,
+      "/repo/src/components/Probe/types.ts": `
+        export type Re = { id: number };
+        const _side = window.innerWidth;
+      `,
+    });
+    const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    const leak = v.find((x) => x.file.endsWith("Probe/types.ts"));
+    expect(leak).toBeUndefined();
+    const barrelHit = v.find((x) => x.file.endsWith("Probe/barrel.ts"));
+    expect(barrelHit).toBeUndefined();
+  });
+
+  it("mixed `export { Value, type X } from` SÍ sigue", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { runtime } from "./barrel";
+        export function Probe() { return <span>{runtime()}</span>; }
+      `,
+      "/repo/src/components/Probe/barrel.ts": `
+        export { runtime, type Shape } from "./impl";
+      `,
+      "/repo/src/components/Probe/impl.ts": `
+        export type Shape = { x: number };
+        export function runtime() { return localStorage.getItem("k"); }
+      `,
+    });
+    const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    const deep = v.find((x) => x.file.endsWith("Probe/impl.ts"));
+    expect(deep).toBeDefined();
+  });
+
   it("`import type` NO sigue al módulo runtime-sucio (no ruido)", () => {
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `

@@ -1084,20 +1084,91 @@ function resolveImportPath(
 }
 
 /**
+ * Devuelve `true` si una `ImportDeclaration` es PURAMENTE type-only en
+ * runtime, es decir TypeScript la elide del JS emitido y el módulo no
+ * se carga. Tres formas reconocidas:
+ *
+ *   - Clause-level: `import type X from "./m"`, `import type { Y } from "./m"`.
+ *   - Inline en todos los specifiers de NamedImports y sin default:
+ *     `import { type A, type B } from "./m"`.
+ *
+ * NO es type-only:
+ *   - Default import value: `import X from "./m"` (incluso si se mezcla
+ *     con specifiers inline type-only — el default sigue siendo runtime).
+ *   - Namespace import: `import * as ns from "./m"` (no admite inline
+ *     `type` por gramática + module sí se carga).
+ *   - Side-effect import: `import "./m"` (sin clause — el módulo se
+ *     ejecuta por sus side-effects). El parser lo deja sin importClause.
+ *   - Mixed: `import { A, type B } from "./m"` — `A` es value, módulo
+ *     se carga, hay que seguirlo.
+ *   - `import {} from "./m"` con NamedImports vacío — TS emite
+ *     `import "./m"`, side-effect runtime. Se sigue.
+ *
+ * Codex P2 round 1 sobre PR #106: clause-level `isTypeOnly` solo cubre
+ * el primer caso. Sin chequear specifier-level se trataban inline-type
+ * como value, traversando módulos type-only y arriesgando falsos
+ * positivos.
+ */
+function isImportPurelyTypeOnly(importDecl) {
+  const ic = importDecl.importClause;
+  if (!ic) return false; // side-effect import
+  if (ic.isTypeOnly === true) return true;
+  if (ic.name) return false; // default import is runtime value
+  const nb = ic.namedBindings;
+  if (!nb) return false;
+  if (ts.isNamespaceImport(nb)) return false;
+  if (ts.isNamedImports(nb)) {
+    if (nb.elements.length === 0) return false; // `import {} from "x"` = side-effect
+    return nb.elements.every((spec) => spec.isTypeOnly === true);
+  }
+  return false;
+}
+
+/**
+ * Equivalente para `ExportDeclaration`. Tres formas type-only puras:
+ *
+ *   - Clause-level: `export type { X } from "./m"`.
+ *   - Inline en todos los specifiers: `export { type A, type B } from "./m"`.
+ *
+ * NO es type-only:
+ *   - `export * from "./m"` (sin clause — barrel runtime).
+ *   - `export * as ns from "./m"` (namespace export — runtime).
+ *   - Mixed: `export { A, type B } from "./m"` — `A` sí runtime.
+ *
+ * Codex P2 round 1 sobre PR #106.
+ */
+function isExportPurelyTypeOnly(exportDecl) {
+  if (exportDecl.isTypeOnly === true) return true;
+  const ec = exportDecl.exportClause;
+  if (!ec) return false; // export * from "./m"
+  if (ts.isNamespaceExport(ec)) return false;
+  if (ts.isNamedExports(ec)) {
+    if (ec.elements.length === 0) return false;
+    return ec.elements.every((spec) => spec.isTypeOnly === true);
+  }
+  return false;
+}
+
+/**
  * Extrae referencias a otros módulos desde un SourceFile:
- *   - `import [type] { X } from "..."` (con `isTypeOnly` clause-level).
- *   - `export [type] { X } from "..."` y `export * from "..."` (barrels).
+ *   - `import { X } from "..."`, `import type { X } from "..."`, etc.
+ *   - `export { X } from "..."`, `export type { X } from "..."`,
+ *     `export * from "..."` (barrels).
  *
  * Cada ref lleva `{ specifier, kind, modulePos }`. `kind` es
- * `"value"` o `"type-only"`. Los `import("...")` dynamic NO se incluyen
- * — son hueco conocido documentado en el header del archivo.
+ * `"value"` o `"type-only"`; este último cubre tanto clause-level
+ * (`import type {...}`) como inline (`import { type X }`) — codex round
+ * 1 sobre #106.
+ *
+ * Los `import("...")` dynamic NO se incluyen — hueco conocido
+ * documentado en el header del archivo.
  */
 function extractModuleReferences(sourceFile) {
   const refs = [];
   for (const stmt of sourceFile.statements) {
     if (ts.isImportDeclaration(stmt)) {
       if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
-      const isTypeOnly = stmt.importClause?.isTypeOnly === true;
+      const isTypeOnly = isImportPurelyTypeOnly(stmt);
       refs.push({
         specifier: stmt.moduleSpecifier.text,
         kind: isTypeOnly ? "type-only" : "value",
@@ -1110,7 +1181,7 @@ function extractModuleReferences(sourceFile) {
       stmt.moduleSpecifier &&
       ts.isStringLiteral(stmt.moduleSpecifier)
     ) {
-      const isTypeOnly = stmt.isTypeOnly === true;
+      const isTypeOnly = isExportPurelyTypeOnly(stmt);
       refs.push({
         specifier: stmt.moduleSpecifier.text,
         kind: isTypeOnly ? "type-only" : "value",
