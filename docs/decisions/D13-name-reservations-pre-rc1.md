@@ -14,10 +14,10 @@ Cada reserva lleva su **semántica explícita** + los nombres adyacentes contra 
 
 ### `Select`
 
-**Semántica reservada**: combobox FUI con anchor positioning, lista de opciones renderizables (custom item content), filtrado/búsqueda opcional, virtualización opcional, portal management vía `reactigoded/floating`.
+**Semántica reservada**: combobox FUI con anchor positioning, lista de opciones renderizables (custom item content), filtrado/búsqueda opcional, virtualización opcional, portal management con primitives FUI (internamente bajo `src/components/floating/`, expuesto al consumer vía root barrel — ver D7).
 
 - **NO usar para**: wrapper sobre `<select>` HTML — eso es `NativeSelect` (ya existe). El día que llegue `Select`, los dos coexisten para casos distintos.
-- **NO usar para**: dropdown menu de acciones — eso es `Menu` (ya existe en `reactigoded/floating`).
+- **NO usar para**: dropdown menu de acciones — eso es `Menu` (ya existe, expuesto en el root barrel de `reactigoded` per D7.5; internamente vive en `src/components/floating/Menu/`).
 
 ### `Form`
 
@@ -66,7 +66,7 @@ Cada reserva lleva su **semántica explícita** + los nombres adyacentes contra 
 
 **Semántica reservada**: menu contextual que se abre vía evento `contextmenu` (right-click / long-press en touch) sobre un target. Posicionado en el cursor.
 
-- **NO usar para**: `Menu` (en `reactigoded/floating`) — `Menu` abre por click sobre un trigger visible explícito (icon, button), posicionado relativo al trigger.
+- **NO usar para**: `Menu` (export en root barrel de `reactigoded`, internamente en `src/components/floating/Menu/`) — `Menu` abre por click sobre un trigger visible explícito (icon, button), posicionado relativo al trigger.
 - **NO usar para**: dropdown que aparece como respuesta a click derecho sobre un dropdown trigger normal — eso sigue siendo `Menu`.
 
 ## Justificación
@@ -112,7 +112,7 @@ Nota operativa: LOW-6 del cruce beta.25 (tracker #161) audita si la separación 
 - **`Tooltip` ≠ `Popover`**: `Tooltip` es transient + descriptivo + manejado por hover/focus, `Popover` será persistente + interactivo + manejado por click. Casos de uso ortogonales.
 - **`Tooltip` ≠ `HoverCard`**: ambos abren por hover, pero `Tooltip` cierra al salir + content textual/breve; `HoverCard` mantiene abierto con grace period + content rich (no interactivo dentro).
 - **`Popover` ≠ `HoverCard`**: trigger (click vs hover) + interactividad dentro (sí vs no).
-- **`Menu` ≠ `ContextMenu`**: `Menu` (en `reactigoded/floating`) abre por click sobre trigger visible; `ContextMenu` interceptará `contextmenu` events (right-click / long-press).
+- **`Menu` ≠ `ContextMenu`**: `Menu` (export root barrel, src en `floating/Menu/`) abre por click sobre trigger visible; `ContextMenu` interceptará `contextmenu` events (right-click / long-press).
 
 ### Por qué `NativeSelect` y no `Select` directamente
 
@@ -159,6 +159,6 @@ Cada reserva se libera por el PR de **introducción real** del componente previs
 ## Referencias
 
 - Cruce A↔B beta.25 §6 punto 10 (`naming reservar Select/Form/Field/...`).
-- D7 (`floating-namespace.md`) — base del subpath `reactigoded/floating` donde irían `Popover`/`HoverCard`/`ContextMenu`.
+- D7 (`floating-namespace.md`) — namespace interno `src/components/floating/` (no subpath público) donde vivirán `Popover`/`HoverCard`/`ContextMenu`. Sus exports llegan al consumer vía root barrel de `reactigoded`.
 - D6 (`dialog-compound.md`) — patrón de compound API que `Form`/`Field` heredarán.
 - [[reactigoded-beta26-progress]] — sesión donde se formalizó.
