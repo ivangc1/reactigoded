@@ -117,6 +117,28 @@ jobs:
         # crasheara en este entorno.
         run: npm run test:consumer-types:nodenext
 
+      - name: Consumer pack tarball gate (MEDIUM-1 beta.26)
+        # Tarball-real-install gate. Diferencia clave vs los dos
+        # `test:consumer-types(:nodenext)` anteriores: aquellos usan
+        # `compilerOptions.paths` para apuntar a `dist/` directamente —
+        # NO ejercitan resolución vía `node_modules`, interpretación del
+        # `exports` field por npm/node real, ni cadena de peer deps
+        # resuelta por npm.
+        #
+        # Este gate hace `npm pack` → instala el tarball en un sandbox
+        # temporal → corre `tsc --noEmit` (Bundler + NodeNext) sobre un
+        # fixture que importa desde "reactigoded" + subpaths
+        # `/server-safe` y `/cn`. Caza el flow END-TO-END que un consumer
+        # real haría tras `npm install reactigoded`.
+        #
+        # Codex propuso este gate en el cruce beta.25 (MEDIUM-1).
+        # Justificación retroactiva: el bug NodeNext .d.ts (259× TS2834
+        # cazado por Codex en sandbox tarball, invisible con `paths`) es
+        # exactamente la clase de regresión que solo emerge con pack
+        # real. Este gate previene regresiones similares durante el
+        # refactor Slot DS-wide upcoming en beta.27.
+        run: npm run test:consumer-pack
+
       - name: Bundle has no dev warns (B-07 follow-up, post-RC1 refined)
         # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`
         # para que esbuild/Vite los hagan DCE en producción. Si una
