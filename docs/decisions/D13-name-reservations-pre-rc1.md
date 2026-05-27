@@ -75,7 +75,7 @@ Cada reserva lleva su **semántica explícita** + los nombres adyacentes contra 
 
 Sin reservar, un PR posterior podría exportar bajo cualquiera de estos nombres un componente diferente (e.g., un `Select` que solo envuelve `<select>` con estilos del DS, sin Floating UI). El día que llegue el verdadero Combobox FUI, el nombre estaría ocupado y romperíamos consumers en 1.x → ese es exactamente el tipo de breaking que rc.1 quiere descartar.
 
-Cada reserva implica un **compromiso de no-introducción** durante la línea 1.x. La introducción real (cuando llegue el componente FUI completo) será una **adición**, no un rename — los consumers que ya usan `NativeSelect`, `Menu`, etc. siguen funcionando, y los que adopten `Select`, `Popover`, etc. lo hacen sobre nombres frescos.
+Cada reserva implica un **compromiso de no-introducción bajo semántica distinta** durante la línea 1.x (no un blanket no-introducción — ver §"Decisión" introductoria + §"Levantamiento de reservas"). La introducción real del componente PREVISTO en su semántica reservada (Popover FUI 1.1.0+, ContextMenu 1.1.0+, etc., per `floating/README.md`) es una **adición**, no un rename — los consumers que ya usan `NativeSelect`, `Menu`, etc. siguen funcionando, y los que adopten `Select`, `Popover`, etc. lo hacen sobre nombres frescos.
 
 ### Coexistencia primitive ↔ compound (Radio/Checkbox + futuros Groups)
 
