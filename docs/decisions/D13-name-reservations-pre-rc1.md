@@ -122,14 +122,18 @@ Nota operativa: LOW-6 del cruce beta.25 (tracker #161) audita si la separación 
 
 ### Inventory actual (verificado 2026-05-26)
 
-```
-Top-level components (31): Accordion, Alert, AlertDialog, Avatar, Badge,
-  Breadcrumb, Button, Card, Checkbox, Chip, Dialog, Divider, Input,
-  NativeSelect, Navbar, Pagination, Progress, Radio, Rating, Sidebar,
-  Skeleton, Slider, Spinner, Stepper, Switch, Table, Tabs, Textarea,
-  ThemeToggle, Timeline, Toast.
+Todos los identifiers listados son exports del **root barrel** de `reactigoded` (single public entry point — `package.json#exports."."`). No hay subpath público dedicado para floating; el agrupamiento `floating/` es organización source-side (`src/components/floating/`) que llega al consumer vía `export * from "./floating"` en `src/components/index.ts`. Ver D7.5.
 
-Floating subpath (3): Menu, Tooltip, primitives.
+```
+Root barrel — exports source-organized en src/components/*/ (31):
+  Accordion, Alert, AlertDialog, Avatar, Badge, Breadcrumb, Button,
+  Card, Checkbox, Chip, Dialog, Divider, Input, NativeSelect, Navbar,
+  Pagination, Progress, Radio, Rating, Sidebar, Skeleton, Slider,
+  Spinner, Stepper, Switch, Table, Tabs, Textarea, ThemeToggle,
+  Timeline, Toast.
+
+Root barrel — exports source-organized en src/components/floating/ (3):
+  Menu, Tooltip, primitives.
 ```
 
 Ninguno de los 8 nombres reservados aparece — la reserva es de futuro,
@@ -143,7 +147,7 @@ que hace este doc es:
 
 No hay gate automático en CI — la cadena `src/components/*/index.ts` no es lo bastante regular para detectar regresiones del API con regex sin falsos positivos. El enforcement es por convención + review.
 
-Si en algún momento la cadena justifica un gate automático (más reservas, más volumen de PRs), se puede añadir `scripts/check-reserved-names.mjs` que liste los exports top-level + subpath floating y falle si alguno matchea esta lista. Hoy es coste/beneficio negativo.
+Si en algún momento la cadena justifica un gate automático (más reservas, más volumen de PRs), se puede añadir `scripts/check-reserved-names.mjs` que liste los exports del root barrel (tanto los de `src/components/*/` como los re-exportados desde `src/components/floating/`) y falle si alguno matchea esta lista. Hoy es coste/beneficio negativo.
 
 ## Levantamiento de reservas
 
