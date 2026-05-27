@@ -6,9 +6,11 @@
 
 ## Decisión
 
-Se reservan los siguientes nombres de exports en el API público del DS — **no se exportarán bajo estos identificadores en 1.0.0** para dejar el espacio libre a componentes Floating UI / compound primitives planeados para 1.x.
+Se reservan los siguientes nombres de exports en el API público del DS. **Reservados contra componentes NO-relacionados** — es decir, durante la línea 1.x ningún PR puede exportar bajo estos identificadores un componente cuya semántica sea distinta a la documentada en esta decisión. La introducción del componente PREVISTO en su semántica reservada (Popover FUI, ContextMenu, etc.) es el camino esperado para "levantar" la reserva — ver §"Levantamiento de reservas" + roadmap en `src/components/floating/README.md` (Popover/HoverCard/ContextMenu/Select/Combobox planeados para 1.1.0+).
 
 Cada reserva lleva su **semántica explícita** + los nombres adyacentes contra los que NO debe usarse. Sin esta delimitación, un PR de buena fe puede reinterpretar `Popover` como "tooltip persistente" o `Field` como "input wrapper genérico" — la reserva queda en pie pero el día que llegue el componente real, el nombre ya estaría ocupado por otra cosa.
+
+**Distinción crítica**: la reserva NO es un compromiso de no-introducción durante 1.x. Es un compromiso de **no-introducción bajo semántica distinta** durante 1.x. Las introducciones planeadas en `floating/README.md` (1.1.0+) son adiciones esperadas que cumplen este D13, no excepciones a él.
 
 ### `Select`
 
@@ -143,12 +145,14 @@ Si en algún momento la cadena justifica un gate automático (más reservas, má
 
 ## Levantamiento de reservas
 
-Cada reserva se libera por PR explícito que:
-1. Introduzca el componente bajo el nombre reservado.
-2. Confirme via tests que cumple las características previstas en la tabla.
-3. Actualice este doc moviéndolo a "Reservas levantadas" con la versión donde se liberó.
+Cada reserva se libera por el PR de **introducción real** del componente previsto (path esperado, alineado con el roadmap de `floating/README.md` para Popover/HoverCard/ContextMenu/Select/Combobox 1.1.0+). El PR de introducción debe:
 
-NO se permite reasignar un nombre reservado a un componente DIFERENTE al previsto sin un nuevo doc D-XX que justifique el cambio de criterio.
+1. Implementar el componente con la **semántica reservada** documentada en esta decisión (no una variante distinta).
+2. Cumplir via tests las características clave de la tabla (anchor positioning para `Popover`, delay para `HoverCard`, etc.).
+3. Actualizar este D13 moviendo la fila a "Reservas levantadas" con la versión donde se liberó + link al PR.
+4. Quedar incluido en CHANGELOG como `Added` (no `BREAKING` — la reserva blindaba este nombre precisamente para que la adición no rompa nada).
+
+**Cambio de criterio**: si en algún momento se decide que el componente reservado se introducirá bajo una semántica DIFERENTE a la prevista (e.g., `Popover` que NO use anchor positioning), requiere un nuevo doc D-XX que justifique el cambio de criterio + supersede la fila correspondiente de este D13. No es necesario para introducciones que respetan la semántica.
 
 ## Referencias
 
