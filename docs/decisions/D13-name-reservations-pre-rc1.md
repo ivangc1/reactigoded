@@ -99,9 +99,11 @@ Y cuando llegue `RadioGroup`, los consumers podrán mezclar:
 </RadioGroup>
 ```
 
-**Paralelo con `Stepper`/`Step`**: `RadioGroup` es a `Radio` lo que `Stepper` es a `Step` — compound context-aware con primitive injectable. `Step` standalone NO existe en el API público (siempre va dentro de `Stepper`) porque un step sin contexto no tiene semántica útil. `Radio` SÍ tiene semántica útil standalone (input HTML válido por sí mismo), por eso se expone también — pero el patrón de injection del compound es el mismo: el container inyecta props (current value, onChange, focus management) que el primitive consume cuando está bajo el contexto.
+**Paralelo con `Stepper`/`Step`**: `RadioGroup` es a `Radio` lo que `Stepper` es a `Step` — compound context-aware con primitive injectable. Ambos primitives (`Step` y `Radio`) **SÍ son exports públicos** (ver `src/components/Stepper/index.ts` + roadmap futuro `Radio`/`RadioGroup`), pero la separación es por **shape de props**, no por visibilidad del componente: el primitive expone `StepProps` (público — children, label, etc.) y mantiene un `StepInternalProps` (interno — current active index, onActivate, onStepKeyDown) marcado `@internal` con `stripInternal`. El compound `Stepper` lo inyecta cuando el primitive vive dentro de su contexto; cuando se renderiza standalone, el primitive tiene defaults sensatos pero pierde la integración con el grupo.
 
-Este patrón cerró el blocker B-STEP en beta.25 (codex BLOCKER 3 del gate review beta.25): `Step` deja de exponer props públicas que solo el `Stepper` debería poder pasar. `Radio`/`RadioGroup` heredará la misma disciplina — props internas que solo `RadioGroup` inyecta van marcadas `@internal` con `stripInternal` (D6/B-STEP playbook).
+Este patrón cerró el blocker B-STEP en beta.25 (codex BLOCKER 3 del gate review beta.25): `StepProps` y `StepInternalProps` quedaron separados para que `skipLibCheck: false` deje de fallar con TS2339 al ver props @internal que `stripInternal` había borrado del .d.ts publicado. `Radio`/`RadioGroup` heredará la misma disciplina — `RadioProps` público estable, `RadioInternalProps` que solo `RadioGroup` inyecta vía contexto (focus management, group value, keyboard navigation handlers), marcados `@internal` con `stripInternal`.
+
+Nota operativa: LOW-6 del cruce beta.25 (tracker #161) audita si la separación `StepProps`/`StepInternalProps` está completa o si quedan props del compound expuestas como públicas. Cualquier residuo cerrará en beta.26+ y servirá de referencia exacta para el split análogo en `RadioGroup`/`CheckboxGroup` cuando lleguen.
 
 **Para `Checkbox` + `CheckboxGroup`**: misma estructura. La diferencia con `Radio` es que el grupo gestiona `values: T[]` (multi-selection) en lugar de un único `value`.
 
