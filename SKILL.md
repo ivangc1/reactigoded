@@ -41,9 +41,11 @@ todas las combinaciones bg/cardinal del tema.**
 
 `Check 3` de `scripts/check-component-contrast.mjs` valida la separación
 perceptual ΔE OKLab entre los cardinales de UI activa (excluye `cinis`,
-que es texto). Política desde `1.0.0-beta.19`:
+que es texto). Política desde `1.0.0-beta.19`, **threshold endurecido en
+beta.27 (#154)** subiendo `error_threshold` 0.05 → 0.07 para blindar el
+invariante sin recalibrar tokens (allowlist v2):
 
-- **ERROR** si `ΔE < 0.05` y el par no está en `scripts/perceptual-allowlist.json`.
+- **ERROR** si `ΔE < 0.07` y el par no está en `scripts/perceptual-allowlist.json`.
 - **ERROR** si un par allowlisted ha derivado más del 5% por debajo de
   su `deltaE_at_decision` registrado (drift detection).
 - **WARN** si `ΔE < 0.10` (par cercano pero aceptable; revisar al
@@ -76,7 +78,7 @@ Para regenerar la tabla: `node scripts/check-component-contrast.mjs --print-perc
 
 | Par | ΔE | Estado |
 |-----|-------|--------|
-| axis-kobalium     | 0.0522 | bajo warn=0.10 (par UI más estrecho del sistema) |
+| axis-kobalium     | 0.0522 | allowlisted (ref=0.0522, ratificado #154 beta.27 vía error_threshold=0.07) |
 | malum-rutilus     | 0.0706 | allowlisted (ref=0.0706, danger vs warning cálidos) |
 | axis-malum        | 0.0929 | bajo warn=0.10 |
 | kobalium-vitreus  | 0.1058 | ok |
@@ -102,9 +104,16 @@ Para regenerar la tabla: `node scripts/check-component-contrast.mjs --print-perc
   icono, Alert con icono), no moviendo más hex. **Allowlisted**.
 - `malum ↔ rutilus` DARK (0.0706): par cálido danger vs warning. Allowlisted
   como decisión consciente; recalibrar bajaría WCAG sobre `fundus`.
-- `axis ↔ kobalium` DARK (0.0522): no allowlisted intencionadamente.
-  Par UI más estrecho del sistema; un drift ligero a la baja debe
-  hacer fallar CI.
+- `axis ↔ kobalium` DARK (0.0522): par UI más estrecho del sistema.
+  Decisión de beta.18 (c8a5202) lo dejó fuera de allowlist con la
+  intención de que un drift a la baja rompiese CI, pero `error_threshold`
+  (0.05) estaba por debajo de 0.0522 — la decisión no era operativa.
+  **Beta.27 (#154) ratificó** la cercanía como excepción consciente
+  vía allowlist explícita + subió `error_threshold` a 0.07. El drift
+  gate (5% por debajo de 0.0522) sigue activo; cualquier par nuevo o
+  degradación adicional bajo 0.07 sin entrada explícita en allowlist
+  rompe CI. Justificación completa y 3 triggers de reapertura en la
+  entry del JSON + tracking en `docs/POST_RC1_BACKLOG.md`. **Allowlisted**.
 
 ## Cinis es un cardinal especial
 

@@ -9,12 +9,12 @@
  *       L_lux + L_nox ≈ 1.16 ± 0.08.
  *   (3) ERROR/WARN: Separación perceptual ΔE OKLab entre cardinales de
  *       UI activa (excluye cinis, que es texto del cuerpo). ERROR si el
- *       par cae bajo `error_threshold` (0.05) salvo allowlist explícita;
- *       WARN si está bajo `warn_threshold` (0.10) o si un par
- *       allowlisted ha derivado más de (1 - drift_tolerance) por debajo
- *       de su valor de decisión. Allowlist en
- *       `scripts/perceptual-allowlist.json`. Modo `--print-perceptual-table`
- *       imprime los 42 valores y sale.
+ *       par cae bajo `error_threshold` (0.07 desde beta.27/#154; antes 0.05)
+ *       salvo allowlist explícita; WARN si está bajo `warn_threshold`
+ *       (0.10) o si un par allowlisted ha derivado más de
+ *       (1 - drift_tolerance) por debajo de su valor de decisión.
+ *       Allowlist en `scripts/perceptual-allowlist.json`. Modo
+ *       `--print-perceptual-table` imprime los 42 valores y sale.
  *
  * Diseñado para correr en CI (rápido, sin browser). Complementa el
  * runner storybook+axe que valida contraste en el DOM real.
