@@ -4,17 +4,6 @@ import { cn } from "@/utils/cn";
 export interface StepProps extends HTMLAttributes<HTMLDivElement> {
   /** Etiqueta debajo del círculo (sólo aplica con `Stepper labeled`). */
   label?: ReactNode | undefined;
-  /**
-   * Índice (1-based) que se muestra dentro del círculo. Lo inyecta el `Stepper`
-   * automáticamente — no lo pases manualmente.
-   */
-  index?: number | undefined;
-  /** Inyectado por `Stepper`. Marca el step actual. */
-  active?: boolean | undefined;
-  /** Inyectado por `Stepper`. Marca el step como completado. */
-  complete?: boolean | undefined;
-  /** Inyectado por `Stepper` cuando usa layout labeled. */
-  labeled?: boolean | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 }
 
@@ -27,9 +16,28 @@ export interface StepProps extends HTMLAttributes<HTMLDivElement> {
  * consumidores con `skipLibCheck: false`). Al sacarlas a un tipo interno que
  * NO se reexporta del barrel, el `.d.ts` público queda coherente.
  *
+ * Beta.27 (#161): completó el split moviendo aquí también `index`, `active`,
+ * `complete` y `labeled` — todas documentadas en su día como "Inyectado por
+ * Stepper, no lo pases manualmente" pero seguían en `StepProps` público,
+ * dejando una asimetría latente. El cast en `cloneElement` ya cubría tanto
+ * `StepProps` como `StepInternalProps`, así que el move es safe (verificado
+ * 0 callers manuales en stories/tests). El `.d.ts` publicado queda con solo
+ * `label` + `ref` + extends `HTMLAttributes`.
+ *
  * @internal
  */
 export interface StepInternalProps {
+  /**
+   * Índice (1-based) que se muestra dentro del círculo. Lo inyecta el
+   * `Stepper` automáticamente.
+   */
+  index?: number | undefined;
+  /** Inyectado por `Stepper`. Marca el step actual. */
+  active?: boolean | undefined;
+  /** Inyectado por `Stepper`. Marca el step como completado. */
+  complete?: boolean | undefined;
+  /** Inyectado por `Stepper` cuando usa layout labeled. */
+  labeled?: boolean | undefined;
   /**
    * Inyectado por `Stepper` cuando es interactivo (`onActiveChange`
    * definido). Convierte el dot en un `<button>` semántico vía
