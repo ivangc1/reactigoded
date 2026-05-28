@@ -81,35 +81,59 @@ describe("AlertDialog", () => {
     spy.mockRestore();
   });
 
-  it("AlertDialogClose cierra via context (sin styling base, codex P1 #87)", async () => {
+  it("AlertDialogClose default render aplica ig-dialog-close styled X (D14 Bloque B BREAKING)", () => {
+    // D14 Bloque B cambia el default de AlertDialogClose: antes unstyled,
+    // ahora icon-button X styled (coherente con DialogClose). El uso como
+    // CTA del footer ahora va por `asChild` (ver tests siguientes).
+    render(
+      <AlertDialog defaultOpen>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <h2>Confirmar</h2>
+            <AlertDialogClose />
+          </AlertDialogHeader>
+        </AlertDialogContent>
+      </AlertDialog>,
+    );
+    const btn = screen.getByRole("button", { name: "Cerrar" });
+    expect(btn).toHaveClass("ig-dialog-close");
+    expect(btn).toHaveTextContent("×");
+  });
+
+  it("AlertDialogClose asChild cierra via context sin ig-dialog-close (D14 Bloque B)", async () => {
+    // Slot pattern: el child del consumer es el elemento renderizado.
+    // AlertDialogClose solo inyecta el close onClick — no aplica
+    // `ig-dialog-close` (asChild = consumer trae su propio styling).
+    // Reemplaza el viejo uso unstyled de AlertDialogClose (pre-beta.27).
     const user = userEvent.setup();
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
     render(
       <AlertDialog defaultOpen>
         <AlertDialogContent>
           <AlertDialogBody>
-            <AlertDialogClose>Aceptar</AlertDialogClose>
+            <AlertDialogClose asChild>
+              <button type="button">Aceptar</button>
+            </AlertDialogClose>
           </AlertDialogBody>
         </AlertDialogContent>
       </AlertDialog>,
     );
     const btn = screen.getByRole("button", { name: "Aceptar" });
-    // Codex P1: AlertDialogClose NO debe aplicar la clase base
-    // `ig-dialog-close` (que estiliza el icono X), porque eso conflict-úa
-    // con `ig-btn-*` que el consumer suele pasar para CTAs Cancel/Confirm.
     expect(btn).not.toHaveClass("ig-dialog-close");
     await user.click(btn);
     expect(closeSpy).toHaveBeenCalled();
     closeSpy.mockRestore();
   });
 
-  it("AlertDialogClose con className consumer NO se mezcla con ig-dialog-close", () => {
+  it("AlertDialogClose asChild con className consumer NO se mezcla con ig-dialog-close", () => {
     render(
       <AlertDialog defaultOpen>
         <AlertDialogContent>
           <AlertDialogBody>
-            <AlertDialogClose className="ig-btn ig-btn-danger">
-              Sí, borrar
+            <AlertDialogClose asChild>
+              <button type="button" className="ig-btn ig-btn-danger">
+                Sí, borrar
+              </button>
             </AlertDialogClose>
           </AlertDialogBody>
         </AlertDialogContent>
@@ -121,19 +145,22 @@ describe("AlertDialog", () => {
     expect(btn).not.toHaveClass("ig-dialog-close");
   });
 
-  it("AlertDialogClose.onClick consumer con preventDefault NO cierra", async () => {
+  it("AlertDialogClose asChild + onClick consumer con preventDefault NO cierra", async () => {
     const user = userEvent.setup();
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
     render(
       <AlertDialog defaultOpen>
         <AlertDialogContent>
           <AlertDialogBody>
-            <AlertDialogClose
-              onClick={(e) => {
-                e.preventDefault();
-              }}
-            >
-              Aceptar
+            <AlertDialogClose asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                }}
+              >
+                Aceptar
+              </button>
             </AlertDialogClose>
           </AlertDialogBody>
         </AlertDialogContent>
@@ -144,7 +171,7 @@ describe("AlertDialog", () => {
     closeSpy.mockRestore();
   });
 
-  it("Composición completa AlertDialog uncontrolled funciona end-to-end", async () => {
+  it("Composición completa AlertDialog uncontrolled funciona end-to-end con asChild", async () => {
     const user = userEvent.setup();
     const showSpy = vi.spyOn(HTMLDialogElement.prototype, "showModal");
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
@@ -157,11 +184,15 @@ describe("AlertDialog", () => {
           </AlertDialogHeader>
           <AlertDialogBody>Esta acción es irreversible.</AlertDialogBody>
           <AlertDialogFooter>
-            <AlertDialogClose className="ig-btn ig-btn-secondary">
-              Cancelar
+            <AlertDialogClose asChild>
+              <button type="button" className="ig-btn ig-btn-secondary">
+                Cancelar
+              </button>
             </AlertDialogClose>
-            <AlertDialogClose className="ig-btn ig-btn-danger">
-              Sí, borrar
+            <AlertDialogClose asChild>
+              <button type="button" className="ig-btn ig-btn-danger">
+                Sí, borrar
+              </button>
             </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogContent>

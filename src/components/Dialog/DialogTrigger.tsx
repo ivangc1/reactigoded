@@ -1,11 +1,34 @@
 "use client";
 
-import type { ButtonHTMLAttributes, Ref } from "react";
+import type { ButtonHTMLAttributes, MouseEvent, Ref } from "react";
+import { Slot } from "@/components/Slot";
 import { useDialogContextRequired } from "./DialogContext";
 
 export interface DialogTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   ref?: Ref<HTMLButtonElement>;
+  /**
+   * Slot pattern (D14): si `true`, clona el child del consumer y le aplica
+   * trigger semantics (`aria-haspopup="dialog"`, `aria-expanded`,
+   * `aria-controls={contentId}` + `onClick` que abre el dialog) sin
+   * renderizar un `<button>` propio. Permite usar cualquier element como
+   * trigger (`<Button>`, `<a>`, custom component) preservando su tipo,
+   * styling y eventos.
+   *
+   * Sin `asChild`, DialogTrigger renderiza un `<button>` plano que envuelve
+   * los children — comportamiento backwards-compat con 1.0.0-beta.26.
+   *
+   * @example
+   * // Slot pattern (recomendado para Buttons del DS):
+   * <DialogTrigger asChild>
+   *   <Button variant="brand">Abrir modal</Button>
+   * </DialogTrigger>
+   *
+   * @example
+   * // Default (backwards-compat):
+   * <DialogTrigger>Abrir</DialogTrigger>
+   */
+  asChild?: boolean;
 }
 
 /**
@@ -13,22 +36,20 @@ export interface DialogTriggerProps
  * relación al SR via `aria-haspopup="dialog"` + `aria-controls={contentId}` +
  * `aria-expanded={open}` (estándar APG para disclosure de dialog).
  *
- * No tiene apariencia propia — es un `<button>` plano para que el consumer
- * componga con `<Button>` o cualquier otro disparador. Si necesitas un
- * disparador con estilos del DS, envuelve un `<Button>` o usa `asChild`-style
- * en futuras iteraciones (no en 1.0).
+ * Dos modos de render:
  *
- * Debe usarse dentro de `<Dialog>`.
+ * - **Default** (`asChild=false`): renderiza un `<button>` plano que envuelve
+ *   los children. Comportamiento idéntico al de 1.0.0-beta.26.
  *
- * @example
- * <Dialog defaultOpen={false}>
- *   <DialogTrigger>
- *     <Button>Abrir modal</Button>
- *   </DialogTrigger>
- *   <DialogContent>...</DialogContent>
- * </Dialog>
+ * - **Slot pattern** (`asChild=true`, D14): clona el child del consumer y
+ *   le aplica los aria props + onClick handler. El child es renderizado
+ *   directamente (no wrapper). Patrón canónico Radix/shadcn.
+ *
+ * Debe usarse dentro de `<Dialog>`. Es client-component (`"use client"`)
+ * porque consume el `DialogContext` via hook — NO marcado server-safe.
  */
 export function DialogTrigger({
+  asChild = false,
   type = "button",
   onClick: consumerOnClick,
   children,
@@ -36,6 +57,42 @@ export function DialogTrigger({
   ...rest
 }: DialogTriggerProps) {
   const { open, setOpen, contentId } = useDialogContextRequired();
+
+  const handleOpen = (e: MouseEvent<HTMLElement>) => {
+    // Chain consumer handler primero (D14 §"Event chain order"). Si
+    // hace preventDefault, abortamos la apertura.
+    consumerOnClick?.(e as MouseEvent<HTMLButtonElement>);
+    if (e.defaultPrevented) return;
+    setOpen(true);
+  };
+
+  if (asChild) {
+    // Slot path: el child del consumer recibe los aria + onClick via
+    // composición. Forwardamos `type` al Slot (codex P2 round 1 sobre
+    // #111) para que la safety semantics se preserve: si el child es
+    // un native `<button>` sin type en un <form>, defaultearía a
+    // `type="submit"` y podría disparar submit accidental al abrir el
+    // dialog. El wrapper default `type="button"` viaja al Slot y se
+    // aplica solo si el child no tiene type propio (Slot merge: child
+    // wins on collision). Consumer puede override con
+    // `<DialogTrigger asChild type="submit">` o poniendo `type="submit"`
+    // en el child directamente.
+    return (
+      <Slot
+        {...rest}
+        ref={ref}
+        type={type}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={handleOpen}
+      >
+        {children}
+      </Slot>
+    );
+  }
+
+  // Default render (backwards-compat).
   return (
     <button
       {...rest}
@@ -44,13 +101,7 @@ export function DialogTrigger({
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-controls={contentId}
-      onClick={(e) => {
-        // Codex P2 pattern (chain consumer handler primero): si el
-        // consumer hace preventDefault, no abrimos el dialog.
-        consumerOnClick?.(e);
-        if (e.defaultPrevented) return;
-        setOpen(true);
-      }}
+      onClick={handleOpen}
     >
       {children}
     </button>

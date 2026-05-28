@@ -9,10 +9,10 @@ import {
   AlertDialogHeader,
   AlertDialogTrigger,
 } from "./index";
-// Codex P1 sobre PR #87: AlertDialogClose deja de ser alias de
-// DialogClose (que estiliza X icon). Para el X del header de un
-// AlertDialog importamos DialogClose directamente — comparten Provider
-// y contexto, sigue cerrando vía setOpen(false).
+// D14 Bloque B (beta.27): AlertDialogClose tiene `asChild` para CTAs
+// del footer. Para el X del header sirve tanto `<AlertDialogClose />`
+// (default styled) como `<DialogClose />` directo — comparten provider.
+import { Button } from "@/components/Button";
 import { DialogClose } from "@/components/Dialog";
 
 const meta = {
@@ -43,8 +43,8 @@ export const PorDefecto: Story = {
   },
   render: () => (
     <AlertDialog defaultOpen={false}>
-      <AlertDialogTrigger className="ig-btn ig-btn-danger">
-        Borrar permanentemente
+      <AlertDialogTrigger asChild>
+        <Button variant="danger">Borrar permanentemente</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -55,17 +55,12 @@ export const PorDefecto: Story = {
           eliminarán permanentemente del sistema.
         </AlertDialogBody>
         <AlertDialogFooter>
-          <AlertDialogClose
-            aria-label="Cancelar"
-            className="ig-btn ig-btn-secondary"
-          >
-            Cancelar
+          {/* D14 Bloque B: asChild reemplaza el className="ig-btn..." pattern */}
+          <AlertDialogClose asChild>
+            <Button variant="secondary">Cancelar</Button>
           </AlertDialogClose>
-          <AlertDialogClose
-            aria-label="Sí, borrar"
-            className="ig-btn ig-btn-danger"
-          >
-            Sí, borrar
+          <AlertDialogClose asChild>
+            <Button variant="danger">Sí, borrar</Button>
           </AlertDialogClose>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -105,17 +100,11 @@ export const AllStates: Story = {
           eliminarán permanentemente.
         </AlertDialogBody>
         <AlertDialogFooter>
-          <AlertDialogClose
-            aria-label="Cancelar"
-            className="ig-btn ig-btn-secondary"
-          >
-            Cancelar
+          <AlertDialogClose asChild>
+            <Button variant="secondary">Cancelar</Button>
           </AlertDialogClose>
-          <AlertDialogClose
-            aria-label="Sí, borrar"
-            className="ig-btn ig-btn-danger"
-          >
-            Sí, borrar
+          <AlertDialogClose asChild>
+            <Button variant="danger">Sí, borrar</Button>
           </AlertDialogClose>
         </AlertDialogFooter>
       </AlertDialogContent>

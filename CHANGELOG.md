@@ -7,7 +7,68 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-(sin cambios aún)
+### BREAKING (D14 Bloque B beta.27)
+
+- **`DialogAction` ELIMINADO**. El patrón canónico para CTAs del footer
+  ahora es `<DialogClose asChild>` con un `<Button>` del consumer como
+  child. Migración:
+
+  ```diff
+   <DialogFooter>
+  -  <DialogAction className="ig-btn ig-btn-secondary">Cancelar</DialogAction>
+  -  <DialogAction className="ig-btn ig-btn-brand">Aceptar</DialogAction>
+  +  <DialogClose asChild>
+  +    <Button variant="secondary">Cancelar</Button>
+  +  </DialogClose>
+  +  <DialogClose asChild>
+  +    <Button variant="brand">Aceptar</Button>
+  +  </DialogClose>
+   </DialogFooter>
+  ```
+
+  Cierra la asimetría léxica `DialogClose styled / DialogAction unstyled /
+  AlertDialogClose clónico` identificada en el cruce reviews beta.25.
+
+- **`AlertDialogClose` cambia default render** a icon-button "×" styled
+  (coherente con `DialogClose`). Antes era unstyled `<button>` para usar
+  con `className="ig-btn ig-btn-*"`. Migración para CTAs del footer:
+
+  ```diff
+   <AlertDialogFooter>
+  -  <AlertDialogClose className="ig-btn ig-btn-secondary">Cancelar</AlertDialogClose>
+  -  <AlertDialogClose className="ig-btn ig-btn-danger">Sí, borrar</AlertDialogClose>
+  +  <AlertDialogClose asChild>
+  +    <Button variant="secondary">Cancelar</Button>
+  +  </AlertDialogClose>
+  +  <AlertDialogClose asChild>
+  +    <Button variant="danger">Sí, borrar</Button>
+  +  </AlertDialogClose>
+   </AlertDialogFooter>
+  ```
+
+### Added (D14 Bloque B beta.27)
+
+- **`asChild` prop en `DialogTrigger`, `DialogClose`, `AlertDialogClose`**.
+  Cuando `asChild={true}`, el componente clona el child del consumer y le
+  inyecta semantics (aria + onClick handler) sin renderizar wrapper
+  propio. Patrón canónico Radix/shadcn. Internamente usa el primitive
+  `<Slot>` de D14 Bloque A (PR #110).
+
+  ```tsx
+  <DialogTrigger asChild>
+    <Button variant="brand">Abrir modal</Button>
+  </DialogTrigger>
+  ```
+
+  `AlertDialogTrigger` es alias de `DialogTrigger`, así que también
+  obtiene `asChild` automáticamente.
+
+  Sin `asChild`, comportamiento idéntico a 1.0.0-beta.26 (backwards-compat
+  para DialogTrigger y DialogClose; AlertDialogClose es BREAKING — ver arriba).
+
+- **`<Slot>` primitive interno** en `src/components/Slot/` — no exportado
+  al consumer, solo usado por components del DS via `asChild` opt-in.
+  Ver D14 + PR #110 para diseño completo.
 
 ## [1.0.0-beta.25] — 2026-05-25 (gate review cruce cycle complete)
 
