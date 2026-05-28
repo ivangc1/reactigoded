@@ -8,8 +8,8 @@ export interface TabsContentProps extends HTMLAttributes<HTMLDivElement> {
   /** Identificador del tab al que pertenece este panel. */
   value: string;
   /** Si `true`, el panel se mantiene en el DOM aunque no sea el activo (oculto con `hidden`). */
-  keepMounted?: boolean;
-  ref?: Ref<HTMLDivElement>;
+  keepMounted?: boolean | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

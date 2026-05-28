@@ -3,8 +3,8 @@ import { cn } from "@/utils/cn";
 
 export interface SidebarHeaderProps extends HTMLAttributes<HTMLDivElement> {
   /** Icono / logo a la izquierda. Visible incluso colapsada. */
-  icon?: ReactNode;
-  ref?: Ref<HTMLDivElement>;
+  icon?: ReactNode | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

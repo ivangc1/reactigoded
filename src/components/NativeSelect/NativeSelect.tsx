@@ -14,14 +14,14 @@ export type NativeSelectState = "default" | "error" | "success";
 
 export interface NativeSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   /** Estado de validación visual. */
-  state?: NativeSelectState;
+  state?: NativeSelectState | undefined;
   /**
    * IDs de elementos descriptivos (`Helper`/`ErrorText`) combinados en
    * `aria-describedby`. Acepta un id o lista de ids. Si pasas también
    * `aria-describedby` directo (vía rest), AMBOS se concatenan.
    */
-  describedBy?: string | string[];
-  ref?: Ref<HTMLSelectElement>;
+  describedBy?: string | string[] | undefined;
+  ref?: Ref<HTMLSelectElement> | undefined;
 }
 
 /**

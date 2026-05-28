@@ -16,9 +16,9 @@ export type InputState = "default" | "error" | "success";
 export interface InputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   /** Tamaño del input. `md` no añade clase. */
-  size?: InputSize;
+  size?: InputSize | undefined;
   /** Estado de validación visual. `error` y `success` aplican color y borde. */
-  state?: InputState;
+  state?: InputState | undefined;
   /**
    * IDs de elementos descriptivos (típicamente `Helper`/`ErrorText`) que se
    * combinan en `aria-describedby`. Acepta un id o lista de ids.
@@ -33,8 +33,8 @@ export interface InputProps
    * <Helper id={helperId}>...</Helper>
    * <ErrorText id={errorId}>...</ErrorText>
    */
-  describedBy?: string | string[];
-  ref?: Ref<HTMLInputElement>;
+  describedBy?: string | string[] | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 /**

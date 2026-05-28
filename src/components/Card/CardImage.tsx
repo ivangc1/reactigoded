@@ -3,10 +3,10 @@ import { cn } from "@/utils/cn";
 
 export interface CardImageProps extends ImgHTMLAttributes<HTMLImageElement> {
   /** Si la imagen va en la parte superior de la card (esquinas top redondeadas). */
-  top?: boolean;
+  top?: boolean | undefined;
   /** Texto alternativo obligatorio para a11y. */
   alt: string;
-  ref?: Ref<HTMLImageElement>;
+  ref?: Ref<HTMLImageElement> | undefined;
 }
 
 /**

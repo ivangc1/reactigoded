@@ -4,8 +4,8 @@ import { cn } from "@/utils/cn";
 export interface NavbarLinkProps
   extends AnchorHTMLAttributes<HTMLAnchorElement> {
   /** Marca el link como activo (`aria-current="page"`). */
-  active?: boolean;
-  ref?: Ref<HTMLAnchorElement>;
+  active?: boolean | undefined;
+  ref?: Ref<HTMLAnchorElement> | undefined;
 }
 
 /**

@@ -13,15 +13,15 @@ export type ProgressSize = "sm" | "md" | "lg";
 
 export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   /** Valor actual (0..max). Ignorado si `indeterminate`. */
-  value?: number;
+  value?: number | undefined;
   /** Valor máximo. Por defecto 100. */
-  max?: number;
+  max?: number | undefined;
   /** Color del progress bar. */
-  variant?: ProgressVariant;
+  variant?: ProgressVariant | undefined;
   /** Altura del track. */
-  size?: ProgressSize;
+  size?: ProgressSize | undefined;
   /** Modo indeterminado: barra animada sin valor concreto. */
-  indeterminate?: boolean;
+  indeterminate?: boolean | undefined;
   /**
    * Etiqueta accesible (aria-label) cuando el componente no recibe
    * `aria-label` explícito. Default `"Cargando"` (ES intencional —
@@ -37,7 +37,7 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
    * Si pasas `aria-label` como prop HTML estándar, gana sobre
    * `loadingLabel` y `formatLabel`.
    */
-  loadingLabel?: string;
+  loadingLabel?: string | undefined;
   /**
    * Función opcional para formatear el `aria-label` con el porcentaje
    * actual. Útil con sistemas i18n con interpolación. No aplica en
@@ -53,8 +53,8 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
    * />
    * ```
    */
-  formatLabel?: (percent: number) => string;
-  ref?: Ref<HTMLDivElement>;
+  formatLabel?: ((percent: number) => string) | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

@@ -30,14 +30,14 @@ export type ToastPosition =
 
 export interface ToastProviderProps {
   /** Posición del contenedor. Por defecto `"top-right"`. */
-  position?: ToastPosition;
+  position?: ToastPosition | undefined;
   /** Duración por defecto en ms. Toasts individuales pueden sobrescribirla. Por defecto `5000`. */
-  defaultDuration?: number;
+  defaultDuration?: number | undefined;
   /**
    * Nodo donde montar el portal. Por defecto `document.body`. Pasa `null`
    * para renderizar inline (útil en SSR o en tests sin portal).
    */
-  container?: HTMLElement | null;
+  container?: HTMLElement | null | undefined;
   /**
    * Número máximo de toasts visibles a la vez. Cuando se excede, el más
    * antiguo se desmonta automáticamente (FIFO eviction) y se dispara su
@@ -45,7 +45,7 @@ export interface ToastProviderProps {
    * evitar spam visual en bucles de errores de red, validación masiva,
    * etc.
    */
-  maxToasts?: number;
+  maxToasts?: number | undefined;
   /**
    * Función opcional que extrae una clave de identidad del toast. Si la
    * clave de un toast nuevo coincide con una en cola, el nuevo se ignora
@@ -61,8 +61,8 @@ export interface ToastProviderProps {
    * Aplica solo en el momento de la inserción — toasts ya en cola no se
    * fusionan retroactivamente si `dedupeBy` cambia.
    */
-  dedupeBy?: (toast: ToastOptions) => string;
-  children?: ReactNode;
+  dedupeBy?: ((toast: ToastOptions) => string) | undefined;
+  children?: ReactNode | undefined;
 }
 
 /**

@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface InputAddonProps extends HTMLAttributes<HTMLSpanElement> {
-  ref?: Ref<HTMLSpanElement>;
+  ref?: Ref<HTMLSpanElement> | undefined;
 }
 
 /** InputAddon — prefijo/sufijo decorativo dentro de un `InputGroup`.  *

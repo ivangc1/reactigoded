@@ -8,7 +8,7 @@ import { useTabs } from "./TabsContext";
 export interface TabsTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Identificador único del tab. Debe coincidir con el `value` del `TabsContent` correspondiente. */
   value: string;
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 /**

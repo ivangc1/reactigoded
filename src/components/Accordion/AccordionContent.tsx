@@ -10,8 +10,8 @@ export interface AccordionContentProps extends HTMLAttributes<HTMLDivElement> {
    * (útil para preservar estado o accesibilidad asistida).
    * Por defecto el panel se desmonta cuando está cerrado.
    */
-  forceMount?: boolean;
-  ref?: Ref<HTMLDivElement>;
+  forceMount?: boolean | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

@@ -10,7 +10,7 @@ import {
 export interface AccordionItemProps extends HTMLAttributes<HTMLDivElement> {
   /** Identificador único del item dentro del Accordion. */
   value: string;
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

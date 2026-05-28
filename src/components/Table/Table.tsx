@@ -11,26 +11,26 @@ export type TableLayout = "auto" | "fixed";
 
 export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
   /** Filas alternas con color de fondo. */
-  striped?: boolean;
+  striped?: boolean | undefined;
   /** Fila destacada al hover. */
-  hover?: boolean;
+  hover?: boolean | undefined;
   /** Bordes en todas las celdas. */
-  bordered?: boolean;
+  bordered?: boolean | undefined;
   /** Padding reducido. */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** `table-layout`: `auto` (defecto del navegador) o `fixed`. */
-  layout?: TableLayout;
+  layout?: TableLayout | undefined;
   /**
    * Si se proporciona, envuelve la tabla en un `<div>` con scroll horizontal.
    * Útil para tablas anchas en mobile.
    */
-  scrollable?: boolean;
+  scrollable?: boolean | undefined;
   /**
    * Etiqueta accesible del wrapper scrollable. Aplica sólo cuando
    * `scrollable=true`. Por defecto "Tabla con scroll horizontal".
    */
-  scrollAreaLabel?: string;
-  ref?: Ref<HTMLTableElement>;
+  scrollAreaLabel?: string | undefined;
+  ref?: Ref<HTMLTableElement> | undefined;
 }
 
 /**
@@ -87,7 +87,7 @@ export function Table({
 
 export interface TableHeadProps
   extends HTMLAttributes<HTMLTableSectionElement> {
-  ref?: Ref<HTMLTableSectionElement>;
+  ref?: Ref<HTMLTableSectionElement> | undefined;
 }
 /** TableHead — sección `<thead>` de la tabla. */
 export function TableHead({ ref, ...rest }: TableHeadProps) {
@@ -96,7 +96,7 @@ export function TableHead({ ref, ...rest }: TableHeadProps) {
 
 export interface TableBodyProps
   extends HTMLAttributes<HTMLTableSectionElement> {
-  ref?: Ref<HTMLTableSectionElement>;
+  ref?: Ref<HTMLTableSectionElement> | undefined;
 }
 /** TableBody — sección `<tbody>` de la tabla. */
 export function TableBody({ ref, ...rest }: TableBodyProps) {
@@ -105,7 +105,7 @@ export function TableBody({ ref, ...rest }: TableBodyProps) {
 
 export interface TableFootProps
   extends HTMLAttributes<HTMLTableSectionElement> {
-  ref?: Ref<HTMLTableSectionElement>;
+  ref?: Ref<HTMLTableSectionElement> | undefined;
 }
 /** TableFoot — sección `<tfoot>` de la tabla. */
 export function TableFoot({ ref, ...rest }: TableFootProps) {
@@ -113,7 +113,7 @@ export function TableFoot({ ref, ...rest }: TableFootProps) {
 }
 
 export interface TableRowProps extends HTMLAttributes<HTMLTableRowElement> {
-  ref?: Ref<HTMLTableRowElement>;
+  ref?: Ref<HTMLTableRowElement> | undefined;
 }
 /** TableRow — fila `<tr>`. */
 export function TableRow({ ref, ...rest }: TableRowProps) {
@@ -122,7 +122,7 @@ export function TableRow({ ref, ...rest }: TableRowProps) {
 
 export interface TableHeaderCellProps
   extends ThHTMLAttributes<HTMLTableCellElement> {
-  ref?: Ref<HTMLTableCellElement>;
+  ref?: Ref<HTMLTableCellElement> | undefined;
 }
 /** TableHeaderCell — celda `<th>`. Acepta `scope`, `colSpan`, etc. */
 export function TableHeaderCell({ ref, ...rest }: TableHeaderCellProps) {
@@ -131,7 +131,7 @@ export function TableHeaderCell({ ref, ...rest }: TableHeaderCellProps) {
 
 export interface TableCellProps
   extends TdHTMLAttributes<HTMLTableCellElement> {
-  ref?: Ref<HTMLTableCellElement>;
+  ref?: Ref<HTMLTableCellElement> | undefined;
 }
 /** TableCell — celda `<td>`. */
 export function TableCell({ ref, ...rest }: TableCellProps) {
@@ -143,8 +143,8 @@ export type TableCaptionSide = "top" | "bottom";
 export interface TableCaptionProps
   extends HTMLAttributes<HTMLTableCaptionElement> {
   /** Posiciona el caption arriba o abajo de la tabla. */
-  side?: TableCaptionSide;
-  ref?: Ref<HTMLTableCaptionElement>;
+  side?: TableCaptionSide | undefined;
+  ref?: Ref<HTMLTableCaptionElement> | undefined;
 }
 /** TableCaption — `<caption>` de la tabla con prop `side` (top/bottom). */
 export function TableCaption({

@@ -40,23 +40,23 @@ interface CardOwnProps<C extends ElementType = "div"> {
    * (`href` para `<a>`, `to` para react-router, etc.) se tipan
    * automáticamente.
    */
-  as?: C;
+  as?: C | undefined;
   /** Color semántico de la card. */
-  variant?: CardVariant;
+  variant?: CardVariant | undefined;
   /** Apariencia visual. Por defecto `"outline"`. Solo aplica si hay `variant`. */
-  appearance?: CardAppearance;
+  appearance?: CardAppearance | undefined;
   /** Borde más marcado. */
-  bordered?: boolean;
+  bordered?: boolean | undefined;
   /** Sombra elevada. */
-  elevated?: boolean;
+  elevated?: boolean | undefined;
   /** Efecto glass (backdrop-filter). */
-  glass?: boolean;
+  glass?: boolean | undefined;
   /** Hover lift + cursor pointer (úsalo cuando la card es clickable). */
-  interactive?: boolean;
+  interactive?: boolean | undefined;
   /**
    * Ref polimórfica al elemento subyacente. El tipo se infiere de `as`.
    */
-  ref?: ComponentPropsWithRef<C>["ref"];
+  ref?: ComponentPropsWithRef<C>["ref"] | undefined;
 }
 
 export type CardProps<C extends ElementType = "div"> = CardOwnProps<C> &

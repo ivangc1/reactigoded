@@ -196,9 +196,9 @@ export interface TooltipProps {
    */
   text: string | ReactNode;
   /** Posición preferida relativa al child. Por defecto `"top"`. */
-  placement?: TooltipPlacement;
+  placement?: TooltipPlacement | undefined;
   /** Color del tooltip. */
-  variant?: TooltipVariant;
+  variant?: TooltipVariant | undefined;
   /**
    * Elemento envuelto (típicamente un `<button>` o `<a>`). Debe ser
    * un único `ReactElement` HTML — no string, fragment, array ni
@@ -221,9 +221,9 @@ export interface TooltipProps {
    */
   children: ReactElement<HTMLProps<HTMLElement>>;
   /** Delay en ms antes de mostrar al hover. Por defecto `0`. */
-  openDelay?: number;
+  openDelay?: number | undefined;
   /** Delay en ms antes de ocultar al desactivar. Por defecto `0`. */
-  closeDelay?: number;
+  closeDelay?: number | undefined;
   /**
    * Contenedor donde se monta el portal del tooltip. Por defecto
    * `document.body`. También aplica para CSS containment / shadow roots.
@@ -256,7 +256,7 @@ export interface TooltipProps {
    * Acepta `HTMLElement` directo o un `RefObject` (Floating UI
    * resuelve ambos).
    */
-  container?: HTMLElement | React.RefObject<HTMLElement | null> | null;
+  container?: HTMLElement | React.RefObject<HTMLElement | null> | null | undefined;
   /**
    * Cualquier prop adicional (event handlers, `ref`, aria-*, data-*,
    * etc.) que el consumer pase a Tooltip se forwardea al elemento child

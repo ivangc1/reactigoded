@@ -5,7 +5,7 @@ import { cn } from "@/utils/cn";
 import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
 
 export interface NavbarNavProps extends HTMLAttributes<HTMLElement> {
-  ref?: Ref<HTMLElement>;
+  ref?: Ref<HTMLElement> | undefined;
 }
 
 /**

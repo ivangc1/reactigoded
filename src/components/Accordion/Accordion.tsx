@@ -13,35 +13,35 @@ import { AccordionContext } from "./AccordionContext";
 
 type SingleProps = {
   /** Modo: solo un item abierto a la vez. */
-  type?: "single";
+  type?: "single" | undefined;
   /** Item abierto (modo controlado). */
-  value?: string | null;
+  value?: string | null | undefined;
   /** Item inicial abierto (modo no controlado). */
-  defaultValue?: string | null;
+  defaultValue?: string | null | undefined;
   /** Callback al cambiar el item abierto. */
-  onValueChange?: (value: string | null) => void;
+  onValueChange?: ((value: string | null) => void) | undefined;
   /**
    * Si `true`, permite cerrar el único item abierto pulsándolo de nuevo.
    * En `false` (por defecto en single) siempre hay un item abierto.
    */
-  collapsible?: boolean;
+  collapsible?: boolean | undefined;
 };
 
 type MultipleProps = {
   /** Modo: cualquier número de items abiertos. */
   type: "multiple";
   /** Items abiertos (modo controlado). */
-  value?: string[];
+  value?: string[] | undefined;
   /** Items iniciales abiertos (modo no controlado). */
-  defaultValue?: string[];
+  defaultValue?: string[] | undefined;
   /** Callback al cambiar la lista de items abiertos. */
-  onValueChange?: (value: string[]) => void;
+  onValueChange?: ((value: string[]) => void) | undefined;
   collapsible?: never;
 };
 
 export type AccordionProps = (SingleProps | MultipleProps) &
   Omit<HTMLAttributes<HTMLDivElement>, "defaultValue" | "onChange"> & {
-    ref?: Ref<HTMLDivElement>;
+    ref?: Ref<HTMLDivElement> | undefined;
   };
 
 /**
@@ -74,7 +74,7 @@ export function Accordion(props: AccordionProps) {
 }
 
 type BaseProps = Omit<HTMLAttributes<HTMLDivElement>, "defaultValue" | "onChange"> & {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 };
 
 function AccordionSingle({

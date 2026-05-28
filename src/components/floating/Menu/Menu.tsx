@@ -32,18 +32,18 @@ export type MenuDirection = "down" | "up";
 
 export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   /** Estado abierto (modo controlado). Si se omite, el componente gestiona su propio estado. */
-  open?: boolean;
+  open?: boolean | undefined;
   /** Estado inicial (modo no controlado). Por defecto `false`. */
-  defaultOpen?: boolean;
+  defaultOpen?: boolean | undefined;
   /** Callback al abrir/cerrar. Disparado en ambos modos. */
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: ((open: boolean) => void) | undefined;
   /** Alineación horizontal del menu. Por defecto `"left"`. */
-  placement?: MenuAlign;
+  placement?: MenuAlign | undefined;
   /** Hacia dónde abre verticalmente. Por defecto `"down"`. */
-  direction?: MenuDirection;
+  direction?: MenuDirection | undefined;
   /** Si los `MenuItem` cierran el menu al activarse. Por defecto `true`. */
-  closeOnSelect?: boolean;
-  ref?: Ref<HTMLDivElement>;
+  closeOnSelect?: boolean | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

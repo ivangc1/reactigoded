@@ -13,16 +13,16 @@ export type SpinnerSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
   /** Color del spinner. Por defecto `"brand"`. */
-  variant?: SpinnerVariant;
+  variant?: SpinnerVariant | undefined;
   /** Tamaño. `"md"` por defecto. */
-  size?: SpinnerSize;
+  size?: SpinnerSize | undefined;
   /**
    * Etiqueta accesible para SR. Por defecto `"Cargando…"` (ES). Sustituye
    * el `aria-label` del componente para i18n. Si pasas también
    * `aria-label` directo (vía rest), `aria-label` gana sobre `label`.
    */
-  label?: string;
-  ref?: Ref<HTMLSpanElement>;
+  label?: string | undefined;
+  ref?: Ref<HTMLSpanElement> | undefined;
 }
 
 /**

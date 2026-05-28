@@ -11,21 +11,21 @@ import { useSidebar } from "./SidebarContext";
 
 interface CommonProps {
   /** Icono al inicio (siempre visible, incluso colapsada). */
-  icon?: ReactNode;
+  icon?: ReactNode | undefined;
   /** Marca el item como ruta/sección actual. Aplica `aria-current="page"`. */
-  active?: boolean;
+  active?: boolean | undefined;
 }
 
 type AnchorItemProps = CommonProps &
   AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
-    ref?: Ref<HTMLAnchorElement>;
+    ref?: Ref<HTMLAnchorElement> | undefined;
   };
 
 type ButtonItemProps = CommonProps &
   ButtonHTMLAttributes<HTMLButtonElement> & {
     href?: undefined;
-    ref?: Ref<HTMLButtonElement>;
+    ref?: Ref<HTMLButtonElement> | undefined;
   };
 
 export type SidebarItemProps = AnchorItemProps | ButtonItemProps;

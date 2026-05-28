@@ -48,7 +48,7 @@ export type UseControllableStateBaseOptions<T> = {
   /**
    * @internal — Symbol-keyed escape hatch. Ver `SUPPRESS_NO_HANDLER_WARN`.
    */
-  [SUPPRESS_NO_HANDLER_WARN]?: boolean;
+  [SUPPRESS_NO_HANDLER_WARN]?: boolean | undefined;
 };
 
 export interface UseControllableStateInternalOptions<T>
@@ -130,7 +130,7 @@ export interface SetValueOptions {
    * Si `true`, NO se invoca `onChange`. Útil para auto-selects internos
    * y rehidrataciones desde storage que NO son acción del usuario.
    */
-  silent?: boolean;
+  silent?: boolean | undefined;
 }
 
 /**

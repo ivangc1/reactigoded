@@ -5,7 +5,7 @@ import { cn } from "@/utils/cn";
 import { useDialogContextOptional } from "./DialogContext";
 
 export interface DialogHeaderProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

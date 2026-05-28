@@ -14,25 +14,25 @@ import type { Theme } from "@/hooks/useTheme";
 export interface ThemeToggleProps
   extends Omit<SwitchProps, "checked" | "defaultChecked" | "onChange" | "ref"> {
   /** Tema actual (modo controlado). */
-  theme?: Theme;
+  theme?: Theme | undefined;
   /** Tema inicial (modo no controlado). Si se omite, se intenta leer storage. */
-  defaultTheme?: Theme;
+  defaultTheme?: Theme | undefined;
   /** Callback al cambiar de tema. */
-  onThemeChange?: (theme: Theme) => void;
+  onThemeChange?: ((theme: Theme) => void) | undefined;
   /** Clave de localStorage donde se persiste el tema. `null` desactiva la persistencia. */
-  storageKey?: string | null;
+  storageKey?: string | null | undefined;
   /**
    * Atributo donde se aplica el tema. Por defecto `data-theme` en `<html>`.
    * Pasar `null` para no aplicar el tema al DOM (sólo dispara onThemeChange).
    */
-  attribute?: string | null;
+  attribute?: string | null | undefined;
   /**
    * Etiqueta del switch. Por defecto muestra "Dark" / "Light" según el modo.
    * Si se proporciona como string fija, se usa siempre; si es función, recibe
    * el tema actual y devuelve el nodo a renderizar.
    */
-  label?: React.ReactNode | ((theme: Theme) => React.ReactNode);
-  ref?: Ref<HTMLInputElement>;
+  label?: React.ReactNode | ((theme: Theme) => React.ReactNode) | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 const DEFAULT_STORAGE_KEY = "theme";

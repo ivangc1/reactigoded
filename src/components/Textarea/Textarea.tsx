@@ -15,16 +15,16 @@ export type TextareaState = "default" | "error" | "success";
 export interface TextareaProps
   extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   /** Auto-resize basado en contenido. */
-  auto?: boolean;
+  auto?: boolean | undefined;
   /** Estado de validación visual. */
-  state?: TextareaState;
+  state?: TextareaState | undefined;
   /**
    * IDs de elementos descriptivos (`Helper`/`ErrorText`) combinados en
    * `aria-describedby`. Acepta un id o lista de ids. Si pasas también
    * `aria-describedby` directo (vía rest), AMBOS se concatenan.
    */
-  describedBy?: string | string[];
-  ref?: Ref<HTMLTextAreaElement>;
+  describedBy?: string | string[] | undefined;
+  ref?: Ref<HTMLTextAreaElement> | undefined;
 }
 
 /**

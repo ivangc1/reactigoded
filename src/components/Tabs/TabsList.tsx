@@ -5,7 +5,7 @@ import { cn } from "@/utils/cn";
 import { useTabs } from "./TabsContext";
 
 export interface TabsListProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

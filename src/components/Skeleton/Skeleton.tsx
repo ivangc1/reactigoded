@@ -16,8 +16,8 @@ export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
    * más alta, `avatar`/`avatar-lg` círculos, `card`/`image` rectángulos
    * grandes y `button` un placeholder de botón.
    */
-  variant?: SkeletonVariant;
-  ref?: Ref<HTMLDivElement>;
+  variant?: SkeletonVariant | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**
@@ -66,9 +66,9 @@ export interface SkeletonContainerProps
    * Etiqueta para SR. Por defecto `"Cargando contenido…"` (ES).
    * Pasa una string específica del contexto para mejor UX SR.
    */
-  label?: string;
+  label?: string | undefined;
   children: ReactNode;
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

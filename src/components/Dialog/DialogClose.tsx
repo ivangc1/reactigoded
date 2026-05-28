@@ -7,7 +7,7 @@ import { useDialogContextOptional } from "./DialogContext";
 
 export interface DialogCloseProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
   /**
    * Slot pattern (D14): si `true`, clona el child del consumer y le aplica
    * close semantics (`onClick` que cierra el dialog + `aria-label`
@@ -39,7 +39,7 @@ export interface DialogCloseProps
    *   </DialogClose>
    * </DialogFooter>
    */
-  asChild?: boolean;
+  asChild?: boolean | undefined;
 }
 
 /**

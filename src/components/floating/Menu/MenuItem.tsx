@@ -15,9 +15,9 @@ import { useMenu } from "./MenuContext";
 
 interface CommonProps {
   /** Marca el item como acción destructiva (color malum). */
-  danger?: boolean;
+  danger?: boolean | undefined;
   /** Marca el item como seleccionado actualmente. */
-  active?: boolean;
+  active?: boolean | undefined;
 }
 
 // Callbacks consumer-facing tipados con HTMLElement (no element-specific).
@@ -34,17 +34,17 @@ type ItemKeyboardHandler = (e: KeyboardEvent<HTMLElement>) => void;
 type ButtonItemProps = CommonProps &
   Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "onKeyDown"> & {
     href?: undefined;
-    onClick?: ItemMouseHandler;
-    onKeyDown?: ItemKeyboardHandler;
-    ref?: Ref<HTMLButtonElement>;
+    onClick?: ItemMouseHandler | undefined;
+    onKeyDown?: ItemKeyboardHandler | undefined;
+    ref?: Ref<HTMLButtonElement> | undefined;
   };
 
 type AnchorItemProps = CommonProps &
   Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "onClick" | "onKeyDown"> & {
     href: string;
-    onClick?: ItemMouseHandler;
-    onKeyDown?: ItemKeyboardHandler;
-    ref?: Ref<HTMLAnchorElement>;
+    onClick?: ItemMouseHandler | undefined;
+    onKeyDown?: ItemKeyboardHandler | undefined;
+    ref?: Ref<HTMLAnchorElement> | undefined;
   };
 
 export type MenuItemProps = ButtonItemProps | AnchorItemProps;

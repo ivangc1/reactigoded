@@ -6,7 +6,7 @@ import { useDialogContextRequired } from "./DialogContext";
 
 export interface DialogTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
   /**
    * Slot pattern (D14): si `true`, clona el child del consumer y le aplica
    * trigger semantics (`aria-haspopup="dialog"`, `aria-expanded`,
@@ -28,7 +28,7 @@ export interface DialogTriggerProps
    * // Default (backwards-compat):
    * <DialogTrigger>Abrir</DialogTrigger>
    */
-  asChild?: boolean;
+  asChild?: boolean | undefined;
 }
 
 /**

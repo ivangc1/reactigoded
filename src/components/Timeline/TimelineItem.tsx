@@ -13,24 +13,24 @@ export type TimelineDotVariant =
 export interface TimelineItemProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   /** Fecha o etiqueta temporal del evento. */
-  date?: ReactNode;
+  date?: ReactNode | undefined;
   /** Título del evento. */
-  title?: ReactNode;
+  title?: ReactNode | undefined;
   /** Descripción del evento. */
-  description?: ReactNode;
+  description?: ReactNode | undefined;
   /** Variante de color del punto del timeline. */
-  dotVariant?: TimelineDotVariant;
+  dotVariant?: TimelineDotVariant | undefined;
   /**
    * Contenido custom del punto (icono, número, etc.).
    * Si se proporciona reemplaza el punto por defecto.
    */
-  dotContent?: ReactNode;
+  dotContent?: ReactNode | undefined;
   /**
    * Si se proporciona, sustituye el contenido renderizado por defecto
    * (date/title/description). Útil para layouts ricos.
    */
-  children?: ReactNode;
-  ref?: Ref<HTMLDivElement>;
+  children?: ReactNode | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

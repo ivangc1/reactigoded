@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface CardDividerProps extends HTMLAttributes<HTMLHRElement> {
-  ref?: Ref<HTMLHRElement>;
+  ref?: Ref<HTMLHRElement> | undefined;
 }
 
 /** CardDivider — separador horizontal entre secciones de una `Card`.  *

@@ -23,9 +23,9 @@ export type CheckboxVariant =
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> {
   /** Color del check cuando está activo. */
-  variant?: CheckboxVariant;
+  variant?: CheckboxVariant | undefined;
   /** Etiqueta visible junto al checkbox. */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /**
    * Activa el tercer estado visual del checkbox (línea horizontal en
    * lugar del tick). Se aplica vía `el.indeterminate = true` en el
@@ -36,7 +36,7 @@ export interface CheckboxProps
    * El `value` del checkbox sigue siendo `checked`/`unchecked`. Mantén
    * tú la sincronización con los hijos cuyo estado lo justifique.
    */
-  indeterminate?: boolean;
+  indeterminate?: boolean | undefined;
   /**
    * Ids extra para `aria-describedby`. Pasar string para un único id o
    * array para varios. Se concatenan con cualquier `aria-describedby`
@@ -48,8 +48,8 @@ export interface CheckboxProps
    * <Checkbox describedBy={helperId}>Acepto</Checkbox>
    * <Helper id={helperId}>Solo email; no spam.</Helper>
    */
-  describedBy?: string | string[];
-  ref?: Ref<HTMLInputElement>;
+  describedBy?: string | string[] | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 /**

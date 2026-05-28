@@ -3,19 +3,19 @@ import { cn } from "@/utils/cn";
 
 export interface StepProps extends HTMLAttributes<HTMLDivElement> {
   /** Etiqueta debajo del círculo (sólo aplica con `Stepper labeled`). */
-  label?: ReactNode;
+  label?: ReactNode | undefined;
   /**
    * Índice (1-based) que se muestra dentro del círculo. Lo inyecta el `Stepper`
    * automáticamente — no lo pases manualmente.
    */
-  index?: number;
+  index?: number | undefined;
   /** Inyectado por `Stepper`. Marca el step actual. */
-  active?: boolean;
+  active?: boolean | undefined;
   /** Inyectado por `Stepper`. Marca el step como completado. */
-  complete?: boolean;
+  complete?: boolean | undefined;
   /** Inyectado por `Stepper` cuando usa layout labeled. */
-  labeled?: boolean;
-  ref?: Ref<HTMLDivElement>;
+  labeled?: boolean | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**
@@ -35,18 +35,18 @@ export interface StepInternalProps {
    * definido). Convierte el dot en un `<button>` semántico vía
    * `role="button"` + `tabIndex` (roving) + handlers click/keydown.
    */
-  interactive?: boolean;
+  interactive?: boolean | undefined;
   /**
    * Inyectado por `Stepper` cuando es interactivo. Llamado al click
    * o al activar por teclado (Enter/Space). Stepper interpreta la
    * activación y dispara `onActiveChange` con el índice 0-based.
    */
-  onActivate?: () => void;
+  onActivate?: (() => void) | undefined;
   /**
    * Inyectado por `Stepper` cuando es interactivo. Maneja
    * ArrowLeft/Right/Up/Down/Home/End para navegar entre steps.
    */
-  onStepKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
+  onStepKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
 }
 
 /**

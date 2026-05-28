@@ -17,15 +17,15 @@ export type ChipVariant =
 export type ChipSize = "sm" | "md" | "lg";
 
 interface ChipBase {
-  variant?: ChipVariant;
-  size?: ChipSize;
+  variant?: ChipVariant | undefined;
+  size?: ChipSize | undefined;
   /** Si está marcado como seleccionable + seleccionado, aplica el estado activo. */
-  selected?: boolean;
+  selected?: boolean | undefined;
   /** Callback opcional para mostrar la X de eliminación. */
-  onRemove?: () => void;
+  onRemove?: (() => void) | undefined;
   /** Texto a11y para el botón de eliminación. */
-  removeLabel?: string;
-  children?: React.ReactNode;
+  removeLabel?: string | undefined;
+  children?: React.ReactNode | undefined;
 }
 
 export type ChipProps =

@@ -4,10 +4,10 @@ import { cn } from "@/utils/cn";
 export interface NavbarMenuButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Si el menú asociado está expandido. */
-  expanded?: boolean;
+  expanded?: boolean | undefined;
   /** ID del elemento que controla (para `aria-controls`). */
-  controlsId?: string;
-  ref?: Ref<HTMLButtonElement>;
+  controlsId?: string | undefined;
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 /**

@@ -14,17 +14,17 @@ export type RatingSize = "sm" | "md" | "lg" | "xl";
 export interface RatingProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "onChange"> {
   /** Valor actual (modo controlado, 0..max). */
-  value?: number;
+  value?: number | undefined;
   /** Valor inicial (modo no controlado). Por defecto 0. */
-  defaultValue?: number;
+  defaultValue?: number | undefined;
   /** Máximo de estrellas. Por defecto 5. */
-  max?: number;
+  max?: number | undefined;
   /** Sólo lectura: no responde a interacción. */
-  readOnly?: boolean;
+  readOnly?: boolean | undefined;
   /** Tamaño visual. */
-  size?: RatingSize;
+  size?: RatingSize | undefined;
   /** Callback al elegir un valor. */
-  onValueChange?: (value: number) => void;
+  onValueChange?: ((value: number) => void) | undefined;
   /**
    * Ids extra para `aria-describedby` del radiogroup. Pasar string para
    * un único id o array para varios. Se concatenan con cualquier
@@ -32,7 +32,7 @@ export interface RatingProps
    * del DS para enlazar `Helper` / `ErrorText` / live-regions con
    * tecnologías asistivas.
    */
-  describedBy?: string | string[];
+  describedBy?: string | string[] | undefined;
   /**
    * Override del `aria-label` por estrella individual. Recibe el valor
    * 1..max y devuelve la cadena. Default ES: `"1 estrella"` / `"N estrellas"`.
@@ -42,8 +42,8 @@ export interface RatingProps
    * @example
    * <Rating max={5} getStarLabel={(n) => `${n} of 5 stars`} />
    */
-  getStarLabel?: (value: number) => string;
-  ref?: Ref<HTMLDivElement>;
+  getStarLabel?: ((value: number) => string) | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

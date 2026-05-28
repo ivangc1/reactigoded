@@ -7,12 +7,12 @@ import { useSidebar } from "./SidebarContext";
 export interface SidebarToggleProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Contenido del botón. Por defecto `"☰"`. */
-  children?: ReactNode;
+  children?: ReactNode | undefined;
   /** Texto a11y al expandir. Por defecto `"Expandir sidebar"`. */
-  expandLabel?: string;
+  expandLabel?: string | undefined;
   /** Texto a11y al colapsar. Por defecto `"Colapsar sidebar"`. */
-  collapseLabel?: string;
-  ref?: Ref<HTMLButtonElement>;
+  collapseLabel?: string | undefined;
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 /**

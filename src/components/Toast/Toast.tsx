@@ -30,24 +30,24 @@ const DEFAULT_ICONS: Record<Exclude<ToastVariant, "neutral">, string> = {
 export interface ToastProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   /** Color/semántica del toast. Por defecto `"neutral"` (sin border-left coloreado). */
-  variant?: ToastVariant;
+  variant?: ToastVariant | undefined;
   /** Título destacado en la parte superior. */
-  title?: ReactNode;
+  title?: ReactNode | undefined;
   /** Mensaje secundario (también acepta `children`). */
-  message?: ReactNode;
+  message?: ReactNode | undefined;
   /**
    * Icono al inicio. `undefined` muestra el icono por defecto del variant
    * (excepto "neutral", que no tiene). Pasa `false` para ocultarlo o un nodo
    * propio para sustituirlo.
    */
-  icon?: ReactNode | false;
+  icon?: ReactNode | false | undefined;
   /** Si se muestra el botón "×". Alias estandarizado con `Alert`. */
-  dismissible?: boolean;
+  dismissible?: boolean | undefined;
   /** Callback al pulsar el botón "×". */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Texto a11y para el botón de cerrar. Por defecto `"Cerrar"`. */
-  closeLabel?: string;
-  ref?: Ref<HTMLDivElement>;
+  closeLabel?: string | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

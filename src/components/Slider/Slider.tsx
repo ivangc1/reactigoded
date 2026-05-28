@@ -9,9 +9,9 @@ import { useControllableState } from "@/hooks/useControllableState";
 export interface SliderProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
   /** Mostrar el valor actual junto al slider. */
-  showValue?: boolean;
+  showValue?: boolean | undefined;
   /** Formateador opcional para el valor visible y para `aria-valuetext`. */
-  formatValue?: (value: number) => string;
+  formatValue?: ((value: number) => string) | undefined;
   /**
    * Callback con el valor numérico decodificado.
    *
@@ -22,15 +22,15 @@ export interface SliderProps
    * por algún motivo (analytics del DOM event, e.g.), añade un wrapper
    * `<input type="range" onChange={...}>` manual.
    */
-  onValueChange?: (value: number) => void;
+  onValueChange?: ((value: number) => void) | undefined;
   /**
    * Ids extra para `aria-describedby`. Pasar string para un único id o
    * array para varios. Se concatenan con cualquier `aria-describedby`
    * que el consumer pase por rest. Patrón canónico del DS para enlazar
    * `Helper` / `ErrorText` / live-regions con tecnologías asistivas.
    */
-  describedBy?: string | string[];
-  ref?: Ref<HTMLInputElement>;
+  describedBy?: string | string[] | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 /**

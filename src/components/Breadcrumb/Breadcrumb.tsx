@@ -13,8 +13,8 @@ import { useLandmarkRegistry } from "@/utils/useLandmarkRegistry";
 
 export interface BreadcrumbProps extends HTMLAttributes<HTMLElement> {
   /** Separador entre items. Por defecto `"/"`. Puede ser nodo (icono). */
-  separator?: ReactNode;
-  ref?: Ref<HTMLElement>;
+  separator?: ReactNode | undefined;
+  ref?: Ref<HTMLElement> | undefined;
 }
 
 /**

@@ -20,7 +20,7 @@ export interface IconButtonProps
   "aria-label": string;
   /** Icono visual (svg, span con emoji, glyph, etc.). */
   children: ReactNode;
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 /**
