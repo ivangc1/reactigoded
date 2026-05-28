@@ -127,13 +127,19 @@
   "size-limit": [
     {
       "name": "JS bundle ESM (index entry + lazy chunks, gzip)",
-      "path": ["dist/index.js", "dist/!(index|server-safe|cn).js"],
+      "path": [
+        "dist/index.js",
+        "dist/!(index|server-safe|cn).js"
+      ],
       "limit": "20 KB",
       "gzip": true
     },
     {
       "name": "JS bundle server-safe ESM (server-safe entry + lazy chunks, gzip)",
-      "path": ["dist/server-safe.js", "dist/!(index|server-safe|cn).js"],
+      "path": [
+        "dist/server-safe.js",
+        "dist/!(index|server-safe|cn).js"
+      ],
       "limit": "8 KB",
       "gzip": true
     },
@@ -223,6 +229,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/culori": "^4.0.1",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
