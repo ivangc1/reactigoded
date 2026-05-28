@@ -35,21 +35,30 @@
  *   - Encadenado en CI como step independiente (verify.yml).
  *
  * Flags y comportamiento:
- *   - `--ignore-scripts` en `npm pack`: skip `prepublishOnly`
- *     (`npm run verify`) — sin esto recursaría infinito (verify llamaría
- *     a pack que llamaría a verify).
+ *   - `--ignore-scripts` en `npm pack`: best-effort. En npm 10 (CI Node
+ *     22.12.0) el flag NO se respeta para `pack` y el script `prepare`
+ *     (`patch-package`) corre igual. Lo dejamos por si npm lo arregla,
+ *     pero NO dependemos de ello.
+ *   - `--pack-destination=<tmpdir>`: en lugar de parsear el stdout de
+ *     `npm pack --json` (frágil — `prepare` puede meter output pre-JSON
+ *     y romper `JSON.parse`), pedimos a npm que escriba el `.tgz` en un
+ *     directorio temporal. Luego un `readdirSync` localiza el archivo
+ *     único. Inmune a output de scripts.
  *   - `--ignore-scripts` en `npm install` del sandbox: defensive — el
  *     tarball de reactigoded NO declara postinstall ni similar, pero los
  *     transitive deps de @floating-ui/react o @types/* podrían declarar
  *     scripts arbitrarios. Sandbox = no nos importan.
  *   - `--no-package-lock`: lockfile del sandbox es ephemeral, no
  *     persistible, ahorra IO en `/tmp`.
- *   - Sandbox en `os.tmpdir()` (ext4 nativo en Linux/WSL, NTFS aislado
- *     en Windows) — mismo principio que `~/reactigoded` migration:
- *     evitar el path NTFS via `/mnt/c` que corrompe binarios.
+ *   - Sandbox y pack-destination ambos en `os.tmpdir()` (ext4 nativo en
+ *     Linux/WSL, NTFS aislado en Windows) — mismo principio que
+ *     `~/reactigoded` migration: evitar el path NTFS via `/mnt/c` que
+ *     corrompe binarios. Y crítico: nunca el tarball en `repoRoot`
+ *     (`npm pack` por defecto lo deja en cwd, lo cual obligaba a un
+ *     cleanup post-hoc frágil).
  *
- * Cleanup garantizado en `finally`: sandbox borrado + tarball local
- * eliminado (npm pack lo deja en `cwd`).
+ * Cleanup garantizado en `finally`: sandbox borrado + pack-destination
+ * borrado. No quedan artifacts en repoRoot.
  */
 import {
   mkdtempSync,
@@ -57,6 +66,7 @@ import {
   writeFileSync,
   readdirSync,
   cpSync,
+  readFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -79,58 +89,40 @@ function run(cmd, opts = {}) {
   execSync(cmd, { stdio: "inherit", ...opts });
 }
 
-/**
- * Wrapper para `execSync` que captura stdout y lo parsea como JSON.
- * stderr sigue fluyendo al terminal para que warnings de npm sean
- * visibles si los hay.
- */
-function runJson(cmd, opts = {}) {
-  const out = execSync(cmd, {
-    encoding: "utf8",
-    stdio: ["inherit", "pipe", "inherit"],
-    ...opts,
-  });
-  return JSON.parse(out.trim());
-}
-
-/**
- * Elimina cualquier tarball `reactigoded-*.tgz` que haya quedado en
- * `repoRoot`. `npm pack` los deja en cwd; defensivo aunque siempre
- * limpiemos en `finally`.
- */
-function cleanupRootTarballs() {
-  for (const entry of readdirSync(repoRoot)) {
-    if (entry.startsWith("reactigoded-") && entry.endsWith(".tgz")) {
-      try {
-        rmSync(join(repoRoot, entry), { force: true });
-      } catch {
-        /* best-effort */
-      }
-    }
-  }
-}
-
 let sandbox;
+let packDest;
 let exitCode = 0;
 
 try {
   // ─── 1. npm pack ────────────────────────────────────────────────
-  // `--ignore-scripts` skipea `prepublishOnly` (verify) — sin esto el
-  // gate recursaría infinito porque verify:unit llama a este script.
-  console.log("\n[consumer-pack 1/5] npm pack --ignore-scripts");
-  cleanupRootTarballs(); // por si quedó alguno de un run anterior fallido
-  const packResult = runJson("npm pack --ignore-scripts --json", {
+  // `--ignore-scripts` skipea `prepublishOnly` (verify) que llamaría a
+  // este script en bucle infinito. NOTA: en npm 10 (CI Node 22.12.0)
+  // el flag NO se respeta para `pack`, y el script `prepare`
+  // (`patch-package`) corre igual. Eso es OK funcionalmente
+  // (patch-package es idempotente) pero rompe `npm pack --json` porque
+  // mete output pre-JSON al stdout.
+  //
+  // Solución: `--pack-destination=<tmpdir>` escribe el `.tgz` a un
+  // directorio temporal. Luego `readdirSync` lo localiza. Sin parsear
+  // stdout. Inmune a output de scripts. Bonus: no dejamos tarball en
+  // repoRoot.
+  packDest = mkdtempSync(join(tmpdir(), "reactigoded-pack-dest-"));
+  console.log(
+    `\n[consumer-pack 1/5] npm pack --ignore-scripts --pack-destination ${packDest}`,
+  );
+  run(`npm pack --ignore-scripts --pack-destination "${packDest}"`, {
     cwd: repoRoot,
   });
-  if (!Array.isArray(packResult) || packResult.length === 0) {
-    throw new Error("npm pack --json devolvió output inesperado");
+  const tarballs = readdirSync(packDest).filter(
+    (f) => f.startsWith("reactigoded-") && f.endsWith(".tgz"),
+  );
+  if (tarballs.length !== 1) {
+    throw new Error(
+      `Esperaba 1 tarball en ${packDest}, encontré ${tarballs.length}: ${tarballs.join(", ") || "(ninguno)"}`,
+    );
   }
-  const tarballName = packResult[0].filename;
-  if (typeof tarballName !== "string") {
-    throw new Error("npm pack --json sin `filename` en el primer entry");
-  }
-  const tarballPath = resolve(repoRoot, tarballName);
-  console.log(`Tarball generado: ${tarballName}`);
+  const tarballPath = join(packDest, tarballs[0]);
+  console.log(`Tarball: ${tarballs[0]}`);
 
   // ─── 2. Crear sandbox ──────────────────────────────────────────
   // mkdtemp en `os.tmpdir()`: Linux/WSL = /tmp (ext4), macOS = /var/folders,
@@ -143,7 +135,7 @@ try {
   // declarado en peerDependencies del package.json del repo) para
   // ejercitar la resolución que un consumer enterprise real haría.
   const repoPkg = JSON.parse(
-    execSync("cat package.json", { cwd: repoRoot, encoding: "utf8" }),
+    readFileSync(join(repoRoot, "package.json"), "utf8"),
   );
   const peers = repoPkg.peerDependencies ?? {};
 
@@ -223,7 +215,13 @@ try {
       console.warn(`Sandbox cleanup failed: ${e.message}`);
     }
   }
-  cleanupRootTarballs();
+  if (packDest) {
+    try {
+      rmSync(packDest, { recursive: true, force: true });
+    } catch (e) {
+      console.warn(`Pack-destination cleanup failed: ${e.message}`);
+    }
+  }
 }
 
 process.exit(exitCode);
