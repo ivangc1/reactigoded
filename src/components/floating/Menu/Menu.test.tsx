@@ -629,3 +629,149 @@ describe("Menu — codex post-D2 fixes", () => {
     expect(menu.getAttribute("style") ?? "").toMatch(/position/);
   });
 });
+
+describe("MenuTrigger — asChild Slot pattern (D14 Bloque D beta.27)", () => {
+  it("default render aplica ig-menu-trigger + tipo button (backwards-compat)", () => {
+    render(
+      <Menu>
+        <MenuTrigger>Opciones</MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    const btn = screen.getByRole("button", { name: "Opciones" });
+    expect(btn).toHaveClass("ig-menu-trigger");
+    expect(btn).toHaveAttribute("type", "button");
+  });
+
+  it("asChild renderiza el child del consumer SIN aplicar ig-menu-trigger", () => {
+    render(
+      <Menu>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger" className="ig-btn ig-btn-brand">
+            Abrir menú
+          </button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    const btn = screen.getByTestId("custom-trigger");
+    expect(btn).toHaveClass("ig-btn");
+    expect(btn).toHaveClass("ig-btn-brand");
+    // asChild: no aplicamos ig-menu-trigger porque el consumer trae styling.
+    expect(btn).not.toHaveClass("ig-menu-trigger");
+  });
+
+  it("asChild propaga aria-haspopup, aria-expanded, aria-controls + id al child", () => {
+    render(
+      <Menu defaultOpen>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger">x</button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    const btn = screen.getByTestId("custom-trigger");
+    // ARIA inyectada por FUI useRole + el id propio del MenuTrigger.
+    expect(btn).toHaveAttribute("aria-haspopup");
+    expect(btn).toHaveAttribute("aria-expanded", "true");
+    expect(btn).toHaveAttribute("aria-controls");
+    expect(btn).toHaveAttribute("id");
+  });
+
+  it("asChild + click abre el menú (FUI handlers propagados al child)", async () => {
+    render(
+      <Menu>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger">Opciones</button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("custom-trigger"));
+    await waitFor(() => {
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+    });
+  });
+
+  it("asChild + onClick consumer chaina con FUI (consumer first)", async () => {
+    const consumerClick = vi.fn();
+    render(
+      <Menu>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger" onClick={consumerClick}>
+            Opciones
+          </button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    fireEvent.click(screen.getByTestId("custom-trigger"));
+    expect(consumerClick).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+    });
+  });
+
+  it("asChild fuerza triggerId sobre child id propio (codex P2 round 1 sobre #113)", () => {
+    // MenuContent referencia triggerId via aria-labelledby. Si Slot's
+    // default child-wins rule dejara ganar al id del consumer (ej.
+    // <button id='my-custom-id'>), aria-labelledby quedaría apuntando
+    // a un id desconocido → menú sin accessible label.
+    //
+    // Fix: pre-clonar el child con `id: triggerId` ANTES del Slot, así
+    // child.props.id = triggerId siempre, sin importar lo que el
+    // consumer pusiera. Comportamiento consistente con path default
+    // (`<button id={triggerId}>` también overwriteaba en pre-D14).
+    render(
+      <Menu defaultOpen>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger" id="my-custom-id">
+            Opciones
+          </button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    const trigger = screen.getByTestId("custom-trigger");
+    // El id del consumer DEBE haber sido sobrescrito por triggerId
+    // (no es "my-custom-id").
+    expect(trigger.getAttribute("id")).not.toBe("my-custom-id");
+    // El triggerId del MenuContext debe estar presente y ser el id real
+    // del trigger — verificamos que aria-labelledby del menu apunta
+    // efectivamente a ESTE elemento.
+    const menu = screen.getByRole("menu");
+    const labelledBy = menu.getAttribute("aria-labelledby");
+    expect(labelledBy).toBe(trigger.getAttribute("id"));
+    expect(labelledBy).toBeTruthy();
+  });
+
+  it("asChild forwardea type al child (default 'button' contra submit accidental)", () => {
+    render(
+      <Menu>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger">x</button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    expect(screen.getByTestId("custom-trigger")).toHaveAttribute(
+      "type",
+      "button",
+    );
+  });
+});

@@ -16,7 +16,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Menú desplegable accesible. Compón con `MenuTrigger`, `MenuContent`, `MenuItem`, `MenuSeparator`, `MenuLabel`. Cierra con ESC y al hacer click fuera; navegación con ↑/↓/Home/End/Enter siguiendo el patrón WAI-ARIA menu button.",
+          "Menú desplegable accesible. Compón con `MenuTrigger`, `MenuContent`, `MenuItem`, `MenuSeparator`, `MenuLabel`. Cierra con ESC y al hacer click fuera; navegación con ↑/↓/Home/End/Enter siguiendo el patrón WAI-ARIA menu button. Slot pattern (D14 Bloque D beta.27): `<MenuTrigger asChild>` permite usar cualquier elemento como trigger (e.g., `<Button>` del DS) propagando aria + handlers sin wrapper.",
       },
     },
   },
