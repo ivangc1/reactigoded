@@ -59,9 +59,9 @@ Para regenerar la tabla: `node scripts/check-component-contrast.mjs --print-perc
 | Par | ΔE | Estado |
 |-----|-------|--------|
 | laurus-vitreus    | 0.0847 | allowlisted (ref=0.0847, eje fresco) |
-| malum-rutilus     | 0.0943 | bajo warn=0.10 |
-| axis-kobalium     | 0.0951 | bajo warn=0.10 |
-| kobalium-vitreus  | 0.0962 | bajo warn=0.10 |
+| malum-rutilus     | 0.0943 | allowlisted (ref=0.0943, gradient utility opt-in `.ig-gradient-warning-danger`) |
+| axis-kobalium     | 0.0951 | allowlisted (ref=0.0951, no usado adyacente) |
+| kobalium-vitreus  | 0.0962 | allowlisted (ref=0.0962, no usado adyacente) |
 | laurus-rutilus    | 0.1085 | ok |
 | rutilus-vitreus   | 0.1176 | ok |
 | axis-malum        | 0.1531 | ok |
