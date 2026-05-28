@@ -291,6 +291,25 @@ const SRC_ROOT = resolve(repoRoot, "src");
 const CLIENT_GLOBALS = new Set([
   "document",
   "window",
+  // `navigator`, `process`, `Buffer`, `globalThis` están en este set
+  // intencionalmente AUNQUE Node los provee como global (verificado en
+  // matriz CI por `src/__tests__/server-safe-catalog-vs-node.test.ts`,
+  // #150 beta.27). Las 4 razones:
+  //   - `globalThis`: caza el bypass
+  //     `globalThis.constructor.constructor("return window")()` —
+  //     audit fixture `globalThis-constructor.fixture.tsx` lo prueba.
+  //     No tener `globalThis` en el set deja esta clase de bypass
+  //     abierta aunque Node lo provea como global ECMAScript estándar.
+  //   - `process`: portabilidad multi-runtime. Cloudflare Workers /
+  //     Deno no tienen `process`. En RSC el patrón canónico es leer
+  //     env vars vía args/context del Server Component, no globalmente.
+  //   - `Buffer`: Node-specific. Multi-runtime usan `Uint8Array`.
+  //     Mismo razonamiento que `process`.
+  //   - `navigator`: añadido a Node en v21 (Node 22.12+ lo provee),
+  //     pero su forma es un SUBSET del navigator de browser (no
+  //     `geolocation`, no `mediaDevices`, sí `userAgent`/`language`).
+  //     Semántica inestable entre runtimes (browser vs Node vs Workers)
+  //     → gate fuerza guard explícito o evitar la API en `@server-safe`.
   "navigator",
   "process",
   "Buffer",
