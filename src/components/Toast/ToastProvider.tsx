@@ -34,8 +34,44 @@ export interface ToastProviderProps {
   /** Duración por defecto en ms. Toasts individuales pueden sobrescribirla. Por defecto `5000`. */
   defaultDuration?: number | undefined;
   /**
-   * Nodo donde montar el portal. Por defecto `document.body`. Pasa `null`
-   * para renderizar inline (útil en SSR o en tests sin portal).
+   * Target HTMLElement para `createPortal`. Default `document.body`.
+   * Pasa `null` para renderizar inline (útil en SSR o en tests sin
+   * portal).
+   *
+   * **Caso típico — Toast dentro de Dialog**: `<Dialog>` usa
+   * `<dialog>.showModal()` que crea un top-layer del browser. Si el
+   * portal del ToastProvider queda en `document.body`, los toasts
+   * aparecen *detrás* del backdrop del dialog (invisibles al usuario).
+   * Pasar el ref del dialog como container ancla el portal al top-layer
+   * y los toasts se renderizan visibles sobre el backdrop. Patrón
+   * canónico idéntico al de `Tooltip` y `MenuContent` (gate review H-04,
+   * decision C-02).
+   *
+   * Tipo más restrictivo que `Tooltip`/`MenuContent` (`HTMLElement` solo,
+   * no `RefObject`): `createPortal` de react-dom necesita el HTMLElement
+   * resuelto. El consumer pasa `ref.current` post-mount o usa
+   * `useLayoutEffect` para capturar el nodo. Floating UI (Tooltip/Menu)
+   * resuelve refs internamente; react-dom no.
+   *
+   * @example
+   * ```tsx
+   * function ConfirmDialog() {
+   *   const dialogRef = useRef<HTMLDialogElement>(null);
+   *   return (
+   *     <Dialog ref={dialogRef} open onClose={...}>
+   *       <DialogBody>
+   *         <ToastProvider container={dialogRef.current}>
+   *           <ConfirmFlow />
+   *         </ToastProvider>
+   *       </DialogBody>
+   *     </Dialog>
+   *   );
+   * }
+   * ```
+   *
+   * Ver `docs/decisions/C-02-modal-tooltip-portal.md` para el rationale
+   * completo del patrón manual (vs context-based) y los triggers de
+   * re-evaluación post-rc.1.
    */
   container?: HTMLElement | null | undefined;
   /**
