@@ -10,8 +10,33 @@ permissions:
 
 jobs:
   unit:
-    name: Lint + typecheck + unit + contrast + build + size
-    runs-on: ubuntu-latest
+    # Matriz CI (#151 beta.27): OS × Node engine min/latest.
+    # Razón: los blockers de beta.24 (POSIX `rm` en clean script; attw
+    # crash en Windows) eran specific-to-platform, invisibles desde
+    # Linux y solo cazados manualmente por Codex en su sandbox real.
+    # Esta matriz es la red de seguridad que los habría cazado
+    # automáticamente.
+    #   - ubuntu-latest + Node 22.12.0: baseline (engine mínimo del
+    #     package.json, lo que se publicaba pre-#151).
+    #   - ubuntu-latest + Node 24: forward compat con Node current.
+    #   - windows-latest + Node 22.12.0 / 24: paridad de plataforma del
+    #     paquete publicado. Caza POSIX-only commands, path separator
+    #     leaks, line-ending sensitivity, shell-specific scripts.
+    # `fail-fast: false` para que un fallo en Windows-Node24 no aborte
+    # los runs de ubuntu (queremos ver todas las matrices fallar/pasar
+    # independientemente para diagnosticar root-cause sin overlap).
+    name: "unit (${{ matrix.os }}, Node ${{ matrix.node }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ["22.12.0", "24"]
+    # Sin override de shell: todos los steps invocan `npm run ...` o
+    # `npx ...`, que son cross-platform. El único step inline que
+    # requería bash (`grep -cF '[reactigoded]'`) se migró a
+    # `node scripts/check-no-dev-warns.mjs` — cierra el cabo del
+    # shell-dependency sin necesidad de `defaults.run.shell: bash`.
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -19,7 +44,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22.12.0
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - name: Install dependencies
@@ -139,29 +164,19 @@ jobs:
         # refactor Slot DS-wide upcoming en beta.27.
         run: npm run test:consumer-pack
 
-      - name: Bundle has no dev warns (B-07 follow-up, post-RC1 refined)
-        # B-07 movió los warn dev-only de \`isDev()\` a \`import.meta.env.DEV\`
+      - name: Bundle has no dev warns (B-07 follow-up, #151 cross-platform)
+        # B-07 movió los warn dev-only de `isDev()` a `import.meta.env.DEV`
         # para que esbuild/Vite los hagan DCE en producción. Si una
-        # regresión introduce un \`console.warn\` que no respeta el guard,
-        # llegaría al bundle publicado. size-limit lo detecta indirectamente
-        # como crecimiento; este step lo fuerza directamente.
+        # regresión introduce un `console.warn` que no respeta el guard,
+        # llegaría al bundle publicado. Este gate lo caza directamente.
         #
-        # Post-RC1 (Tooltip Floating UI): el assertion blanket
-        # \`grep -c 'console\\.'\` mezclaba dos clases distintas:
-        #   (1) dev-warns nuestros que deben podarse en producción.
-        #   (2) errores runtime legítimos de terceros (ej. tabbable
-        #       dispara \`console.error\` cuando detecta un radio button
-        #       mal configurado en runtime — info útil en producción
-        #       que no debe podarse aunque pudiéramos).
-        # La intención original del guardrail B-07 era detectar (1).
-        # Restringiendo el match al prefijo \`[reactigoded]\` (firma
-        # única de nuestros warns) cubrimos exactamente el caso de
-        # regresión nuestra y dejamos pasar los logs propios de deps.
-        # \`grep -F\` (fixed string, no regex) es lo más a prueba de
-        # futuro si mañana cambia el prefijo a algo con caracteres
-        # especiales.
-        run: |
-          test "$(grep -cF '[reactigoded]' dist/index.js  || true)" = "0"
+        # Implementación: script Node (cross-platform genuino, sin
+        # dependencia de `shell: bash` ni `grep -cF` POSIX). Mismo
+        # razonamiento que clean.mjs (rm POSIX → Node fs/promises) que
+        # cerró el blocker beta.24 BLOCKER 1. Ver scripts/check-no-dev-
+        # warns.mjs para el historial completo (post-RC1 prefix refine,
+        # #151 migración a Node).
+        run: npm run test:no-dev-warns
 
       - name: Size budgets
         run: npm run verify:size
