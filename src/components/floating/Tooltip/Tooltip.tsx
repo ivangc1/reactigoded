@@ -13,6 +13,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { Slot } from "@/components/Slot";
 
 /**
  * Extrae texto plano de un ReactNode arbitrario. Usado para el span
@@ -256,6 +257,30 @@ export interface TooltipProps {
    * resuelve ambos).
    */
   container?: HTMLElement | React.RefObject<HTMLElement | null> | null;
+  /**
+   * Cualquier prop adicional (event handlers, `ref`, aria-*, data-*,
+   * etc.) que el consumer pase a Tooltip se forwardea al elemento child
+   * final via el `<Slot>` primitive (D14 Bloque C beta.27).
+   *
+   * Habilita el patrón **nested asChild** crítico para el refactor Slot
+   * DS-wide:
+   *
+   * ```tsx
+   * <DialogClose asChild>
+   *   <Tooltip text="Cancela y cierra">
+   *     <Button variant="danger">×</Button>
+   *   </Tooltip>
+   * </DialogClose>
+   * ```
+   *
+   * El outer Slot de DialogClose pasa props al `<Tooltip>` (close
+   * onClick, ref); Tooltip los recibe en este index signature y los
+   * forwardea al `<Button>` final via su Slot interno. Resultado: el
+   * click en el botón cierra el dialog Y el botón sigue siendo el
+   * anchor del tooltip. Pre-D14 Bloque C: Tooltip dropeaba props del
+   * outer Slot (codex P2 round 2 sobre #109).
+   */
+  [key: string]: unknown;
 }
 
 /**
@@ -347,6 +372,7 @@ export function Tooltip({
   openDelay = 0,
   closeDelay = 0,
   container,
+  ...outerSlotProps
 }: TooltipProps) {
   const tooltipId = useId();
   const { nodeId } = useFloatingNode();
@@ -680,6 +706,32 @@ export function Tooltip({
     </FloatingPortal>
   );
 
+  // D14 Bloque C beta.27: forward outer Slot props al child final via
+  // Slot primitive. Habilita el patrón nested asChild (edge case #6
+  // de D14):
+  //   <DialogClose asChild>
+  //     <Tooltip text="...">
+  //       <Button>X</Button>
+  //     </Tooltip>
+  //   </DialogClose>
+  //
+  // DialogClose's outer Slot clona Tooltip pasando close-onClick + ref.
+  // Tooltip recibe esos props en `outerSlotProps` (...rest del
+  // destructure) y los forwardea al child clonado via Slot interno.
+  // Resultado: el click en Button cierra el dialog Y el Button es el
+  // anchor del tooltip.
+  //
+  // Si `outerSlotProps` está vacío (uso normal de Tooltip sin outer
+  // wrapper), evitamos el Slot wrapper para no añadir trabajo
+  // redundante — el cloned `child` ya tiene todos los props mergeados
+  // por la propia cloneElement de Tooltip.
+  const hasOuterProps = Object.keys(outerSlotProps).length > 0;
+  const slottedChild = hasOuterProps ? (
+    <Slot {...outerSlotProps}>{child}</Slot>
+  ) : (
+    child
+  );
+
   // M-07.2 Capa 3: sentinel dev-only para casos ambiguous. Wrappea el
   // child con un <span style="display:contents"> que escucha hover y
   // focus en CAPTURE phase. Capture corre top-down (window → ancestros
@@ -689,12 +741,16 @@ export function Tooltip({
   // span no tenga caja propia — cero impacto en layout. Sólo se monta
   // en dev y solo para function components (children de DOM intrinsic
   // y forwardRef no entran aquí, cero coste runtime).
+  //
+  // El sentinel siempre vive POR FUERA del Slot (decoración dev, no
+  // afecta props del child final). Slot ya hizo su trabajo mergeando
+  // outerSlotProps con child.props.
   const childOrSentinel = shouldWrapInDevSentinel ? (
     <span ref={sentinelRef} style={DEV_SENTINEL_STYLE}>
-      {child}
+      {slottedChild}
     </span>
   ) : (
-    child
+    slottedChild
   );
 
   return (

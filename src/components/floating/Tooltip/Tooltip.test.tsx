@@ -871,3 +871,82 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     // funcionando para los otros casos (ver tests Capa 4 + sentinel).
   });
 });
+
+describe("Tooltip — nested asChild forwarding (D14 Bloque C beta.27)", () => {
+  it("outer Slot props (onClick) propagan al child final via Slot interno", async () => {
+    // Reproduce el nested case del D14 edge #6 que motivó Bloque C:
+    //   <Slot {...outerProps}>
+    //     <Tooltip text="...">
+    //       <Button onClick={consumer}>X</Button>
+    //     </Tooltip>
+    //   </Slot>
+    //
+    // Sin el refactor, Tooltip dropeaba los outerProps (TooltipProps no
+    // aceptaba ...rest). Con el refactor, Tooltip's Slot interno
+    // forwardea outerProps + cloneProps al Button final via cloneElement
+    // chain. Resultado: el click en Button chaina consumer onClick →
+    // outer onClick (Slot composeEventHandlers child-first).
+    //
+    // Aquí usamos `<Slot>` directamente como el outer wrapper (en uso
+    // real sería `<DialogClose asChild>` etc.), pero el contrato es el
+    // mismo: Tooltip forwardea cualquier prop no consumida por sí mismo.
+    const user = userEvent.setup();
+    const outerClick = vi.fn();
+    const consumerClick = vi.fn();
+    // Simulamos outer Slot props via record genérico (lo que un
+    // `DialogClose asChild` pasaría al Tooltip clonado). TooltipProps
+    // index signature acepta cualquier prop adicional.
+    const outerSlotProps: Record<string, unknown> = { onClick: outerClick };
+    render(
+      <Tooltip text="Cancela y cierra" {...outerSlotProps}>
+        <button data-testid="probe" onClick={consumerClick}>
+          Aceptar
+        </button>
+      </Tooltip>,
+    );
+    await user.click(screen.getByTestId("probe"));
+    // Child first (consumer), outer second (close handler simulado).
+    // Ambos llamados → ambos se forwardearon al child final.
+    expect(consumerClick).toHaveBeenCalledTimes(1);
+    expect(outerClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("outer Slot ref propaga al child final junto con FUI ref y child ref", () => {
+    // Verifica que los 3 refs co-existen tras el Slot wrapping:
+    //   - outer ref (simulando DialogClose ref).
+    //   - FUI's refs.setReference (interno de Tooltip).
+    //   - child.props.ref (consumer's ref).
+    const outerRef = createRef<HTMLElement>();
+    const consumerRef = createRef<HTMLButtonElement>();
+    // Spread vía record genérico para evitar narrowing TS sobre `ref`
+    // (TooltipProps usa index signature `[key: string]: unknown`).
+    const outerSlotProps: Record<string, unknown> = { ref: outerRef };
+    render(
+      <Tooltip text="Pista" {...outerSlotProps}>
+        <button data-testid="probe" ref={consumerRef}>
+          x
+        </button>
+      </Tooltip>,
+    );
+    const node = screen.getByTestId("probe");
+    expect(outerRef.current).toBe(node);
+    expect(consumerRef.current).toBe(node);
+    // FUI ref se valida indirectamente: si no estuviera conectado, el
+    // tooltip no abriría al hover (probado por los tests de open/close
+    // de las describe blocks anteriores).
+  });
+
+  it("Tooltip sin outer props no añade Slot wrapper redundante (skip optimization)", () => {
+    // Hot-path: uso normal de Tooltip sin outer wrapper. El Slot interno
+    // se omite cuando outerSlotProps está vacío. Test indirecto: verify
+    // que el comportamiento estándar de Tooltip no se rompe + que un
+    // attribute aria-describedby está presente (señal de que cloneElement
+    // de Tooltip aplicó su lógica sin Slot intermedio).
+    render(
+      <Tooltip text="Pista">
+        <button data-testid="probe">x</button>
+      </Tooltip>,
+    );
+    expect(screen.getByTestId("probe")).toHaveAttribute("aria-describedby");
+  });
+});

@@ -70,6 +70,29 @@ versionado [SemVer](https://semver.org/lang/es/).
   al consumer, solo usado por components del DS via `asChild` opt-in.
   Ver D14 + PR #110 para diseño completo.
 
+- **`Tooltip` forwardea outer Slot props al child final** (D14 Bloque C beta.27).
+  `TooltipProps` admite ahora un index signature (cualquier prop adicional
+  no consumida por Tooltip — `text`, `placement`, `variant`, `children`,
+  delays, `container` — se forwardea via Slot interno al elemento child
+  clonado). Habilita el patrón nested asChild:
+
+  ```tsx
+  <DialogClose asChild>
+    <Tooltip text="Cancela y cierra">
+      <Button variant="danger">×</Button>
+    </Tooltip>
+  </DialogClose>
+  ```
+
+  El outer Slot de `DialogClose` clona Tooltip pasando close `onClick` +
+  ref; Tooltip los recibe en su nuevo `...rest` y los forwardea al
+  `<Button>` final via `<Slot>` interno. Pre-Bloque C, esos props se
+  dropeaban silenciosamente (codex P2 round 2 sobre PR #109 caught the
+  bug en el doc-only plan).
+
+  API público de Tooltip preservado: `text`, `placement`, `variant`,
+  `children` (ReactElement), delays, `container` siguen igual.
+
 ## [1.0.0-beta.25] — 2026-05-25 (gate review cruce cycle complete)
 
 Plan **claudegate4** + cruce de gate reviews independientes (GPT Codex +
