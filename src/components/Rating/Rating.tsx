@@ -21,6 +21,28 @@ export interface RatingProps
   max?: number | undefined;
   /** Sólo lectura: no responde a interacción. */
   readOnly?: boolean | undefined;
+  /**
+   * Si se proporciona, Rating participa en form submission nativo
+   * renderizando un `<input type="hidden" name={name} value={value}>`
+   * adyacente al `radiogroup`. El value del hidden input espeja el
+   * valor efectivo (clamped, controlled o uncontrolled), por lo que un
+   * `new FormData(form)` recoge la puntuación sin necesidad de librería
+   * de forms. Sin `name`, Rating es display-only para form submission y
+   * el consumer debe leer el valor vía `onValueChange` + state.
+   *
+   * Cierra la asimetría con los otros inputs del DS (Checkbox/Switch/
+   * Radio/Slider/NativeSelect serializan vía el `<input>` nativo
+   * heredado de `InputHTMLAttributes`). Rating usa buttons en
+   * `role="radiogroup"` por el canal-de-forma WCAG (#102), así que
+   * añadimos el bridge nativo sin tocar el patrón APG visible.
+   *
+   * @example
+   * <form action="/rate" method="post">
+   *   <Rating name="score" defaultValue={3} max={5} />
+   *   <button type="submit">Enviar</button>
+   * </form>
+   */
+  name?: string | undefined;
   /** Tamaño visual. */
   size?: RatingSize | undefined;
   /** Callback al elegir un valor. */
@@ -82,6 +104,7 @@ export function Rating({
   onValueChange,
   describedBy,
   getStarLabel,
+  name,
   className,
   ref,
   ...rest
@@ -240,6 +263,14 @@ export function Rating({
           />
         );
       })}
+      {name !== undefined && (
+        // Bridge nativo form-value (#153): renderiza solo cuando el
+        // consumer pasa `name`. El value espeja el `value` clamped del
+        // hook (controlled o uncontrolled), así que `new FormData(form)`
+        // recoge la puntuación sin librería de forms. Vive dentro del
+        // radiogroup para asociación natural con el form ancestor.
+        <input type="hidden" name={name} value={String(value)} />
+      )}
     </div>
   );
 }
