@@ -213,10 +213,24 @@ function mergeAndClone(
         childValue as (e: SyntheticEvent) => void,
         slotValue as (e: SyntheticEvent) => void,
       );
-    } else {
-      // Default: child wins. Cubre aria-*, data-*, role, id, otros props.
+    } else if (childValue !== undefined) {
+      // Default: child wins SOLO si el consumer definió la prop con valor
+      // genuino. Explícito `prop={undefined}` desde el consumer NO debe
+      // sobrescribir el default del slot — esto pasa con event handlers
+      // condicionales (`onClick={maybeHandler}` donde `maybeHandler` es
+      // a veces `undefined`) y rompía el library behavior (e.g., el close
+      // handler del DialogClose dropeado).
+      //
+      // Codex P2 round 1 sobre PR #110: caso real para Bloques B/C/D
+      // donde el outer Slot pasa `onClick={closeDialog}` y un consumer
+      // dynamic-set su `onClick={maybeFn}` con `maybeFn=undefined`. Sin
+      // este check el dialog dejaba de cerrarse silenciosamente.
+      //
+      // Aplica a TODAS las props (no solo events): `aria-label={undefined}`
+      // tampoco debe borrar el `aria-label="Cerrar"` que el slot provee.
       merged[key] = childValue;
     }
+    // else: childValue === undefined → keep slotValue (no override).
   }
 
   return cloneElement(child, merged);

@@ -231,6 +231,53 @@ describe("Slot — event handler chain (D14 edge case #4)", () => {
     expect(childHandler).toHaveBeenCalledTimes(1);
   });
 
+  it("child onClick=undefined does NOT overwrite slot onClick (codex P2 round 1 #110)", () => {
+    // Patrón típico del refactor Slot DS-wide: el library wrapper
+    // (DialogClose, MenuTrigger, etc.) pasa su close/open handler como
+    // slot prop; el consumer puede tener un handler condicional
+    // `onClick={cond ? fn : undefined}`. Cuando undefined, el handler
+    // de library NO debe perderse.
+    const slotHandler = vi.fn();
+    const consumerHandler: ((e: MouseEvent<HTMLButtonElement>) => void) | undefined =
+      undefined;
+    render(
+      <Slot onClick={slotHandler}>
+        <button
+          type="button"
+          data-testid="probe"
+          onClick={consumerHandler}
+        >
+          x
+        </button>
+      </Slot>,
+    );
+    fireEvent.click(screen.getByTestId("probe"));
+    expect(slotHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("child aria-label=undefined does NOT overwrite slot aria-label default", () => {
+    // Mismo principio aplica a TODAS las props, no solo events. Un
+    // consumer que escribe `<Button aria-label={undefined}>` no debería
+    // borrar el `aria-label="Cerrar"` que el Slot wrapper provee como
+    // default i18n (D12).
+    const explicitUndefined: string | undefined = undefined;
+    render(
+      <Slot aria-label="from slot">
+        <button
+          type="button"
+          data-testid="probe"
+          aria-label={explicitUndefined}
+        >
+          x
+        </button>
+      </Slot>,
+    );
+    expect(screen.getByTestId("probe")).toHaveAttribute(
+      "aria-label",
+      "from slot",
+    );
+  });
+
   it("non-event-shape functions in slotProps do NOT compose", () => {
     // Functions whose name doesn't match /^on[A-Z]/ should follow the
     // "default: child wins" branch, not the chain logic.
