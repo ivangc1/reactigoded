@@ -15,12 +15,12 @@ export interface AccordionHeaderProps
   /** Texto/contenido del header. */
   children: ReactNode;
   /** Si `true`, oculta el icono indicador. */
-  hideIcon?: boolean;
+  hideIcon?: boolean | undefined;
   /** Reemplaza el icono por defecto (▼). */
-  icon?: ReactNode;
+  icon?: ReactNode | undefined;
   /** Callback al togglear (además del toggle interno). */
-  onOpenChange?: (open: boolean) => void;
-  ref?: Ref<HTMLButtonElement>;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 /**

@@ -2,7 +2,7 @@ import { type HTMLAttributes, type Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface TimelineProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

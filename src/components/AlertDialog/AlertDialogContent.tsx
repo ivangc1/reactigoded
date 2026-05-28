@@ -4,7 +4,7 @@ import type { Ref } from "react";
 import { DialogContent, type DialogContentProps } from "@/components/Dialog";
 
 export interface AlertDialogContentProps extends DialogContentProps {
-  ref?: Ref<HTMLDialogElement>;
+  ref?: Ref<HTMLDialogElement> | undefined;
 }
 
 /**

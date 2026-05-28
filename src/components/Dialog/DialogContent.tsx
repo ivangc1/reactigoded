@@ -20,16 +20,16 @@ export type DialogContentBackdrop =
 export interface DialogContentProps
   extends Omit<DialogHTMLAttributes<HTMLDialogElement>, "open" | "id"> {
   /** Tamaño del modal. Por defecto `"md"`. */
-  size?: DialogContentSize;
+  size?: DialogContentSize | undefined;
   /** Estilo del backdrop. Por defecto `"default"`. */
-  backdrop?: DialogContentBackdrop;
+  backdrop?: DialogContentBackdrop | undefined;
   /** Cerrar al hacer click fuera del contenido. Por defecto `true`. */
-  closeOnBackdrop?: boolean;
+  closeOnBackdrop?: boolean | undefined;
   /** Permitir cerrar con la tecla ESC. Por defecto `true`. */
-  closeOnEsc?: boolean;
+  closeOnEsc?: boolean | undefined;
   /** Estado de carga (aplica `ig-dialog-loading`). */
-  loading?: boolean;
-  ref?: Ref<HTMLDialogElement>;
+  loading?: boolean | undefined;
+  ref?: Ref<HTMLDialogElement> | undefined;
 }
 
 /**

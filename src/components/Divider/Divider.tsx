@@ -12,14 +12,14 @@ export type DividerVariant =
 
 export interface DividerProps extends HTMLAttributes<HTMLElement> {
   /** Orientación. Vertical renderiza un `<span>` inline-block; horizontal un `<hr>`. */
-  vertical?: boolean;
+  vertical?: boolean | undefined;
   /** Borde discontinuo. */
-  dashed?: boolean;
+  dashed?: boolean | undefined;
   /** Color del separador. `default` usa el color neutro de borde. */
-  variant?: DividerVariant;
+  variant?: DividerVariant | undefined;
   /** Si se pasan, renderiza un divider con texto centrado en lugar de la línea. */
-  children?: ReactNode;
-  ref?: Ref<HTMLElement>;
+  children?: ReactNode | undefined;
+  ref?: Ref<HTMLElement> | undefined;
 }
 
 /**

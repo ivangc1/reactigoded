@@ -14,7 +14,7 @@ import { useMenu } from "./MenuContext";
 
 export interface MenuTriggerProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
   /**
    * Slot pattern (D14 Bloque D beta.27): si `true`, clona el child del
    * consumer y le aplica trigger semantics (id, aria-haspopup, aria-expanded
@@ -37,7 +37,7 @@ export interface MenuTriggerProps
    * // Default (backwards-compat):
    * <MenuTrigger>Opciones</MenuTrigger>
    */
-  asChild?: boolean;
+  asChild?: boolean | undefined;
 }
 
 /**

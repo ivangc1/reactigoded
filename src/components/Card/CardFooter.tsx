@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface CardFooterProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /** CardFooter — pie de una `Card`. Típicamente acciones o metadata.  *

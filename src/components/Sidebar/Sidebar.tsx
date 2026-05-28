@@ -8,12 +8,12 @@ import { SidebarContext } from "./SidebarContext";
 
 export interface SidebarProps extends HTMLAttributes<HTMLElement> {
   /** Estado colapsado (modo controlado). */
-  collapsed?: boolean;
+  collapsed?: boolean | undefined;
   /** Estado inicial (modo no controlado). Por defecto `false`. */
-  defaultCollapsed?: boolean;
+  defaultCollapsed?: boolean | undefined;
   /** Callback al cambiar collapsed. */
-  onCollapsedChange?: (collapsed: boolean) => void;
-  ref?: Ref<HTMLElement>;
+  onCollapsedChange?: ((collapsed: boolean) => void) | undefined;
+  ref?: Ref<HTMLElement> | undefined;
 }
 
 /**

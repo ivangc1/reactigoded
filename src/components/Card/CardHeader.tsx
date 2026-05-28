@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /** CardHeader — cabecera de una `Card`. Suele contener título + acciones.  *

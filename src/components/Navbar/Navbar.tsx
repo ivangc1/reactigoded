@@ -21,10 +21,10 @@ export interface NavbarProps extends HTMLAttributes<HTMLElement> {
    * excluyentes solo en docs. Ahora la elección es una sola prop con
    * unión discriminada — el typing impide pasar ambas a la vez.
    */
-  position?: NavbarPosition;
+  position?: NavbarPosition | undefined;
   /** Estilo glassmorphism (fondo translúcido + blur). */
-  glass?: boolean;
-  ref?: Ref<HTMLElement>;
+  glass?: boolean | undefined;
+  ref?: Ref<HTMLElement> | undefined;
 }
 
 /**

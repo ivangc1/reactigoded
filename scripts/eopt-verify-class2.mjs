@@ -86,7 +86,7 @@ function collectDestructure(bindingPattern, map) {
 /**
  * Recolecta destructure de un función completa (param + body assignments).
  */
-function buildAliasMap(funcNode, sourceFile) {
+function buildAliasMap(funcNode) {
   const map = new Map();
 
   // Param destructure.
@@ -195,7 +195,7 @@ for (const f of files) {
   // Build alias map from all component functions in this file.
   const aliasMap = new Map();
   for (const fn of findComponentFunctions(sourceFile)) {
-    const map = buildAliasMap(fn, sourceFile);
+    const map = buildAliasMap(fn);
     for (const [k, v] of map) {
       // Last writer wins; for our case unlikely to conflict.
       aliasMap.set(k, v);

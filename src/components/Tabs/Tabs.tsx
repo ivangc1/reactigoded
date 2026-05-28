@@ -25,18 +25,18 @@ export type TabsVariant =
 
 export interface TabsProps extends HTMLAttributes<HTMLDivElement> {
   /** TabsTrigger seleccionado (modo controlado). */
-  value?: string;
+  value?: string | undefined;
   /** TabsTrigger inicial (modo no controlado). */
-  defaultValue?: string;
+  defaultValue?: string | undefined;
   /** Callback al cambiar de tab. */
-  onValueChange?: (value: string) => void;
+  onValueChange?: ((value: string) => void) | undefined;
   /** Color del indicador del tab activo. */
-  variant?: TabsVariant;
+  variant?: TabsVariant | undefined;
   /** Estilo "pills" en vez de underline. */
-  pills?: boolean;
+  pills?: boolean | undefined;
   /** Orientación del tablist. */
-  orientation?: "horizontal" | "vertical";
-  ref?: Ref<HTMLDivElement>;
+  orientation?: "horizontal" | "vertical" | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

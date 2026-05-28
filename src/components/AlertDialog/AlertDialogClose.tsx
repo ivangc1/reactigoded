@@ -13,7 +13,7 @@ import { useDialogContextOptional } from "@/components/Dialog/DialogContext";
 
 export interface AlertDialogCloseProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
   /**
    * Slot pattern (D14): si `true`, clona el child del consumer y le aplica
    * close semantics sin renderizar un `<button>` propio ni aplicar
@@ -25,7 +25,7 @@ export interface AlertDialogCloseProps
    * a `DialogClose` (cierre asimetría léxica heredada — D14 Bloque B
    * BREAKING vs beta.26 donde AlertDialogClose era unstyled).
    */
-  asChild?: boolean;
+  asChild?: boolean | undefined;
 }
 
 /**

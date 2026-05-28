@@ -205,7 +205,7 @@ export const Class2_StepperActive = (
 );
 
 export const Class2_PaginationPage = (
-  <Pagination page={maybeNum} total={10} pageSize={5} />
+  <Pagination page={maybeNum} totalPages={10} />
 );
 
 export const Class2_SliderOnValueChange = (

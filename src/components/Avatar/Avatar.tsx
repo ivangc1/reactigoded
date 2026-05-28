@@ -16,18 +16,18 @@ const STATUS_LABEL_ES: Record<AvatarStatus, string> = {
 };
 
 interface AvatarBase extends HTMLAttributes<HTMLDivElement> {
-  size?: AvatarSize;
+  size?: AvatarSize | undefined;
   /** Cuadrado (default) → con bordes ligeramente redondeados; `rounded` lo hace círculo. */
-  rounded?: boolean;
+  rounded?: boolean | undefined;
   /** Punto de estado en la esquina inferior derecha. */
-  status?: AvatarStatus;
+  status?: AvatarStatus | undefined;
   /**
    * Override del `aria-label` del punto de estado, para i18n. Si no se
    * pasa, se usa "Estado: {label en español}". Pasa la traducción
    * completa, no solo la palabra de estado.
    */
-  statusLabel?: string;
-  ref?: Ref<HTMLDivElement>;
+  statusLabel?: string | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 interface AvatarImage extends AvatarBase {
@@ -40,13 +40,13 @@ interface AvatarImage extends AvatarBase {
    * el avatar queda vacío al fallar — el consumer es responsable de
    * dar fallback explícito.
    */
-  initials?: string;
+  initials?: string | undefined;
   /**
    * Estrategia de carga del `<img>`. Por defecto `"lazy"` para no
    * bloquear el LCP cuando el avatar está fuera del viewport (M-10).
    * Pasa `"eager"` si el avatar es above-the-fold y crítico para LCP.
    */
-  loading?: "lazy" | "eager";
+  loading?: "lazy" | "eager" | undefined;
 }
 
 interface AvatarInitials extends AvatarBase {

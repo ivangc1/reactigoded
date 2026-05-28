@@ -3,8 +3,8 @@ import { cn } from "@/utils/cn";
 
 export interface LabelProps extends LabelHTMLAttributes<HTMLLabelElement> {
   /** Marca el label como obligatorio (añade asterisco). */
-  required?: boolean;
-  ref?: Ref<HTMLLabelElement>;
+  required?: boolean | undefined;
+  ref?: Ref<HTMLLabelElement> | undefined;
 }
 
 /**

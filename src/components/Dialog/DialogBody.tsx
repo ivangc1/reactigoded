@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface DialogBodyProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /** DialogBody — cuerpo scrollable del modal.  *

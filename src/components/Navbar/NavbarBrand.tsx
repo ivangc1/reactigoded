@@ -6,20 +6,20 @@ import {
 import { cn } from "@/utils/cn";
 
 type CommonProps = {
-  className?: string;
+  className?: string | undefined;
 };
 
 type AsAnchor = CommonProps &
   AnchorHTMLAttributes<HTMLAnchorElement> & {
     /** Si se proporciona `href`, se renderiza como `<a>`. */
     href: string;
-    ref?: Ref<HTMLAnchorElement>;
+    ref?: Ref<HTMLAnchorElement> | undefined;
   };
 
 type AsDiv = CommonProps &
   HTMLAttributes<HTMLDivElement> & {
     href?: undefined;
-    ref?: Ref<HTMLDivElement>;
+    ref?: Ref<HTMLDivElement> | undefined;
   };
 
 export type NavbarBrandProps = AsAnchor | AsDiv;

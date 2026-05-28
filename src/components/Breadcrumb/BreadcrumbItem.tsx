@@ -9,12 +9,12 @@ type BreadcrumbItemAsCurrent = HTMLAttributes<HTMLSpanElement> & {
   /** Marca este item como la página actual (renderiza `<span aria-current="page">`). */
   current: true;
   href?: never;
-  ref?: Ref<HTMLSpanElement>;
+  ref?: Ref<HTMLSpanElement> | undefined;
 };
 
 type BreadcrumbItemAsLink = AnchorHTMLAttributes<HTMLAnchorElement> & {
-  current?: false;
-  ref?: Ref<HTMLAnchorElement>;
+  current?: false | undefined;
+  ref?: Ref<HTMLAnchorElement> | undefined;
 };
 
 export type BreadcrumbItemProps = BreadcrumbItemAsCurrent | BreadcrumbItemAsLink;

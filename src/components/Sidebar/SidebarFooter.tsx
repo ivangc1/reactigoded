@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface SidebarFooterProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /** SidebarFooter — sección inferior de la sidebar (suele alojar `SidebarToggle`).  *

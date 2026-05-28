@@ -29,25 +29,25 @@ export interface DialogProps {
    *     El Dialog gestiona su estado interno; `DialogTrigger` y `DialogClose`
    *     llaman al setter del provider sin necesidad de useState externo.
    */
-  open?: boolean;
+  open?: boolean | undefined;
   /**
    * Valor inicial en **modo uncontrolled** (cuando `open` es undefined).
    * Por defecto `false` (cerrado). Ignorado en modo controlled.
    */
-  defaultOpen?: boolean;
+  defaultOpen?: boolean | undefined;
   /**
    * Callback cuando el estado cambia. Dispara en ambos modos:
    * - Controlled: único mecanismo para que el consumer actualice `open`.
    * - Uncontrolled: actúa como observer.
    */
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: ((open: boolean) => void) | undefined;
   /**
    * @deprecated B-02: usa `onOpenChange`. Eliminado en 2.0. Solo dispara
    * con `open=false` (cierres). Para apertura programática usa el state
    * del Dialog (`<DialogTrigger>` en uncontrolled, o `open` prop en
    * controlled).
    */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   children: ReactNode;
 }
 

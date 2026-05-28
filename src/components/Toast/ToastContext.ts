@@ -5,22 +5,22 @@ import type { ToastVariant } from "./Toast";
 
 export interface ToastOptions {
   /** Título del toast. */
-  title?: ReactNode;
+  title?: ReactNode | undefined;
   /** Mensaje secundario. */
-  message?: ReactNode;
+  message?: ReactNode | undefined;
   /** Variant semántico. Por defecto `"neutral"`. */
-  variant?: ToastVariant;
+  variant?: ToastVariant | undefined;
   /**
    * Tiempo en ms hasta auto-dismiss. `0` desactiva el auto-dismiss (queda
    * hasta que se cierre manualmente). Por defecto `5000`.
    */
-  duration?: number;
+  duration?: number | undefined;
   /** Override del icono del toast. `false` lo oculta. */
-  icon?: ReactNode | false;
+  icon?: ReactNode | false | undefined;
   /** Si el toast muestra botón "×". Por defecto `true`. */
-  dismissible?: boolean;
+  dismissible?: boolean | undefined;
   /** Callback al cerrar (manual o auto). */
-  onDismiss?: () => void;
+  onDismiss?: (() => void) | undefined;
 }
 
 export interface ToastEntry extends ToastOptions {

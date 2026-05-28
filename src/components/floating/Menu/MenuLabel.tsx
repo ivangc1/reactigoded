@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface MenuLabelProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /** MenuLabel — cabecera tipo etiqueta para agrupar items. */

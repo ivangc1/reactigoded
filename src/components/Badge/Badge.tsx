@@ -13,20 +13,20 @@ export type BadgeSize = "sm" | "md" | "lg";
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   /** Variante de color. Por defecto `"brand"`. */
-  variant?: BadgeVariant;
+  variant?: BadgeVariant | undefined;
   /** Tamaño. `"md"` (default) no añade clase modificadora. */
-  size?: BadgeSize;
+  size?: BadgeSize | undefined;
   /** Pill/píldora con esquinas totalmente redondeadas. */
-  pill?: boolean;
+  pill?: boolean | undefined;
   /** Outline en vez de relleno sólido. */
-  outline?: boolean;
+  outline?: boolean | undefined;
   /**
    * Modo "punto": un círculo sin texto. Cuando `dot=true`, los `children`
    * se ignoran visualmente y se mueven a `aria-label` para SR. Útil como
    * indicador de estado (online, notificación, etc.).
    */
-  dot?: boolean;
-  ref?: Ref<HTMLSpanElement>;
+  dot?: boolean | undefined;
+  ref?: Ref<HTMLSpanElement> | undefined;
 }
 
 /**

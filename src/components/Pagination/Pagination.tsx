@@ -21,53 +21,53 @@ export interface PaginationProps
    * `onPageChange`. Si se omite, el componente arranca en `defaultPage`
    * y maneja el state internamente.
    */
-  page?: number;
+  page?: number | undefined;
   /**
    * Página inicial (1-based) en modo **uncontrolled**. Default `1`.
    * Ignorado si `page` está definido.
    */
-  defaultPage?: number;
+  defaultPage?: number | undefined;
   /** Número total de páginas (>=1). */
   totalPages: number;
   /** Cuántas páginas mostrar a cada lado de la actual antes de elipsis. Por defecto 1. */
-  siblingCount?: number;
+  siblingCount?: number | undefined;
   /**
    * Callback al cambiar de página. Opcional en modo uncontrolled (el
    * componente actualiza su state interno) y útil para reaccionar al
    * cambio (fetch de datos, sync con URL, etc.).
    */
-  onPageChange?: (page: number) => void;
+  onPageChange?: ((page: number) => void) | undefined;
   /** Color de la página activa. */
-  variant?: PaginationVariant;
+  variant?: PaginationVariant | undefined;
   /**
    * Contenido del botón anterior. Si es string también se usa como
    * `aria-label` (a menos que se pase `prevAriaLabel` explícito).
    * Si es ReactNode (p.ej. un icono), pasa `prevAriaLabel` con el texto
    * legible para SR.
    */
-  prevLabel?: ReactNode;
+  prevLabel?: ReactNode | undefined;
   /**
    * Contenido del botón siguiente. Mismas reglas que `prevLabel`.
    */
-  nextLabel?: ReactNode;
+  nextLabel?: ReactNode | undefined;
   /**
    * `aria-label` del botón anterior. Override explícito; si se omite y
    * `prevLabel` es string se usa éste, en otro caso "Página anterior".
    */
-  prevAriaLabel?: string;
+  prevAriaLabel?: string | undefined;
   /**
    * `aria-label` del botón siguiente. Override explícito; si se omite y
    * `nextLabel` es string se usa éste, en otro caso "Página siguiente".
    */
-  nextAriaLabel?: string;
+  nextAriaLabel?: string | undefined;
   /**
    * Genera el `aria-label` de cada botón de página. Por defecto
    * `(p) => "Página N"` en español. Útil para i18n: pasar
    * `(p) => \`Page ${p}\`` para inglés, `(p) => \`Seite ${p}\`` para
    * alemán, etc. (L-12 gate review).
    */
-  getPageLabel?: (page: number) => string;
-  ref?: Ref<HTMLElement>;
+  getPageLabel?: ((page: number) => string) | undefined;
+  ref?: Ref<HTMLElement> | undefined;
 }
 
 type PageItem = number | "ellipsis-start" | "ellipsis-end";

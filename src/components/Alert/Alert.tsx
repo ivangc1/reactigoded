@@ -16,24 +16,24 @@ export type AlertVariant =
 export interface AlertProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   /** Color/semántica del alert. */
-  variant?: AlertVariant;
+  variant?: AlertVariant | undefined;
   /** Icono opcional al inicio (suele ser un SVG o emoji). */
-  icon?: ReactNode;
+  icon?: ReactNode | undefined;
   /** Título destacado. */
-  title?: ReactNode;
+  title?: ReactNode | undefined;
   /** Permite cerrar el alert (muestra botón ×). */
-  dismissible?: boolean;
+  dismissible?: boolean | undefined;
   /** Callback al pulsar el botón ×. Disparado tanto en modo controlado como uncontrolled. */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Texto a11y para el botón de cerrar. */
-  closeLabel?: string;
+  closeLabel?: string | undefined;
   /** Si está abierto (modo controlado). */
-  open?: boolean;
+  open?: boolean | undefined;
   /** Estado inicial (modo no controlado). Por defecto `true`. */
-  defaultOpen?: boolean;
+  defaultOpen?: boolean | undefined;
   /** Callback con el siguiente estado. Modo controlado o uncontrolled. */
-  onOpenChange?: (open: boolean) => void;
-  ref?: Ref<HTMLDivElement>;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

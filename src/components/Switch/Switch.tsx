@@ -27,9 +27,9 @@ export type SwitchVariant =
 export interface SwitchProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> {
   /** Color del switch cuando está activo. */
-  variant?: SwitchVariant;
+  variant?: SwitchVariant | undefined;
   /** Etiqueta visible junto al switch. */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /**
    * Activa el tercer estado visual del switch (thumb centrado en el
    * track, color de variante de fondo). Se aplica vía
@@ -38,15 +38,15 @@ export interface SwitchProps
    * toggles maestros que controlan un grupo donde unos hijos están
    * on y otros off (desde 1.0.0-beta.8).
    */
-  indeterminate?: boolean;
+  indeterminate?: boolean | undefined;
   /**
    * Ids extra para `aria-describedby`. Pasar string para un único id o
    * array para varios. Se concatenan con cualquier `aria-describedby`
    * que el consumer pase por rest. Patrón canónico del DS para enlazar
    * `Helper` / `ErrorText` / live-regions con tecnologías asistivas.
    */
-  describedBy?: string | string[];
-  ref?: Ref<HTMLInputElement>;
+  describedBy?: string | string[] | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 /**

@@ -46,12 +46,12 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
    * el valor inicial; sin un mecanismo para mutarlo el componente sería
    * un display estático sin razón de ser.
    */
-  active?: number;
+  active?: number | undefined;
   /**
    * Valor inicial en **modo uncontrolled** (cuando `active` es
    * undefined). Por defecto `0`. Ignorado en modo controlled.
    */
-  defaultActive?: number;
+  defaultActive?: number | undefined;
   /**
    * Callback cuando el usuario navega o activa por teclado / click.
    * Dispara en ambos modos:
@@ -77,12 +77,12 @@ export interface StepperProps extends HTMLAttributes<HTMLDivElement> {
    * controlled el consumer decide si lo aplica (puede rechazar saltos
    * hacia adelante en un wizard, p.ej.).
    */
-  onActiveChange?: (next: number) => void;
+  onActiveChange?: ((next: number) => void) | undefined;
   /** Si true, usa el layout con labels debajo (`ig-stepper-labeled`). */
-  labeled?: boolean;
+  labeled?: boolean | undefined;
   /** Una lista de `Step`. */
   children: ReactNode;
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**

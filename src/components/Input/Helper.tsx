@@ -2,7 +2,7 @@ import type { HTMLAttributes, Ref } from "react";
 import { cn } from "@/utils/cn";
 
 export interface HelperProps extends HTMLAttributes<HTMLParagraphElement> {
-  ref?: Ref<HTMLParagraphElement>;
+  ref?: Ref<HTMLParagraphElement> | undefined;
 }
 
 /**

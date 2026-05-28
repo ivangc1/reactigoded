@@ -11,7 +11,7 @@ import { cn } from "@/utils/cn";
 import { useMenu } from "./MenuContext";
 
 export interface MenuContentProps extends HTMLAttributes<HTMLDivElement> {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement> | undefined;
   /**
    * **D2 + H-04 paralelo (RC1 gate review beta.24)**: target HTMLElement
    * para el `<FloatingPortal>`. Default `document.body`.
@@ -27,7 +27,7 @@ export interface MenuContentProps extends HTMLAttributes<HTMLDivElement> {
    * Acepta `HTMLElement` directo o un `RefObject` (Floating UI resuelve
    * ambos).
    */
-  container?: HTMLElement | RefObject<HTMLElement | null> | null;
+  container?: HTMLElement | RefObject<HTMLElement | null> | null | undefined;
 }
 
 /**

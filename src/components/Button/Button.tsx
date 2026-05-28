@@ -38,19 +38,19 @@ export type ButtonAppearance = "solid" | "outline" | "ghost" | "link";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Variante semántica de color. Por defecto `"brand"`. */
-  variant?: ButtonVariant;
+  variant?: ButtonVariant | undefined;
   /** Apariencia visual. Por defecto `"solid"`. */
-  appearance?: ButtonAppearance;
+  appearance?: ButtonAppearance | undefined;
   /** Tamaño. `"md"` (default) no añade clase modificadora. */
-  size?: ButtonSize;
+  size?: ButtonSize | undefined;
   /** Muestra spinner y bloquea clicks. */
-  loading?: boolean;
+  loading?: boolean | undefined;
   /** Ocupa el ancho completo del contenedor. */
-  block?: boolean;
+  block?: boolean | undefined;
   /** Botón solo-icono (cuadrado, padding equilibrado). */
-  icon?: boolean;
+  icon?: boolean | undefined;
   /** Ref al `<button>` subyacente. En React 19 es prop normal. */
-  ref?: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement> | undefined;
 }
 
 /**
