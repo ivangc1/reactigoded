@@ -1,7 +1,7 @@
 # M-01 — Polymorphic `as` solo en Card
 
 **Fecha**: 2026-05-10
-**Estado**: status quo (mantener solo en Card), decisión patrón global diferida a 2.0
+**Estado**: ⚠️ **PARCIALMENTE SUPERSEDED por [D14](D14-slot-pattern-ds-wide.md) (2026-05-28)**. La parte de M-01 que difería el Slot pattern DS-wide a 2.0 queda revertida: Slot entra en 1.0 (beta.27) por decisión del cruce reviews beta.25 (cuantificación ~1800–2700 LOC + asimetría léxica heredada). La parte de M-01 sobre `as` polimórfica (no Slot) sigue diferida por separado — es ortogonal: Slot cubre el 80% de los casos donde se pedía `as`, y el 20% restante puede esperar a 1.x post-rc.1.
 **Origen**: gate review § IV.3 línea 1086
 
 ## Contexto
