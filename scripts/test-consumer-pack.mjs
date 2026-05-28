@@ -131,13 +131,20 @@ try {
   console.log(`\n[consumer-pack 2/5] Sandbox: ${sandbox}`);
 
   // ─── 3. Sandbox package.json + fixture ─────────────────────────
-  // Versiones de peer deps: copiamos las del paquete real (rango
-  // declarado en peerDependencies del package.json del repo) para
-  // ejercitar la resolución que un consumer enterprise real haría.
-  const repoPkg = JSON.parse(
-    readFileSync(join(repoRoot, "package.json"), "utf8"),
-  );
-  const peers = repoPkg.peerDependencies ?? {};
+  // Versiones EXACTAS instaladas en el node_modules del repo (resueltas
+  // por el lockfile principal). Garantiza que el gate use exactamente
+  // las mismas versiones de peers + tooling que el resto del CI del repo.
+  //
+  // Codex P2 round 1 sobre #108: usar rangos (`react: ">=19.0.0"` o incluso
+  // `^19.2.6`) hacía que el gate resolviera versiones distintas cada
+  // ejecución según lo que estuviera publicado en npm — releases futuras
+  // (e.g., React 20, FUI 0.28) podrían romper el gate sin que el repo
+  // cambiase. El gate debe ser DETERMINISTA respecto al estado del repo;
+  // las versiones exactas leídas de node_modules cumplen ese contrato.
+  function installedVersion(name) {
+    const pkgPath = join(repoRoot, "node_modules", name, "package.json");
+    return JSON.parse(readFileSync(pkgPath, "utf8")).version;
+  }
 
   const sandboxPkg = {
     name: "reactigoded-consumer-pack-test",
@@ -146,12 +153,15 @@ try {
     type: "module",
     dependencies: {
       reactigoded: `file:${tarballPath}`,
-      ...peers,
+      "@floating-ui/react": installedVersion("@floating-ui/react"),
+      clsx: installedVersion("clsx"),
+      react: installedVersion("react"),
+      "react-dom": installedVersion("react-dom"),
     },
     devDependencies: {
-      typescript: repoPkg.devDependencies.typescript,
-      "@types/react": repoPkg.devDependencies["@types/react"],
-      "@types/react-dom": repoPkg.devDependencies["@types/react-dom"],
+      typescript: installedVersion("typescript"),
+      "@types/react": installedVersion("@types/react"),
+      "@types/react-dom": installedVersion("@types/react-dom"),
     },
   };
   writeFileSync(
