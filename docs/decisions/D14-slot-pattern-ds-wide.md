@@ -57,14 +57,18 @@ export interface SlotProps {
 export function Slot(props: SlotProps): React.ReactElement;
 ```
 
+Vocabulario (importante para evitar la confusión que Codex P2 round 1 cazó):
+- **"props del parent"** = props pasados A Slot por el componente library (e.g., `DialogClose` pasa `onClick={closeHandler}` a `<Slot>` para cerrar el dialog al click). NO son props del consumer.
+- **"props del child"** = props que el child element del consumer ya tiene (e.g., `<Button onClick={consumerHandler}>` que el consumer escribió dentro del `<DialogClose asChild>`).
+
 Comportamiento:
 - Recibe **exactamente UN child React element**.
-- Mergea props del padre Slot + props del child:
-  - `className`: concatenado con `cn(parent, child)`.
-  - `style`: merge shallow, child wins en colisiones (`{...parent, ...child}`).
-  - `ref`: composed con `composeRefs(parent, child)` — ambos refs reciben el DOM node.
-  - Event handlers (`onClick`, `onPointerDown`, etc.): chained, parent first. Si parent llama `e.preventDefault()`, el child handler NO corre.
-  - Resto de props: parent provee defaults, child override.
+- Mergea props del parent Slot + props del child con estas reglas:
+  - **`className`**: `cn(parentClassName, childClassName)` — parent primero, child appended. Consumer's classes pueden override las del library porque se aplican después en el cascade CSS.
+  - **`style`**: merge shallow con child wins en colisiones (`{...parentStyle, ...childStyle}`). Consumer's inline style override defaults del library.
+  - **`ref`**: `composeRefs(parentRef, childRef)` — ambos refs reciben el DOM node, ninguno se pierde.
+  - **Event handlers** (`onClick`, `onPointerDown`, etc.): chained, **child handler primero** (consumer's). Library's handler corre **solo si** consumer no llamó `e.preventDefault()`. Ver edge case #4 para el rationale completo — patrón canónico Radix `composeEventHandlers(child, parent)`.
+  - **Resto de props** (aria-*, data-*, role, etc.): parent provee defaults, child override (consumer's value gana si está set).
 
 ### Edge case contract (explícito antes de implementar)
 
