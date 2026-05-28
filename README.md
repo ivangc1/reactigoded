@@ -55,6 +55,51 @@ la dep si el consumer ya la tenía vía Radix/Headless UI/otra DS.
 Externalizarla mantiene el bundle ESM de reactigoded en ~16 KB gz
 (budget 20 KB con headroom para crecimiento, D9 beta.24).
 
+### ⚠ Riesgo pre-1.0 — qué pasa cuando FUI publique 0.28
+
+`@floating-ui/react` está actualmente en `0.27.x` (pre-1.0). En semver
+pre-1.0 el caret `^0.27.0` se comporta distinto que en versiones
+mayores estables:
+
+```
+^0.27.0  →  matchea 0.27.x SOLAMENTE  (NO matchea 0.28.0)
+^1.27.0  →  matchea 1.x.x  (sí matchearía 1.28.0)
+```
+
+Es decir: una vez FUI publique `0.28.0`, los consumers haciendo
+`npm install reactigoded` con la rango `^0.27.0` de nuestro
+peerDependencies verán warning de peer-dep no satisfecho si tienen
+`@floating-ui/react@0.28.x` ya instalado por otra dep. Eso es
+intencional — un minor bump en `0.x` puede traer breaking changes
+(la convención semver de pre-1.0).
+
+**Política del DS** (decision doc `D10-fui-peer-dep-verify.md`):
+
+1. Mantenemos `^0.27.0` cerrado hasta verificar compatibilidad
+   con la nueva minor.
+2. Cuando FUI publique `0.28.0`, hacemos cross-check de los 20
+   símbolos que usamos (`autoUpdate`, `useFloating`, `flip`, etc.).
+3. Si la nueva minor no rompe nuestros uses, ampliamos el rango a
+   `^0.27.0 || ^0.28.0` en un patch release del DS.
+4. Si rompe, evaluamos: pinar `0.27.x` permanente, o adoptar `0.28`
+   con un minor bump del DS (breaking si el cambio toca API expuesta).
+
+**Si tu app YA usa `@floating-ui/react` directamente**: pinea
+explícitamente `0.27.x` en tu `package.json` para evitar que un `npm
+install` de tu app traiga `0.28.0` automático y rompa la resolución
+del peer-dep antes de que actualicemos el rango.
+
+```jsonc
+// tu package.json
+"dependencies": {
+  "@floating-ui/react": "~0.27.0", // tilde — solo patches dentro de 0.27
+  "reactigoded": "^1.0.0"
+}
+```
+
+Una vez FUI llegue a `1.0.0`, este riesgo desaparece (`^1.0.0`
+permite minor bumps con backwards compat semver-standard).
+
 ## CSS imports
 
 8 entradas. Lo habitual: importa solo `design.css` (+ opcionalmente `fonts.css` si quieres las tipografías Google del DS).
