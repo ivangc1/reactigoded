@@ -48,8 +48,15 @@
  *     tarball de reactigoded NO declara postinstall ni similar, pero los
  *     transitive deps de @floating-ui/react o @types/* podrían declarar
  *     scripts arbitrarios. Sandbox = no nos importan.
- *   - `--no-package-lock`: lockfile del sandbox es ephemeral, no
- *     persistible, ahorra IO en `/tmp`.
+ *   - Copia del `package-lock.json` del repo al sandbox (sin
+ *     `--no-package-lock`): codex P2 round 2 cazó que pin direct
+ *     versions no es suficiente — transitivos como `scheduler:^0.27.0`,
+ *     `tabbable:^6.0.0`, `csstype:^3.2.2` seguían flotando. Copiar el
+ *     lockfile principal (que ya está resuelto a SHAs exactos por el
+ *     `npm ci` de CI) garantiza que TODOS los nodos del grafo resuelvan
+ *     al mismo bit que el repo. `reactigoded` (file:tarball) queda fuera
+ *     del lockfile — el reconcile de `npm install` lo añade fresh sin
+ *     tocar el resto.
  *   - Sandbox y pack-destination ambos en `os.tmpdir()` (ext4 nativo en
  *     Linux/WSL, NTFS aislado en Windows) — mismo principio que
  *     `~/reactigoded` migration: evitar el path NTFS via `/mnt/c` que
@@ -179,15 +186,32 @@ try {
     join(sandbox, "tsconfig.nodenext.json"),
   );
 
+  // Codex P2 round 2: copiar el lockfile del repo al sandbox para que
+  // los TRANSITIVOS también queden pinned (sin esto, `scheduler:^0.27.0`,
+  // `tabbable:^6.0.0`, `csstype:^3.2.2`, etc. resuelven a versiones
+  // futuras que el repo no ha visto). El lockfile principal está
+  // resuelto a SHAs exactos por `npm ci` del CI principal — el sandbox
+  // hereda esa resolución íntegra. `reactigoded` (file:tarball) no está
+  // en el lockfile principal; npm install lo añade fresh sin tocar el
+  // resto del grafo.
+  cpSync(
+    join(repoRoot, "package-lock.json"),
+    join(sandbox, "package-lock.json"),
+  );
+
   // ─── 4. npm install en sandbox ─────────────────────────────────
   // Flags:
   //   --ignore-scripts: defensive frente a postinstall de transitive deps.
   //   --no-audit / --no-fund: silencia ruido irrelevante.
-  //   --no-package-lock: lockfile ephemeral, no se persiste.
   //   --legacy-peer-deps: replica el flag usado en CI principal (verify.yml).
+  //
+  // NO usamos --no-package-lock: queremos que npm reconcile el lockfile
+  // copiado del repo + el package.json del sandbox. Los transitivos
+  // ya resueltos en el lockfile quedan pinned; reactigoded (file:tarball)
+  // se añade fresh.
   console.log("\n[consumer-pack 3/5] npm install en sandbox");
   run(
-    "npm install --ignore-scripts --no-audit --no-fund --no-package-lock --legacy-peer-deps",
+    "npm install --ignore-scripts --no-audit --no-fund --legacy-peer-deps",
     { cwd: sandbox },
   );
 
