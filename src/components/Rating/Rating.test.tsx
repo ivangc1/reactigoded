@@ -320,4 +320,88 @@ describe("Rating — clamp inputs inválidos (regression beta.4)", () => {
       "native-id helper-1 error-1",
     );
   });
+
+  // #153: form-value bridge nativo. Cierra asimetría con Checkbox/Switch/
+  // Radio/Slider/NativeSelect (todos serializan vía input nativo
+  // heredado). Rating expone `name` opcional; al pasarlo renderiza un
+  // `<input type="hidden">` que espeja el valor efectivo.
+  describe("form-value serialization (#153)", () => {
+    it("uncontrolled: tras click en estrella 3, FormData recoge value=3", async () => {
+      const user = userEvent.setup();
+      render(
+        <form data-testid="form">
+          <Rating name="score" defaultValue={0} max={5} />
+        </form>,
+      );
+      const form = screen.getByTestId<HTMLFormElement>("form");
+      expect(new FormData(form).get("score")).toBe("0");
+
+      const star3 = screen.getByRole("radio", { name: "3 estrellas" });
+      await user.click(star3);
+
+      expect(new FormData(form).get("score")).toBe("3");
+    });
+
+    it("controlled: hidden input espeja el prop value sin requerir click", () => {
+      render(
+        <form data-testid="form">
+          <Rating name="score" value={4} max={5} onValueChange={() => {}} />
+        </form>,
+      );
+      const form = screen.getByTestId<HTMLFormElement>("form");
+      expect(new FormData(form).get("score")).toBe("4");
+    });
+
+    it("controlled: re-render con value distinto actualiza el hidden input", () => {
+      const { rerender } = render(
+        <form data-testid="form">
+          <Rating name="score" value={2} max={5} onValueChange={() => {}} />
+        </form>,
+      );
+      const form = screen.getByTestId<HTMLFormElement>("form");
+      expect(new FormData(form).get("score")).toBe("2");
+
+      rerender(
+        <form data-testid="form">
+          <Rating name="score" value={5} max={5} onValueChange={() => {}} />
+        </form>,
+      );
+      expect(new FormData(form).get("score")).toBe("5");
+    });
+
+    it("sin `name`: NO renderiza hidden input (Rating queda display-only para forms)", () => {
+      render(
+        <form data-testid="form">
+          <Rating defaultValue={3} max={5} />
+        </form>,
+      );
+      const form = screen.getByTestId<HTMLFormElement>("form");
+      expect([...new FormData(form).keys()]).toHaveLength(0);
+      expect(form.querySelectorAll('input[type="hidden"]')).toHaveLength(0);
+    });
+
+    it("readOnly con `name`: serializa el value sin permitir interacción", async () => {
+      const user = userEvent.setup();
+      render(
+        <form data-testid="form">
+          <Rating name="score" value={4} max={5} readOnly />
+        </form>,
+      );
+      const form = screen.getByTestId<HTMLFormElement>("form");
+      expect(new FormData(form).get("score")).toBe("4");
+      const star1 = screen.getByRole("radio", { name: "1 estrella" });
+      await user.click(star1);
+      expect(new FormData(form).get("score")).toBe("4");
+    });
+
+    it("value out-of-range se clampa antes de serializar (consistente con runtime)", () => {
+      render(
+        <form data-testid="form">
+          <Rating name="score" value={99} max={5} onValueChange={() => {}} />
+        </form>,
+      );
+      const form = screen.getByTestId<HTMLFormElement>("form");
+      expect(new FormData(form).get("score")).toBe("5");
+    });
+  });
 });
