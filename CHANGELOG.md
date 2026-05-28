@@ -17,7 +17,7 @@ Cierra el bloque **claudegate5 / beta.27** (25 PRs entre #105 y
   Patrón canónico Radix/shadcn habilitado en todo el DS.
 - **EOPT widening completo (#155)**: 307 props públicas opcionales
   ensanchadas a `?: T | undefined` para consumers con
-  `exactOptionalPropertyTypes: true`. 3 fronteras documentadas
+  `exactOptionalPropertyTypes: true`. 2 fronteras documentadas
   explícitamente (sección final del bloque).
 - **Red de seguridad cross-platform (#151)**: matriz CI 4 combos
   (ubuntu/windows × Node 22.12/24), test catálogo `CLIENT_GLOBALS`
@@ -204,24 +204,9 @@ reviews los identifican.
 
 ### EOPT widening — fronteras (consumer-facing)
 
-El widening `?: T | undefined` de #155 cubre **307 props del DS**. Hay 3 clases NO cubiertas que el consumer EOPT debe conocer para evitar confusión en el primer caso de cada una.
+El widening `?: T | undefined` de #155 cubre **307 props del DS**. Hay 2 clases NO cubiertas que el consumer EOPT debe conocer.
 
-#### 1. Props heredadas de `InputHTMLAttributes` (React)
-
-`Switch.checked`, `Slider.value`, `Slider.defaultValue`, etc. NO ensanchadas porque su tipo viene de React (`InputHTMLAttributes<HTMLInputElement>`), no del DS. Un consumer EOPT que haga:
-
-```tsx
-<Switch checked={cond ? true : undefined} />
-//      ^^^^^^^ TS error: Type 'undefined' is not assignable to type 'boolean'
-```
-
-…verá el error por los tipos de React, no del DS. Workaround: omitir la prop vía spread condicional.
-
-```tsx
-<Switch {...(cond ? { checked: true } : {})} />
-```
-
-#### 2. Discriminantes con literal `?: undefined`
+#### 1. Discriminantes con literal `?: undefined`
 
 `MenuItem.href`, `SidebarItem.href`, `NavbarBrand.AsDiv.href`. NO ensanchadas porque rompería el discriminated union — son los literal `undefined` que activan la rama `button`/`div`:
 
@@ -230,7 +215,7 @@ El widening `?: T | undefined` de #155 cubre **307 props del DS**. Hay 3 clases 
 <MenuItem href="/perfil">Acción anchor</MenuItem>
 ```
 
-#### 3. Exclusiones con `?: never`
+#### 2. Exclusiones con `?: never`
 
 8 props del inventory `scripts/eopt-classify.mjs --json` marcadas `OUT_OF_SCOPE_NEVER`. NO ensanchadas porque `never` es el mecanismo de exclusión de variantes en discriminated unions.
 
