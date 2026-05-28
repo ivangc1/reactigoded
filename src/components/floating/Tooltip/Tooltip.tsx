@@ -618,8 +618,24 @@ export function Tooltip({
   //   consumer en lugar de sobreescribirlo.
   // - `aria-describedby` al final para que NO sea pisado (apunta al
   //   sr-only span persistente, no al portal).
-  const existing = children.props["aria-describedby"];
-  const combined = existing ? `${existing} ${tooltipId}` : tooltipId;
+  //
+  // Codex P2 round 1 sobre #112 (D14 Bloque C): aria-describedby es una
+  // ID-list ARIA (space-separated). Cuando un outer Slot wrapper
+  // (`<Foo asChild>`) o el consumer pasa aria-describedby directo a
+  // Tooltip via la nueva API forwardeada, hay que CONCATENAR — no
+  // "child wins" como las default merge rules de Slot harían. Por eso
+  // incluimos `outerSlotProps["aria-describedby"]` en el combined
+  // ANTES de cloneElement. El Slot wrap posterior aplica child-wins
+  // sobre el resultado: como el child ya contiene los IDs del outer
+  // dentro de combined, no se pierde nada (idempotente).
+  const outerDescribedBy =
+    typeof outerSlotProps["aria-describedby"] === "string"
+      ? outerSlotProps["aria-describedby"]
+      : undefined;
+  const childDescribedBy = children.props["aria-describedby"];
+  const combined = [outerDescribedBy, childDescribedBy, tooltipId]
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .join(" ");
   const referenceProps = getReferenceProps(children.props);
 
   // Capa 2b — wrap dev-only de onMouseEnter/onFocus para detectar si

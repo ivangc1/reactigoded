@@ -936,6 +936,56 @@ describe("Tooltip — nested asChild forwarding (D14 Bloque C beta.27)", () => {
     // de las describe blocks anteriores).
   });
 
+  it("outer aria-describedby se CONCATENA con el de Tooltip (no winner-takes-all)", () => {
+    // Codex P2 round 1 sobre #112: aria-describedby es ID-list ARIA,
+    // semánticamente debe concatenar. Slot's default merge rules ('child
+    // wins') dropearían el ID del outer wrapper silenciosamente,
+    // rompiendo descripciones a11y compuestas (e.g., outer error
+    // message ID + Tooltip's text).
+    //
+    // El fix: Tooltip incluye outerSlotProps['aria-describedby'] en el
+    // 'combined' antes de cloneElement. El Slot posterior aplica
+    // child-wins sobre un combined que ya tiene el outer ID → no se
+    // pierde nada.
+    const outerSlotProps: Record<string, unknown> = {
+      "aria-describedby": "outer-help-text-id",
+    };
+    render(
+      <Tooltip text="Pista interna" {...outerSlotProps}>
+        <button data-testid="probe" aria-describedby="child-id">
+          x
+        </button>
+      </Tooltip>,
+    );
+    const describedBy = screen
+      .getByTestId("probe")
+      .getAttribute("aria-describedby");
+    // Los 3 IDs deben estar presentes: outer + child + tooltipId.
+    expect(describedBy).toContain("outer-help-text-id");
+    expect(describedBy).toContain("child-id");
+    // tooltipId es generado dinámicamente — solo verificamos formato
+    // ID-list y que ningún ID se perdió.
+    expect(describedBy?.split(" ").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("outer aria-describedby aplica también cuando child NO tiene aria-describedby propio", () => {
+    // Edge case: outer pasa aria-describedby pero el child no tiene
+    // ninguna. Sin el fix: child wins → solo tooltipId, outer dropeado.
+    // Con el fix: combined = 'outer-id tooltipId'.
+    const outerSlotProps: Record<string, unknown> = {
+      "aria-describedby": "outer-only-id",
+    };
+    render(
+      <Tooltip text="Pista" {...outerSlotProps}>
+        <button data-testid="probe">x</button>
+      </Tooltip>,
+    );
+    const describedBy = screen
+      .getByTestId("probe")
+      .getAttribute("aria-describedby");
+    expect(describedBy).toContain("outer-only-id");
+  });
+
   it("Tooltip sin outer props no añade Slot wrapper redundante (skip optimization)", () => {
     // Hot-path: uso normal de Tooltip sin outer wrapper. El Slot interno
     // se omite cuando outerSlotProps está vacío. Test indirecto: verify
