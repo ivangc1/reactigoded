@@ -18,5 +18,5 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true
   },
-  "include": ["app.tsx"]
+  "include": ["app.tsx", "app-eopt-undefined.tsx"]
 }

@@ -178,6 +178,10 @@ try {
 
   cpSync(join(fixtureDir, "app.tsx"), join(sandbox, "app.tsx"));
   cpSync(
+    join(fixtureDir, "app-eopt-undefined.tsx"),
+    join(sandbox, "app-eopt-undefined.tsx"),
+  );
+  cpSync(
     join(fixtureDir, "tsconfig.bundler.json"),
     join(sandbox, "tsconfig.bundler.json"),
   );
