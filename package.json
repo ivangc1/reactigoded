@@ -1,7 +1,7 @@
 {
   "name": "reactigoded",
-  "version": "1.0.0-beta.25",
-  "description": "igoded design system — componentes React + CSS utility-first state-driven",
+  "version": "1.0.0-beta.26",
+  "description": "igoded design system \u2014 componentes React + CSS utility-first state-driven",
   "license": "MIT",
   "author": "ivangc1",
   "homepage": "https://github.com/ivangc1/reactigoded#readme",
@@ -109,10 +109,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
-    "_comment_build_storybook": "Genera el artefacto deployable a igoded.es con lang=es aplicado al HTML estático. NO añadir flag --output-dir aquí; el lang fix asume el default storybook-static/. Si Chromatic invoca este script, ver chromatic.config.json (apunta a build-storybook:chromatic, sin lang fix).",
+    "_comment_build_storybook": "Genera el artefacto deployable a igoded.es con lang=es aplicado al HTML est\u00e1tico. NO a\u00f1adir flag --output-dir aqu\u00ed; el lang fix asume el default storybook-static/. Si Chromatic invoca este script, ver chromatic.config.json (apunta a build-storybook:chromatic, sin lang fix).",
     "build-storybook": "storybook build && node scripts/fix-storybook-static-lang.mjs",
     "build-storybook:chromatic": "storybook build",
-    "_comment_verify_fast": "Verify rápido para iterar local: ~5 min cold (lint+typecheck+test:unit threads). Bajan ~50s con vitest cache caliente, pero el escenario típico es cold (cambia un componente, vitest reconstruye su grafo). vs ~25-30 min de verify:unit completo (--isolate --pool=forks). Sirve para iterar local; CI sigue corriendo el verify completo tras push y caza estado compartido entre tests / mocks que se filtran / divergencias de typecheck por @types instalados pero no incluidos en compilerOptions.types. Contador CI fallos con verify:fast OK: 1 (B-05 process.env.NODE_ENV — typecheck local pasó por @types/node ambient, CI strict cazó; fix: usar `import.meta.env.DEV` patrón Slider/Pagination del DS).",
+    "_comment_verify_fast": "Verify r\u00e1pido para iterar local: ~5 min cold (lint+typecheck+test:unit threads). Bajan ~50s con vitest cache caliente, pero el escenario t\u00edpico es cold (cambia un componente, vitest reconstruye su grafo). vs ~25-30 min de verify:unit completo (--isolate --pool=forks). Sirve para iterar local; CI sigue corriendo el verify completo tras push y caza estado compartido entre tests / mocks que se filtran / divergencias de typecheck por @types instalados pero no incluidos en compilerOptions.types. Contador CI fallos con verify:fast OK: 1 (B-05 process.env.NODE_ENV \u2014 typecheck local pas\u00f3 por @types/node ambient, CI strict caz\u00f3; fix: usar `import.meta.env.DEV` patr\u00f3n Slider/Pagination del DS).",
     "verify:fast": "npm run lint && npm run typecheck && npm run test:unit",
     "verify:unit": "node scripts/clean.mjs tsconfig.tsbuildinfo && npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run test:server-safe-markers && npm run build && npm run test:state-css-exclusion && npm run test:publint && npm run test:rsc-fixture && npm run test:consumer-types && npm run test:consumer-types:nodenext && npm run test:consumer-pack",
     "verify:storybook": "npm run test:storybook",
@@ -162,7 +162,7 @@
       "gzip": true
     },
     {
-      "name": "base.css globales mínimos",
+      "name": "base.css globales m\u00ednimos",
       "path": "dist/styles/igoded-base.css",
       "limit": "600 B",
       "gzip": true
