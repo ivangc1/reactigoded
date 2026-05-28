@@ -9,7 +9,6 @@ import { DialogHeader } from "./DialogHeader";
 import { DialogBody } from "./DialogBody";
 import { DialogFooter } from "./DialogFooter";
 import { DialogClose } from "./DialogClose";
-import { DialogAction } from "./DialogAction";
 
 // D6 (beta.24): Dialog ahora es el Provider; el `<dialog>` real es
 // DialogContent. Todos los tests usan el patrón compound canónico.
@@ -579,20 +578,22 @@ describe("Dialog subcomponents", () => {
     );
   });
 
-  it("DialogAction cierra vía contexto sin styling base (footer CTA)", async () => {
-    // El descubrimiento: usar DialogClose con `className="ig-btn ig-btn-..."`
-    // para CTAs del footer mezclaba `ig-dialog-close` (2rem × 2rem fixed)
-    // con las clases del button → descuadre vertical y horizontal en el
-    // footer. DialogAction es el equivalente unstyled (mirror exacto de
-    // AlertDialogClose) que cierra via context pero NO aplica
-    // `ig-dialog-close`, dejando al consumer la elección visual.
+  it("DialogClose asChild cierra vía contexto sin aplicar ig-dialog-close (footer CTA)", async () => {
+    // D14 Bloque B: el patrón canónico para CTAs del footer reemplaza
+    // el viejo `<DialogAction>` (eliminado) por
+    // `<DialogClose asChild><Button>...</Button></DialogClose>`. Slot
+    // pattern: el child del consumer es el elemento renderizado,
+    // DialogClose solo inyecta el onClick handler + aria-label default.
+    // No se aplica `ig-dialog-close` (consumer trae su propio styling).
     const user = userEvent.setup();
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
     render(
       <Dialog defaultOpen>
         <DialogContent>
           <DialogFooter>
-            <DialogAction>Aceptar</DialogAction>
+            <DialogClose asChild>
+              <button type="button">Aceptar</button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>,
@@ -604,14 +605,19 @@ describe("Dialog subcomponents", () => {
     closeSpy.mockRestore();
   });
 
-  it("DialogAction con className consumer NO añade ig-dialog-close", () => {
+  it("DialogClose asChild con className consumer NO añade ig-dialog-close", () => {
+    // D14 Bloque B: el className que el consumer pase a DialogClose se
+    // mergea con el del child via Slot (cn(slot, child)). Pero NO se
+    // añade `ig-dialog-close` porque el path asChild lo skipea.
     render(
       <Dialog defaultOpen>
         <DialogContent>
           <DialogFooter>
-            <DialogAction className="ig-btn ig-btn-brand">
-              Confirmar
-            </DialogAction>
+            <DialogClose asChild>
+              <button type="button" className="ig-btn ig-btn-brand">
+                Confirmar
+              </button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>,
@@ -622,20 +628,23 @@ describe("Dialog subcomponents", () => {
     expect(btn).not.toHaveClass("ig-dialog-close");
   });
 
-  it("DialogAction.onClick consumer con preventDefault NO cierra", async () => {
+  it("DialogClose asChild + onClick consumer con preventDefault NO cierra", async () => {
     const user = userEvent.setup();
     const closeSpy = vi.spyOn(HTMLDialogElement.prototype, "close");
     render(
       <Dialog defaultOpen>
         <DialogContent>
           <DialogFooter>
-            <DialogAction
-              onClick={(e) => {
-                e.preventDefault();
-              }}
-            >
-              Aceptar
-            </DialogAction>
+            <DialogClose asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                }}
+              >
+                Aceptar
+              </button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>,

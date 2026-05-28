@@ -8,7 +8,6 @@ import { DialogHeader } from "./DialogHeader";
 import { DialogBody } from "./DialogBody";
 import { DialogFooter } from "./DialogFooter";
 import { DialogClose } from "./DialogClose";
-import { DialogAction } from "./DialogAction";
 import { Button } from "@/components/Button";
 
 const meta = {
@@ -18,7 +17,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Dialog compound (D6 beta.24) — `<Dialog>` es el Provider del estado, `<DialogContent>` es el `<dialog>` HTML nativo con focus-trap/ESC/top-layer del browser, `<DialogTrigger>` abre el modal sin necesidad de useState consumer en uncontrolled. Compón con `DialogHeader`, `DialogBody`, `DialogFooter`, `DialogClose`. Nota: `DialogTrigger` y `DialogClose` son `<button>` planos — para estilarlos como `<Button>` del DS, pasa la clase `ig-btn ig-btn-brand` (o las que apliquen) via `className` (un patrón `asChild` viene en 1.1).",
+          "Dialog compound (D6 beta.24, D14 Bloque B beta.27) — `<Dialog>` es el Provider del estado, `<DialogContent>` es el `<dialog>` HTML nativo con focus-trap/ESC/top-layer del browser, `<DialogTrigger>` abre el modal sin necesidad de useState consumer en uncontrolled. Compón con `DialogHeader`, `DialogBody`, `DialogFooter`, `DialogClose`. Slot pattern (D14): `<DialogTrigger asChild>` y `<DialogClose asChild>` permiten usar cualquier elemento del consumer (típicamente `<Button>` del DS) como trigger/close, propagando aria props + handlers sin wrapper. `DialogAction` ELIMINADO en beta.27 — patrón canónico ahora es `<DialogClose asChild><Button>...</Button></DialogClose>`.",
       },
     },
   },
@@ -39,7 +38,10 @@ export const PorDefecto: Story = {
   },
   render: () => (
     <Dialog defaultOpen={false}>
-      <DialogTrigger className="ig-btn ig-btn-brand">Abrir modal</DialogTrigger>
+      {/* Slot pattern (D14): DialogTrigger asChild + Button del DS */}
+      <DialogTrigger asChild>
+        <Button variant="brand">Abrir modal</Button>
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <h2>Confirmar acción</h2>
@@ -51,12 +53,13 @@ export const PorDefecto: Story = {
           </p>
         </DialogBody>
         <DialogFooter>
-          <DialogAction className="ig-btn ig-btn-secondary">
-            Cancelar
-          </DialogAction>
-          <DialogAction className="ig-btn ig-btn-brand">
-            Aceptar
-          </DialogAction>
+          {/* Slot pattern (D14): reemplaza el viejo DialogAction */}
+          <DialogClose asChild>
+            <Button variant="secondary">Cancelar</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button variant="brand">Aceptar</Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -204,9 +207,9 @@ export const NoCloseOnBackdrop: Story = {
           </p>
         </DialogBody>
         <DialogFooter>
-          <DialogAction className="ig-btn ig-btn-brand">
-            Entendido
-          </DialogAction>
+          <DialogClose asChild>
+            <Button variant="brand">Entendido</Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

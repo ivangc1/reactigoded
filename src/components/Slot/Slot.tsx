@@ -34,9 +34,15 @@ import { composeEventHandlers } from "./composeEventHandlers";
  */
 export interface SlotProps {
   children: ReactNode;
-  className?: string;
-  style?: CSSProperties;
-  ref?: Ref<HTMLElement>;
+  // `| undefined` explícito para `exactOptionalPropertyTypes: true`. Los
+  // wrappers asChild (DialogClose, DialogTrigger, etc.) frecuentemente
+  // pasan `className={consumerClassName}` donde el value puede ser
+  // undefined. Sin `| undefined` aquí, cada wrapper tendría que hacer
+  // spread condicional (`...(x ? { x } : {})`) — ruido innecesario en
+  // 4 components.
+  className?: string | undefined;
+  style?: CSSProperties | undefined;
+  ref?: Ref<HTMLElement> | undefined;
   // Index signature for arbitrary props (event handlers, aria-*, data-*,
   // role, etc.). Unknown type forces explicit narrowing en el merge.
   [key: string]: unknown;
