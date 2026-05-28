@@ -101,6 +101,33 @@ rmFilesByPrefix("utils", INTERNAL_UTILS_PREFIXES);
 // regresar el comportamiento. Mantener el guardrail aquí es barato.
 rmFilesByPrefix(".", ["_internal-env.", "vite-env."]);
 
+// #159 (beta.27): `dist/cn.d.ts` huérfano. vite-plugin-dts con
+// `insertTypesEntry: true` (vite.lib.config.ts) emite un `.d.ts` entry
+// por cada vite entry — para `cn` genera `dist/cn.d.ts` con un
+// re-export trivial `export * from './utils/cn.js'`. NO está
+// referenciado por el `exports` field del package.json:
+//
+//   "./cn": {
+//     "types": "./dist/utils/cn.d.ts",   ← el .d.ts real, con
+//                                          source map.
+//     "default": "./dist/cn.js"
+//   }
+//
+// El consumer accede a tipos vía `./dist/utils/cn.d.ts` (tsc-emitted,
+// con source map para go-to-definition). `dist/cn.d.ts` es el residuo
+// del plugin sin uso. Eliminarlo deja el tarball más limpio sin
+// afectar la resolución de tipos (verificado por consumer-pack gate
+// con skipLibCheck:false en bundler + NodeNext).
+function rmFile(rel) {
+  const abs = join(distDir, rel);
+  if (existsSync(abs)) {
+    unlinkSync(abs);
+    console.log(`[clean-internal-dist] removed file: ${rel}`);
+    removed += 1;
+  }
+}
+rmFile("cn.d.ts");
+
 // Por si alguno de los archivos *.test.* se cuela en dist/.
 function rmTestArtifactsRecursive(dir) {
   if (!existsSync(dir)) return;
