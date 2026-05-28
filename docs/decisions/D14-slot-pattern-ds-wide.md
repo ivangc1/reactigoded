@@ -13,7 +13,7 @@ Adoptar **Slot pattern via `asChild` prop** en los componentes Trigger / Close /
 
 1. **Dialog**: `DialogTrigger`, `DialogClose`, `DialogAction` (este último eliminado).
 2. **AlertDialog**: `AlertDialogTrigger`, `AlertDialogClose`.
-3. **Tooltip** (`floating/Tooltip/`): ya usa Slot vía pattern Tooltip-style (D-01). Audit + alinear al primitive nuevo en bloque C.
+3. **Tooltip** (`floating/Tooltip/`): ya usa Slot-style (D-01) pero NO propaga props del outer Slot a su child. Bloque C es **refactor interno** para que Tooltip use el `<Slot>` primitive del Bloque A internamente — necesario para que el nested asChild case del edge #6 funcione.
 4. **Menu** (`floating/Menu/`): `MenuTrigger`. Idéntica forma.
 
 Las 13 familias futuras del roadmap floating (Popover, HoverCard, ContextMenu, Submenu, MenuBar, Combobox/Select, DatePicker, TimePicker, ColorPicker, etc. — ver `src/components/floating/README.md`) **NO se hacen ahora**. Se diseñan ya nativas con Slot cuando se añadan post-rc.1 / 1.x.
@@ -30,13 +30,22 @@ beta.27.0
   Bloque B → PR-B: Dialog + AlertDialog migration
               (cierra la asimetría léxica más visible del DS;
                BREAKING: elimina DialogAction)
-  Bloque C → PR-C: Tooltip Slot audit + alinear con primitive nuevo
-              (D-01 ya hizo Tooltip-style; este bloque puede ser
-               verificación-only o pequeño refactor si D-01 diverge)
+  Bloque C → PR-C: Tooltip refactor — usar <Slot> internamente
+              (corregido tras codex P2 round 2: NO es solo audit/verify;
+               es refactor real. Razón: Tooltip actual NO propaga props
+               del outer Slot a su child, así que el nested asChild
+               case [edge #6] no funciona hasta que Tooltip use <Slot>
+               internamente con `...rest` forwarding.)
   Bloque D → PR-D: Menu MenuTrigger migration
 
 beta.27.1 — release con Slot DS-wide cerrado
 1.0.0-rc.1 — siguiente release, beta.27 estable
+
+Nota sobre el orden: B antes que C porque B aporta más valor visible
+(cierra la asimetría léxica). Entre el merge de B y el merge de C,
+el nested asChild case (edge #6) queda con known-limitation. Los 4
+bloques deben ir todos en la misma beta release (beta.27.1) para que
+el consumer no vea un estado intermedio donde nested falla silencioso.
 ```
 
 Cada bloque tiene su PR independiente para que `git bisect` siga funcionando si una regresión emerge en el camino.
@@ -193,9 +202,18 @@ Es decir, comportamiento idéntico al actual de los componentes pre-D14. Backwar
 </DialogClose>
 ```
 
-**Decisión**: **compose-friendly**. Slot clona `<Tooltip>` (el child directo) y le mergea los props del Close. `Tooltip` internamente hace su propio Slot (D-01) sobre `<Button>`. La composición funciona — los handlers/refs llegan al Button final via cadena de cloneElement.
+**Decisión**: **compose-friendly**, PERO requiere Bloque C completado.
 
-Documentado como pattern soportado. NO requiere lógica adicional en el primitive — emerge naturalmente del cloneElement.
+Codex P2 round 2 cazó (correctamente) que la `Tooltip` actual NO propaga props del outer Slot a su child. Su `TooltipProps` solo acepta campos propios sin `...rest`, y su `cloneProps` solo inyecta FUI handlers (hover/focus) + ref + `aria-describedby`. Si un outer Slot clona `<Tooltip>` con `onClick={closeHandler}` + `ref={...}`, Tooltip los DROPEA — el close handler nunca llega al `<Button>` final.
+
+**Por tanto, este patrón está soportado SOLO después de Bloque C** (que refactoriza Tooltip para usar el `<Slot>` primitive internamente y propagar props del outer slot transparentemente). Bloque C deja de ser "audit / verify" y pasa a ser refactor real.
+
+Implementación del fix en Bloque C:
+1. `TooltipProps` añade `...rest` (heredando `HTMLAttributes<HTMLElement>` o similar) para aceptar arbitrary props del outer Slot.
+2. Internamente, el `cloneElement(children, cloneProps)` se reemplaza por `<Slot {...rest} {...cloneProps}>{children}</Slot>` (o equivalente vía utility), de modo que las reglas de composition del primitive (composeRefs, event chain consumer-first, className/style merge) aplican uniformemente.
+3. La cadena resultante: outer Slot clona Tooltip con close handler → Tooltip's inner Slot mergea close handler + FUI handlers → Button final recibe ambos chained con preventDefault honored en cada salto.
+
+**Hasta Bloque C merge**: este patrón nested NO funciona. Bloques A + B publicados solos (sin C) tienen este known-limitation. Para evitarlo, los 4 bloques se mergean dentro de la misma beta release (beta.27.1) — el consumer nunca ve un estado intermedio donde el nested case falle silenciosamente.
 
 #### 7. Props del componente padre que deben llegar al child (aria/data)
 
@@ -222,7 +240,7 @@ Estos se pasan a Slot como props normales y se mergean en el cloneElement.
 | `<DialogTrigger asChild><Button>Open</Button></DialogTrigger>` | N/A | **NUEVO**. Renderiza el Button del consumer con trigger semantics. |
 | `<AlertDialogClose>X</AlertDialogClose>` | Renderiza `<button>X</button>` unstyled. | **CAMBIO**: ahora renderiza `<button class="ig-dialog-close">X</button>` (styled como header X, coherente con DialogClose). Para usar como CTA del footer: `<AlertDialogClose asChild><Button variant="danger">X</Button></AlertDialogClose>`. |
 | `<AlertDialogTrigger>` | Existe vía alias `DialogTrigger`. | Sigue como alias (no se duplica componente). asChild funciona vía DialogTrigger. |
-| `<Tooltip>` | Slot-style D-01 (children: ReactElement). | Verificar coherencia con primitive nuevo en bloque C. Posiblemente: añadir `asChild` prop para tener el patrón homogéneo, dejar el comportamiento actual como default (children = ReactElement). |
+| `<Tooltip>` | Slot-style D-01 (children: ReactElement). `TooltipProps` no acepta `...rest` → outer Slot props se pierden. | **Refactor interno (bloque C)**: usar `<Slot>` primitive del bloque A internamente + aceptar `...rest` props. API público preservado (`text`, `placement`, `variant`, `children`, delays). El cambio habilita el nested asChild case (edge #6). |
 | `<MenuTrigger>` | Renderiza wrapper button. | Análogo a DialogTrigger: añade `asChild` para hacer Slot del child del consumer. |
 
 ### Migration table para CHANGELOG (1.0.0-beta.27)
@@ -269,7 +287,8 @@ Estos se pasan a Slot como props normales y se mergean en el cloneElement.
 |---|---|---|---|
 | `composeRefs` bug en edge case (function ref + object ref combinados) | Baja-Media | Alto (rompe ref forwarding en muchos componentes) | Bloque A es PR independiente con coverage ≥95% líneas y fixtures explícitos para cada combo ref. Codex revisa el primitive aislado antes de propagar a 4 familias. |
 | Event chain priorización wrong (library first en lugar de consumer first) | Baja | Alto (rompe consumer escape hatches via preventDefault) | Tests explícitos en bloque A para esta semántica. |
-| Tooltip D-01 diverge del primitive nuevo en sutilezas (e.g., Fragment handling, error messages) | Media | Bajo | Bloque C es audit + refactor mínimo para alinear. Si D-01 diverge solo en ergonomía pero la semántica es la misma, dejamos D-01 quieto. |
+| Tooltip refactor en Bloque C rompe consumer existente (D-01 already shipped) | Media | Medio | Bloque C debe preservar el API publico (children como ReactElement, semantica D-01) — el cambio es interno (uso de <Slot> en lugar de cloneElement raw + aceptar ...rest props para forwarding). Tests existentes de Tooltip deben pasar sin modificación. Si rompen, el refactor diverge del API y hay que rediseñar. |
+| Tooltip D-01 diverge del primitive nuevo en sutilezas (Fragment handling, error messages) | Media | Bajo | Bloque C alinea D-01 con el primitive. Si la divergencia es solo ergonómica (mensajes de error distintos) y la semántica es la misma, dejamos D-01 quieto. |
 | Consumer hace `<DialogClose asChild>{condition && <Button/>}</DialogClose>` (children dinámicos null) | Media | Bajo | Detect `null` / `false` children → emit dev warn, render nothing. NO crashea. |
 | Storybook stories pre-D14 rompen al migrar (porque usan `DialogAction` que se elimina) | Alta | Bajo | Bloque B incluye update de stories + test:storybook. CI lo caza. |
 | Consumer-pack gate falla en bloque B (porque consumer-types fixture importa DialogClose con shape vieja) | Media | Bajo | Bloque B también actualiza `fixtures/consumer-pack/app.tsx` + `fixtures/consumer-types*/app.tsx` para reflejar la nueva API. |
@@ -291,10 +310,16 @@ Estos se pasan a Slot como props normales y se mergean en el cloneElement.
 - Update fixture consumers (consumer-types, consumer-types-nodenext, consumer-pack) con la nueva API.
 - Update Migration guide en CHANGELOG.
 
-### Bloque C (Tooltip audit)
+### Bloque C (Tooltip refactor)
 
-- Si D-01 ya cumple el contrato del primitive nuevo: bloque vacío (verificación + nota en commit).
-- Si diverge en algo: refactor mínimo + tests.
+(Scope corregido tras codex P2 round 2: NO es solo audit/verify.)
+
+- Refactor interno de Tooltip: `cloneElement(children, cloneProps)` → `<Slot {...rest} {...cloneProps}>{children}</Slot>`.
+- `TooltipProps` añade aceptar `...rest` (cualquier prop del outer Slot debe pasar al Button final).
+- API público se preserva: `text`, `placement`, `variant`, `children` (ReactElement), `openDelay`, `closeDelay` siguen igual. Lo que cambia es que ahora Tooltip ALSO acepta cualquier otro prop y lo forwardea — convirtiendo Tooltip en una capa transparente para Slot composition.
+- Tests existentes de Tooltip deben pasar sin modificación (gate de no-regression).
+- Test nuevo: `<DialogClose asChild><Tooltip text="x"><Button onClick={consumerHandler}/></Tooltip></DialogClose>` — click en Button debe invocar consumerHandler primero, luego cerrar el dialog, con preventDefault honorando ambos.
+- Update Storybook story de Tooltip con un ejemplo del nested case (opt-in showcase de la composability).
 
 ### Bloque D (Menu)
 
