@@ -68,12 +68,20 @@ export function DialogTrigger({
 
   if (asChild) {
     // Slot path: el child del consumer recibe los aria + onClick via
-    // composición. No wrapper <button>, no type, no theming default —
-    // el consumer trae su propio elemento.
+    // composición. Forwardamos `type` al Slot (codex P2 round 1 sobre
+    // #111) para que la safety semantics se preserve: si el child es
+    // un native `<button>` sin type en un <form>, defaultearía a
+    // `type="submit"` y podría disparar submit accidental al abrir el
+    // dialog. El wrapper default `type="button"` viaja al Slot y se
+    // aplica solo si el child no tiene type propio (Slot merge: child
+    // wins on collision). Consumer puede override con
+    // `<DialogTrigger asChild type="submit">` o poniendo `type="submit"`
+    // en el child directamente.
     return (
       <Slot
         {...rest}
         ref={ref}
+        type={type}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={contentId}

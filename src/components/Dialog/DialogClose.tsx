@@ -102,10 +102,18 @@ export function DialogClose({
     // explícito en DialogClose. Si no, el child trae su propio accessible
     // name (text content de `<Button>Aceptar</Button>`). Forzar el default
     // "Cerrar" sobrescribiría el accessible name legítimo del consumer.
+    //
+    // `type` forwardado (codex P2 round 1 sobre #111): un consumer en form
+    // que escribe `<DialogClose asChild type="submit">` espera que el
+    // submit se aplique; sin forwarding se perdía silencioso. El wrapper
+    // default "button" cubre native children sin type para evitar submit
+    // accidental (Slot rule: child wins on collision, así que el child
+    // con type explícito siempre gana).
     return (
       <Slot
         {...rest}
         ref={ref}
+        type={type}
         className={className}
         {...(consumerAriaLabel !== undefined
           ? { "aria-label": consumerAriaLabel }

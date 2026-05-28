@@ -653,4 +653,68 @@ describe("Dialog subcomponents", () => {
     expect(closeSpy).not.toHaveBeenCalled();
     closeSpy.mockRestore();
   });
+
+  it("DialogClose asChild forwardea type al child (default 'button' contra submit accidental)", () => {
+    // Codex P2 round 1 sobre #111: el wrapper default `type="button"` debe
+    // viajar al child via Slot para que un native `<button>` sin type en
+    // un <form> no defaultee a submit. Slot merge: child wins on collision.
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button data-testid="close-no-type">Cancelar</button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByTestId("close-no-type")).toHaveAttribute(
+      "type",
+      "button",
+    );
+  });
+
+  it("DialogClose asChild type='submit' del wrapper se forwardea (caso form CTA)", () => {
+    // Consumer en form puede querer que el close-trigger también submitee.
+    // El type del wrapper debe viajar al Slot.
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogFooter>
+            <DialogClose asChild type="submit">
+              <button data-testid="close-submit">Guardar</button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByTestId("close-submit")).toHaveAttribute(
+      "type",
+      "submit",
+    );
+  });
+
+  it("DialogClose asChild: child con type explícito gana sobre wrapper (Slot child-wins)", () => {
+    // Si el consumer setteó type en el child Y en el wrapper, child wins
+    // per Slot merge rules. Aquí wrapper default es 'button' pero child es
+    // 'submit' explícito.
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button data-testid="close-child-submit" type="submit">
+                Guardar
+              </button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByTestId("close-child-submit")).toHaveAttribute(
+      "type",
+      "submit",
+    );
+  });
 });

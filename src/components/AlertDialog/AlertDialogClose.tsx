@@ -104,10 +104,16 @@ export function AlertDialogClose({
     // Slot path: el child del consumer recibe close semantics. NO aplicamos
     // `ig-dialog-close` — asChild = consumer brings own styling. aria-label
     // solo se pasa si el consumer la setteó explícito.
+    //
+    // `type` forwardado (codex P2 round 1 sobre #111): mismo razonamiento
+    // que DialogClose — el wrapper default "button" cubre native children
+    // sin type (evita submit accidental en form), child con type explícito
+    // gana via Slot merge.
     return (
       <Slot
         {...rest}
         ref={ref}
+        type={type}
         className={className}
         {...(consumerAriaLabel !== undefined
           ? { "aria-label": consumerAriaLabel }
