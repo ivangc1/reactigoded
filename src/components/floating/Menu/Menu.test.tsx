@@ -723,6 +723,41 @@ describe("MenuTrigger — asChild Slot pattern (D14 Bloque D beta.27)", () => {
     });
   });
 
+  it("asChild fuerza triggerId sobre child id propio (codex P2 round 1 sobre #113)", () => {
+    // MenuContent referencia triggerId via aria-labelledby. Si Slot's
+    // default child-wins rule dejara ganar al id del consumer (ej.
+    // <button id='my-custom-id'>), aria-labelledby quedaría apuntando
+    // a un id desconocido → menú sin accessible label.
+    //
+    // Fix: pre-clonar el child con `id: triggerId` ANTES del Slot, así
+    // child.props.id = triggerId siempre, sin importar lo que el
+    // consumer pusiera. Comportamiento consistente con path default
+    // (`<button id={triggerId}>` también overwriteaba en pre-D14).
+    render(
+      <Menu defaultOpen>
+        <MenuTrigger asChild>
+          <button data-testid="custom-trigger" id="my-custom-id">
+            Opciones
+          </button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem>Uno</MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    const trigger = screen.getByTestId("custom-trigger");
+    // El id del consumer DEBE haber sido sobrescrito por triggerId
+    // (no es "my-custom-id").
+    expect(trigger.getAttribute("id")).not.toBe("my-custom-id");
+    // El triggerId del MenuContext debe estar presente y ser el id real
+    // del trigger — verificamos que aria-labelledby del menu apunta
+    // efectivamente a ESTE elemento.
+    const menu = screen.getByRole("menu");
+    const labelledBy = menu.getAttribute("aria-labelledby");
+    expect(labelledBy).toBe(trigger.getAttribute("id"));
+    expect(labelledBy).toBeTruthy();
+  });
+
   it("asChild forwardea type al child (default 'button' contra submit accidental)", () => {
     render(
       <Menu>

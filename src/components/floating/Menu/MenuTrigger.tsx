@@ -1,7 +1,13 @@
 "use client";
 
 import { useMergeRefs } from "@floating-ui/react";
-import type { ButtonHTMLAttributes, Ref } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type ReactElement,
+  type Ref,
+} from "react";
 import { cn } from "@/utils/cn";
 import { Slot } from "@/components/Slot";
 import { useMenu } from "./MenuContext";
@@ -87,17 +93,39 @@ export function MenuTrigger({
     // wrapper default "button" cubre native children sin type contra
     // submit accidental en form; child con type explícito gana via
     // Slot merge child-wins.
+    //
+    // `id` forzado al child via pre-clone (codex P2 round 1 sobre #113).
+    // Problema: MenuContent referencia `triggerId` via `aria-labelledby`.
+    // Si el consumer pasa un `id` propio en su child, Slot's default
+    // child-wins rule lo dejaría ganar sobre `triggerId`, rompiendo el
+    // accessible label del menú.
+    //
+    // Solución: pre-clonar el child con `id: triggerId` ANTES de
+    // pasarlo a Slot. cloneElement merge: new props (triggerId) win
+    // sobre props existentes (consumer's id). Cuando Slot procese este
+    // child, `child.props.id === triggerId` — incluso si pasáramos
+    // `id` al Slot, child-wins gana correctamente.
+    //
+    // El comportamiento es consistente con el path default
+    // (`<button id={triggerId}>` también overwriteaba child id en
+    // pre-D14). Si el consumer necesita un id distinto, MenuTrigger
+    // asChild no es el lugar — el contract de MenuTrigger es ser el
+    // anchor del aria-labelledby.
     const mergedProps = getReferenceProps(rest);
+    const childWithTriggerId = isValidElement(children)
+      ? cloneElement(children as ReactElement<{ id?: string }>, {
+          id: triggerId,
+        })
+      : children;
     return (
       <Slot
         {...mergedProps}
         ref={refMerged}
-        id={triggerId}
         type={type}
         aria-controls={menuId}
         className={className}
       >
-        {children}
+        {childWithTriggerId}
       </Slot>
     );
   }
