@@ -556,3 +556,142 @@ export function Client() {
     expect(() => checkSourceFile(code, "client.fixture.tsx")).not.toThrow();
   });
 });
+
+/**
+ * Anti-regresión #151 codex P1: el resolver de imports tiene que
+ * funcionar con paths que llevan Windows drive letter (`D:/repo/...`).
+ *
+ * `path.posix.resolve` NO trata `D:/foo` como absoluto (POSIX no sabe
+ * de drive letters) → prepende cwd → path roto del tipo
+ * `<cwd>/D:/foo/src/utils/cn`. La fix vive en `crossOsResolve` del
+ * script (extrae la drive como prefijo, ejecuta `pathPosix.resolve`
+ * sobre el resto POSIX, re-prepende drive). Este describe ejercita
+ * el path completo (alias + relativo + inSrc check + violations
+ * reporting) con roots virtuales que tienen drive letter — el bug
+ * del codex se manifiesta como "unresolvable" en todos los imports.
+ *
+ * Si una regresión vuelve a `pathPosix.resolve` directo sobre paths
+ * con drive letter, los 4 tests aquí saltan en CUALQUIER OS (no hace
+ * falta Windows runner — el bug es lógico, no de plataforma).
+ */
+function runWithWindowsVfs(
+  entryPath: string,
+  files: VirtualFs,
+  tsconfigPaths: Array<{ prefix: string; targetPrefix: string }> = [
+    { prefix: "@/", targetPrefix: "src/" },
+  ],
+) {
+  return checkFileWithImports(entryPath, {
+    tsconfigPaths,
+    repoRoot: "D:/a/repo",
+    srcRoot: "D:/a/repo/src",
+    readFile: (p: string) => {
+      const entry = files.get(p);
+      if (!entry) throw new Error(`[vfs-win] missing: ${p}`);
+      return entry.content;
+    },
+    fileExists: (p: string) => files.has(p),
+  });
+}
+
+describe("server-safe gate — Windows drive letter paths (#151 codex P1 anti-regresión)", () => {
+  it("alias `@/utils/foo` resuelve con projectRoot `D:/a/repo` (no prepende cwd)", () => {
+    const files = vfs({
+      "D:/a/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { fmt } from "@/utils/fmt";
+        export function Probe() { return fmt(window.location.href); }
+      `,
+      "D:/a/repo/src/utils/fmt.ts": `
+        export function fmt(s: string) {
+          return document.cookie + s;
+        }
+      `,
+    });
+    const violations = runWithWindowsVfs(
+      "D:/a/repo/src/components/Probe/Probe.tsx",
+      files,
+    );
+    // El alias debe haber resuelto Y la cadena haber descendido a
+    // fmt.ts donde se caza el document.cookie. Si el resolver volviera
+    // a la versión pre-fix con `pathPosix.resolve("D:/a/repo", ...)`,
+    // el path saldría como `<cwd>/D:/a/repo/src/utils/fmt` → no resolvió
+    // → violation 'unresolved-import' en vez de la violation real del
+    // bypass transitivo.
+    expect(violations.some((v) => v.rule === "unresolved-import")).toBe(false);
+    const transitive = violations.find((v) =>
+      v.file.endsWith("utils/fmt.ts"),
+    );
+    expect(transitive).toBeDefined();
+    expect(transitive?.chain).toEqual([
+      "src/components/Probe/Probe.tsx",
+      "src/utils/fmt.ts",
+    ]);
+  });
+
+  it("relativo `./inner` con importerAbsPath Windows resuelve correctamente", () => {
+    const files = vfs({
+      "D:/a/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { foo } from "./inner";
+        export function Probe() { return foo(); }
+      `,
+      "D:/a/repo/src/components/Probe/inner.ts": `
+        export function foo() { return window.location.href; }
+      `,
+    });
+    const violations = runWithWindowsVfs(
+      "D:/a/repo/src/components/Probe/Probe.tsx",
+      files,
+    );
+    expect(violations.some((v) => v.rule === "unresolved-import")).toBe(false);
+    const transitive = violations.find((v) => v.file.endsWith("Probe/inner.ts"));
+    expect(transitive).toBeDefined();
+  });
+
+  it("inSrc check distingue archivos fuera de `D:/a/repo/src/` y los trata como external", () => {
+    // Un archivo en `D:/a/repo/scripts/` está FUERA de src — debería
+    // ser tratado como external (no seguir) sin emitir violations.
+    const files = vfs({
+      "D:/a/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { runtime } from "../../../scripts/runtime";
+        export function Probe() { return runtime(); }
+      `,
+      "D:/a/repo/scripts/runtime.ts": `
+        // Fuera de src: si el resolver lo siguiera (debido a un bug
+        // en inSrc check) cazaría el window aquí. El comportamiento
+        // correcto es "external", no seguir.
+        export function runtime() { return window.localStorage; }
+      `,
+    });
+    const violations = runWithWindowsVfs(
+      "D:/a/repo/src/components/Probe/Probe.tsx",
+      files,
+    );
+    // 0 violations: el import out-of-src se marca external y no se
+    // sigue, y el archivo entry no tiene client API access.
+    expect(violations).toEqual([]);
+  });
+
+  it("alias no resoluble reporta path POSIX con drive letter preservada (no `<cwd>/D:/...`)", () => {
+    const files = vfs({
+      "D:/a/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { missing } from "@/utils/does-not-exist";
+        export function Probe() { return missing(); }
+      `,
+    });
+    const violations = runWithWindowsVfs(
+      "D:/a/repo/src/components/Probe/Probe.tsx",
+      files,
+    );
+    const unresolved = violations.find((v) => v.rule === "unresolved-import");
+    expect(unresolved).toBeDefined();
+    // El reason debe contener el path relativo correcto, NO un path
+    // inflado tipo `<cwd>/D:/a/repo/...`. Pre-fix: el detail tenía
+    // basura tipo "D:/a/repo/src\\utils\\..." o el cwd prefijado.
+    expect(unresolved?.detail).toContain("src/utils/does-not-exist");
+    expect(unresolved?.detail).not.toMatch(/D:\/a\/repo\/D:/);
+  });
+});

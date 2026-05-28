@@ -98,6 +98,7 @@
     "test:scope-leaks": "node scripts/check-css-scope-leaks.mjs --strict",
     "test:hex-drift": "node scripts/check-hex-drift.mjs --strict",
     "test:state-css-exclusion": "node scripts/check-state-css-exclusion.mjs",
+    "test:no-dev-warns": "node scripts/check-no-dev-warns.mjs",
     "test:server-safe-markers": "node scripts/check-server-safe-markers.mjs",
     "test:publint": "publint",
     "test:rsc-fixture": "tsc -p fixtures/rsc/tsconfig.json --noEmit",
