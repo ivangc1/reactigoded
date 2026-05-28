@@ -126,15 +126,15 @@
   },
   "size-limit": [
     {
-      "name": "JS bundle ESM (gzip)",
-      "path": "dist/index.js",
+      "name": "JS bundle ESM (index entry + lazy chunks, gzip)",
+      "path": ["dist/index.js", "dist/Toast-*.js"],
       "limit": "20 KB",
       "gzip": true
     },
     {
-      "name": "JS bundle server-safe ESM (gzip)",
-      "path": "dist/server-safe.js",
-      "limit": "16 KB",
+      "name": "JS bundle server-safe ESM (server-safe entry + lazy chunks, gzip)",
+      "path": ["dist/server-safe.js", "dist/Toast-*.js"],
+      "limit": "8 KB",
       "gzip": true
     },
     {
