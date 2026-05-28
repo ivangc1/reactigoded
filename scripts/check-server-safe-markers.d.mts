@@ -132,3 +132,15 @@ export declare function getTsconfigPaths(): Array<{
 
 export declare const CLIENT_GLOBALS: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
+
+/**
+ * Detección AST del marker `@server-safe` (#158, beta.27). Reemplaza la
+ * detección substring que tenía falsos positivos sobre string literals,
+ * line comments y block comments NO-JSDoc. Solo cuenta el marker como
+ * presente si el parser de JSDoc de TypeScript lo reconoce como tag en
+ * un bloque JSDoc real.
+ */
+export declare function isContentServerSafeMarked(
+  content: string,
+  relPath: string,
+): boolean;

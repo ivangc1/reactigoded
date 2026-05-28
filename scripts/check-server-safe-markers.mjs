@@ -1671,21 +1671,87 @@ const isCliEntry =
   process.argv[1] !== undefined &&
   pathToFileURL(process.argv[1]).href === import.meta.url;
 
+/**
+ * Detección AST del marker `@server-safe` (#158, beta.27).
+ *
+ * El predecesor era `content.includes("@server-safe")` — substring
+ * laxa que cazaba 3 vectores de falsos positivos:
+ *   (a) String literals que mencionan el marker en texto.
+ *   (b) Line comments en prosa describiendo cuándo NO usarlo.
+ *   (c) Block comments NO-JSDoc (un solo asterisco al abrir).
+ *
+ * El parser de JSDoc de TypeScript solo reconoce `@server-safe` como
+ * tag cuando aparece en un bloque JSDoc real (doble asterisco). Sigue
+ * siendo posible que un contributor escriba prosa con `@server-safe`
+ * dentro de un JSDoc y el parser lo capture como tag — eso es propio
+ * del parser de JSDoc, no de nuestra detección. La mejora cierra los
+ * 3 vectores (a)/(b)/(c) sin coste.
+ *
+ * @param {string} content - Source text del archivo.
+ * @param {string} relPath - Path relativo (para script kind detection).
+ * @returns {boolean} true si algún statement top-level tiene
+ *   `@server-safe` en su JSDoc.
+ */
+export function isContentServerSafeMarked(content, relPath) {
+  const sourceFile = ts.createSourceFile(
+    relPath,
+    content,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  for (const stmt of sourceFile.statements) {
+    const tags = ts.getJSDocTags(stmt);
+    for (const tag of tags) {
+      if (tag.tagName.text === "server-safe") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 if (isCliEntry) {
   const allFiles = [
     ...listSourceFiles(COMPONENTS_DIR),
     ...listSourceFiles(HOOKS_DIR),
   ];
 
-  const markedFiles = allFiles.filter((f) =>
-    readFileSync(f, "utf8").includes("@server-safe"),
-  );
-
   // Cache compartida cross-entries: un util importado por N componentes
   // se parsea y analiza UNA vez. Sin esto, el coste pasa de O(N+M) a
   // O(N·M) (N = marked entries, M = utils tocados). Codex/Claude HIGH-2
-  // del cruce beta.25.
+  // del cruce beta.25. Hoisted antes del filtro de marker detection para
+  // compartir el parse entre las dos fases (#158).
   const parseCache = new Map();
+
+  function isFileServerSafeMarked(filePath) {
+    let cached = parseCache.get(filePath);
+    if (!cached) {
+      const content = readFileSync(filePath, "utf8");
+      const relRaw = relative(repoRoot, filePath);
+      const relPath = relRaw.split(pathSep).join("/");
+      const sourceFile = ts.createSourceFile(
+        relPath,
+        content,
+        ts.ScriptTarget.Latest,
+        /* setParentNodes */ true,
+        relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      );
+      cached = { sourceFile, content };
+      parseCache.set(filePath, cached);
+    }
+    for (const stmt of cached.sourceFile.statements) {
+      const tags = ts.getJSDocTags(stmt);
+      for (const tag of tags) {
+        if (tag.tagName.text === "server-safe") {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  const markedFiles = allFiles.filter((f) => isFileServerSafeMarked(f));
   // `visited` se RECREA por entry: si visit-eamos un util al chequear el
   // primer entry, lo skipearíamos en los siguientes y perderíamos
   // reporting de la cadena correcta (cada entry necesita ver el path
@@ -1700,7 +1766,7 @@ if (isCliEntry) {
 
   if (allViolations.length === 0) {
     console.log(
-      `✓ @server-safe invariant holds (${String(markedFiles.length)} files marked, 0 violations, ${String(parseCache.size)} files analyzed transitively) [AST]`,
+      `✓ @server-safe invariant holds (${String(markedFiles.length)} files marked, 0 violations, ${String(parseCache.size)} files parsed total) [AST]`,
     );
     process.exit(0);
   }
