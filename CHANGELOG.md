@@ -70,6 +70,32 @@ versionado [SemVer](https://semver.org/lang/es/).
   al consumer, solo usado por components del DS via `asChild` opt-in.
   Ver D14 + PR #110 para diseño completo.
 
+- **`asChild` prop en `MenuTrigger`** (D14 Bloque D beta.27).
+  Misma semántica que `DialogTrigger`/`DialogClose`/`AlertDialogClose`: si
+  `true`, clona el child del consumer y le aplica id + ARIA (haspopup,
+  expanded, controls) + handlers FUI (click + keyboard) sin renderizar
+  un `<button>` propio ni aplicar `ig-menu-trigger`. Permite usar
+  cualquier elemento como trigger:
+
+  ```tsx
+  <Menu>
+    <MenuTrigger asChild>
+      <Button variant="brand">Abrir menú</Button>
+    </MenuTrigger>
+    <MenuContent>
+      <MenuItem>Editar</MenuItem>
+    </MenuContent>
+  </Menu>
+  ```
+
+  Sin `asChild`, comportamiento idéntico a 1.0.0-beta.26 (backwards-compat).
+
+  **Cierra el refactor Slot DS-wide** (D14): 4 familias migradas (Dialog,
+  AlertDialog, Tooltip, Menu) — todas las que existen con triggers en
+  1.0. Las 13 familias futuras del roadmap `floating/README.md`
+  (Popover, HoverCard, ContextMenu, Combobox, etc.) se diseñarán ya
+  nativas con Slot en 1.1.0+.
+
 - **`Tooltip` forwardea outer Slot props al child final** (D14 Bloque C beta.27).
   `TooltipProps` admite ahora un index signature (cualquier prop adicional
   no consumida por Tooltip — `text`, `placement`, `variant`, `children`,
