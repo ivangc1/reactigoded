@@ -96,6 +96,84 @@ describe("server-safe gate — CLIENT_GLOBALS catálogo ampliado (beta.25)", () 
   });
 });
 
+/**
+ * #164: navigator wholesale denylist. `navigator` es uno de los 4
+ * entries del catálogo original (beta.24) que TAMBIÉN existen como
+ * global en Node 22.12+ (Node lo añadió en v21). El gate lo flaggea
+ * AUNQUE Node lo provea, por la asimetría documentada en el comment
+ * del catálogo (`scripts/check-server-safe-markers.mjs`, post-#150):
+ *
+ *   "navigator: añadido a Node en v21 (Node 22.12+ lo provee), pero
+ *   su forma es un SUBSET del browser navigator (no geolocation, no
+ *   mediaDevices, sí userAgent/language). Semántica inestable entre
+ *   runtimes (browser vs Node vs Workers) → gate fuerza guard
+ *   explícito o evitar la API en `@server-safe`."
+ *
+ * Antes de este bloque, navigator estaba en CLIENT_GLOBALS desde día
+ * 1 pero CERO fixtures del audit lo probaban. Si una regresión sacara
+ * `navigator` del set (consciente o accidentalmente), nada saltaba.
+ * Este bloque cierra el cabo: el catálogo Y la decisión wholesale Y
+ * el test que la blinda están alineados.
+ *
+ * Wholesale = todas las formas de acceso son flag-eadas, sin allowlist
+ * por property name. Razón: allowlistar `navigator.userAgent` y bloquear
+ * `navigator.geolocation` requiere mantenimiento N×M (cada nueva web
+ * API en Node potencialmente añade allowlist entries), y la ergonomía
+ * del consumer en `@server-safe` no justifica el coste — la
+ * alternativa segura (`typeof navigator !== "undefined" && navigator.X`)
+ * funciona en todos los runtimes sin cambios.
+ */
+describe("server-safe gate — navigator wholesale denylist (#164 beta.27)", () => {
+  it.each([
+    // APIs que existen en BROWSER + NODE (subset compartido).
+    ["userAgent", `const ua = navigator.userAgent;`],
+    ["language", `const lang = navigator.language;`],
+    ["languages", `const langs = navigator.languages;`],
+    // APIs browser-only (no en Node).
+    ["geolocation", `const g = navigator.geolocation;`],
+    ["mediaDevices", `const md = navigator.mediaDevices;`],
+    ["clipboard", `const c = navigator.clipboard;`],
+    ["serviceWorker", `const sw = navigator.serviceWorker;`],
+    // Cualquier chained access — la regla es wholesale.
+    [
+      "userAgent.includes",
+      `const isChrome = navigator.userAgent.includes("Chrome");`,
+    ],
+  ])(
+    "caza `navigator.%s` wholesale (sin allowlist por property name)",
+    (property, body) => {
+      const violations = checkSourceFile(
+        fixture(body),
+        `navigator-${property}.fixture.tsx`,
+      );
+      expect(violations.length).toBeGreaterThan(0);
+      // El detail referencia `navigator`, no la property específica —
+      // confirma que es el global el que dispara, no un per-property
+      // allowlist mismatched.
+      expect(violations.some((v) => v.detail.includes("navigator"))).toBe(true);
+    },
+  );
+
+  it("caza referencia bare a `navigator` (sin property access)", () => {
+    const body = `const n = navigator; void n;`;
+    const violations = checkSourceFile(
+      fixture(body),
+      "navigator-bare.fixture.tsx",
+    );
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.detail.includes("navigator"))).toBe(true);
+  });
+
+  it("`navigator` está en CLIENT_GLOBALS (anti-regresión del wholesale denylist)", () => {
+    // Si alguien borra navigator del set sin actualizar el doc del
+    // rationale en el catálogo, este test lo caza. Junto con
+    // `src/__tests__/server-safe-catalog-vs-node.test.ts` (#150)
+    // que asserts que DOCUMENTED_NODE_OVERLAPS ⊆ CLIENT_GLOBALS,
+    // el invariante queda blindado por dos lados.
+    expect(CLIENT_GLOBALS.has("navigator")).toBe(true);
+  });
+});
+
 describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", () => {
   it("caza `eval(...)` directo", () => {
     const v = checkSourceFile(
