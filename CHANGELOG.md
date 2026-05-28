@@ -7,6 +7,29 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-beta.26] — 2026-05-29 (bloque claudegate5 / beta.27 cerrado)
+
+Cierra el bloque **claudegate5 / beta.27** (25 PRs entre #105 y
+#129) con 3 ejes principales:
+
+- **Slot pattern DS-wide (D14)**: refactor `asChild` en las 4
+  familias con triggers (Dialog / AlertDialog / Tooltip / Menu).
+  Patrón canónico Radix/shadcn habilitado en todo el DS.
+- **EOPT widening completo (#155)**: 307 props públicas opcionales
+  ensanchadas a `?: T | undefined` para consumers con
+  `exactOptionalPropertyTypes: true`. 3 fronteras documentadas
+  explícitamente (sección final del bloque).
+- **Red de seguridad cross-platform (#151)**: matriz CI 4 combos
+  (ubuntu/windows × Node 22.12/24), test catálogo `CLIENT_GLOBALS`
+  vs Node runtime (#150), gates de payload reales (#160), peer
+  `@floating-ui/react ^0.27` pre-1.0 documentado (#156).
+
+Tras este release queda únicamente FREEZE-CHECK + gate reviews
+antes de tagear `1.0.0-rc.1` (API congelada para 1.x). beta.26
+puede aún recibir bug fixes o ajustes pre-rc.1 si los gate
+reviews los identifican.
+
+
 ### BREAKING (D14 Bloque B beta.27)
 
 - **`DialogAction` ELIMINADO**. El patrón canónico para CTAs del footer
@@ -63,7 +86,7 @@ versionado [SemVer](https://semver.org/lang/es/).
   `AlertDialogTrigger` es alias de `DialogTrigger`, así que también
   obtiene `asChild` automáticamente.
 
-  Sin `asChild`, comportamiento idéntico a 1.0.0-beta.26 (backwards-compat
+  Sin `asChild`, comportamiento idéntico a 1.0.0-beta.25 (backwards-compat
   para DialogTrigger y DialogClose; AlertDialogClose es BREAKING — ver arriba).
 
 - **`<Slot>` primitive interno** en `src/components/Slot/` — no exportado
@@ -88,7 +111,7 @@ versionado [SemVer](https://semver.org/lang/es/).
   </Menu>
   ```
 
-  Sin `asChild`, comportamiento idéntico a 1.0.0-beta.26 (backwards-compat).
+  Sin `asChild`, comportamiento idéntico a 1.0.0-beta.25 (backwards-compat).
 
   **Cierra el refactor Slot DS-wide** (D14): 4 familias migradas (Dialog,
   AlertDialog, Tooltip, Menu) — todas las que existen con triggers en
@@ -113,11 +136,105 @@ versionado [SemVer](https://semver.org/lang/es/).
   El outer Slot de `DialogClose` clona Tooltip pasando close `onClick` +
   ref; Tooltip los recibe en su nuevo `...rest` y los forwardea al
   `<Button>` final via `<Slot>` interno. Pre-Bloque C, esos props se
-  dropeaban silenciosamente (codex P2 round 2 sobre PR #109 caught the
-  bug en el doc-only plan).
+  dropeaban silenciosamente (codex P2 round 2 sobre PR #109 cazó el bug en el
+  doc-only plan).
 
   API público de Tooltip preservado: `text`, `placement`, `variant`,
   `children` (ReactElement), delays, `container` siguen igual.
+
+### Added (resto del bloque beta.27)
+
+- **EOPT widening — 307 props opcionales ensanchadas a `?: T | undefined`** (#155, PR #114). Habilita el patrón consumer `<Comp prop={cond ? val : undefined}>` bajo `exactOptionalPropertyTypes: true`. Reparto:
+  - 271 CLASE 1 (codemod AST mecánico).
+  - 36 CLASE 2 (widening + tests runtime sobre los 12 componentes con `useControllableState`).
+  - 11 OUT OF SCOPE (3 discriminadores `?: undefined` literal + 8 exclusiones `?: never`).
+
+  Inventario AST: `scripts/eopt-classify.mjs`. Verifier: `scripts/eopt-verify-class2.mjs`. Codemod: `scripts/eopt-codemod.mjs`. Tests runtime: `src/__tests__/eopt-undefined-uncontrolled.test.tsx`. Fronteras NO cubiertas documentadas más abajo.
+
+- **Rating form-value bridge nativo (#153, PR #117)**. `Rating` añade `name?: string`. Cuando se proporciona, renderiza `<input type="hidden" name={name} value={value}>` adyacente al `role="radiogroup"`. El valor espeja el efectivo (controlled o uncontrolled). Mantiene el canal-de-forma WCAG (#102 — buttons en `radiogroup`).
+
+  ```tsx
+  <form action="/rate" method="post">
+    <Rating name="score" defaultValue={3} max={5} />
+    <button type="submit">Enviar</button>
+  </form>
+  ```
+
+  Cierra la asimetría con los otros 5 inputs del DS (`Checkbox`, `Switch`, `Radio`, `Slider`, `NativeSelect`) que serializan vía `<input>` nativo heredado.
+
+- **CI matriz Windows + Node [22.12, 24]** (#151, PR #121). `.github/workflows/verify.yml` corre 4 combos: ubuntu/windows × Node 22.12/24. Cross-OS gates: `scripts/check-no-dev-warns.mjs` (reemplaza el step inline `grep -cF` POSIX-only), helpers `crossOsResolve/crossOsRelative/crossOsDirname` en `scripts/check-server-safe-markers.mjs` que preservan Windows drive letters (codex P1).
+
+- **Test catálogo `CLIENT_GLOBALS` vs Node runtime cross-version** (#150, PR #122). `src/__tests__/server-safe-catalog-vs-node.test.ts` verifica en runtime real (Node 22.12 + 24, ubuntu + windows) que el catálogo del gate `@server-safe` no tiene falsos positivos sobre globals que Node provee. 4 overlaps documentados (`globalThis`/`process`/`Buffer`/`navigator`) con rationale multi-runtime.
+
+- **Server-safe marker AST** (#158, PR #118). El gate `check-server-safe-markers.mjs` detecta el marker `@server-safe` vía TypeScript Compiler API (JSDoc tag), no via substring. Cierra 3 vectores de falsos positivos: string literals, line comments en prosa, block comments no-JSDoc. Tests: `src/__tests__/server-safe-marker-ast-detection.test.ts`.
+
+- **Consumer-pack tarball-real-install gate** (PR #108). `scripts/test-consumer-pack.mjs` hace `npm pack` → instala en sandbox → corre `tsc --noEmit` con bundler + NodeNext. Caza issues que solo emergen con el flow end-to-end real: exports field interpretado por node/npm, peer deps resueltos, `.d.ts` paths bajo NodeNext.
+
+- **Smuggling cross-módulo gate (HIGH-2)** (PR #106). El gate `@server-safe` ahora sigue imports transitivos (depth-first) para cazar bypasses que importan un util sucio desde un archivo `@server-safe`. Inventario completo en `scripts/check-server-safe-markers.mjs` (orquestador `checkFileWithImports`).
+
+- **NodeNext + CLIENT_GLOBALS ampliado + JSDoc Menu (HIGH bloque)** (PR #105). El gate detecta acceso bare a 46 client globals (catálogo ampliado vs los 6 originales). `CLIENT_GLOBALS` exportado para uso en tests. Resolución alias en NodeNext robustecida con cascada de extensiones `.ts`/`.tsx`/`/index.ts`/`/index.tsx`.
+
+- **D13 — name reservations pre-rc.1** (PR #107). Reservas léxicas para los componentes/props que el roadmap 1.1+ va a añadir (Popover/HoverCard/ContextMenu/Combobox y subsystem `Form`/`Field`/`FormError`). Documentadas en `docs/decisions/D13-name-reservations-pre-rc1.md`.
+
+- **Fixture Playwright contraste pares componente** (#152, PR #129). `src/stories/ContrastPairs.stories.tsx` mide ΔE OKLab sobre DOM real (Chromium vía vitest-browser-playwright + Storybook) y asserta vs `deltaE_at_decision` con drift_tolerance 5%. Complementa el gate `check-component-contrast.mjs` (CSS resolver) con cobertura runtime DOM — caza regresiones de cascade/specificity.
+
+- **Audit fixtures `navigator` wholesale denylist** (#164, PR #125). 10 tests en `src/_audit/server-safe-gate.test.ts` que prueban el wholesale denylist de `navigator.X` (sin allowlist por property name). Blindaje del invariante para que una regresión que saque `navigator` del catálogo salte por dos lados (catálogo + audit).
+
+### Changed
+
+- **ΔE error_threshold blindado 0.05 → 0.07 + axis-kobalium dark ratificado** (#154, PR #115). `scripts/perceptual-allowlist.json` v2: `error_threshold` subido a 0.07 sin recalibrar tokens. `axis-kobalium dark` (ΔE 0.0522) ratificado como excepción consciente vía allowlist (drift gate sigue activo). Cualquier par nuevo bajo 0.07 sin allowlist explícita rompe CI. SKILL.md alineado (PRs #115, #116).
+
+- **DialogContext marcado `@internal`** (#162, PR #120). Los 4 exports del módulo (`DialogContextValue`, `DialogContext`, `useDialogContextOptional`, `useDialogContextRequired`) son `@internal`. `stripInternal: true` borra todo el `.d.ts` publicado (`export {}`). El bundle JS runtime sigue intacto. Verificado vía consumer-pack con `skipLibCheck: false`. El deep-import `AlertDialogClose → @/components/Dialog/DialogContext` es arquitectura D8 documentada (no deuda).
+
+- **StepProps internal split completado** (#161, PR #119). Las 4 props que el `Stepper` inyecta vía `cloneElement` (`index`/`active`/`complete`/`labeled`) movidas de `StepProps` (público) a `StepInternalProps` (`@internal`). Justo con las 3 que ya estaban (`interactive`/`onActivate`/`onStepKeyDown`), `StepInternalProps` agrupa las 7 props internas. `StepProps` publicado queda con `label?: ReactNode` + `ref` + `extends HTMLAttributes`.
+
+- **Size-budget mide payload real (no shim)** (#160, PR #126). `package.json` `size-limit` entries para JS bundles ahora incluyen el lazy chunk vía glob `dist/!(index|server-safe|cn).js` (extglob) — captura cualquier chunk transitivo que Rollup emita. Limits ajustados al payload real: `JS bundle ESM` 18.11 KB gz / 20 KB limit; `JS bundle server-safe ESM` 4.42 KB gz / 8 KB limit (vs 16 KB anterior cosmético).
+
+- **Toast container JSDoc alineado con Tooltip/MenuContent** (#165, PR #127). `ToastProvider.container` documenta el patrón Dialog-nesting (top-layer del browser) + ejemplo Dialog-ref + referencia a `docs/decisions/C-02-modal-tooltip-portal.md`. Cierra la asimetría documental entre los 3 componentes que aceptan `container`.
+
+### Fixed
+
+- **`dist/cn.d.ts` huérfano eliminado del tarball** (#159, PR #123). El `vite-plugin-dts` emite un `.d.ts` por cada entry, pero `exports` field apunta a `./dist/utils/cn.d.ts` (tsc-emitted, con sourcemap). Helper `rmFile` añadido a `scripts/clean-internal-dist.mjs`.
+
+- **Dev-vulns devDep cero** (#163, PR #124). `npm audit` reportaba 3 vulns (`brace-expansion`, `tmp`, `ws`) en devDeps. Verificado `npm audit --omit=dev` = 0 vulns pre/post-fix (runtime nunca afectado). Bumps: brace-expansion 5.0.5 → 5.0.6, tmp 0.2.5 → 0.2.7, ws 8.20.0 → 8.21.0. 0 cambios en `package.json` (solo lockfile).
+
+### Documentation
+
+- **Peer `@floating-ui/react ^0.27` pre-1.0 risk** (#156, PR #128). Sección nueva en README sobre la semántica especial del caret (^) en versiones 0.x: `^0.27.0` matchea SOLO `0.27.x` (NO `0.28.0`). Documenta la política del DS (mantener `^0.27.0` cerrado hasta verify FUI 0.28 compat) + recomendación al consumer (pinear `~0.27.0` si usa FUI directamente). Alineado con `docs/decisions/D10-fui-peer-dep-verify.md`.
+
+### EOPT widening — fronteras (consumer-facing)
+
+El widening `?: T | undefined` de #155 cubre **307 props del DS**. Hay 3 clases NO cubiertas que el consumer EOPT debe conocer para evitar confusión en el primer caso de cada una.
+
+#### 1. Props heredadas de `InputHTMLAttributes` (React)
+
+`Switch.checked`, `Slider.value`, `Slider.defaultValue`, etc. NO ensanchadas porque su tipo viene de React (`InputHTMLAttributes<HTMLInputElement>`), no del DS. Un consumer EOPT que haga:
+
+```tsx
+<Switch checked={cond ? true : undefined} />
+//      ^^^^^^^ TS error: Type 'undefined' is not assignable to type 'boolean'
+```
+
+…verá el error por los tipos de React, no del DS. Workaround: omitir la prop vía spread condicional.
+
+```tsx
+<Switch {...(cond ? { checked: true } : {})} />
+```
+
+#### 2. Discriminantes con literal `?: undefined`
+
+`MenuItem.href`, `SidebarItem.href`, `NavbarBrand.AsDiv.href`. NO ensanchadas porque rompería el discriminated union — son los literal `undefined` que activan la rama `button`/`div`:
+
+```tsx
+<MenuItem href={undefined}>Acción button</MenuItem>
+<MenuItem href="/perfil">Acción anchor</MenuItem>
+```
+
+#### 3. Exclusiones con `?: never`
+
+8 props del inventory `scripts/eopt-classify.mjs --json` marcadas `OUT_OF_SCOPE_NEVER`. NO ensanchadas porque `never` es el mecanismo de exclusión de variantes en discriminated unions.
+
+Inventario completo + clasificación AST en `scripts/eopt-classify.mjs`. Ver PR #114 / commit `9bdaf9a` del widening.
 
 ## [1.0.0-beta.25] — 2026-05-25 (gate review cruce cycle complete)
 
