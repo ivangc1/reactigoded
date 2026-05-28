@@ -206,27 +206,80 @@ import {
 import ts from "typescript";
 
 /**
- * Normaliza un path al separator POSIX (`/`).
- *
- * Necesario para que la resolución de imports (alias y relativos)
- * funcione idéntica en Windows y en Linux:
- *   - VFS de tests usa keys POSIX (`/repo/src/...`).
- *   - Real-disk en Windows: `path.resolve` produce `\\` nativo, pero
- *     `node:fs` acepta forward slashes en Windows también.
- *
- * Con esta función + `pathPosix.resolve` en el resolver, el path
- * intermedio es siempre POSIX y compara correctamente con el VFS sin
- * sacrificar el real-disk en ningún OS. Mismo patrón que aplican
- * `scripts/check-css-scope-leaks.mjs` y `scripts/check-hex-drift.mjs`
- * sobre sus paths de reporting.
- *
- * #151 (beta.27): fix del fallo en Windows runner — los 7 tests de
- * `src/_audit/server-safe-gate.test.ts` fallaban porque
- * `resolve(projectRoot, ...)` en Windows producía `src\\utils\\shared`
- * (separator nativo) pero el VFS los buscaba como `/repo/src/utils/shared`.
+ * Normaliza un path al separator POSIX (`/`). Helper de bajo nivel
+ * usado por `crossOsResolve`/`crossOsRelative`/`crossOsDirname` —
+ * NO usar directamente como input de `pathPosix.resolve` cuando el
+ * input puede tener drive letter (Windows), porque POSIX no trata
+ * `D:/` como absoluto y prepende cwd.
  */
 function toPosix(p) {
   return p.split(pathSep).join("/");
+}
+
+/**
+ * Resolver cross-OS que cubre tres modos sin if-else por plataforma:
+ *
+ *   1. **VFS test**: `base` como `/repo` (POSIX literal). No tiene
+ *      drive letter — `pathPosix.resolve` lo trata como absoluto.
+ *   2. **Real-disk Linux**: `base` como `/home/user/reactigoded`.
+ *      Mismo caso que (1).
+ *   3. **Real-disk Windows**: `base` como `D:\a\reactigoded`. Tras
+ *      `toPosix` queda `D:/a/reactigoded`, pero `pathPosix.resolve`
+ *      NO reconoce `D:/` como absoluto (POSIX ignora drive letters)
+ *      y prepende cwd → path roto. Codex P1 sobre PR #121:
+ *      `D:\a\.../D:/a/.../src/utils/cn`. La fix: extraer la drive
+ *      letter como prefijo, ejecutar `pathPosix.resolve` sobre el
+ *      resto POSIX-puro, y re-prepender la drive al output.
+ *
+ * Trabajamos en POSIX internamente para que el path intermedio
+ * compare correctamente con el VFS (keys forward-slash) y con
+ * `node:fs` en Windows (que acepta forward slashes nativamente).
+ */
+function crossOsResolve(base, ...segments) {
+  const posixBase = toPosix(base);
+  const posixSegments = segments.map(toPosix);
+  const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(posixBase);
+  if (driveMatch) {
+    const drive = driveMatch[1];
+    const rest = driveMatch[2] ?? "/";
+    return drive + pathPosix.resolve(rest, ...posixSegments);
+  }
+  return pathPosix.resolve(posixBase, ...posixSegments);
+}
+
+/**
+ * `path.relative` cross-OS. Misma técnica: strip drive letter
+ * (case-insensitive — Windows es case-insensitive sobre drives),
+ * relativar el resto POSIX, devolver el resultado. Si las drives no
+ * coinciden, fallback a `pathPosix.relative` que producirá un path
+ * "imposible" (`..` inflado) y `inSrc` lo rechazará — comportamiento
+ * correcto para el cross-drive case.
+ */
+function crossOsRelative(from, to) {
+  const posixFrom = toPosix(from);
+  const posixTo = toPosix(to);
+  const fromDrive = /^([A-Za-z]:)/.exec(posixFrom)?.[1];
+  const toDrive = /^([A-Za-z]:)/.exec(posixTo)?.[1];
+  if (
+    fromDrive &&
+    toDrive &&
+    fromDrive.toLowerCase() === toDrive.toLowerCase()
+  ) {
+    return pathPosix.relative(
+      posixFrom.slice(fromDrive.length) || "/",
+      posixTo.slice(toDrive.length) || "/",
+    );
+  }
+  return pathPosix.relative(posixFrom, posixTo);
+}
+
+/**
+ * `path.dirname` cross-OS. Como POSIX dirname sobre forward slashes
+ * basta — no hay caso especial con drive letters (siempre queda
+ * `D:/foo/bar` → `D:/foo`).
+ */
+function crossOsDirname(p) {
+  return pathPosix.dirname(toPosix(p));
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1075,28 +1128,30 @@ function resolveImportPath(
   // disco físico, los tests usan `/repo` simulado). El default es el
   // path físico del proyecto.
   //
-  // Normalizamos a POSIX (`/`) para que la resolución sea idéntica en
-  // Windows y en Linux. Sin esto, `resolve()` en Windows produce
-  // `src\\utils\\shared` (native `\`) y el VFS de tests (POSIX `/`) no
-  // lo encuentra → los 7 tests de smuggling cross-módulo fallaban en
-  // Windows runner. `node:fs` en Windows acepta forward slashes, así
-  // que real-disk sigue funcionando. Ver `toPosix` arriba (#151).
-  const projectRoot = toPosix(rootsOverride?.repoRoot ?? repoRoot);
-  const srcRoot = toPosix(rootsOverride?.srcRoot ?? SRC_ROOT);
+  // Usamos `crossOsResolve`/`crossOsRelative`/`crossOsDirname` para
+  // que la resolución funcione idéntica en los 3 modos:
+  //   1. VFS test (`/repo/...` POSIX literal).
+  //   2. Real-disk Linux (`/home/...` POSIX).
+  //   3. Real-disk Windows (`D:\repo\...` con drive letter).
+  // Ver helpers arriba para el desglose (#151 + codex P1 fix sobre
+  // PR #121: drive letters no son absolutas en POSIX, requieren
+  // preservación manual).
+  const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
+  const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
     for (const { prefix, targetPrefix } of tsconfigPaths) {
       if (specifier.startsWith(prefix)) {
         const tail = specifier.slice(prefix.length);
-        const noExt = pathPosix.resolve(projectRoot, targetPrefix + tail);
+        const noExt = crossOsResolve(projectRoot, targetPrefix + tail);
         const resolved = tryResolveFile(noExt, fileExists);
         if (resolved) {
           return { kind: "internal", absPath: resolved };
         }
         return {
           kind: "unresolvable",
-          reason: `alias \`${specifier}\` no resolvió en ${pathPosix.relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
+          reason: `alias \`${specifier}\` no resolvió en ${crossOsRelative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
         };
       }
     }
@@ -1104,20 +1159,20 @@ function resolveImportPath(
     return { kind: "external" };
   }
   // Relative.
-  const importerDir = pathPosix.dirname(toPosix(importerAbsPath));
-  const noExt = pathPosix.resolve(importerDir, specifier);
+  const importerDir = crossOsDirname(importerAbsPath);
+  const noExt = crossOsResolve(importerDir, specifier);
   const resolved = tryResolveFile(noExt, fileExists);
   if (resolved) {
     // Solo seguimos dentro de src/ (proxy para "archivo del DS, no
     // node_modules, no scripts/ ni fixtures/ ni dist/").
-    const rel = pathPosix.relative(srcRoot, toPosix(resolved));
+    const rel = crossOsRelative(srcRoot, resolved);
     const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
     if (inSrc) return { kind: "internal", absPath: resolved };
     return { kind: "external" };
   }
   return {
     kind: "unresolvable",
-    reason: `relativo \`${specifier}\` no resolvió en ${pathPosix.relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
+    reason: `relativo \`${specifier}\` no resolvió en ${crossOsRelative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
   };
 }
 
