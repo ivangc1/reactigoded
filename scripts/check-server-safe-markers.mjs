@@ -195,8 +195,39 @@
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, resolve, join, relative, sep as pathSep } from "node:path";
+import {
+  dirname,
+  resolve,
+  join,
+  relative,
+  sep as pathSep,
+  posix as pathPosix,
+} from "node:path";
 import ts from "typescript";
+
+/**
+ * Normaliza un path al separator POSIX (`/`).
+ *
+ * Necesario para que la resolución de imports (alias y relativos)
+ * funcione idéntica en Windows y en Linux:
+ *   - VFS de tests usa keys POSIX (`/repo/src/...`).
+ *   - Real-disk en Windows: `path.resolve` produce `\\` nativo, pero
+ *     `node:fs` acepta forward slashes en Windows también.
+ *
+ * Con esta función + `pathPosix.resolve` en el resolver, el path
+ * intermedio es siempre POSIX y compara correctamente con el VFS sin
+ * sacrificar el real-disk en ningún OS. Mismo patrón que aplican
+ * `scripts/check-css-scope-leaks.mjs` y `scripts/check-hex-drift.mjs`
+ * sobre sus paths de reporting.
+ *
+ * #151 (beta.27): fix del fallo en Windows runner — los 7 tests de
+ * `src/_audit/server-safe-gate.test.ts` fallaban porque
+ * `resolve(projectRoot, ...)` en Windows producía `src\\utils\\shared`
+ * (separator nativo) pero el VFS los buscaba como `/repo/src/utils/shared`.
+ */
+function toPosix(p) {
+  return p.split(pathSep).join("/");
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -1043,22 +1074,29 @@ function resolveImportPath(
   // resolver contra un root virtual en tests (la cache real apunta al
   // disco físico, los tests usan `/repo` simulado). El default es el
   // path físico del proyecto.
-  const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
-  const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
+  //
+  // Normalizamos a POSIX (`/`) para que la resolución sea idéntica en
+  // Windows y en Linux. Sin esto, `resolve()` en Windows produce
+  // `src\\utils\\shared` (native `\`) y el VFS de tests (POSIX `/`) no
+  // lo encuentra → los 7 tests de smuggling cross-módulo fallaban en
+  // Windows runner. `node:fs` en Windows acepta forward slashes, así
+  // que real-disk sigue funcionando. Ver `toPosix` arriba (#151).
+  const projectRoot = toPosix(rootsOverride?.repoRoot ?? repoRoot);
+  const srcRoot = toPosix(rootsOverride?.srcRoot ?? SRC_ROOT);
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
     for (const { prefix, targetPrefix } of tsconfigPaths) {
       if (specifier.startsWith(prefix)) {
         const tail = specifier.slice(prefix.length);
-        const noExt = resolve(projectRoot, targetPrefix + tail);
+        const noExt = pathPosix.resolve(projectRoot, targetPrefix + tail);
         const resolved = tryResolveFile(noExt, fileExists);
         if (resolved) {
           return { kind: "internal", absPath: resolved };
         }
         return {
           kind: "unresolvable",
-          reason: `alias \`${specifier}\` no resolvió en ${relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
+          reason: `alias \`${specifier}\` no resolvió en ${pathPosix.relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
         };
       }
     }
@@ -1066,20 +1104,20 @@ function resolveImportPath(
     return { kind: "external" };
   }
   // Relative.
-  const importerDir = dirname(importerAbsPath);
-  const noExt = resolve(importerDir, specifier);
+  const importerDir = pathPosix.dirname(toPosix(importerAbsPath));
+  const noExt = pathPosix.resolve(importerDir, specifier);
   const resolved = tryResolveFile(noExt, fileExists);
   if (resolved) {
     // Solo seguimos dentro de src/ (proxy para "archivo del DS, no
     // node_modules, no scripts/ ni fixtures/ ni dist/").
-    const rel = relative(srcRoot, resolved);
-    const inSrc = !rel.startsWith("..") && !rel.startsWith(pathSep);
+    const rel = pathPosix.relative(srcRoot, toPosix(resolved));
+    const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
     if (inSrc) return { kind: "internal", absPath: resolved };
     return { kind: "external" };
   }
   return {
     kind: "unresolvable",
-    reason: `relativo \`${specifier}\` no resolvió en ${relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
+    reason: `relativo \`${specifier}\` no resolvió en ${pathPosix.relative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
   };
 }
 
