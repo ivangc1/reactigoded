@@ -1,7 +1,7 @@
 # D14 — Slot pattern DS-wide (asChild en Trigger/Close de 4 familias)
 
 **Fecha**: 2026-05-28
-**Estado**: 🔵 **PROPUESTA — en revisión cruzada (Codex + humano)**. Implementación condicionada a aprobación de este plan.
+**Estado**: ✅ **IMPLEMENTADO** — Bloques A/B/C/D mergeados (PRs #110-#113), taggeado y publicado en `1.0.0-beta.26`. `asChild` en 4 familias (Dialog/AlertDialog/Tooltip/Menu); `DialogAction` eliminado; primitive `<Slot>` interno en `src/components/Slot/`.
 **Origen**:
 - M-01 (post-RC1, beta.20) deferred Slot pattern DS-wide a 2.0.
 - Cruce reviews beta.25 (Opus 4.7 generic, 2026-05-27): cuantificó ~1800–2700 LOC evitables + asimetría léxica `DialogClose styled / DialogAction unstyled / AlertDialogClose clone` como deuda heredada permanente del 1.x si M-01 no se revierte.
