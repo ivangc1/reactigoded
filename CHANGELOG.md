@@ -24,10 +24,10 @@ Cierra el bloque **claudegate5 / beta.27** (25 PRs entre #105 y
   vs Node runtime (#150), gates de payload reales (#160), peer
   `@floating-ui/react ^0.27` pre-1.0 documentado (#156).
 
-Tras este release queda únicamente FREEZE-CHECK + gate reviews
-antes de tagear `1.0.0-rc.1` (API congelada para 1.x). beta.26
-puede aún recibir bug fixes o ajustes pre-rc.1 si los gate
-reviews los identifican.
+Tras este release queda el gate review claudegate6 (auditoría AI con
+cruce A+B de dos auditores independientes) antes de tagear
+`1.0.0-rc.1` (API congelada para 1.x). beta.26 puede aún recibir bug
+fixes o ajustes pre-rc.1 si el gate identifica blockers.
 
 
 ### BREAKING (D14 Bloque B beta.27)
