@@ -20,10 +20,12 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  CLIENT_GLOBALS,
+  SAFE_GLOBALS,
+  INTENTIONAL_DENY,
   DYNAMIC_EVAL_SINKS,
   checkSourceFile,
   checkFileWithImports,
+  isContentServerSafeMarked,
 } from "../../scripts/check-server-safe-markers.mjs";
 
 function fixture(body: string): string {
@@ -83,16 +85,22 @@ describe("server-safe gate — CLIENT_GLOBALS catálogo ampliado (beta.25)", () 
     },
   );
 
-  it("CLIENT_GLOBALS exporta el catálogo completo con browser-only adds", () => {
-    expect(CLIENT_GLOBALS.has("localStorage")).toBe(true);
-    expect(CLIENT_GLOBALS.has("screen")).toBe(true);
-    expect(CLIENT_GLOBALS.has("matchMedia")).toBe(true);
-    expect(CLIENT_GLOBALS.has("DOMParser")).toBe(true);
-    expect(CLIENT_GLOBALS.has("Worker")).toBe(true);
-    expect(CLIENT_GLOBALS.has("IntersectionObserver")).toBe(true);
-    // Sanity: existentes no removidos.
-    expect(CLIENT_GLOBALS.has("window")).toBe(true);
-    expect(CLIENT_GLOBALS.has("document")).toBe(true);
+  it("SAFE_GLOBALS (fail-closed) NO incluye browser globals conocidos", () => {
+    // Modelo whitelist (beta.27 BLOCKER-1): un nombre AUSENTE de
+    // SAFE_GLOBALS es lo que lo hace flaggeable. Estos browser-only no
+    // deben colarse en el safe-set — si lo hicieran, reabrirían su bypass.
+    for (const name of [
+      "localStorage",
+      "screen",
+      "matchMedia",
+      "DOMParser",
+      "Worker",
+      "IntersectionObserver",
+      "window",
+      "document",
+    ]) {
+      expect(SAFE_GLOBALS.has(name)).toBe(false);
+    }
   });
 });
 
@@ -164,13 +172,15 @@ describe("server-safe gate — navigator wholesale denylist (#164 beta.27)", () 
     expect(violations.some((v) => v.detail.includes("navigator"))).toBe(true);
   });
 
-  it("`navigator` está en CLIENT_GLOBALS (anti-regresión del wholesale denylist)", () => {
-    // Si alguien borra navigator del set sin actualizar el doc del
-    // rationale en el catálogo, este test lo caza. Junto con
-    // `src/__tests__/server-safe-catalog-vs-node.test.ts` (#150)
-    // que asserts que DOCUMENTED_NODE_OVERLAPS ⊆ CLIENT_GLOBALS,
-    // el invariante queda blindado por dos lados.
-    expect(CLIENT_GLOBALS.has("navigator")).toBe(true);
+  it("`navigator` es denegación intencional (anti-regresión del wholesale denylist)", () => {
+    // En el modelo fail-closed `navigator` lo provee Node 22.12+ pero se
+    // deniega igual (subset inestable entre runtimes). Vive en
+    // INTENTIONAL_DENY y por tanto está EXCLUIDO de SAFE_GLOBALS. Junto con
+    // `src/__tests__/server-safe-catalog-vs-node.test.ts` (#150, Test B:
+    // INTENTIONAL_DENY ∩ SAFE = ∅), el invariante queda blindado por dos
+    // lados.
+    expect(INTENTIONAL_DENY.has("navigator")).toBe(true);
+    expect(SAFE_GLOBALS.has("navigator")).toBe(false);
   });
 });
 
@@ -771,5 +781,99 @@ describe("server-safe gate — Windows drive letter paths (#151 codex P1 anti-re
     // basura tipo "D:/a/repo/src\\utils\\..." o el cwd prefijado.
     expect(unresolved?.detail).toContain("src/utils/does-not-exist");
     expect(unresolved?.detail).not.toMatch(/D:\/a\/repo\/D:/);
+  });
+});
+
+/**
+ * Modelo fail-closed (beta.27 BLOCKER-1, cruce A+B claudegate6). El gate
+ * pasó de denylist (~46 nombres) a whitelist `SAFE_GLOBALS`: acceso bare a
+ * cualquier global NO en el safe-set se flaggea. Estos tests blindan:
+ *   1. El START-1 (HTMLElement, self, CSS, …) que la denylist dejaba pasar.
+ *   2. Que el class-extends RUNTIME sigue cazándose (no se excluyó como
+ *      type-only por error).
+ *   3. Que las exclusiones type-space (`isNonReferencePosition` reglas
+ *      11-13) NO generan falsos positivos.
+ */
+describe("server-safe gate — modelo fail-closed (beta.27 BLOCKER-1)", () => {
+  it.each([
+    ["HTMLElement bare (START-1)", `const T = HTMLElement; void T;`],
+    ["self bare (START-1)", `const s = self; void s;`],
+    ["CSS.supports (no estaba en denylist-46)", `CSS.supports("display", "grid");`],
+    ["Element bare", `const E = Element; void E;`],
+    ["customElements", `customElements.get("x-foo");`],
+  ])("caza %s (gap que la denylist de 46 dejaba pasar)", (_label, body) => {
+    const v = checkSourceFile(fixture(body), "fail-closed.fixture.tsx");
+    expect(v.length).toBeGreaterThan(0);
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("caza `class X extends HTMLElement` (heritage RUNTIME, no se excluye como type-only)", () => {
+    // Regla 12 de isNonReferencePosition excluye el `extends` de una
+    // INTERFACE y el `implements` de una clase (type-only), pero NO el
+    // `extends` de una CLASE — es una ref runtime real. Un custom element
+    // en código server-safe DEBE flaggearse.
+    const code = `/** @server-safe */\nexport class XProbe extends HTMLElement {}`;
+    const v = checkSourceFile(code, "class-extends.fixture.tsx");
+    expect(v.some((x) => x.detail.includes("HTMLElement"))).toBe(true);
+  });
+
+  it.each([
+    ["ES builtins", `const m = new Map(); return Promise.resolve(m);`],
+    [
+      "globals Node (URL/fetch/crypto)",
+      `const u = new URL("x", "http://a"); void fetch(u); return crypto.randomUUID();`,
+    ],
+    ["Event/CustomEvent (overlap Node)", `const e = new CustomEvent("x"); void e;`],
+    ["import.meta.env (regla 13)", `if (import.meta.env.DEV) { void 0; }`],
+  ])("NO genera falso positivo en %s", (_label, body) => {
+    const v = checkSourceFile(fixture(body), "no-fp.fixture.tsx");
+    expect(v).toEqual([]);
+  });
+
+  it("NO genera falso positivo en posiciones de tipo (interface extends Omit, React.ReactNode)", () => {
+    // Reglas 11 (QualifiedName) + 12 (interface heritage). Tipos borrados.
+    const code = `
+/** @server-safe */
+import type React from "react";
+export interface ProbeProps extends Omit<{ a: 1; b: 2 }, "a"> {
+  children?: React.ReactNode | undefined;
+}
+export function Probe(_p: ProbeProps) { return null; }
+`;
+    const v = checkSourceFile(code, "type-pos.fixture.tsx");
+    expect(v).toEqual([]);
+  });
+});
+
+/**
+ * Marker `@server-safe` fail-loud (beta.27 BLOCKER-1). La detección pasó de
+ * mirar solo `sourceFile.statements` (top-level) a recorrer el AST completo
+ * y FALLAR RUIDOSO si el marker aparece en posición anidada — antes ese
+ * caso pasaba inadvertido (fail-open silencioso: el dev cree que el archivo
+ * se audita y no es así).
+ */
+describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)", () => {
+  it("detecta marker en statement top-level", () => {
+    const code = `/** @server-safe */\nexport const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "ok.tsx")).toBe(true);
+  });
+
+  it("archivo sin marker devuelve false", () => {
+    const code = `export const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "none.tsx")).toBe(false);
+  });
+
+  it("FALLA RUIDOSO si el marker está en una función anidada (no fail-open)", () => {
+    const code = `export function Outer() {\n  /** @server-safe */\n  function inner() { return 1; }\n  return inner();\n}`;
+    expect(() => isContentServerSafeMarked(code, "nested.tsx")).toThrow(
+      /posición no soportada/,
+    );
+  });
+
+  it("FALLA RUIDOSO si el marker está en un arrow anidado", () => {
+    const code = `export const Outer = () => {\n  /** @server-safe */\n  const inner = () => 1;\n  return inner;\n};`;
+    expect(() => isContentServerSafeMarked(code, "nested-arrow.tsx")).toThrow(
+      /posición no soportada/,
+    );
   });
 });

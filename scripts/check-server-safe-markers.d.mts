@@ -130,15 +130,31 @@ export declare function getTsconfigPaths(): Array<{
   targetPrefix: string;
 }>;
 
-export declare const CLIENT_GLOBALS: ReadonlySet<string>;
+/**
+ * Whitelist fail-closed (beta.27 BLOCKER-1). Acceso bare a cualquier global
+ * AUSENTE de este set se flaggea. Derivado de `globals` (builtins ES ∪
+ * globals de Node) menos `INTENTIONAL_DENY` y los overclaims de `globals`
+ * no provistos por el engine mínimo (Node 22.12). Reemplaza al antiguo
+ * `CLIENT_GLOBALS` (denylist).
+ */
+export declare const SAFE_GLOBALS: ReadonlySet<string>;
+/**
+ * Globals que Node provee pero el gate deniega igual (portabilidad
+ * multi-runtime / anti-bypass): `globalThis`, `process`, `Buffer`,
+ * `navigator`, `localStorage`, `sessionStorage`, `eval`, `Function`.
+ * Excluidos de `SAFE_GLOBALS`.
+ */
+export declare const INTENTIONAL_DENY: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
 
 /**
- * Detección AST del marker `@server-safe` (#158, beta.27). Reemplaza la
- * detección substring que tenía falsos positivos sobre string literals,
- * line comments y block comments NO-JSDoc. Solo cuenta el marker como
- * presente si el parser de JSDoc de TypeScript lo reconoce como tag en
- * un bloque JSDoc real.
+ * Detección AST del marker `@server-safe`. Recorre el AST completo: cuenta
+ * el marker como presente solo si aparece en el JSDoc de un statement
+ * top-level. FALLA RUIDOSO (throw) si aparece en posición ANIDADA (función
+ * interna, método…) — antes ese caso pasaba inadvertido (fail-open
+ * silencioso). beta.27 BLOCKER-1.
+ *
+ * @throws si el marker `@server-safe` está en una posición no soportada.
  */
 export declare function isContentServerSafeMarked(
   content: string,

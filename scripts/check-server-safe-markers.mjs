@@ -204,6 +204,7 @@ import {
   posix as pathPosix,
 } from "node:path";
 import ts from "typescript";
+import globalsPkg from "globals";
 
 /**
  * Normaliza un path al separator POSIX (`/`). Helper de bajo nivel
@@ -288,85 +289,96 @@ const COMPONENTS_DIR = resolve(repoRoot, "src/components");
 const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 const SRC_ROOT = resolve(repoRoot, "src");
 
-const CLIENT_GLOBALS = new Set([
-  "document",
-  "window",
-  // `navigator`, `process`, `Buffer`, `globalThis` están en este set
-  // intencionalmente AUNQUE Node los provee como global (verificado en
-  // matriz CI por `src/__tests__/server-safe-catalog-vs-node.test.ts`,
-  // #150 beta.27). Las 4 razones:
-  //   - `globalThis`: caza el bypass
-  //     `globalThis.constructor.constructor("return window")()` —
-  //     audit fixture `globalThis-constructor.fixture.tsx` lo prueba.
-  //     No tener `globalThis` en el set deja esta clase de bypass
-  //     abierta aunque Node lo provea como global ECMAScript estándar.
-  //   - `process`: portabilidad multi-runtime. Cloudflare Workers /
-  //     Deno no tienen `process`. En RSC el patrón canónico es leer
-  //     env vars vía args/context del Server Component, no globalmente.
-  //   - `Buffer`: Node-specific. Multi-runtime usan `Uint8Array`.
-  //     Mismo razonamiento que `process`.
-  //   - `navigator`: añadido a Node en v21 (Node 22.12+ lo provee),
-  //     pero su forma es un SUBSET del navigator de browser (no
-  //     `geolocation`, no `mediaDevices`, sí `userAgent`/`language`).
-  //     Semántica inestable entre runtimes (browser vs Node vs Workers)
-  //     → gate fuerza guard explícito o evitar la API en `@server-safe`.
-  "navigator",
+// ── Modelo fail-closed (whitelist) del catálogo server-safe ──
+// (beta.27 BLOCKER-1, cruce A+B claudegate6)
+//
+// HISTORIA: hasta beta.26 esto era una DENYLIST de ~46 nombres browser-
+// only. El cruce A+B (START-1) demostró que era estructuralmente
+// insuficiente: `lib.dom.d.ts` declara ~826 globals client-only que
+// lanzan ReferenceError en Node, y la denylist cubría 46 → ~780 pasaban
+// silenciosos (`HTMLElement`, `Element`, `self`, `CSS`, customElements
+// nuevos…). Una denylist "más completa" conserva la dirección de fallo
+// equivocada: el día que el navegador/TS añada un global nuevo, vuelve a
+// pasar hasta que alguien regenere el catálogo.
+//
+// MODELO: deny-by-default. Lo SEGURO se enumera (finito, estable); todo
+// lo demás accedido bare se flaggea. Seguro =
+//   (ECMAScript builtins ∪ globals de Node) − denegaciones intencionales.
+// Fuente: paquete `globals` (mantenido, versionado). Un global DOM nuevo
+// se caza solo, sin tocar este archivo. Un falso positivo es ruido
+// (arreglable: añadir a SAFE_GLOBALS si es genuinamente Node-safe), no un
+// ReferenceError en producción SSR — fail-closed compra esa dirección.
+//
+// ENGINE-MIN: `globals.nodeBuiltin` puede listar globals añadidos después
+// de Node 22.12.0 (engine mínimo declarado). El test #150
+// `src/__tests__/server-safe-catalog-vs-node.test.ts` corre en la matriz
+// CI (22.12 + 24) y falla si algún nombre de SAFE_GLOBALS no lo provee el
+// Node real → ancla la whitelist al engine mínimo, no al Node del dev.
+//
+// DENEGACIONES INTENCIONALES (Node los provee pero se flaggean igual):
+//   - `globalThis`: caza el bypass
+//     `globalThis.constructor.constructor("return window")()` — audit
+//     fixture `globalThis-constructor.fixture.tsx` lo prueba.
+//   - `process` / `Buffer`: portabilidad multi-runtime. Cloudflare
+//     Workers / Deno no los tienen. En RSC el patrón canónico es leer env
+//     vars vía args/context del Server Component, no globalmente.
+//   - `navigator`: Node v21+ lo provee como SUBSET inestable del de
+//     browser (sí `userAgent`/`language`; no `geolocation`/`mediaDevices`).
+//     Semántica divergente entre runtimes → gate fuerza guard explícito.
+//   - `localStorage` / `sessionStorage`: `globals.nodeBuiltin` los lista
+//     (webstorage experimental de Node), pero en SSR/RSC crashean o son
+//     semánticamente erróneos. Sin esta exclusión, fail-closed REABRIRÍA
+//     el bypass de Web Storage (verificado: leak SAFE ∩ denylist-46 = 2).
+//   - `eval` / `Function`: dynamic eval sinks (ver DYNAMIC_EVAL_SINKS).
+//     Excluidos de SAFE para que también se flaggeen como bare ref.
+const INTENTIONAL_DENY = new Set([
+  "globalThis",
   "process",
   "Buffer",
-  "globalThis",
-  // Browser-only timers (no existen en Node SSR). Codex round 17 P2.2:
-  // tratarlos como client globals para flag-ear cualquier ref bare a
-  // ellos en render path (call site, no solo callback body).
-  "requestAnimationFrame",
-  "cancelAnimationFrame",
-  "requestIdleCallback",
-  "cancelIdleCallback",
-  // beta.25 BLOCKER 4 (gate review CONV-2): catálogo Claude ampliado.
-  // Browser-only que NO existen como global en Node >=22.12.0 (engine
-  // mínimo declarado). Acceder a bare en render server lanza
-  // ReferenceError exactamente igual que `window`. Verificación caso a
-  // caso antes de añadir (algunos como `URL`, `Blob`, `crypto`, `fetch`,
-  // `EventTarget` SÍ existen como global en Node y NO se añaden).
+  "navigator",
   "localStorage",
   "sessionStorage",
-  "location",
-  "history",
-  "screen",
-  "IntersectionObserver",
-  "ResizeObserver",
-  "MutationObserver",
-  // PerformanceObserver NO va aqui: es global en Node >=22.12.0 (engine
-  // minimo del paquete) — anadirlo genera falsos positivos para codigo
-  // server-safe que use la API legitima de Node. Codex P2 round 2 sobre #99.
-  "XMLHttpRequest",
-  "indexedDB",
-  "caches",
-  "FileReader",
-  "getComputedStyle",
-  "getSelection",
-  "matchMedia",
-  "scrollTo",
-  "scrollBy",
-  "alert",
-  "confirm",
-  "prompt",
-  "print",
-  "open",
-  "close",
-  "EventSource",
-  "Notification",
-  "visualViewport",
-  "Animation",
-  "KeyframeEffect",
-  "DOMParser",
-  "XPathEvaluator",
-  "Image",
-  "Audio",
-  "Worker",
-  "SharedWorker",
-  "customElements",
-  "speechSynthesis",
+  "eval",
+  "Function",
 ]);
+
+// Overclaims de `globals`: nombres que `globals@17.x` lista en `builtin`/
+// `nodeBuiltin` pero que Node 22.12.0 (engine MÍNIMO declarado) NO provee
+// como global — landearon en Node 23/24 o están flag-gated. Un componente
+// `@server-safe` que los referencie bare lanzaría ReferenceError en un
+// consumer sobre el floor. Verificado contra el runtime real de Node
+// 22.12.0; el test `server-safe-catalog-vs-node.test.ts` (Test A) corre en
+// la celda 22.12 de la matriz CI y FALLA si esta lista se desincroniza con
+// lo que el floor realmente provee (p.ej. al bumpear `globals` o el engine).
+// IMPORTANTE: subtraer SOLO añade strictness (fail-closed) — si un nombre
+// dejara de ser overclaim, el efecto sería un FP corregible, nunca un FN.
+const GLOBALS_OVERCLAIMS = new Set([
+  "AsyncDisposableStack",
+  "CloseEvent",
+  "DisposableStack",
+  "ErrorEvent",
+  "Float16Array",
+  "Storage",
+  "SuppressedError",
+  "URLPattern",
+]);
+
+// Whitelist efectiva. Acceso bare a cualquier identificador NO resuelto
+// en scope (local/param/import) y AUSENTE de este set se trata como
+// global no-server-safe y se flaggea. Reemplaza al antiguo `CLIENT_GLOBALS`
+// (denylist) invirtiendo la decisión-hoja del walker. DETERMINISTA: se
+// deriva solo del paquete `globals` (datos estáticos), nunca del
+// `globalThis` ambiente — el gate se importa también bajo jsdom (donde
+// `window`/`document`/`HTMLElement` estarían polyfilled) y un
+// runtime-intersect envenenaría SAFE con browser globals.
+const SAFE_GLOBALS = new Set(
+  [
+    ...Object.keys(globalsPkg.builtin),
+    ...Object.keys(globalsPkg.nodeBuiltin),
+  ].filter(
+    (name) => !INTENTIONAL_DENY.has(name) && !GLOBALS_OVERCLAIMS.has(name),
+  ),
+);
 
 // Sinks de evaluación dinámica. NO son "browser globals" — existen
 // también en Node — pero PERMITEN bypassear el análisis estático del
@@ -848,7 +860,10 @@ function extractPositiveTypeofGuard(expr) {
     if (!ts.isTypeOfExpression(typeofExpr)) continue;
     const operand = typeofExpr.expression;
     if (!ts.isIdentifier(operand)) continue;
-    if (!CLIENT_GLOBALS.has(operand.text)) continue;
+    // fail-closed: el guard `typeof X !== "undefined"` es significativo
+    // para cualquier global NO-seguro. Los SAFE nunca se flaggean, así que
+    // reconocer el guard sobre ellos es irrelevante — skip.
+    if (SAFE_GLOBALS.has(operand.text)) continue;
     if (!ts.isStringLiteral(stringExpr)) continue;
     if (stringExpr.text !== "undefined") continue;
     return operand.text;
@@ -999,6 +1014,46 @@ function isNonReferencePosition(node) {
       ts.isElementAccessExpression(parent)) &&
     parent.expression === node
   ) {
+    return true;
+  }
+
+  // ── Reglas 11-13: añadidas en beta.27 BLOCKER-1 al pasar a fail-closed.
+  // Bajo la denylist anterior nunca se ejercitaban (el predicado
+  // `CLIENT_GLOBALS.has` short-circuitaba antes de llegar aquí); el modelo
+  // whitelist hace `isNonReferencePosition` load-bearing para TODO
+  // identificador, exponiendo posiciones type-space y meta-properties que
+  // se borran en compilación y no leen ningún binding global.
+
+  // 11. Entity name de tipo (`A.B` en posición de tipo es un
+  //     QualifiedName, p.ej. `React.ReactNode`). A diferencia del acceso a
+  //     valor `a.b` (PropertyAccessExpression), el QualifiedName SOLO
+  //     aparece en type-space → ni `left` ni `right` leen un binding
+  //     runtime. (Caza `React`/`ReactNode` en `children?: React.ReactNode`.)
+  if (ts.isQualifiedName(parent)) {
+    return true;
+  }
+
+  // 12. Heritage type-only: `interface X extends Omit<...>` o
+  //     `class X implements Y`. El `extends` de una INTERFACE y el
+  //     `implements` de una CLASE son type-only (se borran). CRÍTICO: el
+  //     `extends` de una CLASE (`class X extends Base`) SÍ es una ref
+  //     runtime — no se excluye, para que `class X extends HTMLElement`
+  //     (custom element, client-only) siga flaggeándose.
+  if (
+    ts.isExpressionWithTypeArguments(parent) &&
+    parent.expression === node &&
+    ts.isHeritageClause(parent.parent) &&
+    (parent.parent.token === ts.SyntaxKind.ImplementsKeyword ||
+      ts.isInterfaceDeclaration(parent.parent.parent))
+  ) {
+    return true;
+  }
+
+  // 13. Nombre de MetaProperty: el `meta` de `import.meta` (y `target` de
+  //     `new.target`). Construcción sintáctica ESM estándar, disponible en
+  //     SSR/RSC — no es un read de global. (Caza `meta` en
+  //     `import.meta.env.DEV`.)
+  if (ts.isMetaProperty(parent) && parent.name === node) {
     return true;
   }
 
@@ -1633,9 +1688,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const expr = node.expression;
       if (ts.isIdentifier(expr)) {
         const api = expr.text;
-        const isClientGlobal = CLIENT_GLOBALS.has(api);
+        const isUnsafeGlobal = !SAFE_GLOBALS.has(api);
         const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
-        if (isClientGlobal || isEvalSink) {
+        if (isUnsafeGlobal || isEvalSink) {
           // Si el binding está shadow-eado por una local (parameter, var,
           // import, etc.), NO es ref al global — skip.
           if (!context.localBindings.has(api) && !context.isInDeferredBody) {
@@ -1650,7 +1705,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                 line: line + 1,
                 detail: isEvalSink
                   ? `acceso a \`${api}.*\` (dynamic eval sink — bypassea el AST gate): ${lineText}`
-                  : `acceso bare a \`${api}\` sin guard typeof activo: ${lineText}`,
+                  : `acceso a \`${api}.*\` — \`${api}\` no es global server-safe (ni ES builtin ni global de Node ≥22.12) y no hay guard typeof activo: ${lineText}`,
               });
             }
           }
@@ -1677,9 +1732,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // ReferenceError igual que property accesses si el binding no existe.
     if (ts.isIdentifier(node)) {
       const api = node.text;
-      const isClientGlobal = CLIENT_GLOBALS.has(api);
+      const isUnsafeGlobal = !SAFE_GLOBALS.has(api);
       const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
-      if (isClientGlobal || isEvalSink) {
+      if (isUnsafeGlobal || isEvalSink) {
         if (
           !context.localBindings.has(api) &&
           !isNonReferencePosition(node)
@@ -1695,7 +1750,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               line: line + 1,
               detail: isEvalSink
                 ? `referencia a \`${api}\` (dynamic eval sink — bypassea el AST gate): ${lineText}`
-                : `referencia bare al binding \`${api}\` sin guard typeof activo: ${lineText}`,
+                : `referencia bare a \`${api}\` — no es global server-safe (ni ES builtin ni global de Node ≥22.12) y no hay guard typeof activo: ${lineText}`,
             });
           }
         }
@@ -1747,10 +1802,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
 
 // ─── Exports (para tests) ──────────────────────────────────────
 //
-// `checkSourceFile`, `CLIENT_GLOBALS` y `DYNAMIC_EVAL_SINKS` se exportan
-// para que `src/_audit/server-safe-gate.test.ts` pueda validar que cada
-// bypass conocido (eval, Function, Reflect.construct, etc.) realmente lo
-// caza el gate sobre fixtures inline.
+// `checkSourceFile`, `SAFE_GLOBALS`, `INTENTIONAL_DENY` y
+// `DYNAMIC_EVAL_SINKS` se exportan para que
+// `src/_audit/server-safe-gate.test.ts` y
+// `src/__tests__/server-safe-catalog-vs-node.test.ts` puedan validar el
+// modelo fail-closed (whitelist) y que cada bypass conocido (eval,
+// Function, Reflect.construct, etc.) realmente lo caza el gate.
 //
 // `checkFileWithImports`, `resolveImportPath`, `extractModuleReferences`
 // añadidos en beta.26 HIGH-2 para validar el cierre de smuggling cross-
@@ -1763,7 +1820,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
 // `checkSourceFile` directamente) para que el smuggling cross-módulo se
 // chequee también en CI.
 export {
-  CLIENT_GLOBALS,
+  SAFE_GLOBALS,
+  INTENTIONAL_DENY,
   DYNAMIC_EVAL_SINKS,
   checkSourceFile,
   checkFileWithImports,
@@ -1782,6 +1840,73 @@ export {
 const isCliEntry =
   process.argv[1] !== undefined &&
   pathToFileURL(process.argv[1]).href === import.meta.url;
+
+/**
+ * Recorre el AST COMPLETO buscando el tag JSDoc `@server-safe` y:
+ *   - devuelve `true` si hay un marker en posición CANÓNICA (JSDoc de un
+ *     statement top-level del módulo),
+ *   - FALLA RUIDOSAMENTE (throw) si encuentra el marker en posición
+ *     ANIDADA (función interna, método, bloque…).
+ *
+ * beta.27 BLOCKER-1 (cruce A+B claudegate6): el predecesor solo iteraba
+ * `sourceFile.statements` (top-level). Un `@server-safe` en un JSDoc
+ * anidado pasaba INADVERTIDO → el archivo no se trataba como marcado →
+ * no se auditaba → fail-open silencioso (el dev cree que el invariante se
+ * enforça y no es así). Fail-loud (no detección permisiva) fuerza la forma
+ * canónica: un marker mal colocado es un ERROR del gate, no comportamiento
+ * no especificado que luego se congela.
+ *
+ * CRÍTICO — anclaje del tag: `ts.getJSDocTags(node)` devuelve el mismo tag
+ * en VARIOS nodos por herencia/asociación de JSDoc. Para un JSDoc
+ * `@server-safe` sobre `export const X = () => {}`, lo reporta en el
+ * VariableStatement, el VariableDeclaration, el Identifier y el
+ * ArrowFunction. Solo el host real cumple `tag.parent.parent === node`
+ * (tag → JSDoc → host); filtrar por eso cuenta cada tag UNA vez en su host
+ * y evita falsos "misplaced".
+ *
+ * @param {import("typescript").SourceFile} sourceFile
+ * @param {string} relPath
+ * @returns {boolean} true si hay `@server-safe` en un statement top-level.
+ * @throws {Error} si hay `@server-safe` en posición anidada (no soportada).
+ */
+function detectServerSafeMarker(sourceFile, relPath) {
+  const topLevel = new Set(sourceFile.statements);
+  let marked = false;
+  const misplacedLines = [];
+
+  const visit = (node) => {
+    for (const tag of ts.getJSDocTags(node)) {
+      if (tag.tagName.text !== "server-safe") continue;
+      // tag → JSDoc (tag.parent) → host node (tag.parent.parent). Solo
+      // procesamos el tag en su host real para no contar duplicados
+      // heredados.
+      const host = tag.parent && tag.parent.parent;
+      if (host !== node) continue;
+      if (topLevel.has(node)) {
+        marked = true;
+      } else {
+        const { line } = sourceFile.getLineAndCharacterOfPosition(
+          node.getStart(sourceFile),
+        );
+        misplacedLines.push(line + 1);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  for (const stmt of sourceFile.statements) visit(stmt);
+
+  if (misplacedLines.length > 0) {
+    const plural = misplacedLines.length > 1;
+    throw new Error(
+      `[server-safe gate] marker \`@server-safe\` en posición no soportada ` +
+        `en ${relPath} (línea${plural ? "s" : ""} ${misplacedLines.join(", ")}). ` +
+        `El marker SOLO es válido en el JSDoc de un statement top-level del ` +
+        `módulo — un marker anidado pasaría inadvertido (fail-open silencioso). ` +
+        `Mueve el JSDoc al export/declaración top-level del componente.`,
+    );
+  }
+  return marked;
+}
 
 /**
  * Detección AST del marker `@server-safe` (#158, beta.27).
@@ -1812,15 +1937,7 @@ export function isContentServerSafeMarked(content, relPath) {
     /* setParentNodes */ true,
     relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  for (const stmt of sourceFile.statements) {
-    const tags = ts.getJSDocTags(stmt);
-    for (const tag of tags) {
-      if (tag.tagName.text === "server-safe") {
-        return true;
-      }
-    }
-  }
-  return false;
+  return detectServerSafeMarker(sourceFile, relPath);
 }
 
 if (isCliEntry) {
@@ -1852,15 +1969,9 @@ if (isCliEntry) {
       cached = { sourceFile, content };
       parseCache.set(filePath, cached);
     }
-    for (const stmt of cached.sourceFile.statements) {
-      const tags = ts.getJSDocTags(stmt);
-      for (const tag of tags) {
-        if (tag.tagName.text === "server-safe") {
-          return true;
-        }
-      }
-    }
-    return false;
+    const relRaw = relative(repoRoot, filePath);
+    const relPath = relRaw.split(pathSep).join("/");
+    return detectServerSafeMarker(cached.sourceFile, relPath);
   }
 
   const markedFiles = allFiles.filter((f) => isFileServerSafeMarked(f));
