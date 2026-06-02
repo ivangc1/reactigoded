@@ -1771,24 +1771,35 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     }
 
     // (c.2) Dynamic eval sink vía Function constructor alcanzable por
-    // `.constructor` SIN nombrar `Function`. `x.constructor.constructor(...)`
-    // (cualquier base: literal, valor SAFE, expresión) y `f.constructor(...)`
-    // reachan el Function constructor y evalúan código desde un string —
-    // bypassean el AST gate igual que `eval`/`Function`. La rama (c) solo
-    // cazaba la cadena cuando la BASE era un identificador denegado (p.ej.
-    // `globalThis.constructor.*` colateralmente); con base literal/SAFE
-    // pasaba. Detectamos el member access `constructor` cuando es el CALLEE
-    // de una CallExpression (invocado). Los usos legítimos de `.constructor`
-    // (reflexión `err.constructor.name`, comparación `x.constructor === Y`,
-    // clon `new x.constructor()`) NO son callee de CallExpression → 0 FP.
-    // beta.27 BLOCKER-1 (cruce A+B, FN-hunt).
+    // `.constructor` SIN nombrar `Function`. El constructor del constructor
+    // de CUALQUIER valor ES `Function` (`[].constructor` → Array;
+    // `Array.constructor` → Function), así que `x.constructor.constructor`
+    // evalúa código desde un string igual que `eval`/`Function` y bypassea el
+    // AST gate. La rama (c) solo lo cazaba cuando la base era un identificador
+    // denegado (`globalThis.constructor.*` colateral); con base literal/SAFE
+    // pasaba. Flaggeamos un member access `constructor` (`x.constructor` o
+    // `x["constructor"]`) cuando está "weaponizado":
+    //   (a) su BASE es OTRO member access `constructor` — la cadena
+    //       `x.constructor.constructor` ES el Function constructor, se llame
+    //       o no (cubre la forma partida `const F = x.constructor.constructor;
+    //       F("code")()` y `.call`/`.apply` sobre él), o
+    //   (b) es el CALLEE de una CallExpression — `f.constructor("code")`
+    //       sobre una base que ya es función.
+    // Los usos legítimos (`err.constructor.name`, `x.constructor === Y`, clon
+    // `new x.constructor()`, `this.constructor.name`) NO cumplen (a) ni (b)
+    // → 0 FP. RESIDUAL CONOCIDO fuera de alcance: alcanzar `Function` por
+    // reflexión pura sin sintaxis `.constructor` (`Reflect.get(x,
+    // "constructor")`, `Object.getOwnPropertyDescriptor`) — código no
+    // idiomático en un componente presentacional que el static gate no
+    // persigue (guardrail honesto, no sandbox anti-adversario).
+    // beta.27 BLOCKER-1 (cruce A+B, FN-hunt + re-review).
     if (
       (ts.isPropertyAccessExpression(node) ||
         ts.isElementAccessExpression(node)) &&
-      ts.isCallExpression(node.parent) &&
-      node.parent.expression === node &&
       isConstructorMemberAccess(node) &&
-      !context.isInDeferredBody
+      !context.isInDeferredBody &&
+      (isConstructorMemberAccess(node.expression) ||
+        (ts.isCallExpression(node.parent) && node.parent.expression === node))
     ) {
       const start = node.getStart(sourceFile);
       const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -1797,7 +1808,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         file: relPath,
         rule: "no-dynamic-eval-sink",
         line: line + 1,
-        detail: `invocación de \`.constructor\` (Function constructor alcanzable desde cualquier base — dynamic eval sink que bypassea el AST gate): ${lineText}`,
+        detail: `acceso a \`.constructor.constructor\` / invocación de \`.constructor\` (Function constructor alcanzable desde cualquier base — dynamic eval sink que bypassea el AST gate): ${lineText}`,
       });
     }
 

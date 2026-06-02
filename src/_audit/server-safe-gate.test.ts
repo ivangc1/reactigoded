@@ -923,6 +923,13 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     ["object method base", `const w = ({}).constructor.constructor("x")();`],
     ["computed bracket access", `const w = ({})["constructor"]["constructor"]("x")();`],
     ["function base single .constructor", `function g() {}; const w = g.constructor("x");`],
+    // Formas que la primera iteración (solo callee) dejaba pasar — cerradas
+    // en la re-review por la regla (a) "doble .constructor".
+    ["forma partida (asignada a variable)", `const F = [].constructor.constructor; const w = F("x")();`],
+    ["doble accedida sin invocar", `const F = [].constructor.constructor; void F;`],
+    [".call sobre el constructor", `const w = [].constructor.constructor.call(null, "x")();`],
+    [".bind sobre el constructor", `const F = [].constructor.constructor.bind(null); void F;`],
+    ["computed doble sin invocar", `const F = ({})["constructor"]["constructor"]; void F;`],
   ])("caza el Function constructor escape: %s", (_label, body) => {
     const v = probe(body);
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -932,6 +939,8 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     ["reflexión `.constructor.name`", `const e = new Error(); const n = e.constructor.name; void n;`],
     ["comparación `.constructor === X`", `const o = {}; const b = o.constructor === Object; void b;`],
     ["clon `new x.constructor()`", `const o = {}; const c = new o.constructor(); void c;`],
+    ["`.constructor` simple sin segunda capa", `const e = new Error(); const c = e.constructor; void c;`],
+    ["`this.constructor.name`", `class C { m() { return this.constructor.name; } } void C;`],
   ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
