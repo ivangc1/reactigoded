@@ -1787,11 +1787,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     //       sobre una base que ya es función.
     // Los usos legítimos (`err.constructor.name`, `x.constructor === Y`, clon
     // `new x.constructor()`, `this.constructor.name`) NO cumplen (a) ni (b)
-    // → 0 FP. RESIDUAL CONOCIDO fuera de alcance: alcanzar `Function` por
-    // reflexión pura sin sintaxis `.constructor` (`Reflect.get(x,
-    // "constructor")`, `Object.getOwnPropertyDescriptor`) — código no
-    // idiomático en un componente presentacional que el static gate no
-    // persigue (guardrail honesto, no sandbox anti-adversario).
+    // → 0 FP.
+    //
+    // RESIDUALES CONOCIDOS POR DISEÑO (fuera de alcance — detalle completo en
+    // el ADR docs/decisions/D1-P1-server-safe-marker.md, "Frontera del
+    // eval-sink"): alcanzar `Function` por reflexión profunda es ESTÁTICAMENTE
+    // INDECIDIBLE. Quedan sin flag, a propósito:
+    //   1. cadena partida en vars:  const c = x.constructor; c.constructor("x")()
+    //   2. destructuring:           const { constructor: F } = x.constructor; F("x")()
+    //   3. computed key vía var:    const k = "constructor"; x[k][k]("x")()
+    //   (+ `Reflect.get(x,"constructor")`, `Object.getOwnPropertyDescriptor`)
+    // Se aceptan porque `@server-safe` es opt-in/first-party, NO una frontera
+    // de seguridad: un bypass solo crashea RUIDOSO en el consumer del propio
+    // contributor (sin activo ni adversario). Perseguirlos sintácticamente
+    // paga FP (rompe `const Ctor = x.constructor; new Ctor()`) sin lograr
+    // cierre hermético. CADUCIDAD: si `@server-safe` deja de ser opt-in/
+    // first-party (frontera de confianza sobre código no auditado), esta
+    // decisión queda ANULADA y hay que reevaluar el cierre.
     // beta.27 BLOCKER-1 (cruce A+B, FN-hunt + re-review).
     if (
       (ts.isPropertyAccessExpression(node) ||
@@ -1994,7 +2006,15 @@ function detectServerSafeMarker(sourceFile, relPath) {
           const tagPos = tag.getStart(sourceFile);
           const { line, character } =
             sourceFile.getLineAndCharacterOfPosition(tagPos);
-          const linePrefix = sourceFile.text.slice(tagPos - character, tagPos);
+          // Normalizamos quitando caracteres invisibles de ancho cero (ZWSP
+          // U+200B, ZWNJ, ZWJ, BOM) del prefijo antes del check: un zero-width
+          // colado por copy-paste justo antes del `@` no debe SILENCIAR el
+          // marker (el archivo dejaría de auditarse sin que nadie lo vea —
+          // fail-open accidental, mismo eje que el marker anidado). beta.27
+          // BLOCKER-1 (cruce A+B, re-review).
+          const linePrefix = sourceFile.text
+            .slice(tagPos - character, tagPos)
+            .replace(/[\u200B-\u200D\uFEFF]/g, "");
           if (!/^[\s*/]*$/.test(linePrefix)) continue;
           if (topLevel.has(node)) {
             marked = true;

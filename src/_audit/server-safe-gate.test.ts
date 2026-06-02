@@ -899,6 +899,18 @@ describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)
     expect(() => isContentServerSafeMarked(code, "prose-nested.tsx")).not.toThrow();
     expect(isContentServerSafeMarked(code, "prose-nested.tsx")).toBe(false);
   });
+
+  it("zero-width space antes del @ NO silencia el marker (footgun accidental)", () => {
+    // Un ZWSP (U+200B) colado por copy-paste antes del `@` hacía que el
+    // archivo dejara de auditarse en silencio. El prefijo se normaliza.
+    const code = `/**\u200B@server-safe*/\nexport const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "zwsp.tsx")).toBe(true);
+  });
+
+  it("ZWSP embebido en prosa sigue SIN marcar (no se cuela por la normalización)", () => {
+    const code = `/** texto \u200B@server-safe en prosa */\nexport const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "zwsp-prose.tsx")).toBe(false);
+  });
 });
 
 /**
@@ -942,6 +954,25 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     ["`.constructor` simple sin segunda capa", `const e = new Error(); const c = e.constructor; void c;`],
     ["`this.constructor.name`", `class C { m() { return this.constructor.name; } } void C;`],
   ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
+    expect(probe(body)).toEqual([]);
+  });
+
+  // ── Residuales CONOCIDOS POR DISEÑO ────────────────────────────────────
+  // Alcanzar `Function` por reflexión profunda es ESTÁTICAMENTE INDECIDIBLE.
+  // Estas 3 clases PASAN el gate a propósito (ver ADR D1-P1, "Frontera del
+  // eval-sink"). Se aceptan porque `@server-safe` es opt-in/first-party, NO
+  // una frontera de seguridad: un bypass solo crashea ruidoso en el consumer
+  // del propio contributor (sin activo ni adversario). Perseguirlos paga FP
+  // (rompe `const Ctor = x.constructor; new Ctor()`) sin cierre hermético.
+  // Este test PINEA la decisión: si una de estas empieza a flaggearse, falla
+  // aquí → lee el ADR + el modelo de amenaza ANTES de cambiar nada.
+  // CADUCIDAD: vale solo mientras `@server-safe` sea opt-in/first-party sin
+  // código no confiable; si esa premisa cambia, esta decisión queda anulada.
+  it.each([
+    ["cadena partida en variables", `const c1 = [].constructor; const c2 = c1.constructor; const w = c2("return 1")();`],
+    ["destructuring del nombre constructor", `const { constructor: C } = []; const { constructor: F } = C; const w = F("return 1")();`],
+    ["computed key vía variable", `const k = "constructor"; const w = [][k][k]("return 1")();`],
+  ])("residual fuera de alcance POR DISEÑO (indecidible, no es amenaza): %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
 });

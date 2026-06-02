@@ -112,4 +112,39 @@ Una revisión adversarial multi-agente del primer commit (cada hallazgo reproduc
 - **FPs fail-closed** (sobre-flagueo): nombre de campo de clase (`PropertyDeclaration`), label / `break` / `continue`, y `arguments` en funciones no-arrow → exentos en `isNonReferencePosition` / scope.
 - **Marker fail-open two-block + prosa**: `ts.getJSDocTags` devolvía solo el último de varios bloques JSDoc consecutivos (fail-open) y un `@server-safe` embebido en prosa lanzaba fail-loud FALSO. Fix: iterar `node.jsDoc` (todos los bloques) + filtro de posición canónica (tag al inicio de línea JSDoc, no en prosa).
 
-Validación final: 124 tests verdes (+24 regresión), 0 violations sobre 39 marcados, lint + typecheck limpios.
+Una segunda re-revisión adversarial (sobre el hardening anterior) cerró además variantes del Function constructor escape que la primera iteración dejaba pasar: cadena asignada a una variable (`const F = x.constructor.constructor; F("code")()`), `.call`/`.bind` sobre el constructor, operador coma, y constructor pasado como argumento. La detección pasó de "callee de CallExpression" a flaggear la cadena `x.constructor.constructor` se llame o no (regla (a): un member access `constructor` cuya base es OTRO member access `constructor`).
+
+Validación final: 1079 tests verdes (suite completa) + verify:unit (CI-equivalent) en verde, 0 violations sobre 39 marcados.
+
+### Frontera del eval-sink — modelo de amenaza y residuales conocidos POR DISEÑO
+
+Alcanzar el `Function` constructor por reflexión en JavaScript es **estáticamente indecidible** de cerrar al 100%: las indirecciones son ilimitadas (cadenas partidas en variables, destructuring, computed keys vía variable, `Reflect.get`, proto-walking, strings codificados/concatenados). El gate caza las formas **legibles** (`eval`, `Function`, `x.constructor.constructor` contiguo, `x.constructor(call)`, más todos los globals DOM) y declina explícitamente las siguientes tres clases de **ofuscación profunda** — con un ejemplo de cada una, para que dentro de N meses, cuando alguien las encuentre pasando el gate, conste que es **conocido y por diseño**, no un agujero recién descubierto:
+
+```ts
+// 1. Cadena partida en variables intermedias (data-flow, no sintáctico):
+const c1 = [].constructor;        // Array
+const c2 = c1.constructor;        // Function
+c2("return globalThis")();        // ← PASA el gate
+
+// 2. Destructuring del nombre `constructor` (no hay member access que cazar):
+const { constructor: C } = [];
+const { constructor: F } = C;
+F("return globalThis")();         // ← PASA el gate
+
+// 3. Computed key vía variable (la key no es un string literal):
+const k = "constructor";
+[][k][k]("return globalThis")();  // ← PASA el gate
+```
+
+(`Reflect.get(x, "constructor")` y `Object.getOwnPropertyDescriptor` caen en la misma categoría.)
+
+**Por qué se aceptan — el modelo de amenaza, no solo la indecidibilidad.** La indecidibilidad explica por qué no perseguimos el 100%; el modelo de amenaza explica por qué no hace falta:
+
+- `@server-safe` es un gate **opt-in y first-party**. Un contributor *añade* el marker para *afirmar* "este componente no peta en SSR/RSC"; el gate **verifica esa afirmación** contra errores honestos y anti-patrones legibles. NO es una frontera de confianza ni de seguridad (auth/sandbox).
+- Rellenando el modelo de amenaza: **activo** = ninguno; **adversario** = un contributor que sabotea su *propia* afirmación opt-in; **daño** = su componente crashea **ruidoso** en el consumer que lo use (sin exfiltración, sin escalada, recuperable y visible). Un bypass del Function constructor bajo el propio marker es autodestructivo y no gana nada — bastaría con no poner el marker.
+- Test que distingue "frontera principista" de `// nosec`: ¿el bypass permite dañar a otro / un activo real, o solo rompe lo propio opt-in? Aquí es lo segundo. Por eso aceptar estos residuales no es suprimir una vulnerabilidad: bajo la amenaza real, **nunca fueron un fallo**. Es un lint de calidad que no caza el 100% de la ofuscación deliberada, no una exposición tapada.
+- En seguridad real (código no confiable) trazarías la frontera en fail-closed agresivo y aceptarías falsos positivos, porque el coste del miss es catastrófico. Aquí el coste del miss es un crash ruidoso en el consumer del propio contributor — el modelo no justifica el coste de FP (p.ej. romper el patrón factory legítimo `const Ctor = x.constructor; new Ctor()`, que cualquier expansión sintáctica sacrificaría sin lograr cierre hermético).
+
+**CLÁUSULA DE CADUCIDAD.** Esta frontera asume que `@server-safe` se mantiene **opt-in, first-party, sin ejecutar código de fuentes no confiables**. Si esa premisa cambia — si el marker pasa a ser una frontera de confianza sobre la que se decide que código no auditado es "seguro" — esta decisión **queda anulada** y el cierre de los residuales debe reevaluarse (en ese mundo sí serían un agujero explotable, y "aceptar por diseño" se convertiría en el anti-patrón). La frontera es legítima solo mientras el modelo de amenaza se sostenga; por eso queda escrito.
+
+**Footgun accidental SÍ cerrado** (distinto eje, sí cubierto por el modelo opt-in honesto): un carácter de ancho cero (ZWSP) colado por copy-paste justo antes del `@` del marker hacía que el archivo dejara de auditarse en silencio (fail-open accidental). Se normaliza el prefijo antes del check de posición canónica. Mismo espíritu que el marker anidado: cerrar lo que silencia el gate por accidente.
