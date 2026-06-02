@@ -633,6 +633,43 @@ function addBindingNamesFromPattern(node, names) {
 }
 
 /**
+ * Recolecta los nombres declarados a NIVEL DE MÓDULO (top-level): const/let/
+ * var, function, class e imports — SIN recursar en cuerpos de función. Usado
+ * SOLO para eximir tags JSX uppercase que son referencias a componentes del
+ * módulo (importados / locales / forward-ref / mutuos — válidos en
+ * render-time aunque el orden TDZ los deje "fuera de scope" en el punto
+ * sintáctico de uso). Un global DOM como `HTMLElement` NO se declara → no se
+ * exime → se flaggea.
+ *
+ * DISEÑO (consciente, no efecto colateral): el set es module-level ∪ (vía el
+ * walker) localBindings. Cubre los casos legítimos —componente importado,
+ * top-level forward/mutuo, y nested declarado-antes-de-uso (que ya está en
+ * localBindings)— SIN sobre-eximir. Un nested forward-ref en el mismo scope
+ * (`<Sub/>` antes de `const Sub=…`) es un error de runtime real (TDZ → React
+ * lo ve undefined) y se flaggea correctamente. Module-level (no whole-file)
+ * evita el FN de "nombre declarado en función A usado como tag en función B".
+ * beta.27 BLOCKER-1 (codex P2: JSX uppercase tags bajo fail-closed).
+ */
+function gatherModuleDeclaredNames(sourceFile) {
+  const names = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      for (const decl of stmt.declarationList.declarations) {
+        addBindingNamesFromPattern(decl.name, names);
+      }
+    } else if (
+      (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
+      stmt.name
+    ) {
+      names.add(stmt.name.text);
+    } else if (ts.isImportDeclaration(stmt)) {
+      addRuntimeImportBindings(stmt.importClause, names);
+    }
+  }
+  return names;
+}
+
+/**
  * `var` declarations: hoisted al function/module scope. Recurre a
  * través de blocks anidados, if/else, try/catch, for/while bodies,
  * switch — pero NO en nested function-likes (otro scope).
@@ -776,25 +813,38 @@ function extractPostStatementBindings(stmt) {
  * Otros módulos (preact, frameworks alt, mocks/helpers locales) no
  * exempt.
  */
+/**
+ * Añade a `names` los bindings RUNTIME de un import clause, SALTANDO los
+ * type-only. CRÍTICO: un `import type { X }` o `import { type X }` se BORRA al
+ * compilar — NO crea un binding en runtime, así que NO sombrea el global
+ * ambiente `X`. Si se añadiera al shadow-set, una ref bare a `X` se trataría
+ * como local y pasaría el gate, pero en runtime resuelve al global real →
+ * ReferenceError en SSR. Centralizar el filtro aquí evita que el bypass
+ * recurra en cada colector. `isImportPurelyTypeOnly` ya existía para el path
+ * de smuggling; este lo cablea también al path de shadow.
+ * beta.27 BLOCKER-1 (workflow: erased-shadow bypass).
+ */
+function addRuntimeImportBindings(importClause, names) {
+  if (!importClause || importClause.isTypeOnly) return;
+  if (importClause.name) names.add(importClause.name.text);
+  const nb = importClause.namedBindings;
+  if (!nb) return;
+  if (ts.isNamespaceImport(nb)) {
+    names.add(nb.name.text);
+  } else if (ts.isNamedImports(nb)) {
+    for (const spec of nb.elements) {
+      if (!spec.isTypeOnly) names.add(spec.name.text);
+    }
+  }
+}
+
 function gatherReactImports(sourceFile) {
   const names = new Set();
   for (const stmt of sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt)) continue;
     if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
     if (stmt.moduleSpecifier.text !== "react") continue;
-    const importClause = stmt.importClause;
-    if (!importClause) continue;
-    if (importClause.name) names.add(importClause.name.text);
-    const namedBindings = importClause.namedBindings;
-    if (namedBindings) {
-      if (ts.isNamespaceImport(namedBindings)) {
-        names.add(namedBindings.name.text);
-      } else if (ts.isNamedImports(namedBindings)) {
-        for (const spec of namedBindings.elements) {
-          names.add(spec.name.text);
-        }
-      }
-    }
+    addRuntimeImportBindings(stmt.importClause, names);
   }
   return names;
 }
@@ -818,20 +868,7 @@ function gatherModulePreloadedBindings(sourceFile) {
   const nonImports = new Set();
   for (const stmt of sourceFile.statements) {
     if (ts.isImportDeclaration(stmt)) {
-      const importClause = stmt.importClause;
-      if (importClause) {
-        if (importClause.name) all.add(importClause.name.text);
-        const namedBindings = importClause.namedBindings;
-        if (namedBindings) {
-          if (ts.isNamespaceImport(namedBindings)) {
-            all.add(namedBindings.name.text);
-          } else if (ts.isNamedImports(namedBindings)) {
-            for (const spec of namedBindings.elements) {
-              all.add(spec.name.text);
-            }
-          }
-        }
-      }
+      addRuntimeImportBindings(stmt.importClause, all);
       continue;
     }
     const captured = new Set();
@@ -915,7 +952,7 @@ function isConstructorMemberAccess(node) {
   return false;
 }
 
-function isNonReferencePosition(node) {
+function isNonReferencePosition(node, declaredNames) {
   const parent = node.parent;
   if (!parent) return false;
 
@@ -1027,14 +1064,23 @@ function isNonReferencePosition(node) {
     return true;
   }
 
-  // 9. JSX tag name: `<window />`, `<Buffer />`. Lowercase = string
-  //    literal HTML element (no ref). Uppercase ES ref a binding,
-  //    pero el caso es extremadamente raro y skip pragmático.
+  // 9. JSX tag name. Lowercase (`<div/>`, `<span/>`) = elemento intrínseco
+  //    (string literal, NO lee binding) → exento. Uppercase (`<HTMLElement/>`,
+  //    `<Foo/>`) = referencia de VALOR a un binding que el runtime JSX
+  //    evalúa: se exime SOLO si el nombre está declarado en algún sitio del
+  //    módulo (componente importado / local / forward-ref / mutuo, válido en
+  //    render-time). Un global DOM bare como `<HTMLElement/>` NO se declara →
+  //    cae al check fail-closed y se flaggea (ReferenceError en SSR). Bajo la
+  //    denylist esto era skip pragmático; fail-closed lo hace load-bearing.
+  //    Codex P2 beta.27 BLOCKER-1.
   if (
     (ts.isJsxOpeningElement(parent) ||
       ts.isJsxClosingElement(parent) ||
       ts.isJsxSelfClosingElement(parent)) &&
-    parent.tagName === node
+    parent.tagName === node &&
+    ts.isIdentifier(node) &&
+    (/^[a-z]/.test(node.text) ||
+      (declaredNames !== undefined && declaredNames.has(node.text)))
   ) {
     return true;
   }
@@ -1102,6 +1148,23 @@ function isNonReferencePosition(node) {
       ts.isContinueStatement(parent)) &&
     parent.label === node
   ) {
+    return true;
+  }
+
+  // 15. JsxNamespacedName: el `ns` y el `name` de `<svg:rect/>` (tag) o de
+  //     `<use xlink:href=.../>` (atributo). Compila a un STRING (`"svg:rect"`,
+  //     `{ "xlink:href": … }`) — ni `ns` ni `name` leen un binding runtime.
+  //     beta.27 BLOCKER-1 (workflow: FP en SVG/XML namespaced).
+  if (ts.isJsxNamespacedName(parent)) {
+    return true;
+  }
+
+  // 16. ImportTypeNode.qualifier: el `Name` de `import("mod").Name` en
+  //     posición de TIPO (`p: import("react").ReactNode`). Type-space puro,
+  //     se borra en compilación — análogo a la regla 11 (QualifiedName). El
+  //     `import()` DINÁMICO de runtime no es un ImportTypeNode, así que sigue
+  //     flaggeándose. beta.27 BLOCKER-1 (workflow: FP type-space).
+  if (ts.isImportTypeNode(parent) && parent.qualifier === node) {
     return true;
   }
 
@@ -1546,6 +1609,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
 
+  // Nombres declarados a nivel de módulo — para eximir tags JSX uppercase
+  // que son componentes (no globals). Se calcula una vez por archivo.
+  const moduleDeclaredNames = gatherModuleDeclaredNames(sourceFile);
+
   // Rule 1: no "use client" directive coexisting con @server-safe.
   // Inspect AST directive prologue: walk top-level statements mientras
   // sean ExpressionStatement con StringLiteral (prologue cohort per
@@ -1848,7 +1915,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       if (isUnsafeGlobal || isEvalSink) {
         if (
           !context.localBindings.has(api) &&
-          !isNonReferencePosition(node)
+          !isNonReferencePosition(node, moduleDeclaredNames)
         ) {
           if (!context.isInDeferredBody && !context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);

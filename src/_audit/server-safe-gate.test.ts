@@ -1044,3 +1044,117 @@ describe("server-safe gate — guard typeof bajo fail-closed", () => {
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });
+
+/**
+ * JSX uppercase tag = referencia de VALOR a un global no-safe (codex P2,
+ * beta.27 BLOCKER-1). Bajo la denylist la regla 9 de isNonReferencePosition
+ * eximía TODO tag JSX (skip pragmático); fail-closed la hizo load-bearing y
+ * `<HTMLElement/>` (global DOM como componente) lanzaba ReferenceError en SSR
+ * pero pasaba el gate. Ahora: lowercase = intrínseco (exento); uppercase
+ * exento SOLO si está declarado a nivel de módulo (componente). Los 4
+ * vectores de FP (forward-ref, import, shadow, member-expr) quedan limpios.
+ */
+describe("server-safe gate — JSX uppercase tags (codex P2 beta.27)", () => {
+  it.each([
+    ["<HTMLElement /> (global DOM como componente)", `/** @server-safe */\nexport const C = () => <HTMLElement />;`],
+    ["<Audio />", `/** @server-safe */\nexport const C = () => <Audio />;`],
+    ["<Image /> self-closing", `/** @server-safe */\nexport const C = () => <Image />;`],
+  ])("FLAGGEA tag JSX uppercase no declarado: %s", (_label, code) => {
+    const v = checkSourceFile(code, "jsx-flag.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it.each([
+    ["intrínseco <div/>", `/** @server-safe */\nexport const C = () => <div />;`],
+    ["import binding <Button/>", `/** @server-safe */\nimport { Button } from "./Button";\nexport const C = () => <Button />;`],
+    ["forward-ref const local", `/** @server-safe */\nexport const A = () => <Later />;\nconst Later = () => <span />;`],
+    ["referencia mutua A<->B", `/** @server-safe */\nexport const A = () => <B />;\nexport const B = () => <A />;`],
+    ["shadow de un global (const local)", `/** @server-safe */\nconst HTMLElement = () => <span />;\nexport const C = () => <HTMLElement />;`],
+    ["member-expr <Foo.Bar/> (root importado)", `/** @server-safe */\nimport * as Foo from "./foo";\nexport const C = () => <Foo.Bar />;`],
+  ])("NO genera falso positivo en componente legítimo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "jsx-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * Anti-regresión de TODA la superficie de `isNonReferencePosition` bajo
+ * fail-closed (recomendación Auditor B: cerrar la clase, no whack-a-mole).
+ * Cada posición NO-read de un global debe quedar exenta; cada READ real debe
+ * flaggearse. Si una exención empieza a sobre-permitir, salta aquí.
+ */
+describe("server-safe gate — isNonReferencePosition: read vs non-read (fail-closed)", () => {
+  const Comp = (b: string) =>
+    `/** @server-safe */\nexport const Comp = () => { ${b} return null; };`;
+
+  it.each([
+    ["obj.window (property name)", Comp(`const o: any = {}; const x = o.window; void x;`)],
+    ["typeof window", Comp(`const x = typeof window; void x;`)],
+    ["type annotation HTMLElement", Comp(`const x: HTMLElement | null = null; void x;`)],
+    ["object literal key {window:1}", Comp(`const o = { window: 1 }; void o;`)],
+    ["const window = 1 (declara local)", Comp(`const window = 1; void window;`)],
+    ["class field name", `/** @server-safe */\nexport class C { window = 1; }`],
+    ["destructure source {window:w}", Comp(`const o: any = {}; const { window: w } = o; void w;`)],
+    ["label + break", Comp(`outer: for (let i = 0; i < 2; i++) { if (i) break outer; }`)],
+  ])("NON-READ queda clean: %s", (_label, code) => {
+    expect(checkSourceFile(code, "nonread.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    ["bare read const w=window", Comp(`const w = window; void w;`)],
+    ["shorthand {window}", Comp(`const o = { window }; void o;`)],
+    ["computed key {[window]:1}", Comp(`const o = { [window as any]: 1 }; void o;`)],
+    ["spread {...window}", Comp(`const o = { ...(window as any) }; void o;`)],
+    ["condition window?1:2", Comp(`const x = window ? 1 : 2; void x;`)],
+    ["array [window]", Comp(`const a = [window]; void a;`)],
+    ["return window", Comp(`return window;`)],
+  ])("READ se flaggea: %s", (_label, code) => {
+    const v = checkSourceFile(code, "read.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+});
+
+/**
+ * Erased-shadow bypass (workflow audit, beta.27 BLOCKER-1). Un import
+ * type-only (`import type {X}` / `import {type X}`) se BORRA al compilar — NO
+ * crea binding runtime, así que NO sombrea el global ambiente `X`. Los
+ * colectores del shadow-set lo añadían sin filtrar `isTypeOnly`, tratando una
+ * ref bare a `X` como local → pasaba el gate, pero en runtime resuelve al
+ * global real → ReferenceError en SSR. Cableado `addRuntimeImportBindings`.
+ */
+describe("server-safe gate — type-only import NO sombrea el global (erased-shadow)", () => {
+  it.each([
+    ["import {type window} + bare read", `/** @server-safe */\nimport { type window } from "./x";\nexport const C = () => { const w = window; void w; return null; };`],
+    ["import type {document} + property access", `/** @server-safe */\nimport type { document } from "./x";\nexport const C = () => { return document.title; };`],
+    ["import {type HTMLElement} + JSX tag", `/** @server-safe */\nimport { type HTMLElement } from "./x";\nexport const C = () => <HTMLElement />;`],
+    ["import {type Function} + eval-sink", `/** @server-safe */\nimport { type Function } from "./x";\nexport const C = () => { const f = Function("return 1")(); void f; return null; };`],
+    ["mixto import {Value, type window}", `/** @server-safe */\nimport { Value, type window } from "./x";\nexport const C = () => { void Value; const w = window; void w; return null; };`],
+  ])("FLAGGEA pese al import type-only: %s", (_label, code) => {
+    const v = checkSourceFile(code, "erased-shadow.fixture.tsx");
+    expect(v.length).toBeGreaterThan(0);
+  });
+
+  it("import VALUE (no type) SÍ es shadow real → clean", () => {
+    const code = `/** @server-safe */\nimport { window } from "./x";\nexport const C = () => { const w = window; void w; return null; };`;
+    expect(checkSourceFile(code, "value-shadow.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * Falsos positivos cerrados por el workflow audit (beta.27 BLOCKER-1):
+ * JsxNamespacedName (SVG/XML) e ImportTypeNode.qualifier (type-space).
+ */
+describe("server-safe gate — FP cerrados: JsxNamespacedName + ImportTypeNode", () => {
+  it.each([
+    ["atributo namespaced <use xlink:href>", `/** @server-safe */\nexport const C = () => <use xlink:href="#x" />;`],
+    ["tag namespaced <svg:rect/>", `/** @server-safe */\nexport const C = () => <svg:rect />;`],
+    ["ImportTypeNode qualifier en tipo", `/** @server-safe */\nexport const C = (p: import("react").ReactNode) => { void p; return null; };`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "fp-closed.fixture.tsx")).toEqual([]);
+  });
+
+  it("import() DINÁMICO de runtime con global SIGUE flaggeando (no es type-space)", () => {
+    const code = `/** @server-safe */\nexport const C = () => { void import((window as any).x); return null; };`;
+    const v = checkSourceFile(code, "dynamic-import.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+});
