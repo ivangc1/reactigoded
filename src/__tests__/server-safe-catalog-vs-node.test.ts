@@ -87,6 +87,59 @@ const MUST_STAY_FLAGGED = [
   "XMLHttpRequest",
   "DOMParser",
   "Worker",
+  // `global`: alias runtime-equivalente de `globalThis` en Node. Si entra en
+  // SAFE (vía `globals.nodeBuiltin`) reabre el bypass dynamic-eval +
+  // `global.process.env`. Cruce A+B, FN-hunt.
+  "global",
+];
+
+/**
+ * Contenido EXACTO esperado de `SAFE_GLOBALS` (122 nombres, ordenados). Es
+ * un PIN del contrato: cualquier cambio en el set (bump de `globals`,
+ * denegación nueva, overclaim) debe actualizar esta lista CONSCIENTEMENTE.
+ * Sin el pin, un minor bump de `globals` (`^17.6.0`) podría añadir un nombre
+ * floor-present pero client-unsafe sin que los Tests A/B/C lo cacen (Test A
+ * solo caza nombres ausentes del runtime, no los presentes-pero-unsafe).
+ * Cruce A+B claudegate6, robustez del freeze.
+ */
+const SAFE_GLOBALS_PIN = [
+  "AbortController", "AbortSignal", "AggregateError", "Array", "ArrayBuffer", "Atomics",
+  "BigInt", "BigInt64Array", "BigUint64Array", "Blob", "Boolean", "BroadcastChannel",
+  "ByteLengthQueuingStrategy", "CompressionStream", "CountQueuingStrategy", "Crypto", "CryptoKey", "CustomEvent",
+  "DOMException", "DataView", "Date", "DecompressionStream", "Error", "EvalError",
+  "Event", "EventTarget", "File", "FinalizationRegistry", "Float32Array", "Float64Array",
+  "FormData", "Headers", "Infinity", "Int16Array", "Int32Array", "Int8Array",
+  "Intl", "Iterator", "JSON", "Map", "Math", "MessageChannel",
+  "MessageEvent", "MessagePort", "NaN", "Navigator", "Number", "Object",
+  "Performance", "PerformanceEntry", "PerformanceMark", "PerformanceMeasure", "PerformanceObserver", "PerformanceObserverEntryList",
+  "PerformanceResourceTiming", "Promise", "Proxy", "RangeError", "ReadableByteStreamController", "ReadableStream",
+  "ReadableStreamBYOBReader", "ReadableStreamBYOBRequest", "ReadableStreamDefaultController", "ReadableStreamDefaultReader", "ReferenceError", "Reflect",
+  "RegExp", "Request", "Response", "Set", "SharedArrayBuffer", "String",
+  "SubtleCrypto", "Symbol", "SyntaxError", "TextDecoder", "TextDecoderStream", "TextEncoder",
+  "TextEncoderStream", "TransformStream", "TransformStreamDefaultController", "TypeError", "URIError", "URL",
+  "URLSearchParams", "Uint16Array", "Uint32Array", "Uint8Array", "Uint8ClampedArray", "WeakMap",
+  "WeakRef", "WeakSet", "WebAssembly", "WebSocket", "WritableStream", "WritableStreamDefaultController",
+  "WritableStreamDefaultWriter", "atob", "btoa", "clearImmediate", "clearInterval", "clearTimeout",
+  "console", "crypto", "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent",
+  "escape", "fetch", "isFinite", "isNaN", "parseFloat", "parseInt",
+  "performance", "queueMicrotask", "setImmediate", "setInterval", "setTimeout", "structuredClone",
+  "undefined", "unescape",
+];
+
+/**
+ * Overclaims de `globals`: nombres que `globals@17.x` lista pero Node 22.12
+ * (engine floor) NO provee. Deben estar restados de SAFE_GLOBALS — si no, un
+ * componente que los referencie bare petaría en un consumer sobre el floor.
+ */
+const GLOBALS_OVERCLAIMS = [
+  "AsyncDisposableStack",
+  "CloseEvent",
+  "DisposableStack",
+  "ErrorEvent",
+  "Float16Array",
+  "Storage",
+  "SuppressedError",
+  "URLPattern",
 ];
 
 describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
@@ -127,5 +180,22 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
       (name) => !INTENTIONAL_DENY.has(name),
     );
     expect(undocumented).toEqual([]);
+  });
+
+  it("E. SAFE_GLOBALS coincide EXACTAMENTE con el pin del contrato", () => {
+    // Pin de contenido: si `globals` (bump) o las denegaciones cambian el
+    // set, este test falla y obliga a revisar conscientemente. Caza el caso
+    // que Test A no ve: un nombre AÑADIDO que SÍ existe en el floor pero es
+    // client-unsafe (p.ej. una Web API que Node estabiliza pero que rompe en
+    // Workers/Deno). En ese caso, decidir: ¿añadir a INTENTIONAL_DENY o
+    // aceptar en el pin?
+    expect([...SAFE_GLOBALS].sort()).toEqual([...SAFE_GLOBALS_PIN].sort());
+  });
+
+  it("F. los GLOBALS_OVERCLAIMS están restados de SAFE_GLOBALS", () => {
+    // Invariante directo (no solo el indirecto de Test A en la celda 22.12):
+    // los nombres que el floor no provee no deben estar en la whitelist.
+    const leaked = GLOBALS_OVERCLAIMS.filter((name) => SAFE_GLOBALS.has(name));
+    expect(leaked).toEqual([]);
   });
 });

@@ -876,4 +876,131 @@ describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)
       /posición no soportada/,
     );
   });
+
+  it("two-block JSDoc: marker en el PRIMERO de dos bloques se detecta (no fail-open)", () => {
+    const code = `/** @server-safe */\n/** otra cosa */\nexport const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "two-block.tsx")).toBe(true);
+  });
+
+  it("two-block JSDoc: marker en el SEGUNDO bloque también", () => {
+    const code = `/** otra cosa */\n/** @server-safe */\nexport const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "two-block-2.tsx")).toBe(true);
+  });
+
+  it("prosa `@server-safe` mid-sentence NO marca ni lanza (top-level)", () => {
+    // TS parsea `@server-safe` como tag aunque esté embebido en prosa; el
+    // filtro de posición canónica (inicio de línea JSDoc) lo descarta.
+    const code = `/** Este componente todavía no es @server-safe del todo */\nexport const X = () => 1;`;
+    expect(isContentServerSafeMarked(code, "prose.tsx")).toBe(false);
+  });
+
+  it("prosa `@server-safe` en JSDoc anidado NO lanza fail-loud FALSO", () => {
+    const code = `export function Outer() {\n  /** helper interno, no es @server-safe por sí solo */\n  function inner() { return 1; }\n  return inner();\n}`;
+    expect(() => isContentServerSafeMarked(code, "prose-nested.tsx")).not.toThrow();
+    expect(isContentServerSafeMarked(code, "prose-nested.tsx")).toBe(false);
+  });
+});
+
+/**
+ * Dynamic eval sink vía Function constructor alcanzable por `.constructor`
+ * (beta.27 BLOCKER-1, cruce A+B FN-hunt). El gate cazaba el escape solo
+ * cuando la base era un identificador denegado (`globalThis.constructor.*`);
+ * con base literal/SAFE pasaba. Ahora se flaggea toda invocación de
+ * `.constructor` independientemente de la base, preservando los usos
+ * legítimos (reflexión / comparación / clon `new`).
+ */
+describe("server-safe gate — Function constructor vía `.constructor` (beta.27 BLOCKER-1)", () => {
+  const probe = (body: string) =>
+    checkSourceFile(
+      `/** @server-safe */\nexport const fn = () => { ${body} return null; };`,
+      "ctor.fixture.tsx",
+    );
+
+  it.each([
+    ["array literal base", `const w = [].constructor.constructor("return globalThis")();`],
+    ["string literal base", `const w = "".constructor.constructor("x")();`],
+    ["number literal base", `const w = (0).constructor.constructor("x")();`],
+    ["object method base", `const w = ({}).constructor.constructor("x")();`],
+    ["computed bracket access", `const w = ({})["constructor"]["constructor"]("x")();`],
+    ["function base single .constructor", `function g() {}; const w = g.constructor("x");`],
+  ])("caza el Function constructor escape: %s", (_label, body) => {
+    const v = probe(body);
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it.each([
+    ["reflexión `.constructor.name`", `const e = new Error(); const n = e.constructor.name; void n;`],
+    ["comparación `.constructor === X`", `const o = {}; const b = o.constructor === Object; void b;`],
+    ["clon `new x.constructor()`", `const o = {}; const c = new o.constructor(); void c;`],
+  ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
+    expect(probe(body)).toEqual([]);
+  });
+});
+
+/**
+ * `global` (alias de Node de `globalThis`) denegado (beta.27 BLOCKER-1,
+ * cruce A+B). Reabría el bypass dynamic-eval + acceso directo a process.env
+ * / client globals vía el objeto global.
+ */
+describe("server-safe gate — `global` (alias Node de globalThis)", () => {
+  const probe = (body: string) =>
+    checkSourceFile(
+      `/** @server-safe */\nexport const fn = () => { ${body} return null; };`,
+      "global.fixture.tsx",
+    );
+
+  it.each([
+    ["bare `global`", `const g = global; void g;`],
+    ["`global.process.env`", `const x = global.process.env.SECRET; void x;`],
+    ["`global.window.location`", `const u = global.window.location.href; void u;`],
+    ["`global.constructor.constructor()`", `const w = global.constructor.constructor("x")(); void w;`],
+  ])("caza acceso a `global`: %s", (_label, body) => {
+    expect(probe(body).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Falsos positivos cerrados al pasar a fail-closed (beta.27 BLOCKER-1, cruce
+ * A+B FP-hunt). Estos patrones server-safe legítimos NO deben flaggearse.
+ */
+describe("server-safe gate — fail-closed: sin falsos positivos en sintaxis legítima", () => {
+  const probe = (body: string) =>
+    checkSourceFile(
+      `/** @server-safe */\nexport const fn = () => { ${body} return null; };`,
+      "fp.fixture.tsx",
+    );
+
+  it("nombre de campo de clase (PropertyDeclaration) no se flaggea", () => {
+    const code = `/** @server-safe */\nexport class Probe { count = 0; field = "x"; }`;
+    expect(checkSourceFile(code, "class-field.fixture.tsx")).toEqual([]);
+  });
+
+  it("label y targets de break/continue no se flaggean", () => {
+    expect(
+      probe(`outer: for (let i = 0; i < 3; i++) { if (i) break outer; else continue outer; }`),
+    ).toEqual([]);
+  });
+
+  it("`arguments` en función no-arrow no se flaggea", () => {
+    const code = `/** @server-safe */\nexport function Probe() { return arguments.length; }`;
+    expect(checkSourceFile(code, "arguments.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * Sitio-hoja invertido: `extractPositiveTypeofGuard` (beta.27 BLOCKER-1). El
+ * guard `typeof X !== "undefined"` exime el acceso a un global NO-safe dentro
+ * de su then-branch; sin guard, se flaggea.
+ */
+describe("server-safe gate — guard typeof bajo fail-closed", () => {
+  it("guard `typeof window !== 'undefined'` exime el acceso dentro", () => {
+    const code = `/** @server-safe */\nexport const fn = () => {\n  if (typeof window !== "undefined") { return window.innerWidth; }\n  return 0;\n};`;
+    expect(checkSourceFile(code, "guard.fixture.tsx")).toEqual([]);
+  });
+
+  it("sin guard, el mismo acceso se flaggea", () => {
+    const code = `/** @server-safe */\nexport const fn = () => { return window.innerWidth; };`;
+    const v = checkSourceFile(code, "noguard.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
 });

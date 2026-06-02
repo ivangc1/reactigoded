@@ -13,30 +13,33 @@
  *      `@server-safe`, NO debe declarar `"use client"`. Las dos cosas
  *      son contradictorias por design.
  *
- *   2. **No accesos DOM en render path**: `document.X`, `window.X`,
- *      `navigator.X`, `process.X`, `Buffer.X`, `globalThis.X` (cualquier
- *      forma — `.foo`, `?.foo`, `["foo"]`, `?.["foo"]`) deben aparecer
- *      SOLO en uno de estos contextos:
+ *   2. **No accesos a globals no-server-safe en render path** (modelo
+ *      FAIL-CLOSED / whitelist, beta.27): acceso bare a CUALQUIER
+ *      identificador no resuelto en scope (local/param/import) y AUSENTE de
+ *      `SAFE_GLOBALS` (= builtins ES ∪ globals de Node − `INTENTIONAL_DENY`
+ *      − overclaims) — en cualquier forma (`X`, `X.foo`, `X?.foo`,
+ *      `X["foo"]`, `X?.["foo"]`) — es violation, salvo en uno de estos
+ *      contextos:
  *
  *      (a) Bajo guard `typeof X !== "undefined"` ACTIVO según scope
  *          (positive typeof, dentro del then-branch del if).
  *      (b) Dentro del body de una función pasada a un sink de ejecución
  *          diferida reconocido: JSX event handler (`onClick`,
  *          `onChange`, etc), hook de React diferido (`useEffect`,
- *          `useLayoutEffect`, `useInsertionEffect`, `useCallback`,
- *          `useImperativeHandle`), o timer (`setTimeout`,
- *          `setInterval`, `setImmediate`, `queueMicrotask`,
- *          `requestAnimationFrame`, `requestIdleCallback`,
- *          `startTransition`).
+ *          `useLayoutEffect`, `useInsertionEffect` — ver `DEFERRED_HOOKS`),
+ *          o timer que existe en Node (`setTimeout`, `setInterval`,
+ *          `setImmediate`, `queueMicrotask` — ver `DEFERRED_LATER_FNS`).
  *
  *          NOT incluido en (b): `useMemo` / `useState` lazy init /
- *          `useRef` lazy init (corren durante render server), helpers
+ *          `useRef` lazy init (corren durante render server); helpers
  *          nested (`function readEnv() { return window.x; }` invocada
- *          desde JSX corre durante render), IIFE (`(() => x)()`),
- *          y referencias indirectas (`const h = () => ...; <X
- *          onClick={h}>` — el body del arrow no queda en posición
- *          sintáctica reconocida; el consumer debe inline-ar o
- *          envolver en `useCallback`).
+ *          desde JSX corre durante render); IIFE (`(() => x)()`);
+ *          `useCallback` / `useImperativeHandle` (el value returned puede
+ *          invocarse durante render — removidos del set); timers
+ *          browser-only `requestAnimationFrame` / `requestIdleCallback` y
+ *          `startTransition` (corre síncrono) — su call-site mismo lanza en
+ *          SSR. El consumer debe inline-ar el acceso en un JSX event
+ *          handler reconocido o moverlo a un effect / guard.
  *
  *      Acceso a un client global en el render path top-level (FUERA
  *      de cualquier callback) sin guard activo es la única forma de
@@ -316,9 +319,12 @@ const SRC_ROOT = resolve(repoRoot, "src");
 // Node real → ancla la whitelist al engine mínimo, no al Node del dev.
 //
 // DENEGACIONES INTENCIONALES (Node los provee pero se flaggean igual):
-//   - `globalThis`: caza el bypass
-//     `globalThis.constructor.constructor("return window")()` — audit
-//     fixture `globalThis-constructor.fixture.tsx` lo prueba.
+//   - `globalThis` / `global`: cazan el bypass
+//     `globalThis.constructor.constructor("return window")()` y el acceso
+//     directo a client globals / `process.env` vía el objeto global. `global`
+//     es el alias runtime-equivalente de Node (`global === globalThis` en el
+//     floor) y `globals.nodeBuiltin` lo lista — sin denegarlo, `global.*`
+//     reabriría el mismo agujero que `globalThis.*` (cruce A+B, FN-hunt).
 //   - `process` / `Buffer`: portabilidad multi-runtime. Cloudflare
 //     Workers / Deno no los tienen. En RSC el patrón canónico es leer env
 //     vars vía args/context del Server Component, no globalmente.
@@ -333,6 +339,7 @@ const SRC_ROOT = resolve(repoRoot, "src");
 //     Excluidos de SAFE para que también se flaggeen como bare ref.
 const INTENTIONAL_DENY = new Set([
   "globalThis",
+  "global",
   "process",
   "Buffer",
   "navigator",
@@ -885,6 +892,29 @@ function extractPositiveTypeofGuard(expr) {
  * `obj.window`, `function fn(window) {}`, `typeof window` NO leen el
  * binding global — son safe.
  */
+/**
+ * `true` si `node` es un member access cuyo nombre accedido es
+ * `constructor` — property access (`x.constructor`) o element access con
+ * string literal (`x["constructor"]`). Usado para cazar el escape al
+ * Function constructor (`x.constructor.constructor("code")()`,
+ * `f.constructor("code")`) cuando la base NO es un identificador denegado.
+ * beta.27 BLOCKER-1 (cruce A+B, FN-hunt).
+ */
+function isConstructorMemberAccess(node) {
+  if (ts.isPropertyAccessExpression(node)) {
+    return node.name.text === "constructor";
+  }
+  if (ts.isElementAccessExpression(node)) {
+    const arg = node.argumentExpression;
+    return (
+      arg !== undefined &&
+      ts.isStringLiteralLike(arg) &&
+      arg.text === "constructor"
+    );
+  }
+  return false;
+}
+
 function isNonReferencePosition(node) {
   const parent = node.parent;
   if (!parent) return false;
@@ -957,7 +987,10 @@ function isNonReferencePosition(node) {
       ts.isExportSpecifier(parent) ||
       ts.isNamespaceImport(parent) ||
       ts.isNamespaceExportDeclaration(parent) ||
-      ts.isLabeledStatement(parent) ||
+      // Nombre de campo de clase: `class C { count = 0 }` — `count` es el
+      // nombre de un PropertyDeclaration, no un read del binding global.
+      // beta.27 BLOCKER-1 (cruce A+B, FP-hunt).
+      ts.isPropertyDeclaration(parent) ||
       ts.isTypeParameterDeclaration(parent)) &&
     "name" in parent &&
     parent.name === node
@@ -1057,6 +1090,21 @@ function isNonReferencePosition(node) {
     return true;
   }
 
+  // 14. Labels: `outer: for (...)` y los targets de `break outer` /
+  //     `continue outer`. El identificador es el NOMBRE del label (en
+  //     `parent.label`, no `parent.name`), metadata de control de flujo, no
+  //     un read del binding global. La antigua regla 6 listaba
+  //     `LabeledStatement` pero comprobaba `parent.name` → rama muerta.
+  //     beta.27 BLOCKER-1 (cruce A+B, FP-hunt).
+  if (
+    (ts.isLabeledStatement(parent) ||
+      ts.isBreakStatement(parent) ||
+      ts.isContinueStatement(parent)) &&
+    parent.label === node
+  ) {
+    return true;
+  }
+
   return false;
 }
 
@@ -1070,10 +1118,12 @@ function isNonReferencePosition(node) {
 // real al binding y debe ser chequeado normalmente, esté o no
 // envuelto en `typeof`.
 //
-// El walker solo chequea PropertyAccessExpression y
-// ElementAccessExpression — no chequea reads de Identifier bare —
-// así que `typeof window` solo (sin acceso) ni se detecta ni se
-// flagea, que es el comportamiento correcto.
+// El walker SÍ chequea reads de Identifier bare (rama (d) — `const w =
+// window`, `f(navigator)`, etc.; el modelo fail-closed la hizo load-bearing
+// para todo identificador). `typeof window` (sin acceso a propiedad) NO se
+// flaggea porque el operando de un `TypeOfExpression` es non-reference-
+// position (regla 2 de `isNonReferencePosition`): leer `typeof X` no lanza
+// ReferenceError aunque X no exista. Comportamiento correcto.
 
 // ─── Cross-module smuggling (beta.26 HIGH-2) ──────────────────────
 //
@@ -1588,6 +1638,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     ) {
       const isDeferred = isDeferredExecutionContext(node, context);
       const fnScopeBindings = gatherFunctionVarHoisted(node);
+      // `arguments` es un binding implícito en funciones NO-arrow (no existe
+      // en arrows). Inyectarlo evita un falso positivo bajo fail-closed:
+      // `arguments` es un keyword contextual runtime-safe, no un global.
+      // beta.27 BLOCKER-1 (cruce A+B, FP-hunt).
+      if (!ts.isArrowFunction(node)) {
+        fnScopeBindings.add("arguments");
+      }
       // Acumular con outer scope. Estas bindings son TODAS non-import
       // (parameters + var hoisted dentro del fn body).
       const bodyContext = {
@@ -1711,6 +1768,37 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+    }
+
+    // (c.2) Dynamic eval sink vía Function constructor alcanzable por
+    // `.constructor` SIN nombrar `Function`. `x.constructor.constructor(...)`
+    // (cualquier base: literal, valor SAFE, expresión) y `f.constructor(...)`
+    // reachan el Function constructor y evalúan código desde un string —
+    // bypassean el AST gate igual que `eval`/`Function`. La rama (c) solo
+    // cazaba la cadena cuando la BASE era un identificador denegado (p.ej.
+    // `globalThis.constructor.*` colateralmente); con base literal/SAFE
+    // pasaba. Detectamos el member access `constructor` cuando es el CALLEE
+    // de una CallExpression (invocado). Los usos legítimos de `.constructor`
+    // (reflexión `err.constructor.name`, comparación `x.constructor === Y`,
+    // clon `new x.constructor()`) NO son callee de CallExpression → 0 FP.
+    // beta.27 BLOCKER-1 (cruce A+B, FN-hunt).
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)) &&
+      ts.isCallExpression(node.parent) &&
+      node.parent.expression === node &&
+      isConstructorMemberAccess(node) &&
+      !context.isInDeferredBody
+    ) {
+      const start = node.getStart(sourceFile);
+      const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+      const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+      violations.push({
+        file: relPath,
+        rule: "no-dynamic-eval-sink",
+        line: line + 1,
+        detail: `invocación de \`.constructor\` (Function constructor alcanzable desde cualquier base — dynamic eval sink que bypassea el AST gate): ${lineText}`,
+      });
     }
 
     // (d) Detectar bare identifier reference a client global. Cubre:
@@ -1856,13 +1944,16 @@ const isCliEntry =
  * canónica: un marker mal colocado es un ERROR del gate, no comportamiento
  * no especificado que luego se congela.
  *
- * CRÍTICO — anclaje del tag: `ts.getJSDocTags(node)` devuelve el mismo tag
- * en VARIOS nodos por herencia/asociación de JSDoc. Para un JSDoc
- * `@server-safe` sobre `export const X = () => {}`, lo reporta en el
- * VariableStatement, el VariableDeclaration, el Identifier y el
- * ArrowFunction. Solo el host real cumple `tag.parent.parent === node`
- * (tag → JSDoc → host); filtrar por eso cuenta cada tag UNA vez en su host
- * y evita falsos "misplaced".
+ * CRÍTICO — usamos `node.jsDoc` (los bloques JSDoc attachados a ESTE nodo
+ * host), NO `ts.getJSDocTags(node)`. Dos razones:
+ *   1. `getJSDocTags` devuelve solo el ÚLTIMO de varios bloques JSDoc
+ *      consecutivos — un `@server-safe` en un bloque previo pasaría
+ *      inadvertido (fail-open silencioso: el archivo no se auditaría). Cruce
+ *      A+B beta.27.
+ *   2. `getJSDocTags` hereda el tag a varios nodos (statement +
+ *      declaration + identifier + initializer), forzando un filtro
+ *      `tag.parent.parent === node`. `node.jsDoc` solo está en el host real,
+ *      así que cada bloque se cuenta UNA vez sin filtro.
  *
  * @param {import("typescript").SourceFile} sourceFile
  * @param {string} relPath
@@ -1875,20 +1966,31 @@ function detectServerSafeMarker(sourceFile, relPath) {
   const misplacedLines = [];
 
   const visit = (node) => {
-    for (const tag of ts.getJSDocTags(node)) {
-      if (tag.tagName.text !== "server-safe") continue;
-      // tag → JSDoc (tag.parent) → host node (tag.parent.parent). Solo
-      // procesamos el tag en su host real para no contar duplicados
-      // heredados.
-      const host = tag.parent && tag.parent.parent;
-      if (host !== node) continue;
-      if (topLevel.has(node)) {
-        marked = true;
-      } else {
-        const { line } = sourceFile.getLineAndCharacterOfPosition(
-          node.getStart(sourceFile),
-        );
-        misplacedLines.push(line + 1);
+    // `node.jsDoc`: array de bloques JSDoc attachados a este host (no se
+    // hereda a hijos). Iteramos TODOS los bloques (no solo el último) para no
+    // perder un marker en un bloque previo.
+    const jsDocBlocks = node.jsDoc;
+    if (Array.isArray(jsDocBlocks)) {
+      for (const block of jsDocBlocks) {
+        for (const tag of block.tags ?? []) {
+          if (tag.tagName.text !== "server-safe") continue;
+          // Solo cuenta si el tag está en posición CANÓNICA: al inicio de
+          // una línea del JSDoc (tras `/**` o ` * `), no embebido en prosa.
+          // TS parsea `@server-safe` como tag aunque aparezca mid-sentence
+          // ("no es @server-safe por sí sola"); sin este filtro, prosa en un
+          // JSDoc anidado lanzaría un fail-loud FALSO (build break) y prosa
+          // top-level marcaría el archivo por error. beta.27 BLOCKER-1.
+          const tagPos = tag.getStart(sourceFile);
+          const { line, character } =
+            sourceFile.getLineAndCharacterOfPosition(tagPos);
+          const linePrefix = sourceFile.text.slice(tagPos - character, tagPos);
+          if (!/^[\s*/]*$/.test(linePrefix)) continue;
+          if (topLevel.has(node)) {
+            marked = true;
+          } else {
+            misplacedLines.push(line + 1);
+          }
+        }
       }
     }
     ts.forEachChild(node, visit);

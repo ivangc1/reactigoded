@@ -12,7 +12,9 @@ export interface ServerSafeGateViolation {
   /**
    * Rule identifier que disparó la violation. Tres categorías:
    *   - `"no-bare-dom-access"`: acceso a client global sin guard activo.
-   *   - `"no-dynamic-eval-sink"`: ref a `eval` / `Function` (bypass del AST).
+   *   - `"no-dynamic-eval-sink"`: ref a `eval` / `Function`, o invocación de
+   *     `.constructor` (Function constructor alcanzable desde cualquier base,
+   *     p.ej. `[].constructor.constructor("code")()`) — bypass del AST.
    *   - `"no-use-client"`: `"use client"` coexistiendo con `@server-safe`.
    *   - `"unresolved-import"`: import relativo o alias que no resuelve a
    *     un archivo dentro de `src/`. El gate FALLA aquí (no skip silencioso)
@@ -140,7 +142,7 @@ export declare function getTsconfigPaths(): Array<{
 export declare const SAFE_GLOBALS: ReadonlySet<string>;
 /**
  * Globals que Node provee pero el gate deniega igual (portabilidad
- * multi-runtime / anti-bypass): `globalThis`, `process`, `Buffer`,
+ * multi-runtime / anti-bypass): `globalThis`, `global`, `process`, `Buffer`,
  * `navigator`, `localStorage`, `sessionStorage`, `eval`, `Function`.
  * Excluidos de `SAFE_GLOBALS`.
  */
