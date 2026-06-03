@@ -1922,8 +1922,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         ts.isElementAccessExpression(node)) &&
       isConstructorMemberAccess(node) &&
       !context.isInDeferredBody &&
+      // (a) doble `x.constructor.constructor` (ES Function, se llame o no);
+      // (b) invocado directo `x.constructor(...)` (incl. optional call);
+      // (c) invocado vía Function.prototype `x.constructor.call/.apply/.bind`
+      //     — `(()=>{}).constructor.call(null,"code")()` reach Function por un
+      //     solo `.constructor` (base función). Codex P1 round 4;
+      // (d) tagged template `x.constructor\`code\``.
+      // El control `[].slice.bind(...)` NO flaggea: `.slice` no es `.constructor`.
       (isConstructorMemberAccess(node.expression) ||
-        (ts.isCallExpression(node.parent) && node.parent.expression === node))
+        (ts.isCallExpression(node.parent) && node.parent.expression === node) ||
+        (ts.isTaggedTemplateExpression(node.parent) &&
+          node.parent.tag === node) ||
+        (ts.isPropertyAccessExpression(node.parent) &&
+          node.parent.expression === node &&
+          (node.parent.name.text === "call" ||
+            node.parent.name.text === "apply" ||
+            node.parent.name.text === "bind")))
     ) {
       const start = node.getStart(sourceFile);
       const { line } = sourceFile.getLineAndCharacterOfPosition(start);

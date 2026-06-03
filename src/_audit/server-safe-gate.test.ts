@@ -942,6 +942,12 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     [".call sobre el constructor", `const w = [].constructor.constructor.call(null, "x")();`],
     [".bind sobre el constructor", `const F = [].constructor.constructor.bind(null); void F;`],
     ["computed doble sin invocar", `const F = ({})["constructor"]["constructor"]; void F;`],
+    // single .constructor (base función) invocado vía Function.prototype —
+    // codex P1 round 4.
+    [".call sobre single constructor", `const w = (() => {}).constructor.call(null, "return 1")();`],
+    [".apply sobre single constructor", `const w = (function () {}).constructor.apply(null, ["return 1"])();`],
+    [".bind sobre single constructor", `const F = (() => {}).constructor.bind(null); const w = F("return 1")();`],
+    ["tagged template sobre constructor", "const w = (() => {}).constructor`return 1`();"],
   ])("caza el Function constructor escape: %s", (_label, body) => {
     const v = probe(body);
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -952,6 +958,8 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     ["comparación `.constructor === X`", `const o = {}; const b = o.constructor === Object; void b;`],
     ["clon `new x.constructor()`", `const o = {}; const c = new o.constructor(); void c;`],
     ["`.constructor` simple sin segunda capa", `const e = new Error(); const c = e.constructor; void c;`],
+    [".bind/.call legítimo NO sobre constructor", `const fn = [].slice.bind([]); void fn;`],
+    ["método `.call` propio (no Function.prototype)", `const o = { call() { return 1; } }; const r = o.call(); void r;`],
     ["`this.constructor.name`", `class C { m() { return this.constructor.name; } } void C;`],
   ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
