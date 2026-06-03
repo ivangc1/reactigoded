@@ -19,6 +19,7 @@
  * en property + identifier).
  */
 import { describe, it, expect } from "vitest";
+import ts from "typescript";
 import {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
@@ -27,6 +28,37 @@ import {
   checkFileWithImports,
   isContentServerSafeMarked,
 } from "../../scripts/check-server-safe-markers.mjs";
+
+/**
+ * Diagnostic codes que tsc emite al type-chequear `src` aislado (con lib.dom,
+ * como el build). Usado por el invariante de capa: ciertos bypasses NO son del
+ * gate porque tsc los rechaza ANTES. Pincha esa dependencia en CI.
+ */
+function tscDiagnosticCodes(src: string, strict = true): number[] {
+  const fileName = "layer-probe.tsx";
+  const sf = ts.createSourceFile(
+    fileName,
+    src,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const host = ts.createCompilerHost({});
+  const orig = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, ...rest) =>
+    name === fileName ? sf : orig(name, ...rest);
+  const program = ts.createProgram([fileName], {
+    strict,
+    noEmit: true,
+    jsx: ts.JsxEmit.Preserve,
+    target: ts.ScriptTarget.ES2022,
+    lib: ["lib.es2022.d.ts", "lib.dom.d.ts"],
+  }, host);
+  return ts
+    .getPreEmitDiagnostics(program)
+    .filter((d) => d.file && d.file.fileName === fileName)
+    .map((d) => d.code);
+}
 
 function fixture(body: string): string {
   return `
@@ -1301,6 +1333,61 @@ describe("server-safe gate — namespace type-only NO sombrea el global (erased-
     ["enum sigue instanciando", `/** @server-safe */\nenum E { A, B }\nexport function C() { return E.A; }`],
   ])("namespace INSTANCIADO sí es binding legítimo → clean (0-FP): %s", (_label, code) => {
     expect(checkSourceFile(code, "ns-value.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * INVARIANTE DE CAPA — tsc bloquea el shadow TDZ (rebuttal PINEADO, beta.27).
+ *
+ * Codex (P2) señaló que el gate pasa `if (typeof window === "undefined") return;
+ * const window = {}` (el `typeof window` resuelve al lexical en TDZ y lanza). Es
+ * REAL que el gate lo pasa, pero NO es un bypass del gate por dos motivos
+ * independientes:
+ *   1. tsc lo RECHAZA antes — "used before declaration" (TS2448 const/let,
+ *      TS2449 class), error de scoping core e INDEPENDIENTE de `strict`. El
+ *      typecheck es CI-gate (verify + `tsc -p tsconfig.build.json`) → nunca
+ *      compila ni llega a producción.
+ *   2. El crash es TDZ — revienta igual en cliente y servidor, no es "global
+ *      ausente en SSR" → fuera del mandato del gate.
+ *
+ * Este test PINCHA la dependencia de capa (no "esperamos que tsc lo rechace",
+ * sino un invariante verificado en CI): si una versión futura de TS degrada esos
+ * errores, revienta y lo revisitamos. Misma disciplina que el JSX member-tag —
+ * todo rebuttal "una capa previa lo bloquea" se respalda pinchando esa capa.
+ *
+ * CONTRASTE decisivo con la clase erased-shadow REAL (declare / namespace
+ * type-only): esa COMPILA limpio → tsc NO la bloquea → el gate es la ÚNICA
+ * defensa → DEBE cazarla (y la caza). Que el TDZ no compile y el erased-shadow
+ * sí PRUEBA que son clases distintas — no se arreglan con el mismo código.
+ */
+describe("server-safe gate — invariante de capa: tsc bloquea el shadow TDZ", () => {
+  it.each([
+    ["const window", `export function C() { if (typeof window === "undefined") return null; const window = {}; return window; }`, 2448],
+    ["let window", `export function C() { if (typeof window === "undefined") return null; let window: any; window = {}; return window; }`, 2448],
+    ["class window", `export function C() { if (typeof window === "undefined") return null; class window {} return window; }`, 2449],
+  ])("el shadow TDZ '%s' FALLA typecheck (used before declaration)", (_label, code, expected) => {
+    expect(tscDiagnosticCodes(code)).toContain(expected);
+  });
+
+  it("TS2448 es independiente de `strict` (también con strict:false)", () => {
+    const code = `export function C() { if (typeof window === "undefined") return null; const window = {}; return window; }`;
+    expect(tscDiagnosticCodes(code, false)).toContain(2448);
+  });
+
+  it.each([
+    ["declare const window", `declare const window: any;\nexport function C() { return window.location.href; }`],
+    ["namespace navigator type-only", `namespace navigator {}\nexport function C() { return navigator.userAgent; }`],
+  ])("CONTRASTE: el erased-shadow real '%s' COMPILA limpio (tsc no es la defensa)", (_label, code) => {
+    const codes = tscDiagnosticCodes(code);
+    expect(codes).not.toContain(2448);
+    expect(codes).not.toContain(2449);
+  });
+
+  it("CONTRASTE: …pero el GATE sí caza el erased-shadow (es la única defensa)", () => {
+    const declareCode = `/** @server-safe */\ndeclare const window: any;\nexport function C() { return window.location.href; }`;
+    const nsCode = `/** @server-safe */\nnamespace navigator {}\nexport function C() { return navigator.userAgent; }`;
+    expect(checkSourceFile(declareCode, "declare-shadow.fixture.tsx").length).toBeGreaterThan(0);
+    expect(checkSourceFile(nsCode, "ns-shadow.fixture.tsx").length).toBeGreaterThan(0);
   });
 });
 
