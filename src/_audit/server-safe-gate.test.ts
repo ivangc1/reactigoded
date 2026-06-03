@@ -1276,3 +1276,29 @@ describe("server-safe gate — clase honest-construct (FP cerrados)", () => {
     expect(v.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * `setImmediate`/`clearImmediate` denegados por el stance edge-baseline
+ * (beta.27): Node-only, no Web-standard; en Vercel Edge son un stub que LANZA
+ * al llamarse → el typeof-guard NO los legitima (van en NON_ABSENCE_DENIALS).
+ * Los otros deferred-timers (web-standard) siguen safe + su callback diferido.
+ */
+describe("server-safe gate — setImmediate/clearImmediate (edge-baseline)", () => {
+  const Comp = (b: string) =>
+    `/** @server-safe */\nexport const Comp = () => { ${b} };`;
+
+  it.each([
+    ["setImmediate bare", Comp(`setImmediate(() => {}); return null;`)],
+    ["clearImmediate bare", Comp(`clearImmediate(1 as unknown as NodeJS.Immediate); return null;`)],
+    ["typeof setImmediate guard NO exime (stub Edge)", Comp(`if (typeof setImmediate !== "undefined") { setImmediate(() => {}); } return null;`)],
+  ])("FLAGGEA: %s", (_label, code) => {
+    expect(checkSourceFile(code, "setimmediate.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["setTimeout callback diferido", Comp(`setTimeout(() => { void window.innerWidth; }, 0); return null;`)],
+    ["queueMicrotask callback diferido", Comp(`queueMicrotask(() => { void document.title; }); return null;`)],
+  ])("web-standard timer sigue safe + deferred → clean: %s", (_label, code) => {
+    expect(checkSourceFile(code, "webtimer.fixture.tsx")).toEqual([]);
+  });
+});

@@ -318,6 +318,14 @@ const SRC_ROOT = resolve(repoRoot, "src");
 // CI (22.12 + 24) y falla si algún nombre de SAFE_GLOBALS no lo provee el
 // Node real → ancla la whitelist al engine mínimo, no al Node del dev.
 //
+// STANCE: "server-safe" = funciona en el EDGE RUNTIME MÁS ESTRICTO **sin
+// asumir `nodejs_compat`** (Vercel Edge; Cloudflare Workers / Deno sin la flag
+// de compat de Node). Es la decisión conservadora correcta para una librería:
+// no puedes asumir que tus consumers activan compat. CAVEAT explícito: un
+// componente flaggeado por un global Node-only SÍ funcionaría en un runtime
+// CON compat — pero el gate ancla al baseline sin compat. (Verificado contra
+// Vercel Edge / matriz de compat cross-runtime; ver ADR D1-P1.)
+//
 // DENEGACIONES INTENCIONALES (Node los provee pero se flaggean igual):
 //   - `globalThis` / `global`: cazan el bypass
 //     `globalThis.constructor.constructor("return window")()` y el acceso
@@ -325,23 +333,37 @@ const SRC_ROOT = resolve(repoRoot, "src");
 //     es el alias runtime-equivalente de Node (`global === globalThis` en el
 //     floor) y `globals.nodeBuiltin` lo lista — sin denegarlo, `global.*`
 //     reabriría el mismo agujero que `globalThis.*` (cruce A+B, FN-hunt).
-//   - `process` / `Buffer`: portabilidad multi-runtime. Cloudflare
-//     Workers / Deno no los tienen. En RSC el patrón canónico es leer env
-//     vars vía args/context del Server Component, no globalmente.
-//   - `navigator`: Node v21+ lo provee como SUBSET inestable del de
-//     browser (sí `userAgent`/`language`; no `geolocation`/`mediaDevices`).
-//     Semántica divergente entre runtimes → gate fuerza guard explícito.
-//   - `localStorage` / `sessionStorage`: `globals.nodeBuiltin` los lista
-//     (webstorage experimental de Node), pero en SSR/RSC crashean o son
-//     semánticamente erróneos. Sin esta exclusión, fail-closed REABRIRÍA
-//     el bypass de Web Storage (verificado: leak SAFE ∩ denylist-46 = 2).
+//   - `process` / `Buffer`: ausentes/stub en el baseline Web-standard edge
+//     (Vercel Edge; Workers/Deno SIN `nodejs_compat`). NO "Workers/Deno no los
+//     tienen" — CON compat sí los tienen; el anclaje es al baseline sin compat.
+//     En RSC el patrón canónico es leer env vía args/context, no globalmente.
+//   - `setImmediate` / `clearImmediate`: Node-only, NO Web-standard. En Vercel
+//     Edge están definidos como STUB QUE LANZA al llamarse ("A Node.js API is
+//     used (setImmediate) which is not supported in the Edge Runtime"). Por eso
+//     van también en NON_ABSENCE_DENIALS (un `typeof setImmediate !==
+//     "undefined"` pasa pero la llamada revienta → guard de falsa confianza).
+//     Los otros deferred-timers (`setTimeout`/`setInterval`/`queueMicrotask`)
+//     SÍ son Web-standard y se quedan en SAFE.
+//   - `navigator`: provisto como SUBSET inestable (sí `userAgent`/`language`;
+//     no `geolocation`/`mediaDevices`) — semántica divergente entre runtimes →
+//     gate fuerza guard explícito.
+//   - `localStorage` / `sessionStorage`: webstorage no disponible en el edge
+//     baseline ni estable en Node (experimental) → crashean o son semántica-
+//     mente erróneos en SSR/RSC.
 //   - `eval` / `Function`: dynamic eval sinks (ver DYNAMIC_EVAL_SINKS).
 //     Excluidos de SAFE para que también se flaggeen como bare ref.
+//
+// FOLLOW-UP (post-freeze): derivar SAFE como INTERSECCIÓN cross-runtime anclada
+// al baseline edge (vía una herramienta tipo `platform-node-compat`) en vez de
+// `globals.nodeBuiltin` − denegaciones-a-mano. Esto convertiría la lista de
+// denegaciones Node-only en algo derivado, no curado.
 const INTENTIONAL_DENY = new Set([
   "globalThis",
   "global",
   "process",
   "Buffer",
+  "setImmediate",
+  "clearImmediate",
   "navigator",
   "localStorage",
   "sessionStorage",
@@ -411,17 +433,24 @@ const SAFE_GLOBALS = new Set(
 // con eval/Function NO se puede "guard con typeof" — hay que refactor.
 const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 
-// Denegaciones cuyo hazard NO es la AUSENCIA sino ser sink de eval / raíz de
-// escape: están SIEMPRE presentes en Node, así que un guard
-// `typeof X !== "undefined"` es siempre true y NO hace el body server-safe —
-// suprimiría la detección (eval-sink / escape) sin gatear nada. Por eso el
-// guard typeof NO se reconoce para ellos (a diferencia de `window`/`process`,
-// cuyo hazard SÍ es la ausencia y el guard SÍ los hace safe). Codex P1 round 3.
+// Denegaciones para las que un guard `typeof X !== "undefined"` NO hace el
+// body safe — el typeof-guard NO se reconoce para ellas:
+//   - `eval`/`Function`/`globalThis`/`global`: sinks de eval / raíz de escape,
+//     SIEMPRE presentes en Node → el guard es vacuamente true y solo
+//     suprimiría la detección. (Codex P1 round 3.)
+//   - `setImmediate`/`clearImmediate`: en Vercel Edge están DEFINIDOS como un
+//     stub que LANZA al llamarse → `typeof setImmediate !== "undefined"` pasa
+//     pero la llamada revienta. El guard da falsa confianza; por eso se trata
+//     como los eval-sinks. (Workflow honest-construct / edge-baseline.)
+// Difieren de `window`/`process`, cuyo hazard SÍ es la ausencia (no están
+// definidos en el baseline) y donde el guard typeof SÍ protege.
 const NON_ABSENCE_DENIALS = new Set([
   "eval",
   "Function",
   "globalThis",
   "global",
+  "setImmediate",
+  "clearImmediate",
 ]);
 
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
@@ -467,10 +496,12 @@ const DEFERRED_HOOKS = new Set([
 //     lanza ReferenceError antes de que el callback se defiera. Movidos
 //     a CLIENT_GLOBALS para que la bare ref también flag-ee. Codex
 //     round 17 P2.2.
+// Timers WEB-STANDARD cuyo callback NO corre durante el render server (existen
+// en el edge baseline). `setImmediate` NO está aquí: es Node-only y se deniega
+// (ver INTENTIONAL_DENY) — su call site mismo crashea en Edge.
 const DEFERRED_LATER_FNS = new Set([
   "setTimeout",
   "setInterval",
-  "setImmediate",
   "queueMicrotask",
 ]);
 

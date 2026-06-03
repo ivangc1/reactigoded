@@ -91,10 +91,16 @@ const MUST_STAY_FLAGGED = [
   // SAFE (vía `globals.nodeBuiltin`) reabre el bypass dynamic-eval +
   // `global.process.env`. Cruce A+B, FN-hunt.
   "global",
+  // `setImmediate`/`clearImmediate`: Node-only, no Web-standard. Stub que lanza
+  // en Vercel Edge. Denegados por el stance edge-baseline (workflow honest-
+  // construct). Los otros deferred-timers (setTimeout/setInterval/
+  // queueMicrotask) SÍ son web-standard y SÍ están en SAFE.
+  "setImmediate",
+  "clearImmediate",
 ];
 
 /**
- * Contenido EXACTO esperado de `SAFE_GLOBALS` (122 nombres, ordenados). Es
+ * Contenido EXACTO esperado de `SAFE_GLOBALS` (120 nombres, ordenados). Es
  * un PIN del contrato: cualquier cambio en el set (bump de `globals`,
  * denegación nueva, overclaim) debe actualizar esta lista CONSCIENTEMENTE.
  * Sin el pin, un minor bump de `globals` (`^17.6.0`) podría añadir un nombre
@@ -119,11 +125,10 @@ const SAFE_GLOBALS_PIN = [
   "TextEncoderStream", "TransformStream", "TransformStreamDefaultController", "TypeError", "URIError", "URL",
   "URLSearchParams", "Uint16Array", "Uint32Array", "Uint8Array", "Uint8ClampedArray", "WeakMap",
   "WeakRef", "WeakSet", "WebAssembly", "WebSocket", "WritableStream", "WritableStreamDefaultController",
-  "WritableStreamDefaultWriter", "atob", "btoa", "clearImmediate", "clearInterval", "clearTimeout",
-  "console", "crypto", "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent",
-  "escape", "fetch", "isFinite", "isNaN", "parseFloat", "parseInt",
-  "performance", "queueMicrotask", "setImmediate", "setInterval", "setTimeout", "structuredClone",
-  "undefined", "unescape",
+  "WritableStreamDefaultWriter", "atob", "btoa", "clearInterval", "clearTimeout", "console",
+  "crypto", "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent", "escape",
+  "fetch", "isFinite", "isNaN", "parseFloat", "parseInt", "performance",
+  "queueMicrotask", "setInterval", "setTimeout", "structuredClone", "undefined", "unescape",
 ];
 
 /**
