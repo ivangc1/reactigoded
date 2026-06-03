@@ -1226,6 +1226,27 @@ function skipParensDown(node) {
 }
 
 /**
+ * ¿La function-like `node` es una IIFE (callee inmediato de una CallExpression,
+ * quizá envuelta en parens)? `(() => {…})()`, `(function(){…})()`. Una IIFE
+ * corre SÍNCRONA en el flujo léxico actual — a diferencia de una declaration
+ * hoisted / closure retornada, su ejecución NO está desacoplada, así que SÍ
+ * hereda los guards activos en su posición. beta.27 BLOCKER-1 (codex P2).
+ */
+function isImmediatelyInvoked(node) {
+  let child = node;
+  let parent = node.parent;
+  while (parent && ts.isParenthesizedExpression(parent)) {
+    child = parent;
+    parent = parent.parent;
+  }
+  return (
+    parent !== undefined &&
+    ts.isCallExpression(parent) &&
+    parent.expression === child
+  );
+}
+
+/**
  * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
  * `Function` constructor). Salta ParenthesizedExpression a AMBOS lados: los
  * paréntesis son contiguos y legibles, NO ofuscación — `((x).constructor)()` ≡
@@ -2067,9 +2088,17 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         // undefined del propio guard, o más tarde como closure retornado. Heredar
         // activeGuards suprimía reads reales (hunt: guard → función hoisted). El
         // narrowing se re-establece DENTRO del body con los guards propios de la
-        // función (vía visitOrderedStatements), que sí son sound. beta.27
-        // BLOCKER-1.
-        activeGuards: new Set(),
+        // función (vía visitOrderedStatements), que sí son sound.
+        //
+        // EXCEPCIÓN: una IIFE corre SÍNCRONA en el flujo actual, NO desacoplada
+        // — hereda los guards activos en SU posición (que ya son correctos:
+        // tras un guard-negativo early-return X está guardado; en la rama
+        // undefined / tras un positivo early-return, NO). Resetear ahí era un FP
+        // (codex P2): `if (typeof window==="undefined") return; (() => window.x)()`
+        // es SSR-safe. beta.27 BLOCKER-1.
+        activeGuards: isImmediatelyInvoked(node)
+          ? context.activeGuards
+          : new Set(),
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;

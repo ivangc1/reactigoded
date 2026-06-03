@@ -1378,6 +1378,12 @@ describe("server-safe gate — guard externo NO cubre cuerpo de función", () =>
     ["hoisted llamada antes del guard", `/** @server-safe */\nexport function Clock(): string { const s = read(); if (typeof window === "undefined") return ""; function read() { return window.location.href; } return s; }`],
     ["llamada en rama undefined del guard", `/** @server-safe */\nexport function Banner(): string { if (typeof window === "undefined") return readUrl(); function readUrl() { return window.location.href; } return "c"; }`],
     ["closure retornado tras el guard", `/** @server-safe */\nexport function F() { if (typeof window === "undefined") return null; const h = () => window.location.href; return h; }`],
+    // IIFE en el path donde window NO existe: corre en flujo pero con window
+    // undefined → debe flaggear (la preservación de guards para IIFEs hereda el
+    // set CORRECTO de su posición: tras un positivo early-return, window NO está
+    // guardado). codex P2 — soundness de la excepción IIFE.
+    ["IIFE en rama undefined (positive early-return)", `/** @server-safe */\nexport function F() { if (typeof window !== "undefined") return "c"; return (() => window.location.href)(); }`],
+    ["IIFE sin guard alguno", `/** @server-safe */\nexport function F() { return (() => window.location.href)(); }`],
   ])("FLAGGEA el read en el cuerpo de función: %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-fn.fixture.tsx").length).toBeGreaterThan(0);
   });
@@ -1386,6 +1392,12 @@ describe("server-safe gate — guard externo NO cubre cuerpo de función", () =>
     ["guard interno + read straight-line", `/** @server-safe */\nexport function useTheme(): string { if (typeof window === "undefined") return "d"; return window.localStorage.getItem("t") ?? "d"; }`],
     ["guard DENTRO de la función protege su read", `/** @server-safe */\nexport function F() { function read() { if (typeof window === "undefined") return ""; return window.location.href; } return read(); }`],
     ["positive guard straight-line", `/** @server-safe */\nexport const C = () => { if (typeof window !== "undefined") { return window.location.href; } return ""; };`],
+    // IIFE invocada inmediatamente tras un guard negativo: corre síncrona en el
+    // flujo client-only → hereda el guard → clean. El reset incondicional era un
+    // FP (codex P2).
+    ["IIFE arrow tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return null; return (() => window.location.href)(); }`],
+    ["IIFE function-expr tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return null; return (function () { return window.location.href; })(); }`],
+    ["IIFE doble-paren tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return null; const w = ((() => window.innerWidth))(); return w; }`],
   ])("guard PROPIO de la función sí protege → clean (0-FP): %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-own.fixture.tsx")).toEqual([]);
   });
