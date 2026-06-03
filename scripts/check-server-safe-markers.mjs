@@ -1375,7 +1375,26 @@ function isNonReferencePosition(node, declaredNames) {
   //     valor `a.b` (PropertyAccessExpression), el QualifiedName SOLO
   //     aparece en type-space → ni `left` ni `right` leen un binding
   //     runtime. (Caza `React`/`ReactNode` en `children?: React.ReactNode`.)
+  //
+  //     EXCEPCIÓN: el `moduleReference` de un `import x = A.B.C` NO-type-only es
+  //     una EntityName en posición de VALOR. `import h = window.location.href`
+  //     emite `var h = window.location.href` — un read runtime del root
+  //     (`window`). El root es el `.left` más interno; los miembros (`.right`,
+  //     `location`/`href`) ya los exime la regla 1. Solo el root se des-exime.
+  //     beta.27 BLOCKER-1 (hunt: import-equals value-alias).
   if (ts.isQualifiedName(parent)) {
+    if (parent.left === node) {
+      let top = parent;
+      while (top.parent && ts.isQualifiedName(top.parent)) top = top.parent;
+      if (
+        top.parent &&
+        ts.isImportEqualsDeclaration(top.parent) &&
+        top.parent.moduleReference === top &&
+        !top.parent.isTypeOnly
+      ) {
+        return false; // root de import-equals value-alias = read runtime
+      }
+    }
     return true;
   }
 

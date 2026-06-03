@@ -1305,6 +1305,35 @@ describe("server-safe gate — namespace type-only NO sombrea el global (erased-
 });
 
 /**
+ * import-equals VALUE-ALIAS (hunt, beta.27 BLOCKER-1). `import h = A.B.C` con un
+ * moduleReference NO-type-only emite `var h = A.B.C` — un read runtime del root.
+ * `import h = window.location.href` leía `window` en SSR, pero la regla 11 de
+ * `isNonReferencePosition` eximía TODA EntityName (`QualifiedName`) asumiendo
+ * type-space. La excepción des-exime SOLO el root (`.left` más interno) cuando
+ * la EntityName es el moduleReference de un import-equals de valor; los miembros
+ * (`.right`) los sigue eximiendo la regla 1, y el type-space (`React.ReactNode`)
+ * y los alias a binding local (`import x = NS.Foo`) siguen clean.
+ */
+describe("server-safe gate — import-equals value-alias (regla 11)", () => {
+  it.each([
+    ["import h = window.location.href", `/** @server-safe */\nimport h = window.location.href;\nexport const x = h;`],
+    ["import nav = navigator.userAgent", `/** @server-safe */\nimport nav = navigator.userAgent;\nexport const x = nav;`],
+    ["import ls = localStorage.length", `/** @server-safe */\nimport ls = localStorage.length;\nexport const x = ls;`],
+    ["import d = document.cookie", `/** @server-safe */\nimport d = document.cookie;\nexport const x = d;`],
+  ])("FLAGGEA el root del value-alias: %s", (_label, code) => {
+    expect(checkSourceFile(code, "import-eq.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["type React.ReactNode (QualifiedName type-space)", `/** @server-safe */\nexport type P = { children?: React.ReactNode };\nexport const C = (p: P) => p.children;`],
+    ["import x = NS.Foo (namespace local de valor)", `/** @server-safe */\nnamespace NS { export const Foo = 1; }\nimport x = NS.Foo;\nexport const y = x;`],
+    ["import type T = React.FC (type-only)", `/** @server-safe */\nimport type T = React.FC;\nexport const x: unknown = null;`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "import-eq-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
  * sobre código server-safe legítimo y compilable que el modelo fail-closed
  * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección
