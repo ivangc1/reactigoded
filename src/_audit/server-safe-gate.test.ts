@@ -965,22 +965,38 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     expect(probe(body)).toEqual([]);
   });
 
+  // ── Nivel 1: computed-key con `const` literal → CAZADO (constant-folding)
+  // El único computed-key que es legible-pero-ofuscado-por-construcción.
+  it("caza computed-key con const literal: const k = 'constructor'; [][k][k](code)()", () => {
+    const v = probe(`const k = "constructor"; const w = [][k][k]("return 1")(); void w;`);
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
   // ── Residuales CONOCIDOS POR DISEÑO ────────────────────────────────────
-  // Alcanzar `Function` por reflexión profunda es ESTÁTICAMENTE INDECIDIBLE.
-  // Estas 3 clases PASAN el gate a propósito (ver ADR D1-P1, "Frontera del
-  // eval-sink"). Se aceptan porque `@server-safe` es opt-in/first-party, NO
-  // una frontera de seguridad: un bypass solo crashea ruidoso en el consumer
-  // del propio contributor (sin activo ni adversario). Perseguirlos paga FP
-  // (rompe `const Ctor = x.constructor; new Ctor()`) sin cierre hermético.
-  // Este test PINEA la decisión: si una de estas empieza a flaggearse, falla
-  // aquí → lee el ADR + el modelo de amenaza ANTES de cambiar nada.
-  // CADUCIDAD: vale solo mientras `@server-safe` sea opt-in/first-party sin
-  // código no confiable; si esa premisa cambia, esta decisión queda anulada.
+  // El criterio de la frontera es LEGIBLE vs OFUSCADO (no decidible vs
+  // indecidible): el gate caza lo que un revisor vería leyendo el diff. Estas
+  // formas requieren data-flow cross-statement / keys NO-constantes / colisión
+  // con patrón legítimo → quedan fuera. Se aceptan porque son ofuscación
+  // deliberada y, bajo el modelo opt-in/first-party (sin adversario), no son
+  // amenaza (ver ADR D1-P1, "Frontera del eval-sink"). El Nivel 2 (taint) las
+  // cazaría pero FP-ea el clon legítimo `const Ctor = x.constructor; new Ctor()`
+  // — probado — sin cierre hermético; descartado.
+  // Este test PINEA la decisión: si una empieza a flaggearse, lee el ADR +
+  // el modelo de amenaza ANTES de cambiar nada. CADUCIDAD: vale solo mientras
+  // `@server-safe` sea opt-in/first-party sin código no confiable.
   it.each([
-    ["cadena partida en variables", `const c1 = [].constructor; const c2 = c1.constructor; const w = c2("return 1")();`],
+    ["cadena partida en variables (data-flow)", `const c1 = [].constructor; const c2 = c1.constructor; const w = c2("return 1")();`],
     ["destructuring del nombre constructor", `const { constructor: C } = []; const { constructor: F } = C; const w = F("return 1")();`],
-    ["computed key vía variable", `const k = "constructor"; const w = [][k][k]("return 1")();`],
-  ])("residual fuera de alcance POR DISEÑO (indecidible, no es amenaza): %s", (_label, body) => {
+    ["computed key NO-const (let, reasignable)", `let k = "constructor"; const w = [][k][k]("return 1")();`],
+    ["computed key concatenada/codificada", `const w = []["cons" + "tructor"]["cons" + "tructor"]("return 1")();`],
+  ])("residual fuera de alcance POR DISEÑO (ofuscado, no es amenaza): %s", (_label, body) => {
+    expect(probe(body)).toEqual([]);
+  });
+
+  it.each([
+    ["lectura reflectiva no invocada const c=x[k]", `const k = "constructor"; const o: any = {}; const c = o[k]; void c;`],
+    ["clon vía const-key new C()", `const k = "constructor"; const o: any = {}; const Ctor = o[k]; const c = new Ctor(); void c;`],
+  ])("Nivel 1 NO genera falso positivo: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
 });

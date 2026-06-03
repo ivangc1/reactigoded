@@ -128,25 +128,31 @@ Validación final: 1139 tests verdes (suite completa) + verify:unit (CI-equivale
 
 ### Frontera del eval-sink — modelo de amenaza y residuales conocidos POR DISEÑO
 
-Alcanzar el `Function` constructor por reflexión en JavaScript es **estáticamente indecidible** de cerrar al 100%: las indirecciones son ilimitadas (cadenas partidas en variables, destructuring, computed keys vía variable, `Reflect.get`, proto-walking, strings codificados/concatenados). El gate caza las formas **legibles** (`eval`, `Function`, `x.constructor.constructor` contiguo, `x.constructor(call)`, más todos los globals DOM) y declina explícitamente las siguientes tres clases de **ofuscación profunda** — con un ejemplo de cada una, para que dentro de N meses, cuando alguien las encuentre pasando el gate, conste que es **conocido y por diseño**, no un agujero recién descubierto:
+**El criterio de la frontera es LEGIBLE vs OFUSCADO, no decidible vs indecidible.** El mandato del gate es cazar errores honestos + anti-patrones que un revisor vería leyendo el diff. `[].constructor.constructor("code")()` es legible-sospechoso → se caza. Una forma ofuscada por construcción (cuyo único motivo de existir es esconderse del revisor) queda fuera — y eso es principista, no cansado: lo ofuscado es necesariamente **deliberado**, y lo deliberado bajo un marker opt-in es el no-adversario ya descartado. La frontera del gate coincide exactamente con su mandato. La indecidibilidad (teorema de Rice: "¿esta expresión evalúa a `Function`?" no es computable) explica por qué no se persigue el 100%; el modelo de amenaza explica por qué no hace falta.
+
+El gate caza **toda forma contigua** de alcanzar+invocar `Function` (`eval`, `Function`, `x.constructor.constructor`, `x.constructor(...)`, `.call`/`.apply`/`.bind`/tagged sobre `.constructor`, optional call) **más el computed-key con `const` literal** (Nivel 1, constant-folding: `const k = "constructor"; [][k][k]("code")()` — el único computed-key legible-pero-ofuscado-por-construcción, cerrado en el freeze). Declina explícitamente estas clases de **ofuscación profunda**, con un ejemplo de cada una para que dentro de N meses, cuando alguien las encuentre pasando, conste que es **conocido y por diseño**, no un agujero recién descubierto:
 
 ```ts
-// 1. Cadena partida en variables intermedias (data-flow, no sintáctico):
-const c1 = [].constructor;        // Array
-const c2 = c1.constructor;        // Function
-c2("return globalThis")();        // ← PASA el gate
+// 1. Cadena partida en variables intermedias (data-flow cross-statement):
+const c1 = [].constructor; const c2 = c1.constructor; c2("return globalThis")();
 
 // 2. Destructuring del nombre `constructor` (no hay member access que cazar):
-const { constructor: C } = [];
-const { constructor: F } = C;
-F("return globalThis")();         // ← PASA el gate
+const { constructor: C } = []; const { constructor: F } = C; F("...")();
 
-// 3. Computed key vía variable (la key no es un string literal):
-const k = "constructor";
-[][k][k]("return globalThis")();  // ← PASA el gate
+// 3. Computed key NO-const o concatenada (la key no es un literal fijo):
+let k = "constructor"; [][k][k]("...")();          // let → reasignable
+[]["cons" + "tructor"]["cons" + "tructor"]("...")(); // concatenada / codificada
+
+// 4. Reflexión / data-flow vía getter:
+Reflect.apply((() => {}).constructor, null, ["..."])();
+Reflect.construct((() => {}).constructor, ["..."]);
+const o = { get c() { return (() => {}).constructor; } }; o.c("...")();
+
+// 5. `new` sobre `.constructor` (colisiona con el clon legítimo):
+new (() => {}).constructor("...")();   // no separable de `new x.constructor()` sin type-info
 ```
 
-(`Reflect.get(x, "constructor")` y `Object.getOwnPropertyDescriptor` caen en la misma categoría.)
+**Por qué no se cierra el Nivel 2 (taint de single-assignment).** Cazaría #1 y #2, pero FP-ea el patrón clon legítimo `const Ctor = x.constructor; new Ctor()` — el taint marcaría `Ctor` y flaggearía `new Ctor()`, indistinguible de `Ctor("code")()` sin type-info (verificado). Shippear un gate que rompe código legítimo en un 1.0 congelado es peor que el hueco de ofuscación deliberada. Por eso se descarta — no por coste, sino por FP-sobre-legítimo.
 
 **Por qué se aceptan — el modelo de amenaza, no solo la indecidibilidad.** La indecidibilidad explica por qué no perseguimos el 100%; el modelo de amenaza explica por qué no hace falta:
 
