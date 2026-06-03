@@ -1236,3 +1236,43 @@ describe("server-safe gate — declaración ambient (declare) NO sombrea el glob
     expect(checkSourceFile(code, "real-binding.fixture.tsx")).toEqual([]);
   });
 });
+
+/**
+ * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
+ * sobre código server-safe legítimo y compilable que el modelo fail-closed
+ * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección
+ * fail-closed. Arreglarlos solo quita FP, nunca debilita el gate.
+ */
+describe("server-safe gate — clase honest-construct (FP cerrados)", () => {
+  const Comp = (b: string) =>
+    `/** @server-safe */\nexport const Comp = () => { ${b} };`;
+
+  it.each([
+    ["negative-guard early-return (idioma SSR dominante)", Comp(`if (typeof window === "undefined") return null; return window.innerWidth;`)],
+    ["negative-guard con block then", Comp(`if (typeof document === "undefined") { return null; } return document.title;`)],
+    ["negative-guard con throw", Comp(`if (typeof window === "undefined") throw new Error("ssr"); return window.innerWidth;`)],
+    ["negative-guard polaridad ==", Comp(`if (typeof window == "undefined") return null; return window.innerWidth;`)],
+    ["enum value access", `/** @server-safe */\nenum Dir { Up, Down }\nexport const Comp = () => { const x = Dir.Up; void x; return null; };`],
+    ["enum usado en componente posterior", `/** @server-safe */\nenum Dir { Up }\nexport const Comp = () => Dir.Up;`],
+    ["named tuple labels", `/** @server-safe */\nexport type Pair = [first: number, second: string];\nexport const Comp = () => null;`],
+    ["named tuple rest/optional", `/** @server-safe */\nexport type T = [head: number, tail?: string, ...rest: boolean[]];\nexport const Comp = () => null;`],
+    ["namespace value access", `/** @server-safe */\nnamespace NS { export const thing = 1; }\nexport const Comp = () => { const x = NS.thing; void x; return null; };`],
+    ["import X = NS.Y (import-equals)", `/** @server-safe */\nnamespace NS { export const Y = 1; }\nimport X = NS.Y;\nexport const Comp = () => { const z = X; void z; return null; };`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "honest.fixture.tsx")).toEqual([]);
+  });
+
+  // El narrowing por early-return NO debe sobre-eximir (FN check): solo aplica
+  // al nombre guardado, DESPUÉS del if, con then abrupto y sin else.
+  it.each([
+    ["acceso ANTES del if (no narrowed aún)", Comp(`const a = window.innerWidth; if (typeof window === "undefined") return null; void a;`)],
+    ["con else → no narrowing", Comp(`if (typeof window === "undefined") { void 0; } else { void 0; } return window.x;`)],
+    ["then sin abrupt → no narrowing", Comp(`if (typeof window === "undefined") { void 0; } return window.x;`)],
+    ["eval/escape no se eximen por guard", Comp(`if (typeof Function === "undefined") return null; return Function("return 1")();`)],
+    ["otro nombre no se exime", Comp(`if (typeof window === "undefined") return null; return document.title;`)],
+    ["declare enum ambient NO sombrea", `/** @server-safe */\ndeclare enum E { A }\nexport const Comp = () => { const x = window; void x; return null; };`],
+  ])("el guard negativo NO sobre-exime (sigue flaggeando): %s", (_label, code) => {
+    const v = checkSourceFile(code, "honest-fn.fixture.tsx");
+    expect(v.length).toBeGreaterThan(0);
+  });
+});

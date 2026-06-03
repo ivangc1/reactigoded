@@ -636,12 +636,22 @@ function listSourceFiles(dir) {
  * BORRAN al compilar — NO emiten binding runtime, así que NO sombrean el global
  * homónimo. Si se añadieran al shadow-set, una ref bare al nombre se trataría
  * como local y pasaría el gate, pero en runtime resuelve al global ambiente →
- * ReferenceError en SSR. Mismo eje que los imports type-only. `Ambient` cubre
- * el `declare` propio y el heredado de un `declare global`/namespace ambient.
- * beta.27 BLOCKER-1 (codex P2 round 3 + cierre de clase).
+ * ReferenceError en SSR. Mismo eje que los imports type-only.
+ *
+ * Cubre el `declare` PROPIO (vía `getCombinedModifierFlags & Ambient`) Y el
+ * ambient HEREDADO de un `declare global`/`declare module`/namespace ambient
+ * (vía `node.flags & NodeFlags.Ambient`) — `getCombinedModifierFlags` NO
+ * propaga el ambient heredado, por eso se chequean los dos. (En la práctica el
+ * `declare global { var X }` ya queda fuera porque `collectVarHoistedRecursive`
+ * no recursa en `ModuleDeclaration`; este chequeo es defensa-en-profundidad
+ * frente a un refactor que añada recursión.) beta.27 BLOCKER-1 (codex P2
+ * round 3 + workflow honest-construct).
  */
 function isAmbientDeclaration(node) {
-  return (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Ambient) !== 0;
+  return (
+    (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Ambient) !== 0 ||
+    (node.flags & ts.NodeFlags.Ambient) !== 0
+  );
 }
 
 function addBindingNamesFromPattern(node, names) {
@@ -831,8 +841,15 @@ function extractPostStatementBindings(stmt) {
       }
     }
   } else if (
-    ts.isClassDeclaration(stmt) &&
+    (ts.isClassDeclaration(stmt) ||
+      // `enum E {}` y `namespace NS {}` value-producing emiten binding runtime
+      // (var + IIFE). `const enum` se borra pero incluirlo solo quita FP. Skip
+      // ambient. Sus accesos de valor (`E.A`, `NS.thing`) se trataban como
+      // global bare. beta.27 BLOCKER-1 (workflow honest-construct).
+      ts.isEnumDeclaration(stmt) ||
+      ts.isModuleDeclaration(stmt)) &&
     stmt.name &&
+    ts.isIdentifier(stmt.name) &&
     !isAmbientDeclaration(stmt)
   ) {
     names.add(stmt.name.text);
@@ -911,6 +928,25 @@ function gatherModulePreloadedBindings(sourceFile) {
       addRuntimeImportBindings(stmt.importClause, all);
       continue;
     }
+    // `enum E {}` / `namespace NS {}` value-producing a nivel de módulo: su
+    // binding es referenciable desde cualquier render body (inicializado en
+    // module-eval). Skip ambient. Resuelve `E.A` / `NS.thing` usados antes o
+    // dentro de un componente. beta.27 BLOCKER-1 (workflow honest-construct).
+    if (
+      (ts.isEnumDeclaration(stmt) || ts.isModuleDeclaration(stmt)) &&
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      !isAmbientDeclaration(stmt)
+    ) {
+      all.add(stmt.name.text);
+      continue;
+    }
+    // `import X = NS.Y` / `import X = require("y")` (TS import-equals): si no es
+    // type-only, emite un binding runtime `X`. beta.27 BLOCKER-1.
+    if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) {
+      all.add(stmt.name.text);
+      continue;
+    }
     const captured = new Set();
     collectVarHoistedRecursive(stmt, captured);
     for (const n of captured) {
@@ -958,6 +994,74 @@ function extractPositiveTypeofGuard(expr) {
     return operand.text;
   }
   return null;
+}
+
+/**
+ * Como `extractPositiveTypeofGuard` pero para la forma NEGATIVA
+ * `typeof X === "undefined"` (=== / ==). Devuelve el nombre o null. Usado
+ * para el narrowing por early-return (abajo).
+ */
+function extractNegativeTypeofGuard(expr) {
+  if (!ts.isBinaryExpression(expr)) return null;
+  const op = expr.operatorToken.kind;
+  if (
+    op !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
+    op !== ts.SyntaxKind.EqualsEqualsToken
+  ) {
+    return null;
+  }
+  const candidates = [
+    { typeofExpr: expr.left, stringExpr: expr.right },
+    { typeofExpr: expr.right, stringExpr: expr.left },
+  ];
+  for (const { typeofExpr, stringExpr } of candidates) {
+    if (!ts.isTypeOfExpression(typeofExpr)) continue;
+    const operand = typeofExpr.expression;
+    if (!ts.isIdentifier(operand)) continue;
+    if (SAFE_GLOBALS.has(operand.text)) continue;
+    if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
+    if (!ts.isStringLiteral(stringExpr)) continue;
+    if (stringExpr.text !== "undefined") continue;
+    return operand.text;
+  }
+  return null;
+}
+
+/**
+ * `true` si `stmt` completa SIEMPRE de forma abrupta (return/throw/break/
+ * continue), de modo que el control NO cae a los statements posteriores. Para
+ * un Block, mira el último statement (simplificación conservadora: no analiza
+ * todos los paths, pero el caso idiomático `{ return null; }` se cubre).
+ */
+function statementAlwaysExits(stmt) {
+  if (!stmt) return false;
+  if (
+    ts.isReturnStatement(stmt) ||
+    ts.isThrowStatement(stmt) ||
+    ts.isBreakStatement(stmt) ||
+    ts.isContinueStatement(stmt)
+  ) {
+    return true;
+  }
+  if (ts.isBlock(stmt) && stmt.statements.length > 0) {
+    return statementAlwaysExits(stmt.statements[stmt.statements.length - 1]);
+  }
+  return false;
+}
+
+/**
+ * Narrowing por EARLY-RETURN: `if (typeof X === "undefined") return null;`
+ * (sin else, then-branch que sale abrupto) implica que TRAS el `if`, X existe
+ * → acceso a X es safe en los statements posteriores del mismo bloque. Es el
+ * idioma React/SSR dominante (equivalente al narrowing de TS/ESLint). Devuelve
+ * el nombre guardado o null. beta.27 BLOCKER-1 (workflow honest-construct).
+ */
+function extractNegativeEarlyReturnGuard(stmt) {
+  if (!ts.isIfStatement(stmt) || stmt.elseStatement) return null;
+  const name = extractNegativeTypeofGuard(stmt.expression);
+  if (!name) return null;
+  if (!statementAlwaysExits(stmt.thenStatement)) return null;
+  return name;
 }
 
 /**
@@ -1249,6 +1353,21 @@ function isNonReferencePosition(node, declaredNames) {
   //     `import()` DINÁMICO de runtime no es un ImportTypeNode, así que sigue
   //     flaggeándose. beta.27 BLOCKER-1 (workflow: FP type-space).
   if (ts.isImportTypeNode(parent) && parent.qualifier === node) {
+    return true;
+  }
+
+  // 17. Label de NamedTupleMember: el `first`/`second` de
+  //     `type Pair = [first: number, second: string]`. Type-space puro,
+  //     se borra en compilación — no lee binding. beta.27 BLOCKER-1
+  //     (workflow honest-construct: FP en tuplas con labels).
+  if (ts.isNamedTupleMember(parent) && parent.name === node) {
+    return true;
+  }
+
+  // 18. Nombre de ImportEqualsDeclaration (`import X = NS.Y`): es la
+  //     declaración del binding `X`, no un read. El binding runtime se añade
+  //     al scope en gatherModulePreloadedBindings. beta.27 BLOCKER-1.
+  if (ts.isImportEqualsDeclaration(parent) && parent.name === node) {
     return true;
   }
 
@@ -2062,6 +2181,15 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       visit(stmt, current);
       const additions = extractPostStatementBindings(stmt);
       current = addToScope(current, additions);
+      // Narrowing por early-return: tras `if (typeof X === "undefined") return;`
+      // X existe en los statements posteriores del bloque → guard activo.
+      const negGuard = extractNegativeEarlyReturnGuard(stmt);
+      if (negGuard) {
+        current = {
+          ...current,
+          activeGuards: new Set([...current.activeGuards, negGuard]),
+        };
+      }
     }
   }
 
