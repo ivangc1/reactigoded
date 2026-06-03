@@ -411,6 +411,19 @@ const SAFE_GLOBALS = new Set(
 // con eval/Function NO se puede "guard con typeof" — hay que refactor.
 const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 
+// Denegaciones cuyo hazard NO es la AUSENCIA sino ser sink de eval / raíz de
+// escape: están SIEMPRE presentes en Node, así que un guard
+// `typeof X !== "undefined"` es siempre true y NO hace el body server-safe —
+// suprimiría la detección (eval-sink / escape) sin gatear nada. Por eso el
+// guard typeof NO se reconoce para ellos (a diferencia de `window`/`process`,
+// cuyo hazard SÍ es la ausencia y el guard SÍ los hace safe). Codex P1 round 3.
+const NON_ABSENCE_DENIALS = new Set([
+  "eval",
+  "Function",
+  "globalThis",
+  "global",
+]);
+
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
 // phase) en client. Los effects no corren en SSR, por tanto sus bodies
 // nunca se ejecutan durante render server — exención safe.
@@ -617,6 +630,20 @@ function listSourceFiles(dir) {
  * ObjectBindingPattern / ArrayBindingPattern) y los añade al Set.
  * Maneja destructure anidado y rest elements.
  */
+/**
+ * `true` si la declaración es AMBIENT (`declare const/let/var/function/class`,
+ * o cualquier declaración dentro de un `declare global { … }`). Las ambient se
+ * BORRAN al compilar — NO emiten binding runtime, así que NO sombrean el global
+ * homónimo. Si se añadieran al shadow-set, una ref bare al nombre se trataría
+ * como local y pasaría el gate, pero en runtime resuelve al global ambiente →
+ * ReferenceError en SSR. Mismo eje que los imports type-only. `Ambient` cubre
+ * el `declare` propio y el heredado de un `declare global`/namespace ambient.
+ * beta.27 BLOCKER-1 (codex P2 round 3 + cierre de clase).
+ */
+function isAmbientDeclaration(node) {
+  return (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Ambient) !== 0;
+}
+
 function addBindingNamesFromPattern(node, names) {
   if (!node) return;
   if (ts.isIdentifier(node)) {
@@ -655,11 +682,13 @@ function gatherModuleDeclaredNames(sourceFile) {
   for (const stmt of sourceFile.statements) {
     if (ts.isVariableStatement(stmt)) {
       for (const decl of stmt.declarationList.declarations) {
+        if (isAmbientDeclaration(decl)) continue; // declare const → no runtime
         addBindingNamesFromPattern(decl.name, names);
       }
     } else if (
       (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
-      stmt.name
+      stmt.name &&
+      !isAmbientDeclaration(stmt)
     ) {
       names.add(stmt.name.text);
     } else if (ts.isImportDeclaration(stmt)) {
@@ -688,7 +717,12 @@ function collectVarHoistedRecursive(node, names) {
     ts.isMethodDeclaration(node) ||
     ts.isGetAccessorDeclaration(node) ||
     ts.isSetAccessorDeclaration(node) ||
-    ts.isConstructorDeclaration(node)
+    ts.isConstructorDeclaration(node) ||
+    // namespace/module: sus `var` son scoped al módulo, NO al archivo — y un
+    // `declare global { var X }` es AMBIENT (borrado, no emite binding). En
+    // ninguno de los dos casos el `var` debe hoistarse al scope del archivo.
+    // No recursar cierra el bypass del `declare global`. Codex P2 round 3.
+    ts.isModuleDeclaration(node)
   ) {
     return;
   }
@@ -703,6 +737,7 @@ function collectVarHoistedRecursive(node, names) {
       (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
     if (!blockScoped) {
       for (const decl of node.declarations) {
+        if (isAmbientDeclaration(decl)) continue; // declare var / declare global
         addBindingNamesFromPattern(decl.name, names);
       }
     }
@@ -747,7 +782,7 @@ function gatherBlockFunctionDeclarations(blockNode) {
   const names = new Set();
   if (!blockNode.statements) return names;
   for (const stmt of blockNode.statements) {
-    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt)) {
       names.add(stmt.name.text);
     }
   }
@@ -762,7 +797,7 @@ function gatherBlockFunctionDeclarations(blockNode) {
 function gatherSourceFileFunctionDeclarations(sourceFile) {
   const names = new Set();
   for (const stmt of sourceFile.statements) {
-    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt)) {
       names.add(stmt.name.text);
     }
   }
@@ -791,10 +826,15 @@ function extractPostStatementBindings(stmt) {
       (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
     if (blockScoped) {
       for (const decl of stmt.declarationList.declarations) {
+        if (isAmbientDeclaration(decl)) continue; // declare const/let → erased
         addBindingNamesFromPattern(decl.name, names);
       }
     }
-  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
+  } else if (
+    ts.isClassDeclaration(stmt) &&
+    stmt.name &&
+    !isAmbientDeclaration(stmt)
+  ) {
     names.add(stmt.name.text);
   }
   return names;
@@ -908,6 +948,11 @@ function extractPositiveTypeofGuard(expr) {
     // para cualquier global NO-seguro. Los SAFE nunca se flaggean, así que
     // reconocer el guard sobre ellos es irrelevante — skip.
     if (SAFE_GLOBALS.has(operand.text)) continue;
+    // …pero un guard NO se reconoce para los sinks de eval/escape
+    // (`eval`/`Function`/`globalThis`/`global`): están siempre presentes en
+    // Node, el guard es siempre true y NO hace el body safe — reconocerlo
+    // suprimiría la detección eval-sink/escape. Codex P1 round 3.
+    if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
     if (!ts.isStringLiteral(stringExpr)) continue;
     if (stringExpr.text !== "undefined") continue;
     return operand.text;
@@ -1742,7 +1787,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const blockFns = new Set();
       for (const clause of node.clauses) {
         for (const stmt of clause.statements) {
-          if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+          if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt)) {
             blockFns.add(stmt.name.text);
           }
         }

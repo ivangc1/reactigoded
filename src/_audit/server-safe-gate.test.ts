@@ -1158,3 +1158,57 @@ describe("server-safe gate — FP cerrados: JsxNamespacedName + ImportTypeNode",
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });
+
+/**
+ * El guard `typeof X !== "undefined"` NO debe suprimir la detección para los
+ * sinks de eval/escape (`eval`, `Function`, `globalThis`, `global`) — codex P1
+ * round 3. Están SIEMPRE presentes en Node: el guard es siempre true y NO hace
+ * el body server-safe (se denegan por ser vector de escape, no por ausencia).
+ * Para globals cuyo hazard SÍ es la ausencia (`window`, `process`) el guard
+ * sigue siendo válido.
+ */
+describe("server-safe gate — typeof guard NO suprime eval/escape sinks (codex P1)", () => {
+  it.each([
+    ["typeof Function + Function()", `/** @server-safe */\nexport const C = () => { if (typeof Function !== "undefined") { return Function("return 1")(); } return null; };`],
+    ["typeof eval + eval()", `/** @server-safe */\nexport const C = () => { if (typeof eval !== "undefined") { return eval("1"); } return null; };`],
+    ["typeof global + global.process", `/** @server-safe */\nexport const C = () => { if (typeof global !== "undefined") { return global.process.env.X; } return null; };`],
+  ])("FLAGGEA pese al guard typeof: %s", (_label, code) => {
+    expect(checkSourceFile(code, "guard-evalsink.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["typeof window (hazard = ausencia)", `/** @server-safe */\nexport const C = () => { if (typeof window !== "undefined") { return window.innerWidth; } return 0; };`],
+    ["typeof process (portabilidad)", `/** @server-safe */\nexport const C = () => { if (typeof process !== "undefined") { return process.env.X; } return null; };`],
+  ])("el guard SÍ es válido (clean): %s", (_label, code) => {
+    expect(checkSourceFile(code, "guard-valid.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * Declaración AMBIENT (`declare const/let/var/function/class`, `declare global`)
+ * NO sombrea el global homónimo — codex P2 round 3 + cierre de clase. Se borra
+ * al compilar (no emite binding runtime), así que en runtime la ref resuelve al
+ * global ambiente → ReferenceError en SSR. El bypass afectaba a TODOS los paths
+ * (bare read, property, eval-sink, JSX tag), no solo el JSX que vio codex.
+ */
+describe("server-safe gate — declaración ambient (declare) NO sombrea el global", () => {
+  it.each([
+    ["declare const + JSX tag", `/** @server-safe */\ndeclare const HTMLElement: any;\nexport const C = () => <HTMLElement />;`],
+    ["declare const + bare read", `/** @server-safe */\ndeclare const window: any;\nexport const C = () => { const x = window; void x; return null; };`],
+    ["declare const + property access", `/** @server-safe */\ndeclare const document: any;\nexport const C = () => { return document.title; };`],
+    ["declare const + eval-sink", `/** @server-safe */\ndeclare const Function: any;\nexport const C = () => { return Function("return 1")(); };`],
+    ["declare function + JSX tag", `/** @server-safe */\ndeclare function Foo(): any;\nexport const C = () => <Foo />;`],
+    ["declare class + JSX tag", `/** @server-safe */\ndeclare class Widget {}\nexport const C = () => <Widget />;`],
+    ["declare global var + bare read", `/** @server-safe */\ndeclare global { var widget: any; }\nexport const C = () => { return widget; };`],
+  ])("FLAGGEA pese al declare ambient: %s", (_label, code) => {
+    expect(checkSourceFile(code, "ambient.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["const REAL (no declare)", `/** @server-safe */\nexport const C = () => { const window = 1; const x = window; void x; return null; };`],
+    ["var REAL top-level", `/** @server-safe */\nvar helper = 1;\nexport const C = () => { const x = helper; void x; return null; };`],
+    ["componente local REAL", `/** @server-safe */\nconst Inner = () => <span/>;\nexport const C = () => <Inner />;`],
+  ])("declaración REAL (no ambient) SÍ es binding → clean: %s", (_label, code) => {
+    expect(checkSourceFile(code, "real-binding.fixture.tsx")).toEqual([]);
+  });
+});
