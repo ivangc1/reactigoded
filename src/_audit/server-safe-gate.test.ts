@@ -965,39 +965,48 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     expect(probe(body)).toEqual([]);
   });
 
-  // ── Nivel 1: computed-key con `const` literal → CAZADO (constant-folding)
-  // El único computed-key que es legible-pero-ofuscado-por-construcción.
-  it("caza computed-key con const literal: const k = 'constructor'; [][k][k](code)()", () => {
-    const v = probe(`const k = "constructor"; const w = [][k][k]("return 1")(); void w;`);
-    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
-  });
-
   // ── Residuales CONOCIDOS POR DISEÑO ────────────────────────────────────
-  // El criterio de la frontera es LEGIBLE vs OFUSCADO (no decidible vs
-  // indecidible): el gate caza lo que un revisor vería leyendo el diff. Estas
-  // formas requieren data-flow cross-statement / keys NO-constantes / colisión
-  // con patrón legítimo → quedan fuera. Se aceptan porque son ofuscación
-  // deliberada y, bajo el modelo opt-in/first-party (sin adversario), no son
-  // amenaza (ver ADR D1-P1, "Frontera del eval-sink"). El Nivel 2 (taint) las
-  // cazaría pero FP-ea el clon legítimo `const Ctor = x.constructor; new Ctor()`
-  // — probado — sin cierre hermético; descartado.
+  // El criterio de la frontera es LEGIBLE vs OFUSCADO: el gate caza lo que un
+  // revisor vería leyendo el diff (las formas CONTIGUAS de .constructor). Estas
+  // requieren data-flow / keys computadas / reflexión → ofuscación deliberada
+  // que, bajo el modelo opt-in/first-party (sin adversario), NO es amenaza (ver
+  // ADR D1-P1, "Frontera del eval-sink"). Se EVALUÓ un "Nivel 1" (constant-fold
+  // del computed-key con const literal) y se DESCARTÓ: todo computed-key
+  // peligroso ya se caza por la RAÍZ (ver test siguiente), así que el fold solo
+  // añadía cazar el constructor-sobre-raíz-segura (un no-threat) y FP-eaba
+  // shadowing honesto — coste puro.
   // Este test PINEA la decisión: si una empieza a flaggearse, lee el ADR +
   // el modelo de amenaza ANTES de cambiar nada. CADUCIDAD: vale solo mientras
   // `@server-safe` sea opt-in/first-party sin código no confiable.
   it.each([
     ["cadena partida en variables (data-flow)", `const c1 = [].constructor; const c2 = c1.constructor; const w = c2("return 1")();`],
     ["destructuring del nombre constructor", `const { constructor: C } = []; const { constructor: F } = C; const w = F("return 1")();`],
-    ["computed key NO-const (let, reasignable)", `let k = "constructor"; const w = [][k][k]("return 1")();`],
-    ["computed key concatenada/codificada", `const w = []["cons" + "tructor"]["cons" + "tructor"]("return 1")();`],
+    ["reflexión Reflect.apply sobre .constructor", `const w = Reflect.apply((() => {}).constructor, null, ["return 1"])();`],
   ])("residual fuera de alcance POR DISEÑO (ofuscado, no es amenaza): %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
 
+  // PIN de la CLASE computed-key: las 5 escrituras del MISMO ataque PASAN. Un
+  // "Nivel 1" cazaría solo la #1 → falsa completitud (documentar "manejamos
+  // computed-key" sería mentir; let/concat/alias/prop entran). Contra un
+  // adversario, catch parcial = teatro (usa la #2). Por eso es residual: la
+  // línea es legible-contigua vs indirección, no "const vs let". Si una empieza
+  // a flaggearse, lee el ADR "Frontera del eval-sink" ANTES de cambiar.
   it.each([
-    ["lectura reflectiva no invocada const c=x[k]", `const k = "constructor"; const o: any = {}; const c = o[k]; void c;`],
-    ["clon vía const-key new C()", `const k = "constructor"; const o: any = {}; const Ctor = o[k]; const c = new Ctor(); void c;`],
-  ])("Nivel 1 NO genera falso positivo: %s", (_label, body) => {
+    ["#1 const literal", `const k = "constructor"; const w = [][k][k]("return 1")();`],
+    ["#2 let (reasignable)", `let k = "constructor"; const w = [][k][k]("return 1")();`],
+    ["#3 concatenada", `const k = "cons" + "tructor"; const w = [][k][k]("return 1")();`],
+    ["#4 alias", `const a = "constructor"; const k = a; const w = [][k][k]("return 1")();`],
+    ["#5 propiedad de objeto", `const o = { key: "constructor" }; const w = [][o.key][o.key]("return 1")();`],
+  ])("computed-key residual — las 5 escrituras de la clase PASAN: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
+  });
+
+  it("computed-key sobre RAÍZ insegura SÍ se caza (sin folding — por eso el Nivel 1 sobraba)", () => {
+    // Cuando la raíz es peligrosa, el valor de la key es irrelevante — flaggea
+    // por la raíz. Es lo que un gate sintáctico SÍ puede prometer sin mentir.
+    const v = probe(`const k = "x"; return (globalThis as Record<string, unknown>)[k];`);
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });
 
@@ -1300,5 +1309,26 @@ describe("server-safe gate — setImmediate/clearImmediate (edge-baseline)", () 
     ["queueMicrotask callback diferido", Comp(`queueMicrotask(() => { void document.title; }); return null;`)],
   ])("web-standard timer sigue safe + deferred → clean: %s", (_label, code) => {
     expect(checkSourceFile(code, "webtimer.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * Codex P2 round 5 — el narrowing por early-return (`if (typeof X ===
+ * "undefined") return`) no se propagaba en el loop separado de CaseBlock
+ * (switch), causando un FP en un patrón SSR común. (El otro P2 de la ronda —
+ * el shadow-fold del Nivel 1 — se cerró revirtiendo el Nivel 1 entero: ver el
+ * residual computed-key arriba.)
+ */
+describe("server-safe gate — codex P2 round 5 (switch-guard)", () => {
+  it("switch: negative-guard con statements directos NO genera FP", () => {
+    const code = `/** @server-safe */\nexport const C = (x: string) => { switch (x) { case "b": if (typeof window === "undefined") return 0; return window.innerWidth; default: return 0; } };`;
+    expect(checkSourceFile(code, "switch-guard.fixture.tsx")).toEqual([]);
+  });
+
+  it("switch: el guard NO cruza el clause boundary (sound, sigue flaggeando)", () => {
+    // Entrar directamente en `case "b"` no ejecuta el `if` de `case "a"`.
+    const code = `/** @server-safe */\nexport const C = (x: string) => { switch (x) { case "a": if (typeof window === "undefined") return 0; case "b": return window.innerWidth; default: return 0; } };`;
+    const v = checkSourceFile(code, "switch-cross.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });

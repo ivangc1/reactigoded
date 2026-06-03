@@ -130,7 +130,7 @@ Validación final: 1139 tests verdes (suite completa) + verify:unit (CI-equivale
 
 **El criterio de la frontera es LEGIBLE vs OFUSCADO, no decidible vs indecidible.** El mandato del gate es cazar errores honestos + anti-patrones que un revisor vería leyendo el diff. `[].constructor.constructor("code")()` es legible-sospechoso → se caza. Una forma ofuscada por construcción (cuyo único motivo de existir es esconderse del revisor) queda fuera — y eso es principista, no cansado: lo ofuscado es necesariamente **deliberado**, y lo deliberado bajo un marker opt-in es el no-adversario ya descartado. La frontera del gate coincide exactamente con su mandato. La indecidibilidad (teorema de Rice: "¿esta expresión evalúa a `Function`?" no es computable) explica por qué no se persigue el 100%; el modelo de amenaza explica por qué no hace falta.
 
-El gate caza **toda forma contigua** de alcanzar+invocar `Function` (`eval`, `Function`, `x.constructor.constructor`, `x.constructor(...)`, `.call`/`.apply`/`.bind`/tagged sobre `.constructor`, optional call) **más el computed-key con `const` literal** (Nivel 1, constant-folding: `const k = "constructor"; [][k][k]("code")()` — el único computed-key legible-pero-ofuscado-por-construcción, cerrado en el freeze). Declina explícitamente estas clases de **ofuscación profunda**, con un ejemplo de cada una para que dentro de N meses, cuando alguien las encuentre pasando, conste que es **conocido y por diseño**, no un agujero recién descubierto:
+El gate caza **toda forma contigua** de alcanzar+invocar `Function` (`eval`, `Function`, `x.constructor.constructor`, `x.constructor(...)`, `.call`/`.apply`/`.bind`/tagged sobre `.constructor`, optional call). Declina explícitamente estas clases de **ofuscación profunda**, con un ejemplo de cada una para que dentro de N meses, cuando alguien las encuentre pasando, conste que es **conocido y por diseño**, no un agujero recién descubierto:
 
 ```ts
 // 1. Cadena partida en variables intermedias (data-flow cross-statement):
@@ -139,9 +139,8 @@ const c1 = [].constructor; const c2 = c1.constructor; c2("return globalThis")();
 // 2. Destructuring del nombre `constructor` (no hay member access que cazar):
 const { constructor: C } = []; const { constructor: F } = C; F("...")();
 
-// 3. Computed key NO-const o concatenada (la key no es un literal fijo):
-let k = "constructor"; [][k][k]("...")();          // let → reasignable
-[]["cons" + "tructor"]["cons" + "tructor"]("...")(); // concatenada / codificada
+// 3. Computed key vía variable (la key no es un string literal directo):
+const k = "constructor"; [][k][k]("...")();
 
 // 4. Reflexión / data-flow vía getter:
 Reflect.apply((() => {}).constructor, null, ["..."])();
@@ -151,6 +150,24 @@ const o = { get c() { return (() => {}).constructor; } }; o.c("...")();
 // 5. `new` sobre `.constructor` (colisiona con el clon legítimo):
 new (() => {}).constructor("...")();   // no separable de `new x.constructor()` sin type-info
 ```
+
+**Se evaluó y descartó un "Nivel 1"** (constant-folding de `const k = "constructor"; x[k]`) para cazar el caso 3. El argumento decisivo NO es "es un no-threat" — es **FALSA COMPLETITUD**, y aguanta incluso si dudas del modelo opt-in:
+
+El caso 3 no es "la forma con const-literal". Es la clase entera de indirección. El mismo ataque tiene infinitas escrituras equivalentes — verificado, las 5 PASAN:
+
+```ts
+const k = "constructor"; [][k][k]("code")()            // 1. literal  ← lo único que el Nivel 1 cazaría
+let k = "constructor"; [][k][k]("code")()              // 2. reasignable
+const k = "cons" + "tructor"; [][k][k]("code")()       // 3. concatenada
+const a = "constructor"; const k = a; [][k][k]("...")  // 4. alias
+const o = { key: "constructor" }; [][o.key][o.key]()   // 5. propiedad de objeto
+```
+
+Un "Nivel 1" cazaría la #1 y dejaría pasar las otras cuatro. Documentar entonces "manejamos el computed-key al constructor" sería **mentir** — un revisor confiaría en una cobertura que no existe. Y contra un adversario real (justo el escenario en que dudar del modelo opt-in importaría), un cazador de 1-de-∞ escrituras **no detiene nada** — usa la #2 — y encima da falsa confianza: es **teatro de seguridad**, peor que un hueco declarado. Por eso este argumento es más fuerte que el del threat-model: si NO hay adversario, el catch parcial es coste por un fantasma; si SÍ lo hay, es disfraz que no para. En ambos casos: no se hace.
+
+Refuerzos secundarios (cualquiera bastaría): todo computed-key peligroso ya se caza **por la RAÍZ** (`globalThis[k]`/`window[k]` flaggean pase lo que pase → el único caso incremental es constructor-sobre-raíz-segura = la ofuscación); el fold file-wide además FP-eaba shadowing honesto (`const key = "constructor"; { const key = "map"; arr[key](fn) }`). La línea **contigua-legible vs indirección-ofuscada** es la única NO arbitraria: "caza const pero no let" no tiene principio; "caza lo que un revisor ve, la indirección queda fuera por diseño" sí, y es verdad. El residual no es una grieta sin tapar — es el reconocimiento honesto de dónde acaba lo que un gate sintáctico puede prometer **sin mentir**.
+
+**Lección de proceso (para contribuyentes):** todo check sensible a scope debe reusar el `localBindings` scope-aware del walker, NUNCA recolectar nombres file-wide e ignorar shadowing. El FP del Nivel 1 (`const key = "constructor"` externo + `const key = "map"` interno) es la ilustración: el fold file-wide trató el `key` interno como el externo. El gate YA respeta shadowing por la vía correcta (`const document = "x"; document.length` pasa). Patrón general de esta sesión: **auditar** (leer comportamiento existente) destapa bugs reales pre-existentes sin riesgo; **añadir código de detección** introduce bugs nuevos — gastar el presupuesto en lo primero. (Pendiente menor: confirmar que los otros colectores module-wide — `gatherModuleDeclaredNames`, los de erased-construct — interactúan bien con shadowing de scope interno; el path central de `localBindings` está verificado limpio.)
 
 **Por qué no se cierra el Nivel 2 (taint de single-assignment).** Cazaría #1 y #2, pero FP-ea el patrón clon legítimo `const Ctor = x.constructor; new Ctor()` — el taint marcaría `Ctor` y flaggearía `new Ctor()`, indistinguible de `Ctor("code")()` sin type-info (verificado). Shippear un gate que rompe código legítimo en un 1.0 congelado es peor que el hueco de ofuscación deliberada. Por eso se descarta — no por coste, sino por FP-sobre-legítimo.
 

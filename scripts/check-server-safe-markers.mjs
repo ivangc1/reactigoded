@@ -1117,56 +1117,17 @@ function extractNegativeEarlyReturnGuard(stmt) {
  * `f.constructor("code")`) cuando la base NO es un identificador denegado.
  * beta.27 BLOCKER-1 (cruce A+B, FN-hunt).
  */
-/**
- * Nombres de `const` ligados al string literal "constructor" — para el
- * constant-folding LOCAL de keys computadas: `const k = "constructor"; x[k]`
- * se trata como `x.constructor`. Solo `const` (single-assignment, valor fijo);
- * `let`/`var` reasignables y strings concatenados/codificados quedan como
- * residual indecidible (Rice). Esta es la ÚNICA forma de computed-key que es
- * legible-pero-ofuscada-por-construcción: el único motivo de rutear por una
- * key-string es esconderse del revisor. Over-approxima file-wide a propósito y
- * es 0-FP: el fold solo dispara una violation si el acceso resultante está
- * weaponizado (rama c.2) — una lectura reflectiva no invocada (`const c = x[k]`)
- * o un clon (`new C()`) NO se flaggean. beta.27 BLOCKER-1 (Nivel 1, freeze).
- */
-function gatherConstructorKeyAliases(sourceFile) {
-  const names = new Set();
-  const visit = (node) => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.initializer &&
-      ts.isStringLiteralLike(node.initializer) &&
-      node.initializer.text === "constructor" &&
-      ts.isVariableDeclarationList(node.parent) &&
-      (node.parent.flags & ts.NodeFlags.Const) !== 0
-    ) {
-      names.add(node.name.text);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
-  return names;
-}
-
-function isConstructorMemberAccess(node, constructorKeyAliases) {
+function isConstructorMemberAccess(node) {
   if (ts.isPropertyAccessExpression(node)) {
     return node.name.text === "constructor";
   }
   if (ts.isElementAccessExpression(node)) {
     const arg = node.argumentExpression;
-    if (arg === undefined) return false;
-    if (ts.isStringLiteralLike(arg) && arg.text === "constructor") return true;
-    // Nivel 1: key computada que es un identificador resuelto a un `const`
-    // con literal "constructor" (constant-folding).
-    if (
-      constructorKeyAliases !== undefined &&
-      ts.isIdentifier(arg) &&
-      constructorKeyAliases.has(arg.text)
-    ) {
-      return true;
-    }
-    return false;
+    return (
+      arg !== undefined &&
+      ts.isStringLiteralLike(arg) &&
+      arg.text === "constructor"
+    );
   }
   return false;
 }
@@ -1847,10 +1808,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   // que son componentes (no globals). Se calcula una vez por archivo.
   const moduleDeclaredNames = gatherModuleDeclaredNames(sourceFile);
 
-  // `const k = "constructor"` aliases — constant-folding de keys computadas
-  // en la detección del Function constructor escape (Nivel 1).
-  const constructorKeyAliases = gatherConstructorKeyAliases(sourceFile);
-
   // Rule 1: no "use client" directive coexisting con @server-safe.
   // Inspect AST directive prologue: walk top-level statements mientras
   // sean ExpressionStatement con StringLiteral (prologue cohort per
@@ -1990,10 +1947,25 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         if (ts.isCaseClause(clause) && clause.expression) {
           visit(clause.expression, current);
         }
+        // Los guards por early-return son POR-CLAUSE: entrar directamente en
+        // otra clause NO ejecuta el `if` guard, así que el narrowing NO debe
+        // cruzar el boundary (si lo hiciera, sería un FN). Por eso van en un
+        // `clauseCtx` que resetea en cada clause. Los bindings let/const SÍ se
+        // comparten (scope léxico del switch) → se acumulan en `current`.
+        // beta.27 BLOCKER-1 (codex P2 round 5: guard no propagado en switch).
+        let clauseCtx = current;
         for (const stmt of clause.statements) {
-          visit(stmt, current);
+          visit(stmt, clauseCtx);
           const additions = extractPostStatementBindings(stmt);
           current = addToScope(current, additions);
+          clauseCtx = addToScope(clauseCtx, additions);
+          const negGuard = extractNegativeEarlyReturnGuard(stmt);
+          if (negGuard) {
+            clauseCtx = {
+              ...clauseCtx,
+              activeGuards: new Set([...clauseCtx.activeGuards, negGuard]),
+            };
+          }
         }
       }
       return;
@@ -2095,30 +2067,36 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // → 0 FP.
     //
     // FRONTERA = LEGIBLE vs OFUSCADO (no decidible vs indecidible): el gate
-    // caza lo que un revisor vería leyendo el diff. Las formas contiguas de
-    // `.constructor` + el computed-key con `const` literal (Nivel 1,
-    // constant-folding) se cazan. RESIDUALES CONOCIDOS POR DISEÑO (detalle en
-    // el ADR docs/decisions/D1-P1-server-safe-marker.md, "Frontera del
-    // eval-sink") — requieren data-flow / keys no-constantes / reflexión, y son
-    // ofuscación deliberada que no escribe nadie por accidente:
+    // caza lo que un revisor vería leyendo el diff — las formas CONTIGUAS de
+    // `.constructor`. RESIDUALES CONOCIDOS POR DISEÑO (detalle en el ADR
+    // docs/decisions/D1-P1-server-safe-marker.md, "Frontera del eval-sink") —
+    // requieren data-flow / keys computadas / reflexión, y son ofuscación
+    // deliberada que no escribe nadie por accidente:
     //   1. cadena partida en vars:  const c = x.constructor; c.constructor("x")()
     //   2. destructuring:           const { constructor: F } = x.constructor; F("x")()
-    //   3. computed key NO-const o concatenada: let k="constructor" / x["cons"+"tructor"]
+    //   3. computed key vía variable: const k = "constructor"; x[k][k]("x")()
     //   4. reflexión: `Reflect.apply/construct/get(x,"constructor")`, getter
     //   5. `new x.constructor("code")` (colisiona con el clon legítimo — no
     //      separable sin type-info)
+    // El caso 3 es la CLASE de indirección, no "la forma const-literal": el
+    // mismo ataque tiene infinitas escrituras (let, concat, alias, propiedad de
+    // objeto, Reflect, …) — verificadas pasando. Un "Nivel 1" (constant-fold de
+    // `const k="constructor"`) cazaría UNA y dejaría pasar el resto → FALSA
+    // COMPLETITUD: documentar "manejamos computed-key" sería mentir, y contra un
+    // adversario el catch parcial es teatro (usa la escritura siguiente). Además
+    // todo computed-key peligroso ya se caza por la RAÍZ (`globalThis[k]` flaggea
+    // pase lo que pase). Se EVALUÓ y DESCARTÓ. Ver ADR "Frontera del eval-sink".
     // Se aceptan porque `@server-safe` es opt-in/first-party, NO una frontera
     // de seguridad: un bypass solo crashea RUIDOSO en el consumer del propio
     // contributor (sin activo ni adversario), y lo ofuscado es deliberado →
-    // el no-adversario ya descartado. El Nivel 2 (taint) los cazaría pero FP-ea
-    // el clon `const Ctor = x.constructor; new Ctor()` sin cierre hermético.
-    // CADUCIDAD: si `@server-safe` deja de ser opt-in/first-party (frontera de
-    // confianza sobre código no auditado), esta decisión queda ANULADA.
-    // beta.27 BLOCKER-1 (cruce A+B, FN-hunt + re-review + Nivel 1).
+    // el no-adversario ya descartado. CADUCIDAD: si `@server-safe` deja de ser
+    // opt-in/first-party (frontera de confianza sobre código no auditado), esta
+    // decisión queda ANULADA.
+    // beta.27 BLOCKER-1 (cruce A+B, FN-hunt + re-review).
     if (
       (ts.isPropertyAccessExpression(node) ||
         ts.isElementAccessExpression(node)) &&
-      isConstructorMemberAccess(node, constructorKeyAliases) &&
+      isConstructorMemberAccess(node) &&
       !context.isInDeferredBody &&
       // (a) doble `x.constructor.constructor` (ES Function, se llame o no);
       // (b) invocado directo `x.constructor(...)` (incl. optional call);
@@ -2127,7 +2105,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       //     solo `.constructor` (base función). Codex P1 round 4;
       // (d) tagged template `x.constructor\`code\``.
       // El control `[].slice.bind(...)` NO flaggea: `.slice` no es `.constructor`.
-      (isConstructorMemberAccess(node.expression, constructorKeyAliases) ||
+      (isConstructorMemberAccess(node.expression) ||
         (ts.isCallExpression(node.parent) && node.parent.expression === node) ||
         (ts.isTaggedTemplateExpression(node.parent) &&
           node.parent.tag === node) ||
