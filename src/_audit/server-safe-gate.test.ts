@@ -1334,6 +1334,36 @@ describe("server-safe gate — import-equals value-alias (regla 11)", () => {
 });
 
 /**
+ * Eval-sink PAREN-WRAP (hunt, beta.27 BLOCKER-1). Las ramas (b/c/d) de la
+ * detección `.constructor` exigían `node.parent` directo = Call/PropertyAccess/
+ * Tagged; un `ParenthesizedExpression` rompía la cadena y `((fn).constructor)()`
+ * (= `Function("code")()`) pasaba. Los parens son contiguos y legibles, NO
+ * ofuscación → in-scope. `isWeaponizedConstructorAccess` salta parens a ambos
+ * lados. Los usos legítimos (`(err.constructor).name`, `(x.constructor) === Y`,
+ * `new (x.constructor)()`) siguen clean.
+ */
+describe("server-safe gate — eval-sink paren-wrap del .constructor", () => {
+  it.each([
+    ["((fn).constructor)() callee", `/** @server-safe */\nexport const t = ((() => {}).constructor)("return window.localStorage")();`],
+    ["(...).call(null,...)", `/** @server-safe */\nexport const t = ((() => {}).constructor).call(null, "return document.cookie")();`],
+    ["(...) tagged template", `/** @server-safe */\nexport const t = ((() => {}).constructor)\`return navigator.userAgent\`;`],
+    ["doble paren wrap", `/** @server-safe */\nexport const t = (((() => {}).constructor))("x")();`],
+    ["(base).constructor.constructor partido", `/** @server-safe */\nconst F = (({}).constructor).constructor;\nexport const t = F("x")();`],
+  ])("FLAGGEA pese a los paréntesis: %s", (_label, code) => {
+    const v = checkSourceFile(code, "paren-sink.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it.each([
+    ["(err.constructor).name", `/** @server-safe */\nexport const n = (err: any) => (err.constructor).name;`],
+    ["(x.constructor) === Y", `/** @server-safe */\nexport const eq = (x: any, Y: any) => (x.constructor) === Y;`],
+    ["new (x.constructor)() clon", `/** @server-safe */\nexport const clone = (x: any) => new (x.constructor)();`],
+  ])("NO genera falso positivo en uso legítimo de .constructor: %s", (_label, code) => {
+    expect(checkSourceFile(code, "ctor-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
  * sobre código server-safe legítimo y compilable que el modelo fail-closed
  * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección

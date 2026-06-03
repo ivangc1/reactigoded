@@ -1219,6 +1219,49 @@ function isConstructorMemberAccess(node) {
   return false;
 }
 
+/** Desenvuelve ParenthesizedExpression hacia ABAJO: `((x))` → `x`. */
+function skipParensDown(node) {
+  while (node && ts.isParenthesizedExpression(node)) node = node.expression;
+  return node;
+}
+
+/**
+ * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
+ * `Function` constructor). Salta ParenthesizedExpression a AMBOS lados: los
+ * paréntesis son contiguos y legibles, NO ofuscación — `((x).constructor)()` ≡
+ * `x.constructor()`, y exigir `node.parent` directo dejaba escapar la forma
+ * envuelta (hunt: paren-wrap del eval-sink). beta.27 BLOCKER-1.
+ */
+function isWeaponizedConstructorAccess(node) {
+  // (a) doble `x.constructor.constructor` (ES Function, se llame o no) — la base
+  //     puede venir envuelta en parens: `(x.constructor).constructor`.
+  if (isConstructorMemberAccess(skipParensDown(node.expression))) return true;
+  // Ancestro efectivo saltando parens hacia ARRIBA; `child` es el nodo (quizá
+  // envuelto) que es hijo directo de ese ancestro.
+  let child = node;
+  let parent = node.parent;
+  while (parent && ts.isParenthesizedExpression(parent)) {
+    child = parent;
+    parent = parent.parent;
+  }
+  if (!parent) return false;
+  // (b) callee de CallExpression: `x.constructor("code")` (incl. optional call).
+  if (ts.isCallExpression(parent) && parent.expression === child) return true;
+  // (d) tagged template: `` x.constructor`code` ``.
+  if (ts.isTaggedTemplateExpression(parent) && parent.tag === child) return true;
+  // (c) Function.prototype: `x.constructor.call/.apply/.bind(...)`.
+  if (
+    ts.isPropertyAccessExpression(parent) &&
+    parent.expression === child &&
+    (parent.name.text === "call" ||
+      parent.name.text === "apply" ||
+      parent.name.text === "bind")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function isNonReferencePosition(node, declaredNames) {
   const parent = node.parent;
   if (!parent) return false;
@@ -2204,22 +2247,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         ts.isElementAccessExpression(node)) &&
       isConstructorMemberAccess(node) &&
       !context.isInDeferredBody &&
-      // (a) doble `x.constructor.constructor` (ES Function, se llame o no);
-      // (b) invocado directo `x.constructor(...)` (incl. optional call);
-      // (c) invocado vía Function.prototype `x.constructor.call/.apply/.bind`
-      //     — `(()=>{}).constructor.call(null,"code")()` reach Function por un
-      //     solo `.constructor` (base función). Codex P1 round 4;
-      // (d) tagged template `x.constructor\`code\``.
-      // El control `[].slice.bind(...)` NO flaggea: `.slice` no es `.constructor`.
-      (isConstructorMemberAccess(node.expression) ||
-        (ts.isCallExpression(node.parent) && node.parent.expression === node) ||
-        (ts.isTaggedTemplateExpression(node.parent) &&
-          node.parent.tag === node) ||
-        (ts.isPropertyAccessExpression(node.parent) &&
-          node.parent.expression === node &&
-          (node.parent.name.text === "call" ||
-            node.parent.name.text === "apply" ||
-            node.parent.name.text === "bind")))
+      // (a) doble `x.constructor.constructor`; (b) callee directo
+      // `x.constructor(...)`; (c) `x.constructor.call/.apply/.bind`; (d) tagged
+      // `x.constructor\`code\``. Todas saltando ParenthesizedExpression a ambos
+      // lados (`((x).constructor)()` ≡ `x.constructor()`). El control
+      // `[].slice.bind(...)` NO flaggea: `.slice` no es `.constructor`.
+      isWeaponizedConstructorAccess(node)
     ) {
       const start = node.getStart(sourceFile);
       const { line } = sourceFile.getLineAndCharacterOfPosition(start);
