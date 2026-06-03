@@ -685,6 +685,91 @@ function isAmbientDeclaration(node) {
   );
 }
 
+/**
+ * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿emite un binding runtime?
+ * Semántica "instantiated module" de TS: un namespace se elide ENTERO si NO
+ * contiene ningún miembro que produzca valor. Evaluado sintácticamente sobre el
+ * cuerpo (whitelist fail-closed: solo `true` si se PRUEBA un miembro de valor;
+ * recursivo para `namespace A.B {}` y namespaces anidados).
+ *
+ *   namespace N { export interface I {} }  → ELIDED   (solo tipos)
+ *   namespace N {}                         → ELIDED   (vacío)
+ *   namespace N { export const x = 1 }     → EMITE    var N;(IIFE)
+ *
+ * Un namespace elidido NO crea binding: si su nombre coincide con un global
+ * (`namespace navigator {}`), una ref bare a `navigator` resuelve al global
+ * browser real → debe poder flaggearse, NO sombrearse. beta.27 BLOCKER-1.
+ */
+function namespaceIsInstantiated(moduleDecl) {
+  if (isAmbientDeclaration(moduleDecl)) return false;
+  const body = moduleDecl.body;
+  if (!body) return false;
+  // `namespace A.B { … }`: el body es otro ModuleDeclaration (la `B`).
+  if (ts.isModuleDeclaration(body)) return namespaceIsInstantiated(body);
+  if (!ts.isModuleBlock(body)) return false;
+  for (const stmt of body.statements) {
+    // Whitelist de miembros que INSTANCIAN (producen valor). Default: seguir
+    // escaneando → si ninguno instancia, el namespace está elidido.
+    if (ts.isVariableStatement(stmt) && !isAmbientDeclaration(stmt)) return true;
+    if (ts.isFunctionDeclaration(stmt) && stmt.body && !isAmbientDeclaration(stmt))
+      return true;
+    if (ts.isClassDeclaration(stmt) && !isAmbientDeclaration(stmt)) return true;
+    if (ts.isEnumDeclaration(stmt) && !isAmbientDeclaration(stmt)) return true;
+    if (ts.isExpressionStatement(stmt)) return true;
+    if (ts.isModuleDeclaration(stmt) && namespaceIsInstantiated(stmt)) return true;
+    if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) return true;
+    if (
+      ts.isImportDeclaration(stmt) &&
+      stmt.importClause &&
+      !stmt.importClause.isTypeOnly
+    )
+      return true;
+    // interface / type alias / import-type / export-type / namespace-type-only
+    // anidado → NO instancian: seguir.
+  }
+  return false;
+}
+
+/**
+ * Fail-closed: ¿la declaración EMITE un binding runtime (produce valor)?
+ *
+ * EL shadow-set solo debe añadir un nombre si su declaración PRUEBA que emite
+ * valor. Si no, el nombre se BORRA al compilar y una ref bare resuelve al
+ * global real → erased-shadow bypass. Históricamente esto se filtraba con un
+ * DENYLIST disperso (`!isAmbientDeclaration` por sitio, `!isTypeOnly` en el
+ * path import) y la misma raíz mordió tres veces: type-only import → `declare`
+ * ambient → namespace type-only. Los productores de valor son un conjunto
+ * ACOTADO y enumerable; los borrados son ABIERTOS. Este predicado whitelistea
+ * el lado acotado — la única forma de cerrar la CLASE, no el caso. Lo consultan
+ * todos los colectores que añaden nombres de declaración al shadow-set.
+ *
+ * SINTÁCTICO a propósito: el gate no tiene type-checker (usa createSourceFile),
+ * y el primer emit del build es `tsc -p tsconfig.build.json`, cuya semántica de
+ * elisión es exactamente la que se evalúa aquí.
+ *
+ * El trade es deliberado y consistente con el resto del gate: errar hacia FP
+ * (omitir un productor de valor → flaggear código legítimo, corregible) NUNCA
+ * hacia bypass (añadir un borrado → fallo silencioso en prod). Verificado 0-FP
+ * contra los 39 marcados + el corpus honest-construct. beta.27 BLOCKER-1.
+ */
+function producesRuntimeValue(decl) {
+  if (!decl || isAmbientDeclaration(decl)) return false;
+  if (ts.isClassDeclaration(decl)) return true;
+  if (ts.isEnumDeclaration(decl)) return true;
+  if (ts.isFunctionDeclaration(decl)) return decl.body !== undefined;
+  if (
+    ts.isVariableDeclaration(decl) ||
+    ts.isVariableStatement(decl) ||
+    ts.isBindingElement(decl) ||
+    ts.isParameter(decl)
+  )
+    return true;
+  if (ts.isImportEqualsDeclaration(decl)) return !decl.isTypeOnly;
+  if (ts.isModuleDeclaration(decl)) return namespaceIsInstantiated(decl);
+  // interface, type alias, y todo lo demás type-space → NO produce valor.
+  return false;
+}
+
 function addBindingNamesFromPattern(node, names) {
   if (!node) return;
   if (ts.isIdentifier(node)) {
@@ -873,15 +958,16 @@ function extractPostStatementBindings(stmt) {
     }
   } else if (
     (ts.isClassDeclaration(stmt) ||
-      // `enum E {}` y `namespace NS {}` value-producing emiten binding runtime
-      // (var + IIFE). `const enum` se borra pero incluirlo solo quita FP. Skip
-      // ambient. Sus accesos de valor (`E.A`, `NS.thing`) se trataban como
-      // global bare. beta.27 BLOCKER-1 (workflow honest-construct).
       ts.isEnumDeclaration(stmt) ||
       ts.isModuleDeclaration(stmt)) &&
     stmt.name &&
     ts.isIdentifier(stmt.name) &&
-    !isAmbientDeclaration(stmt)
+    // `class`/`enum` emiten binding; `namespace` SOLO si está instanciado (≥1
+    // miembro de valor). Un namespace type-only/vacío se elide → NO sombra: si
+    // se añadiera, `navigator.x` con `namespace navigator {}` pasaría como
+    // local. `producesRuntimeValue` cierra la CLASE (fail-closed, no denylist).
+    // beta.27 BLOCKER-1 (erased-shadow #3: type-only import → declare → ns).
+    producesRuntimeValue(stmt)
   ) {
     names.add(stmt.name.text);
   }
@@ -961,13 +1047,14 @@ function gatherModulePreloadedBindings(sourceFile) {
     }
     // `enum E {}` / `namespace NS {}` value-producing a nivel de módulo: su
     // binding es referenciable desde cualquier render body (inicializado en
-    // module-eval). Skip ambient. Resuelve `E.A` / `NS.thing` usados antes o
-    // dentro de un componente. beta.27 BLOCKER-1 (workflow honest-construct).
+    // module-eval). `enum` emite; `namespace` SOLO si está instanciado — un
+    // namespace type-only/vacío se elide y NO debe sombrear (mismo predicado
+    // central que extractPostStatementBindings). beta.27 BLOCKER-1.
     if (
       (ts.isEnumDeclaration(stmt) || ts.isModuleDeclaration(stmt)) &&
       stmt.name &&
       ts.isIdentifier(stmt.name) &&
-      !isAmbientDeclaration(stmt)
+      producesRuntimeValue(stmt)
     ) {
       all.add(stmt.name.text);
       continue;

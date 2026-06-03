@@ -1267,6 +1267,44 @@ describe("server-safe gate — declaración ambient (declare) NO sombrea el glob
 });
 
 /**
+ * Namespace TYPE-ONLY / vacío NO sombrea el global (erased-shadow #3).
+ *
+ * TS ELIDE un `namespace` entero si no contiene ningún miembro de valor
+ * (interface/type-only o vacío) — emit verificado vía ts.transpileModule. El
+ * shadow-set lo añadía filtrando solo `!isAmbientDeclaration` (denylist), así
+ * que `namespace navigator {}` creaba una sombra fantasma y `navigator.x`
+ * pasaba como "local". Tercera vez que muerde la misma raíz (type-only import →
+ * declare ambient → namespace type-only); cerrada de CLASE con el predicado
+ * fail-closed `producesRuntimeValue` (whitelist de productores de valor) que
+ * todos los colectores del shadow-set consultan. Dos testigos adversariales
+ * independientes convergieron: hunt (document/navigator/localStorage/screen) +
+ * codex P1 (`namespace window`). beta.27 BLOCKER-1.
+ */
+describe("server-safe gate — namespace type-only NO sombrea el global (erased-shadow)", () => {
+  it.each([
+    ["ns document type-only (property)", `/** @server-safe */\nnamespace document { export type M = { t: string }; }\nexport function P() { return <h1>{document.title}</h1>; }`],
+    ["ns navigator vacío", `/** @server-safe */\nnamespace navigator {}\nexport function UA() { return <span>{navigator.userAgent}</span>; }`],
+    ["ns localStorage type-only (bare read)", `/** @server-safe */\nnamespace localStorage { export interface E { k: string } }\nexport function S() { const ls = localStorage; ls.getItem("x"); return <div />; }`],
+    ["ns screen block-scoped type-only", `/** @server-safe */\nexport function F() { namespace screen { export type S = number; } return screen.width; }`],
+    ["ns window type-only (codex P1)", `/** @server-safe */\nnamespace window { export interface Foo {} }\nexport function C() { return window.location.href; }`],
+    ["ns window type-only oculta Function()", `/** @server-safe */\nnamespace window { export interface Foo {} }\nexport const x = (window.constructor as any)("return 1");`],
+    ["ns anidado solo-tipos", `/** @server-safe */\nnamespace document { export namespace inner { export type T = 1; } }\nexport function C() { return document.title; }`],
+  ])("FLAGGEA: namespace elidido no es sombra: %s", (_label, code) => {
+    expect(checkSourceFile(code, "ns-erased.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["ns con const (instanciado)", `/** @server-safe */\nnamespace NS { export const x = 1; }\nexport function C() { return <div>{NS.x}</div>; }`],
+    ["ns con function", `/** @server-safe */\nnamespace NS { export function f() { return 1; } }\nexport function C() { return NS.f(); }`],
+    ["ns con class", `/** @server-safe */\nnamespace NS { export class K {} }\nexport function C() { return new NS.K(); }`],
+    ["ns anidado con valor", `/** @server-safe */\nnamespace Outer { export namespace Inner { export const v = 2; } }\nexport function C() { return Outer.Inner.v; }`],
+    ["enum sigue instanciando", `/** @server-safe */\nenum E { A, B }\nexport function C() { return E.A; }`],
+  ])("namespace INSTANCIADO sí es binding legítimo → clean (0-FP): %s", (_label, code) => {
+    expect(checkSourceFile(code, "ns-value.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
  * sobre código server-safe legítimo y compilable que el modelo fail-closed
  * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección

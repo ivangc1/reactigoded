@@ -126,6 +126,18 @@ Con esto el boundary syntáctico queda cerrado: TODA forma contigua de alcanzar+
 
 Validación final: 1139 tests verdes (suite completa) + verify:unit (CI-equivalent) en verde, 0 violations sobre 39 marcados.
 
+### Shadow-set fail-closed — el predicado `producesRuntimeValue` (cierre de CLASE del erased-shadow)
+
+Dos procesos adversariales independientes (un hunt multi-agente de 8 lentes + un P1 de Codex) convergieron en el mismo punto: `namespace navigator {}` / `namespace localStorage { export interface E {} }` marcado `@server-safe` pasaba el gate, pero TS **elide el namespace entero** (no contiene miembro de valor → emit verificado = solo el cuerpo que lee el global, sin binding). El nombre del namespace acababa en el shadow-set y `navigator.userAgent` se trataba como acceso local.
+
+El diagnóstico de fondo es la tesis del propio addendum, un nivel más abajo: **el modelo PRINCIPAL del gate fue a fail-closed (whitelist `SAFE_GLOBALS`), pero el shadow-set seguía siendo fail-OPEN** — añadía el nombre *salvo que* matcheara un modo de borrado conocido (`isAmbientDeclaration`, `isTypeOnly`). Por eso la misma raíz mordió **tres veces**: type-only import → `declare` ambient → namespace type-only. Un denylist de modos-de-borrado se descubre de uno en uno; el siguiente exótico (merging, `export =` de un tipo) volvería a pasar.
+
+El fix correcto no es la rama del namespace: es **fail-close también el shadow-set**. Un nombre entra solo si su declaración **prueba** que emite valor. Los productores de valor son un conjunto ACOTADO y enumerable (`function`-con-body, `class`, `enum`, `namespace`-instanciado, var, import-de-valor, `import =` de valor); los borrados son ABIERTOS (interface, type alias, type-only import, `declare`, namespace type-only, …). Whitelistear el lado acotado cierra la CLASE; denylistear el abierto es el whack-a-mole de las 3 mordeduras. Es el **mismo argumento fail-closed-vs-denylist del catálogo de globals, aplicado al shadow-set**. Un único predicado `producesRuntimeValue(decl)` que TODOS los colectores consultan; para `namespace`, `namespaceIsInstantiated` evalúa recursivamente la presencia de miembro de valor.
+
+Dos matices:
+1. **Evaluado SINTÁCTICAMENTE bajo el toolchain de emisión REAL** (semántica "instantiated module" de TS = primer emit del build, `tsc -p tsconfig.build.json`), no bajo el type-checker (el gate no lo tiene) ni bajo asunciones tsc-default que diverjan de esbuild/vite. (`const enum` no es vector de sombra de todas formas — sus miembros se declaran.)
+2. **El coste es FP, no bypass**, y es el trade que el gate ya eligió: fail-close yerra hacia omitir un productor de valor (flaggea código legítimo, corregible) nunca hacia añadir un borrado (pet silencioso en prod). Verificado **0-FP** contra los 39 marcados + el corpus honest-construct (que ya probó productores no obvios: enum, namespace-valor, `import =`).
+
 ### Frontera del eval-sink — modelo de amenaza y residuales conocidos POR DISEÑO
 
 **El criterio de la frontera es LEGIBLE vs OFUSCADO, no decidible vs indecidible.** El mandato del gate es cazar errores honestos + anti-patrones que un revisor vería leyendo el diff. `[].constructor.constructor("code")()` es legible-sospechoso → se caza. Una forma ofuscada por construcción (cuyo único motivo de existir es esconderse del revisor) queda fuera — y eso es principista, no cansado: lo ofuscado es necesariamente **deliberado**, y lo deliberado bajo un marker opt-in es el no-adversario ya descartado. La frontera del gate coincide exactamente con su mandato. La indecidibilidad (teorema de Rice: "¿esta expresión evalúa a `Function`?" no es computable) explica por qué no se persigue el 100%; el modelo de amenaza explica por qué no hace falta.
