@@ -2061,6 +2061,15 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const bodyContext = {
         ...addToScope(context, fnScopeBindings),
         isInDeferredBody: context.isInDeferredBody || isDeferred,
+        // Un guard `typeof X === "undefined"` del scope EXTERNO no protege el
+        // cuerpo de una función: su ejecución está desacoplada del guard léxico
+        // — puede invocarse ANTES (function declaration hoisted), en la rama
+        // undefined del propio guard, o más tarde como closure retornado. Heredar
+        // activeGuards suprimía reads reales (hunt: guard → función hoisted). El
+        // narrowing se re-establece DENTRO del body con los guards propios de la
+        // función (vía visitOrderedStatements), que sí son sound. beta.27
+        // BLOCKER-1.
+        activeGuards: new Set(),
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;

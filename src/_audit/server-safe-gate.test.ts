@@ -1364,6 +1364,34 @@ describe("server-safe gate — eval-sink paren-wrap del .constructor", () => {
 });
 
 /**
+ * Guard EXTERNO no protege el cuerpo de una función (hunt, beta.27 BLOCKER-1).
+ * El narrowing `if (typeof X === "undefined") return` solo aplica a código
+ * straight-line POSTERIOR en el MISMO scope. Una función declarada tras el guard
+ * tiene su ejecución desacoplada del guard léxico: puede invocarse antes
+ * (function declaration hoisted), en la rama undefined del propio guard, o como
+ * closure retornado. El walker heredaba activeGuards al body → suprimía reads
+ * reales. Fix: activeGuards se resetea al entrar en cualquier function-like; los
+ * guards PROPIOS de la función (straight-line interno) siguen valiendo.
+ */
+describe("server-safe gate — guard externo NO cubre cuerpo de función", () => {
+  it.each([
+    ["hoisted llamada antes del guard", `/** @server-safe */\nexport function Clock(): string { const s = read(); if (typeof window === "undefined") return ""; function read() { return window.location.href; } return s; }`],
+    ["llamada en rama undefined del guard", `/** @server-safe */\nexport function Banner(): string { if (typeof window === "undefined") return readUrl(); function readUrl() { return window.location.href; } return "c"; }`],
+    ["closure retornado tras el guard", `/** @server-safe */\nexport function F() { if (typeof window === "undefined") return null; const h = () => window.location.href; return h; }`],
+  ])("FLAGGEA el read en el cuerpo de función: %s", (_label, code) => {
+    expect(checkSourceFile(code, "guard-fn.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["guard interno + read straight-line", `/** @server-safe */\nexport function useTheme(): string { if (typeof window === "undefined") return "d"; return window.localStorage.getItem("t") ?? "d"; }`],
+    ["guard DENTRO de la función protege su read", `/** @server-safe */\nexport function F() { function read() { if (typeof window === "undefined") return ""; return window.location.href; } return read(); }`],
+    ["positive guard straight-line", `/** @server-safe */\nexport const C = () => { if (typeof window !== "undefined") { return window.location.href; } return ""; };`],
+  ])("guard PROPIO de la función sí protege → clean (0-FP): %s", (_label, code) => {
+    expect(checkSourceFile(code, "guard-own.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
  * sobre código server-safe legítimo y compilable que el modelo fail-closed
  * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección
