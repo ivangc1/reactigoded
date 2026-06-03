@@ -1104,8 +1104,28 @@ describe("server-safe gate — JSX uppercase tags (codex P2 beta.27)", () => {
     ["referencia mutua A<->B", `/** @server-safe */\nexport const A = () => <B />;\nexport const B = () => <A />;`],
     ["shadow de un global (const local)", `/** @server-safe */\nconst HTMLElement = () => <span />;\nexport const C = () => <HTMLElement />;`],
     ["member-expr <Foo.Bar/> (root importado)", `/** @server-safe */\nimport * as Foo from "./foo";\nexport const C = () => <Foo.Bar />;`],
+    // Compound components (codex R6). El tag de `<Dropdown.Trigger/>` es un
+    // PropertyAccessExpression en TS (NO un `JsxMemberExpression`, que no existe
+    // en el AST de TS): el miembro `Trigger` está en posición de NOMBRE de
+    // propiedad → lo exime la regla 1 de `isNonReferencePosition`, no la
+    // exención JSX-tag (regla 9). El root sí se valida como binding (abajo).
+    ["compound <Dropdown.Trigger/> importado", `/** @server-safe */\nimport { Dropdown } from "./d";\nexport const C = () => <Dropdown.Trigger />;`],
+    ["compound <Icons.Search/> importado", `/** @server-safe */\nimport { Icons } from "./i";\nexport const C = () => <Icons.Search />;`],
+    ["compound con miembro = nombre de global <Foo.window/>", `/** @server-safe */\nimport { Foo } from "./f";\nexport const C = () => <Foo.window />;`],
+    ["compound 4-nivel <A.B.C.D/> root importado", `/** @server-safe */\nimport { A } from "./a";\nexport const C = () => <A.B.C.D />;`],
+    ["compound local Card.Header", `/** @server-safe */\nconst Card: any = () => null; Card.Header = () => null;\nexport const C = () => <Card.Header />;`],
   ])("NO genera falso positivo en componente legítimo: %s", (_label, code) => {
     expect(checkSourceFile(code, "jsx-ok.fixture.tsx")).toEqual([]);
+  });
+
+  // Contraparte: en un member-tag, el ROOT sí es una ref de valor — un global
+  // DOM no-bound o un componente no declarado como root DEBE flaggearse.
+  it.each([
+    ["root global <window.Foo/>", `/** @server-safe */\nexport const C = () => <window.Foo />;`],
+    ["root no declarado <Dropdown.Trigger/>", `/** @server-safe */\nexport const C = () => <Dropdown.Trigger />;`],
+  ])("FLAGGEA el root de un member-tag no-bound: %s", (_label, code) => {
+    const v = checkSourceFile(code, "jsx-member-root.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });
 
