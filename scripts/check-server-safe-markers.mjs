@@ -1204,19 +1204,24 @@ function extractNegativeEarlyReturnGuard(stmt) {
  * `f.constructor("code")`) cuando la base NO es un identificador denegado.
  * beta.27 BLOCKER-1 (cruce A+B, FN-hunt).
  */
-function isConstructorMemberAccess(node) {
-  if (ts.isPropertyAccessExpression(node)) {
-    return node.name.text === "constructor";
-  }
+/**
+ * Nombre del miembro accedido, sea punto (`x.foo` → "foo") o bracket con string
+ * literal (`x["foo"]` → "foo"). `undefined` si no es member access o la key no es
+ * un string literal (computed dinámico). Unifica ambas formas para que ningún
+ * check de nombre de método tenga asimetría punto-vs-bracket (codex P2: el
+ * eval-sink escapaba por `x.constructor["call"]`). beta.27 BLOCKER-1.
+ */
+function accessedMemberName(node) {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
   if (ts.isElementAccessExpression(node)) {
     const arg = node.argumentExpression;
-    return (
-      arg !== undefined &&
-      ts.isStringLiteralLike(arg) &&
-      arg.text === "constructor"
-    );
+    if (arg !== undefined && ts.isStringLiteralLike(arg)) return arg.text;
   }
-  return false;
+  return undefined;
+}
+
+function isConstructorMemberAccess(node) {
+  return accessedMemberName(node) === "constructor";
 }
 
 /** Desenvuelve ParenthesizedExpression hacia ABAJO: `((x))` → `x`. */
@@ -1270,15 +1275,16 @@ function isWeaponizedConstructorAccess(node) {
   if (ts.isCallExpression(parent) && parent.expression === child) return true;
   // (d) tagged template: `` x.constructor`code` ``.
   if (ts.isTaggedTemplateExpression(parent) && parent.tag === child) return true;
-  // (c) Function.prototype: `x.constructor.call/.apply/.bind(...)`.
+  // (c) Function.prototype: `x.constructor.call/.apply/.bind(...)` — punto O
+  //     bracket-string `x.constructor["call"](...)` (codex P2). Ambas formas son
+  //     contiguas y legibles; `accessedMemberName` las trata por igual.
   if (
-    ts.isPropertyAccessExpression(parent) &&
-    parent.expression === child &&
-    (parent.name.text === "call" ||
-      parent.name.text === "apply" ||
-      parent.name.text === "bind")
+    (ts.isPropertyAccessExpression(parent) ||
+      ts.isElementAccessExpression(parent)) &&
+    parent.expression === child
   ) {
-    return true;
+    const m = accessedMemberName(parent);
+    if (m === "call" || m === "apply" || m === "bind") return true;
   }
   return false;
 }

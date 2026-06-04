@@ -1451,6 +1451,36 @@ describe("server-safe gate — eval-sink paren-wrap del .constructor", () => {
 });
 
 /**
+ * Eval-sink por BRACKET notation (codex P2, beta.27). `x.constructor["call"](...)`
+ * invocaba Function.prototype.call por bracket; la rama (c) solo miraba
+ * `PropertyAccessExpression` (`.call` punto). `accessedMemberName` unifica punto y
+ * bracket-string → cierra la asimetría de forma estructural (`isConstructorMemberAccess`
+ * ya era simétrico). La frontera legible-vs-ofuscado se mantiene SIMÉTRICA: el
+ * contiguo se caza en ambas formas; el split-var (residual #1, data-flow) queda
+ * out-of-scope en ambas — `["call"]` no es ofuscación, una key dinámica `[k]` sí.
+ */
+describe("server-safe gate — eval-sink por bracket notation del .constructor", () => {
+  it.each([
+    ['constructor["call"]', `/** @server-safe */\nexport const t = (() => {}).constructor["call"](null, "return window")();`],
+    ['constructor["apply"]', `/** @server-safe */\nexport const t = (() => {}).constructor["apply"](null, ["return window"])();`],
+    ['constructor["bind"]', `/** @server-safe */\nexport const t = (() => {}).constructor["bind"](null, "x")();`],
+    ['paren + bracket combinado', `/** @server-safe */\nexport const t = (({}).constructor)["call"](null, "x")();`],
+    ['doble bracket constructor["constructor"]', `/** @server-safe */\nexport const t = ({})["constructor"]["constructor"]("x")();`],
+  ])("FLAGGEA el bracket-string igual que el punto: %s", (_label, code) => {
+    const v = checkSourceFile(code, "bracket-sink.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it.each([
+    ['a["slice"](0) — bracket no-constructor', `/** @server-safe */\nexport const f = (a: any[]) => a["slice"](0);`],
+    ['fn["bind"](null) sobre no-constructor', `/** @server-safe */\nexport const b = (fn: any) => fn["bind"](null);`],
+    ['x["constructor"].name — lectura legítima', `/** @server-safe */\nexport const n = (x: any) => x["constructor"].name;`],
+  ])("NO genera falso positivo en bracket legítimo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "bracket-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Guard EXTERNO no protege el cuerpo de una función (hunt, beta.27 BLOCKER-1).
  * El narrowing `if (typeof X === "undefined") return` solo aplica a código
  * straight-line POSTERIOR en el MISMO scope. Una función declarada tras el guard
