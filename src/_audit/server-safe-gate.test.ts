@@ -1481,6 +1481,37 @@ describe("server-safe gate — eval-sink por bracket notation del .constructor",
 });
 
 /**
+ * Eval-sink por wrapper ERASED (re-hunt, beta.27). `(() => {}).constructor!(...)`,
+ * `((() => {}).constructor as F)(...)`, `... satisfies T` — `!`/`as`/`satisfies`/
+ * `<T>` son wrappers que TS BORRA al emit (emiten exactamente su operando), igual
+ * que los paréntesis. El skip-parens del fix C solo saltaba ParenthesizedExpression
+ * → estos hermanos escapaban. `isErasedOuterExpr`/`skipErasedDown` los saltan a
+ * ambos lados. Contiguos y legibles → in-scope; los usos legítimos con cast/`!`
+ * (`(e.constructor as Function).name`, `new (x.constructor as any)()`) siguen clean.
+ */
+describe("server-safe gate — eval-sink por wrapper erased (!/as/satisfies)", () => {
+  it.each([
+    ['NonNull `!` callee', `/** @server-safe */\nexport const t = (() => {}).constructor!("return globalThis")();`],
+    ['as-cast callee', `/** @server-safe */\nexport const t = ((() => {}).constructor as unknown as (c: string) => () => unknown)("return globalThis")();`],
+    ['satisfies wrapper', `/** @server-safe */\nexport const t = ((() => {}) satisfies unknown).constructor("return window")();`],
+    ['NonNull `!` + .call', `/** @server-safe */\nexport const t = (() => {}).constructor!.call(null, "return globalThis")();`],
+    ['NonNull `!` + bracket ["call"]', `/** @server-safe */\nexport const t = (() => {}).constructor!["call"](null, "x")();`],
+    ['as + NonNull combinado', `/** @server-safe */\nexport const t = (((() => {}).constructor as any)!)("x")();`],
+  ])("FLAGGEA pese al wrapper erased: %s", (_label, code) => {
+    const v = checkSourceFile(code, "erased-sink.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it.each([
+    ['(e.constructor as Function).name', `/** @server-safe */\nexport const n = (e: any) => (e.constructor as Function).name;`],
+    ['new (x.constructor as any)() clon', `/** @server-safe */\nexport const c = (x: any) => new (x.constructor as any)();`],
+    ['(x.constructor!) === Y', `/** @server-safe */\nexport const eq = (x: any, Y: any) => (x.constructor!) === Y;`],
+  ])("NO genera falso positivo con cast/non-null legítimo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "erased-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Guard EXTERNO no protege el cuerpo de una función (hunt, beta.27 BLOCKER-1).
  * El narrowing `if (typeof X === "undefined") return` solo aplica a código
  * straight-line POSTERIOR en el MISMO scope. Una función declarada tras el guard

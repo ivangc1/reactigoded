@@ -1224,9 +1224,29 @@ function isConstructorMemberAccess(node) {
   return accessedMemberName(node) === "constructor";
 }
 
-/** Desenvuelve ParenthesizedExpression hacia ABAJO: `((x))` → `x`. */
-function skipParensDown(node) {
-  while (node && ts.isParenthesizedExpression(node)) node = node.expression;
+/**
+ * ¿`node` es un wrapper que se BORRA al emit (runtime-transparente)? Cubre los
+ * paréntesis Y las expresiones type-only que TS elimina: `x!` (NonNull), `x as T`
+ * (As), `x satisfies T` (Satisfies), `<T>x` (TypeAssertion). Todos emiten
+ * EXACTAMENTE su operando — son contiguos y legibles, no ofuscación. Tratarlos
+ * solo como ParenthesizedExpression dejaba escapar el eval-sink envuelto en `!`/
+ * `as`/`satisfies` (re-hunt: hermanos del paren-wrap C). beta.27 BLOCKER-1.
+ */
+function isErasedOuterExpr(node) {
+  return (
+    ts.isParenthesizedExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isAsExpression(node) ||
+    (typeof ts.isSatisfiesExpression === "function" &&
+      ts.isSatisfiesExpression(node)) ||
+    (typeof ts.isTypeAssertionExpression === "function" &&
+      ts.isTypeAssertionExpression(node))
+  );
+}
+
+/** Desenvuelve hacia ABAJO todos los wrappers erased: `((x as any)!)` → `x`. */
+function skipErasedDown(node) {
+  while (node && isErasedOuterExpr(node)) node = node.expression;
   return node;
 }
 
@@ -1253,20 +1273,21 @@ function isImmediatelyInvoked(node) {
 
 /**
  * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
- * `Function` constructor). Salta ParenthesizedExpression a AMBOS lados: los
- * paréntesis son contiguos y legibles, NO ofuscación — `((x).constructor)()` ≡
- * `x.constructor()`, y exigir `node.parent` directo dejaba escapar la forma
- * envuelta (hunt: paren-wrap del eval-sink). beta.27 BLOCKER-1.
+ * `Function` constructor). Salta los wrappers ERASED a AMBOS lados (parens, `!`,
+ * `as`, `satisfies`, `<T>`): son contiguos y legibles, NO ofuscación —
+ * `((x).constructor)()` ≡ `x.constructor!()` ≡ `x.constructor()`, y exigir
+ * `node.parent` directo dejaba escapar la forma envuelta (hunt: paren-wrap C;
+ * re-hunt: hermanos `!`/`as`/`satisfies`). beta.27 BLOCKER-1.
  */
 function isWeaponizedConstructorAccess(node) {
   // (a) doble `x.constructor.constructor` (ES Function, se llame o no) — la base
-  //     puede venir envuelta en parens: `(x.constructor).constructor`.
-  if (isConstructorMemberAccess(skipParensDown(node.expression))) return true;
-  // Ancestro efectivo saltando parens hacia ARRIBA; `child` es el nodo (quizá
-  // envuelto) que es hijo directo de ese ancestro.
+  //     puede venir envuelta en wrappers erased: `(x.constructor as any).constructor`.
+  if (isConstructorMemberAccess(skipErasedDown(node.expression))) return true;
+  // Ancestro efectivo saltando wrappers erased hacia ARRIBA; `child` es el nodo
+  // (quizá envuelto) que es hijo directo de ese ancestro.
   let child = node;
   let parent = node.parent;
-  while (parent && ts.isParenthesizedExpression(parent)) {
+  while (parent && isErasedOuterExpr(parent)) {
     child = parent;
     parent = parent.parent;
   }
