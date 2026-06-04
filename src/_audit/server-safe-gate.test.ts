@@ -1519,24 +1519,28 @@ describe("server-safe gate — eval-sink por wrapper erased (!/as/satisfies)", (
 });
 
 /**
- * Guard EXTERNO no protege el cuerpo de una función (hunt, beta.27 BLOCKER-1).
- * El narrowing `if (typeof X === "undefined") return` solo aplica a código
- * straight-line POSTERIOR en el MISMO scope. Una función declarada tras el guard
- * tiene su ejecución desacoplada del guard léxico: puede invocarse antes
- * (function declaration hoisted), en la rama undefined del propio guard, o como
- * closure retornado. El walker heredaba activeGuards al body → suprimía reads
- * reales. Fix: activeGuards se resetea al entrar en cualquier function-like; los
- * guards PROPIOS de la función (straight-line interno) siguen valiendo.
+ * Guard POSICIONAL en cuerpos de función (hunt D + re-hunt, beta.27 BLOCKER-1).
+ *
+ * El narrowing `if (typeof X === "undefined") return` es POSICIONAL: un cuerpo
+ * de función hereda los guards activos en SU posición de definición. Es sound
+ * para todo lo que se invoca según su posición léxica (arrow/function-expr/
+ * método/IIFE solo son llamables DESPUÉS de su definición): tras un guard-negativo
+ * early-return el server ya retornó → lo definido después es client-only → hereda
+ * el guard (clean); lo definido ANTES hereda el estado vacío → un read se flaggea.
+ *
+ * ÚNICA excepción — function DECLARATION: HOISTED, llamable ANTES de su posición
+ * textual o en la rama undefined → se resetea (no hereda). El reset INCONDICIONAL
+ * previo (que reseteaba todo function-like) FP-eaba closures retornados y
+ * callbacks síncronos (.map/.reduce), que SÍ son posicionales y client-only tras
+ * el guard. Corregido: reset solo para function declarations.
  */
-describe("server-safe gate — guard externo NO cubre cuerpo de función", () => {
+describe("server-safe gate — guard posicional en cuerpos de función", () => {
   it.each([
-    ["hoisted llamada antes del guard", `/** @server-safe */\nexport function Clock(): string { const s = read(); if (typeof window === "undefined") return ""; function read() { return window.location.href; } return s; }`],
-    ["llamada en rama undefined del guard", `/** @server-safe */\nexport function Banner(): string { if (typeof window === "undefined") return readUrl(); function readUrl() { return window.location.href; } return "c"; }`],
-    ["closure retornado tras el guard", `/** @server-safe */\nexport function F() { if (typeof window === "undefined") return null; const h = () => window.location.href; return h; }`],
-    // IIFE en el path donde window NO existe: corre en flujo pero con window
-    // undefined → debe flaggear (la preservación de guards para IIFEs hereda el
-    // set CORRECTO de su posición: tras un positivo early-return, window NO está
-    // guardado). codex P2 — soundness de la excepción IIFE.
+    // Function declarations HOISTED — llamables antes/independiente del guard.
+    ["function-decl hoisted llamada antes del guard", `/** @server-safe */\nexport function Clock(): string { const s = read(); if (typeof window === "undefined") return ""; function read() { return window.location.href; } return s; }`],
+    ["function-decl llamada en rama undefined", `/** @server-safe */\nexport function Banner(): string { if (typeof window === "undefined") return readUrl(); function readUrl() { return window.location.href; } return "c"; }`],
+    // Posicionales DEFINIDOS ANTES del guard / sin guard → no client-only → flag.
+    ["closure definido ANTES del guard", `/** @server-safe */\nexport function F() { const h = () => window.location.href; if (typeof window === "undefined") return h; return h; }`],
     ["IIFE en rama undefined (positive early-return)", `/** @server-safe */\nexport function F() { if (typeof window !== "undefined") return "c"; return (() => window.location.href)(); }`],
     ["IIFE sin guard alguno", `/** @server-safe */\nexport function F() { return (() => window.location.href)(); }`],
   ])("FLAGGEA el read en el cuerpo de función: %s", (_label, code) => {
@@ -1547,13 +1551,14 @@ describe("server-safe gate — guard externo NO cubre cuerpo de función", () =>
     ["guard interno + read straight-line", `/** @server-safe */\nexport function useTheme(): string { if (typeof window === "undefined") return "d"; return window.localStorage.getItem("t") ?? "d"; }`],
     ["guard DENTRO de la función protege su read", `/** @server-safe */\nexport function F() { function read() { if (typeof window === "undefined") return ""; return window.location.href; } return read(); }`],
     ["positive guard straight-line", `/** @server-safe */\nexport const C = () => { if (typeof window !== "undefined") { return window.location.href; } return ""; };`],
-    // IIFE invocada inmediatamente tras un guard negativo: corre síncrona en el
-    // flujo client-only → hereda el guard → clean. El reset incondicional era un
-    // FP (codex P2).
+    // Posicionales DEFINIDOS TRAS un guard-negativo → client-only → heredan → clean.
+    ["closure retornado tras guard negativo", `/** @server-safe */\nexport function F() { if (typeof window === "undefined") return null; const h = () => window.location.href; return h; }`],
     ["IIFE arrow tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return null; return (() => window.location.href)(); }`],
     ["IIFE function-expr tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return null; return (function () { return window.location.href; })(); }`],
-    ["IIFE doble-paren tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return null; const w = ((() => window.innerWidth))(); return w; }`],
-  ])("guard PROPIO de la función sí protege → clean (0-FP): %s", (_label, code) => {
+    // Callbacks SÍNCRONOS (.map/.reduce) tras un guard → corren en flujo client-only.
+    [".map callback en rama positive-guard", `/** @server-safe */\nexport function C() { if (typeof window !== "undefined") { return ["a", "b"].map((k) => k + window.location.href).join(","); } return "ssr"; }`],
+    [".reduce callback tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return 0; return [1, 2].reduce((s, n) => s + n + window.scrollY, 0); }`],
+  ])("posicional client-only tras el guard → clean (0-FP): %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-own.fixture.tsx")).toEqual([]);
   });
 });

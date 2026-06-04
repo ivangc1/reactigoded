@@ -1228,27 +1228,6 @@ function skipErasedDown(node) {
 }
 
 /**
- * ¿La function-like `node` es una IIFE (callee inmediato de una CallExpression,
- * quizá envuelta en parens)? `(() => {…})()`, `(function(){…})()`. Una IIFE
- * corre SÍNCRONA en el flujo léxico actual — a diferencia de una declaration
- * hoisted / closure retornada, su ejecución NO está desacoplada, así que SÍ
- * hereda los guards activos en su posición. beta.27 BLOCKER-1 (codex P2).
- */
-function isImmediatelyInvoked(node) {
-  let child = node;
-  let parent = node.parent;
-  while (parent && ts.isParenthesizedExpression(parent)) {
-    child = parent;
-    parent = parent.parent;
-  }
-  return (
-    parent !== undefined &&
-    ts.isCallExpression(parent) &&
-    parent.expression === child
-  );
-}
-
-/**
  * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
  * `Function` constructor). Salta los wrappers ERASED a AMBOS lados (parens, `!`,
  * `as`, `satisfies`, `<T>`): son contiguos y legibles, NO ofuscación —
@@ -2086,23 +2065,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const bodyContext = {
         ...addToScope(context, fnScopeBindings),
         isInDeferredBody: context.isInDeferredBody || isDeferred,
-        // Un guard `typeof X === "undefined"` del scope EXTERNO no protege el
-        // cuerpo de una función: su ejecución está desacoplada del guard léxico
-        // — puede invocarse ANTES (function declaration hoisted), en la rama
-        // undefined del propio guard, o más tarde como closure retornado. Heredar
-        // activeGuards suprimía reads reales (hunt: guard → función hoisted). El
-        // narrowing se re-establece DENTRO del body con los guards propios de la
-        // función (vía visitOrderedStatements), que sí son sound.
+        // ¿El cuerpo hereda los guards activos en SU posición de definición?
+        // El narrowing es POSICIONAL y sound para todo lo que se invoca según su
+        // posición léxica: una función-expr/arrow/método/IIFE solo es llamable
+        // DESPUÉS de su definición. Tras un guard-negativo early-return, el server
+        // ya retornó → lo definido después es client-only → hereda el guard (clean,
+        // SSR-safe). Lo definido ANTES del guard hereda el estado (vacío) → un read
+        // se flaggea. Caso 09/10/closure/.map/.reduce → todos correctos heredando.
         //
-        // EXCEPCIÓN: una IIFE corre SÍNCRONA en el flujo actual, NO desacoplada
-        // — hereda los guards activos en SU posición (que ya son correctos:
-        // tras un guard-negativo early-return X está guardado; en la rama
-        // undefined / tras un positivo early-return, NO). Resetear ahí era un FP
-        // (codex P2): `if (typeof window==="undefined") return; (() => window.x)()`
-        // es SSR-safe. beta.27 BLOCKER-1.
-        activeGuards: isImmediatelyInvoked(node)
-          ? context.activeGuards
-          : new Set(),
+        // EXCEPCIÓN — function DECLARATION: está HOISTED, llamable ANTES de su
+        // posición textual (`const s = read(); if (guard) return; function read(){
+        // window }`) o en la rama undefined del guard. Su posición textual NO
+        // refleja cuándo se invoca → se resetea (no hereda). Es el único caso
+        // genuinamente desacoplado. beta.27 BLOCKER-1 (hunt D + re-hunt: el reset
+        // incondicional FP-eaba closures/.map/.reduce, que SÍ son posicionales).
+        activeGuards: ts.isFunctionDeclaration(node)
+          ? new Set()
+          : context.activeGuards,
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
       return;
