@@ -1331,6 +1331,13 @@ describe("server-safe gate — namespace type-only NO sombrea el global (erased-
     ["ns con class", `/** @server-safe */\nnamespace NS { export class K {} }\nexport function C() { return new NS.K(); }`],
     ["ns anidado con valor", `/** @server-safe */\nnamespace Outer { export namespace Inner { export const v = 2; } }\nexport function C() { return Outer.Inner.v; }`],
     ["enum sigue instanciando", `/** @server-safe */\nenum E { A, B }\nexport function C() { return E.A; }`],
+    // `export declare const/function/class` instancian el namespace (emiten el
+    // shell `var N`(IIFE)) aunque el miembro sea ambient. La versión hand-rolled
+    // los omitía → FP en patrón typed-config (re-hunt). ts.isInstantiatedModule
+    // los reconoce.
+    ["ns con export declare const (typed-config)", `/** @server-safe */\nnamespace Config { export declare const VERSION: string; export declare const BUILD: number; }\nexport function C() { return Config.VERSION; }`],
+    ["ns con interface + declare const", `/** @server-safe */\nnamespace Settings { export interface Shape { theme: string } export declare const defaults: Shape; }\nexport function C() { return Settings.defaults; }`],
+    ["ns con export declare function", `/** @server-safe */\nnamespace Api { export declare function call(): void; }\nexport function C() { Api.call(); return null; }`],
   ])("namespace INSTANCIADO sí es binding legítimo → clean (0-FP): %s", (_label, code) => {
     expect(checkSourceFile(code, "ns-value.fixture.tsx")).toEqual([]);
   });

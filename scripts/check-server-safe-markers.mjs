@@ -686,48 +686,25 @@ function isAmbientDeclaration(node) {
 }
 
 /**
- * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿emite un binding runtime?
- * Semántica "instantiated module" de TS: un namespace se elide ENTERO si NO
- * contiene ningún miembro que produzca valor. Evaluado sintácticamente sobre el
- * cuerpo (whitelist fail-closed: solo `true` si se PRUEBA un miembro de valor;
- * recursivo para `namespace A.B {}` y namespaces anidados).
+ * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿emite un binding runtime
+ * `var N`(IIFE)? Si lo está, su nombre ES una sombra runtime legítima; si se
+ * elide (`namespace navigator {}`), una ref bare a `navigator` resuelve al global
+ * real → debe flaggearse, no sombrearse.
  *
- *   namespace N { export interface I {} }  → ELIDED   (solo tipos)
- *   namespace N {}                         → ELIDED   (vacío)
- *   namespace N { export const x = 1 }     → EMITE    var N;(IIFE)
+ *   namespace N {}                          → ELIDED  (vacío)
+ *   namespace N { export interface I {} }   → ELIDED  (solo tipos)
+ *   namespace N { export const x = 1 }      → EMITE   var N;(IIFE)
+ *   namespace N { export declare const x }  → EMITE   var N;(IIFE)  ← clave
  *
- * Un namespace elidido NO crea binding: si su nombre coincide con un global
- * (`namespace navigator {}`), una ref bare a `navigator` resuelve al global
- * browser real → debe poder flaggearse, NO sombrearse. beta.27 BLOCKER-1.
+ * Usamos `ts.isInstantiatedModule`, la semántica de emit AUTORITATIVA de TS, en
+ * vez de un whitelist hand-rolled de miembros de valor. La versión previa omitía
+ * los value-members AMBIENT (`export declare const/function/class`), que SÍ
+ * instancian el namespace (emiten el shell) → FP sobre un patrón typed-config
+ * legítimo (re-hunt). preserveConstEnums=false: el proyecto no lo activa
+ * (tsconfig) — coincide con el primer emit del build (tsc). beta.27 BLOCKER-1.
  */
 function namespaceIsInstantiated(moduleDecl) {
-  if (isAmbientDeclaration(moduleDecl)) return false;
-  const body = moduleDecl.body;
-  if (!body) return false;
-  // `namespace A.B { … }`: el body es otro ModuleDeclaration (la `B`).
-  if (ts.isModuleDeclaration(body)) return namespaceIsInstantiated(body);
-  if (!ts.isModuleBlock(body)) return false;
-  for (const stmt of body.statements) {
-    // Whitelist de miembros que INSTANCIAN (producen valor). Default: seguir
-    // escaneando → si ninguno instancia, el namespace está elidido.
-    if (ts.isVariableStatement(stmt) && !isAmbientDeclaration(stmt)) return true;
-    if (ts.isFunctionDeclaration(stmt) && stmt.body && !isAmbientDeclaration(stmt))
-      return true;
-    if (ts.isClassDeclaration(stmt) && !isAmbientDeclaration(stmt)) return true;
-    if (ts.isEnumDeclaration(stmt) && !isAmbientDeclaration(stmt)) return true;
-    if (ts.isExpressionStatement(stmt)) return true;
-    if (ts.isModuleDeclaration(stmt) && namespaceIsInstantiated(stmt)) return true;
-    if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) return true;
-    if (
-      ts.isImportDeclaration(stmt) &&
-      stmt.importClause &&
-      !stmt.importClause.isTypeOnly
-    )
-      return true;
-    // interface / type alias / import-type / export-type / namespace-type-only
-    // anidado → NO instancian: seguir.
-  }
-  return false;
+  return ts.isInstantiatedModule(moduleDecl, false);
 }
 
 /**
