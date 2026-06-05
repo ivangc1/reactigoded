@@ -1266,6 +1266,32 @@ function isWeaponizedConstructorAccess(node) {
   return false;
 }
 
+/**
+ * ¿`node` (un identifier o property-access) es —o es el ROOT cualificado de— la
+ * expresión de una heritage TYPE-ONLY? `interface X extends a.B.C` y
+ * `class X implements a.B` son type-only (se borran). El `extends` de una CLASE
+ * (`class X extends a.B`) es runtime read → false. Sube por el PropertyAccess
+ * (los miembros ya están cubiertos) hasta la heritage expression. Usado en la
+ * regla 12 (identifier bare) Y en la rama (c) (root de property-access), porque
+ * ambas detectan el global por caminos distintos. beta.27 BLOCKER-1 (re-hunt FP).
+ */
+function isInTypeOnlyHeritageExpr(node) {
+  let top = node;
+  while (
+    ts.isPropertyAccessExpression(top.parent) &&
+    top.parent.expression === top
+  ) {
+    top = top.parent;
+  }
+  return (
+    ts.isExpressionWithTypeArguments(top.parent) &&
+    top.parent.expression === top &&
+    ts.isHeritageClause(top.parent.parent) &&
+    (top.parent.parent.token === ts.SyntaxKind.ImplementsKeyword ||
+      ts.isInterfaceDeclaration(top.parent.parent.parent))
+  );
+}
+
 function isNonReferencePosition(node, declaredNames) {
   const parent = node.parent;
   if (!parent) return false;
@@ -1451,13 +1477,12 @@ function isNonReferencePosition(node, declaredNames) {
   //     `extends` de una CLASE (`class X extends Base`) SÍ es una ref
   //     runtime — no se excluye, para que `class X extends HTMLElement`
   //     (custom element, client-only) siga flaggeándose.
-  if (
-    ts.isExpressionWithTypeArguments(parent) &&
-    parent.expression === node &&
-    ts.isHeritageClause(parent.parent) &&
-    (parent.parent.token === ts.SyntaxKind.ImplementsKeyword ||
-      ts.isInterfaceDeclaration(parent.parent.parent))
-  ) {
+  //
+  //     Cubre también el ROOT de una heritage CUALIFICADA (`interface X extends
+  //     navigator.Connection`): `isInTypeOnlyHeritageExpr` sube por el
+  //     PropertyAccess (los miembros ya los exime la regla 1) hasta la heritage
+  //     expression. Solo type-only — `class X extends navigator.Foo` es runtime.
+  if (isInTypeOnlyHeritageExpr(node)) {
     return true;
   }
 
@@ -2087,6 +2112,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       return;
     }
 
+    // (b.0) Class: el NOMBRE de la clase está en scope DENTRO de su propio cuerpo
+    // — métodos, getters/setters y static blocks corren DESPUÉS de que la clase
+    // se define, así que pueden referenciarla (`class Theme { resolve(){ return
+    // Theme.defaultColor; } }`). Bajo fail-closed, sin pre-cargar el nombre, esa
+    // self-reference se flaggeaba como global bare (FP, re-hunt). El nombre no es
+    // un global → añadirlo solo quita FP; si colisiona con un global, la clase
+    // LO SOMBREA de verdad (runtime). beta.27 BLOCKER-1.
+    if (
+      (ts.isClassDeclaration(node) || ts.isClassExpression(node)) &&
+      node.name
+    ) {
+      const classCtx = addToScope(context, new Set([node.name.text]));
+      ts.forEachChild(node, (child) => visit(child, classCtx));
+      return;
+    }
+
     // (b.1) Block: pre-cargar function declarations (block-scoped pero
     // pre-initialized desde block-entry, round 13 P1.1), luego iterar
     // statements en orden añadiendo let/const/class al scope solo
@@ -2196,8 +2237,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
         if (isUnsafeGlobal || isEvalSink) {
           // Si el binding está shadow-eado por una local (parameter, var,
-          // import, etc.), NO es ref al global — skip.
-          if (!context.localBindings.has(api) && !context.isInDeferredBody) {
+          // import, etc.), NO es ref al global — skip. También skip si el
+          // property-access está en una heritage TYPE-ONLY (`interface X extends
+          // navigator.Foo`) — se borra, no hay read runtime (re-hunt FP).
+          if (
+            !context.localBindings.has(api) &&
+            !context.isInDeferredBody &&
+            !isInTypeOnlyHeritageExpr(node)
+          ) {
             if (!context.activeGuards.has(api)) {
               const start = node.getStart(sourceFile);
               const { line } = sourceFile.getLineAndCharacterOfPosition(start);

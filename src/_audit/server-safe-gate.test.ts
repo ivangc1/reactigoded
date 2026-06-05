@@ -1564,6 +1564,33 @@ describe("server-safe gate — guard posicional en cuerpos de función", () => {
 });
 
 /**
+ * FPs fail-closed destapados por el re-hunt: self-reference de clase + root de
+ * heritage type-only cualificada. Ambos son posiciones que NO leen un global en
+ * runtime pero el modelo fail-closed flaggeaba. Cero debilitamiento — el
+ * class-extends RUNTIME y los reads reales siguen flaggeándose.
+ */
+describe("server-safe gate — class self-ref + heritage type-only (FP re-hunt)", () => {
+  it.each([
+    ["class self-ref en método", `/** @server-safe */\nexport class Theme { static defaultColor = "blue"; resolve(o?: string): string { return o ?? Theme.defaultColor; } }`],
+    ["class self-ref en static method", `/** @server-safe */\nexport class Helper { static make(): Helper { return new Helper(); } }`],
+    ["class self-ref en getter", `/** @server-safe */\nexport class Box { static unit = 1; get u(): number { return Box.unit; } }`],
+    ["interface extends ns.member type-only", `/** @server-safe */\nimport type * as nav from "./nt";\nexport interface T extends nav.Connection { r: boolean }\nexport const S = (p: T) => p.r;`],
+    ["interface extends ns.A.B (deep)", `/** @server-safe */\nimport type * as nav from "./nt";\nexport interface T extends nav.A.B { r: boolean }\nexport const S = (p: T) => p.r;`],
+    ["class implements ns.member type-only", `/** @server-safe */\nimport type * as win from "./wt";\nexport class X implements win.Foo {}`],
+  ])("NO genera falso positivo (posición no-runtime): %s", (_label, code) => {
+    expect(checkSourceFile(code, "fp-rehunt.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    ["class extends window.HTMLElement (runtime read)", `/** @server-safe */\nexport class W extends window.HTMLElement {}`],
+    ["class extends HTMLElement bare", `/** @server-safe */\nexport class E extends HTMLElement {}`],
+    ["método de clase lee window real", `/** @server-safe */\nexport class C { m() { return window.location.href; } }`],
+  ])("class-extends runtime / read real SIGUE flaggeado: %s", (_label, code) => {
+    expect(checkSourceFile(code, "fp-rehunt-flag.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
  * sobre código server-safe legítimo y compilable que el modelo fail-closed
  * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección
