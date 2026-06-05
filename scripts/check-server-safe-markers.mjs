@@ -802,6 +802,21 @@ function gatherModuleDeclaredNames(sourceFile) {
 }
 
 /**
+ * ¿La VariableDeclarationList es BLOCK-SCOPED (no var-hoisted)? `let`/`const` y
+ * también `using`/`await using` (recursos explícitos, TS 5.2). using=4 (plano),
+ * await-using=6 (incluye el bit Const). El `using` plano faltaba → se trataba como
+ * var-hoisted y sombreaba un global homónimo en scope externo (re-hunt BYP4:
+ * `{ using navigator = …; }` exime `navigator.userAgent` fuera del bloque).
+ */
+function isBlockScopedDeclList(flags) {
+  return (
+    (flags &
+      (ts.NodeFlags.Let | ts.NodeFlags.Const | ts.NodeFlags.Using)) !==
+    0
+  );
+}
+
+/**
  * `var` declarations: hoisted al function/module scope. Recurre a
  * través de blocks anidados, if/else, try/catch, for/while bodies,
  * switch — pero NO en nested function-likes (otro scope).
@@ -809,8 +824,8 @@ function gatherModuleDeclaredNames(sourceFile) {
  * NO incluye `function` declarations: en strict ESM (todos los .ts/.tsx
  * de un DS) son block-scoped, NO function-hoisted. Codex round 13 P1.1.
  *
- * NO incluye `let`/`const`/`class`: block-scoped y order-aware (TDZ).
- * Codex round 13 P1.2.
+ * NO incluye `let`/`const`/`class`/`using`: block-scoped y order-aware (TDZ).
+ * Codex round 13 P1.2; using en re-hunt BYP4.
  */
 function collectVarHoistedRecursive(node, names) {
   if (
@@ -836,8 +851,7 @@ function collectVarHoistedRecursive(node, names) {
   // pasaban sin hoist.
   if (ts.isVariableDeclarationList(node)) {
     const flags = node.flags;
-    const blockScoped =
-      (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+    const blockScoped = isBlockScopedDeclList(flags);
     if (!blockScoped) {
       for (const decl of node.declarations) {
         if (isAmbientDeclaration(decl)) continue; // declare var / declare global
@@ -925,8 +939,7 @@ function extractPostStatementBindings(stmt) {
   const names = new Set();
   if (ts.isVariableStatement(stmt)) {
     const flags = stmt.declarationList.flags;
-    const blockScoped =
-      (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+    const blockScoped = isBlockScopedDeclList(flags);
     if (blockScoped) {
       for (const decl of stmt.declarationList.declarations) {
         if (isAmbientDeclaration(decl)) continue; // declare const/let → erased
@@ -2397,8 +2410,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const init = node.initializer;
       if (init && ts.isVariableDeclarationList(init)) {
         const flags = init.flags;
-        const blockScoped =
-          (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+        const blockScoped = isBlockScopedDeclList(flags);
         if (blockScoped) {
           const forBindings = new Set();
           for (const decl of init.declarations) {

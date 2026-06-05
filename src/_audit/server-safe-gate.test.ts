@@ -1680,6 +1680,28 @@ describe("server-safe gate — class self-ref + heritage type-only (FP re-hunt)"
 });
 
 /**
+ * `using` / `await using` son BLOCK-SCOPED, no var-hoisted (re-hunt BYP4). El gate
+ * trataba el `using` plano (NodeFlags.Using=4, sin el bit Const) como var-hoisted →
+ * `{ using navigator = … }` sombreaba el global homónimo en el scope EXTERNO → eximía
+ * `navigator.userAgent` fuera del bloque. Fix: isBlockScopedDeclList incluye Using.
+ */
+describe("server-safe gate — using/await-using es block-scoped (BYP4)", () => {
+  it.each([
+    ["using shadow no escapa el bloque", `/** @server-safe */\nexport function C() { { using navigator = { [Symbol.dispose]() {} }; void navigator; } return navigator.userAgent; }`],
+    ["await using shadow no escapa", `/** @server-safe */\nexport function C() { { await using x = { async [Symbol.asyncDispose]() {} }; void x; } return window.location.href; }`],
+  ])("FLAGGEA el global en scope externo (using no lo sombrea): %s", (_label, code) => {
+    expect(checkSourceFile(code, "using-flag.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["using local usado en su scope", `/** @server-safe */\nexport function C() { using res = { [Symbol.dispose]() {} }; return res; }`],
+    ["using doc.title en su bloque", `/** @server-safe */\nexport function C() { { using doc = { title: "x", [Symbol.dispose]() {} }; return doc.title; } }`],
+  ])("using DENTRO de su bloque es binding local → clean: %s", (_label, code) => {
+    expect(checkSourceFile(code, "using-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Clase HONEST-CONSTRUCT (workflow audit, beta.27 BLOCKER-1): FALSOS POSITIVOS
  * sobre código server-safe legítimo y compilable que el modelo fail-closed
  * dejaba pasar por omisión de scope/posición. Cero bypasses — todos dirección
