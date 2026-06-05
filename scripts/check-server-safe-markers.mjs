@@ -2174,12 +2174,15 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // hereda el guard activo. El else-branch NO (en else, X está
     // undefined per la negación de la condición positiva).
     if (ts.isIfStatement(node)) {
-      const guardedApi = extractPositiveTypeofGuard(node.expression);
-      if (guardedApi) {
+      // chain-aware (`if (typeof a !== "undefined" && typeof b !== "undefined")`)
+      // vía el mismo colector que el guard por expresión — no forkeado.
+      const guards = new Set();
+      collectConjunctionGuards(node.expression, guards);
+      if (guards.size > 0) {
         visit(node.expression, context);
         const thenContext = {
           ...context,
-          activeGuards: new Set([...context.activeGuards, guardedApi]),
+          activeGuards: new Set([...context.activeGuards, ...guards]),
         };
         if (node.thenStatement) visit(node.thenStatement, thenContext);
         if (node.elseStatement) visit(node.elseStatement, context);
@@ -2286,11 +2289,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         // EXCEPCIÓN — function DECLARATION: está HOISTED, llamable ANTES de su
         // posición textual (`const s = read(); if (guard) return; function read(){
         // window }`) o en la rama undefined del guard. Su posición textual NO
-        // refleja cuándo se invoca → se resetea (no hereda). Es el único caso
-        // genuinamente desacoplado. beta.27 BLOCKER-1 (hunt D + re-hunt: el reset
-        // incondicional FP-eaba closures/.map/.reduce, que SÍ son posicionales).
+        // refleja cuándo se invoca → NO hereda los guards POSICIONALES (negative-
+        // early-return acumulados mid-block). Pero SÍ hereda los del BLOQUE entero
+        // (`blockEntryGuards`): el positivo de un `if (typeof X !== "undefined") {
+        // function read(){ X } }` vale para toda función hoisted del bloque (re-hunt
+        // FP5). beta.27 BLOCKER-1 (hunt D + re-hunt).
         activeGuards: ts.isFunctionDeclaration(node)
-          ? new Set()
+          ? new Set(context.blockEntryGuards ?? [])
           : context.activeGuards,
       };
       ts.forEachChild(node, (child) => visit(child, bodyContext));
@@ -2577,7 +2582,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
    * (visible solo desde la declaración hacia adelante).
    */
   function visitOrderedStatements(statements, context, preloadedFns) {
-    let current = addToScope(context, preloadedFns);
+    // Los guards activos al ENTRAR el bloque (p.ej. el positivo de un `if (typeof
+    // X !== "undefined") { … }` envolvente) valen para TODO el bloque, incluidas
+    // las function declarations hoisted. Se preservan en `blockEntryGuards` a
+    // través de la acumulación de negative-early-return guards, que son
+    // POSICIONALES (solo valen tras su statement). Un fn-decl resetea a estos, no
+    // a vacío (re-hunt FP5: fn-decl en bloque positive-guard).
+    let current = {
+      ...addToScope(context, preloadedFns),
+      blockEntryGuards: context.activeGuards,
+    };
     for (const stmt of statements) {
       visit(stmt, current);
       const additions = extractPostStatementBindings(stmt);
@@ -2605,6 +2619,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const reactImports = gatherReactImports(sourceFile);
   const baseContext = {
     activeGuards: new Set(),
+    blockEntryGuards: new Set(),
     isInDeferredBody: false,
     localBindings: moduleAll,
     nonImportBindings: moduleNonImports,

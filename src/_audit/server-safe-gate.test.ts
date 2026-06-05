@@ -1602,8 +1602,21 @@ describe("server-safe gate — guard posicional en cuerpos de función", () => {
     // Callbacks SÍNCRONOS (.map/.reduce) tras un guard → corren en flujo client-only.
     [".map callback en rama positive-guard", `/** @server-safe */\nexport function C() { if (typeof window !== "undefined") { return ["a", "b"].map((k) => k + window.location.href).join(","); } return "ssr"; }`],
     [".reduce callback tras guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") return 0; return [1, 2].reduce((s, n) => s + n + window.scrollY, 0); }`],
+    // fn-decl dentro de un bloque POSITIVE-guard: hereda blockEntryGuards (el guard
+    // positivo vale para todo el bloque incl. hoisted fns). Re-hunt FP5.
+    ["fn-decl en bloque positive-guard", `/** @server-safe */\nexport function C() { if (typeof window !== "undefined") { function read() { return window.location.href; } return read(); } return "ssr"; }`],
+    ["fn-decl en bloque doble positive-guard (if chain)", `/** @server-safe */\nexport function C() { if (typeof window !== "undefined" && typeof document !== "undefined") { function read() { return window.location.href + document.title; } return read(); } return "ssr"; }`],
   ])("posicional client-only tras el guard → clean (0-FP): %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-own.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    // fn-decl en bloque SIN guard / con guard NEGATIVO mid-block (no block-entry)
+    // → resetea a vacío → sigue flaggeando (no abre el bypass de D).
+    ["fn-decl en bloque plano sin guard", `/** @server-safe */\nexport function C() { { function read() { return window.location.href; } return read(); } }`],
+    ["fn-decl hoisted, guard negativo mid-block", `/** @server-safe */\nexport function Clock(): string { const s = read(); if (typeof window === "undefined") return ""; function read() { return window.location.href; } return s; }`],
+  ])("fn-decl sin block-entry guard SIGUE flaggeando: %s", (_label, code) => {
+    expect(checkSourceFile(code, "fndecl-flag.fixture.tsx").length).toBeGreaterThan(0);
   });
 });
 
