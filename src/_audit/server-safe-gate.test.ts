@@ -1524,6 +1524,45 @@ describe("server-safe gate — eval-sink por wrapper erased (!/as/satisfies)", (
 });
 
 /**
+ * Eval-sink envuelto en OPERADORES value-transparentes (re-hunt exhaustivo, beta.27).
+ *
+ * El valor de `(0, X)` / `(c ? X : Y)` / `(X || Y)` / `(f = X)` ES (sintácticamente)
+ * uno de sus operandos — el `.constructor` está TEXTUALMENTE presente, un revisor lo
+ * ve; solo hay ruido transparente alrededor. Es el lado legible/contiguo de la
+ * frontera (under-catch del mandato existente), no scope nuevo.
+ *
+ * EL SET ES EL CONTRATO — finito y enumerable: wrappers erased (`()`,`!`,`as`,
+ * `satisfies`,`<T>`) + coma, `&&`, `||`, `??`, `?:`, `=`. NO es falsa-completitud
+ * (a diferencia del computed-key, que es data-flow ∞). CRÍTICO: el set EXCLUYE las
+ * CALLS/IIFE — `(() => X)()` exige evaluar el cuerpo = data-flow = residual. Este
+ * test pinea el set cerrado; si un call se vuelve "transparente", reabre el muro ∞.
+ */
+describe("server-safe gate — eval-sink por operador value-transparente", () => {
+  it.each([
+    ['coma (0, X)', `/** @server-safe */\nexport const t = (0, (() => {}).constructor)("return globalThis")();`],
+    ['conditional c ? X : null', `/** @server-safe */\nexport const t = ((c: boolean) => (c ? (() => {}).constructor : null)!("x")())(true);`],
+    ['lógico X || null', `/** @server-safe */\nexport const t = ((() => {}).constructor || null)("return globalThis")();`],
+    ['nullish null ?? X', `/** @server-safe */\nexport const t = (null ?? (() => {}).constructor)("x")();`],
+    ['asignación (f = X)', `/** @server-safe */\nlet f: any;\nexport const t = (f = (() => {}).constructor)("x")();`],
+    ['coma + as + bracket ["call"]', `/** @server-safe */\nexport const t = (0, (() => {}).constructor as any)["call"](null, "x")();`],
+  ])("FLAGGEA pese al operador value-transparente: %s", (_label, code) => {
+    const v = checkSourceFile(code, "vt-sink.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it.each([
+    // EL BOUND: call/IIFE NO es transparente → residual out-of-scope (data-flow).
+    ['IIFE devuelve ctor (call NO transparente)', `/** @server-safe */\nexport const t = ((() => (() => {}).constructor)())("x")();`],
+    // &&-left NO carga el valor (base truthy pasa a la derecha) → no FP.
+    ['(ctor && safeFn)() → safeFn', `/** @server-safe */\nexport const t = ((() => {}).constructor && ((s: string) => s))("x");`],
+    ['(x.constructor || Object) === Object', `/** @server-safe */\nexport const eq = (x: any) => (x.constructor || Object) === Object;`],
+    ['ternario .name no llamado', `/** @server-safe */\nexport const n = (e: any) => (true ? e.constructor : null)?.name;`],
+  ])("NO genera falso positivo / respeta el bound (sin call traversal): %s", (_label, code) => {
+    expect(checkSourceFile(code, "vt-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Guard POSICIONAL en cuerpos de función (hunt D + re-hunt, beta.27 BLOCKER-1).
  *
  * El narrowing `if (typeof X === "undefined") return` es POSICIONAL: un cuerpo

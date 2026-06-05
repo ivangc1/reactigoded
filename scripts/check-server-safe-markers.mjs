@@ -1233,22 +1233,89 @@ function skipErasedDown(node) {
 }
 
 /**
+ * Conjunto ACOTADO de constructos VALUE-TRANSPARENTES: el valor de la expresión ES
+ * (sintácticamente) el de uno de sus hijos, sin evaluar nada — wrappers erased
+ * (`()`,`!`,`as`,`satisfies`,`<T>`) + operadores cuyo resultado es un operando:
+ * coma (→right), `&&` (→right: una base truthy como un constructor pasa a la
+ * derecha), `||`/`??` (→left|right), asignación `=` (→right), ternario (→branch).
+ *
+ * CRÍTICO — el set EXCLUYE las CALLS/IIFE: `(() => X)()` NO es transparente, su
+ * valor exige EVALUAR el cuerpo = data-flow = residual infinito. Atravesar un call
+ * reintroduciría el muro. El bound de la frontera (legible-contiguo vs ofuscado)
+ * aguanta SOLO porque este set es finito y no incluye calls. El test pinea el set.
+ * beta.27 BLOCKER-1 (re-hunt: coma/condicional/lógico envolviendo el eval-sink).
+ */
+function isValueTransparentParent(parent, child) {
+  if (isErasedOuterExpr(parent)) return true;
+  if (ts.isConditionalExpression(parent)) {
+    return parent.whenTrue === child || parent.whenFalse === child;
+  }
+  if (ts.isBinaryExpression(parent)) {
+    const op = parent.operatorToken.kind;
+    if (op === ts.SyntaxKind.CommaToken) return parent.right === child;
+    if (op === ts.SyntaxKind.AmpersandAmpersandToken) return parent.right === child;
+    if (
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken
+    ) {
+      return parent.left === child || parent.right === child;
+    }
+    if (op === ts.SyntaxKind.EqualsToken) return parent.right === child;
+  }
+  return false;
+}
+
+/**
+ * ¿El valor de `node` ES (vía constructos value-transparentes, sin calls) un member
+ * access `constructor`? Recursivo, cierra el anidamiento. Usado para la base del
+ * doble `.constructor.constructor` cuando viene envuelta en wrappers/operadores.
+ */
+function reachesConstructorAccess(node) {
+  if (!node) return false;
+  if (isConstructorMemberAccess(node)) return true;
+  if (isErasedOuterExpr(node)) return reachesConstructorAccess(node.expression);
+  if (ts.isConditionalExpression(node)) {
+    return (
+      reachesConstructorAccess(node.whenTrue) ||
+      reachesConstructorAccess(node.whenFalse)
+    );
+  }
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    if (op === ts.SyntaxKind.CommaToken) return reachesConstructorAccess(node.right);
+    if (op === ts.SyntaxKind.AmpersandAmpersandToken)
+      return reachesConstructorAccess(node.right);
+    if (
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken
+    ) {
+      return (
+        reachesConstructorAccess(node.left) ||
+        reachesConstructorAccess(node.right)
+      );
+    }
+    if (op === ts.SyntaxKind.EqualsToken) return reachesConstructorAccess(node.right);
+  }
+  return false;
+}
+
+/**
  * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
- * `Function` constructor). Salta los wrappers ERASED a AMBOS lados (parens, `!`,
- * `as`, `satisfies`, `<T>`): son contiguos y legibles, NO ofuscación —
- * `((x).constructor)()` ≡ `x.constructor!()` ≡ `x.constructor()`, y exigir
- * `node.parent` directo dejaba escapar la forma envuelta (hunt: paren-wrap C;
- * re-hunt: hermanos `!`/`as`/`satisfies`). beta.27 BLOCKER-1.
+ * `Function` constructor). Salta los constructos VALUE-TRANSPARENTES a AMBOS lados
+ * (wrappers erased + coma/lógico/ternario/asignación, sin calls): son contiguos y
+ * legibles — `((x).constructor)()` ≡ `x.constructor!()` ≡ `(0, x.constructor)()` ≡
+ * `x.constructor()`. Exigir `node.parent` directo dejaba escapar la forma envuelta.
+ * beta.27 BLOCKER-1 (hunt: paren-wrap C; re-hunt: `!`/`as`/`satisfies` + operadores).
  */
 function isWeaponizedConstructorAccess(node) {
   // (a) doble `x.constructor.constructor` (ES Function, se llame o no) — la base
-  //     puede venir envuelta en wrappers erased: `(x.constructor as any).constructor`.
-  if (isConstructorMemberAccess(skipErasedDown(node.expression))) return true;
-  // Ancestro efectivo saltando wrappers erased hacia ARRIBA; `child` es el nodo
+  //     puede venir envuelta en value-transparentes: `(0, x.constructor).constructor`.
+  if (reachesConstructorAccess(node.expression)) return true;
+  // Ancestro efectivo saltando value-transparentes hacia ARRIBA; `child` es el nodo
   // (quizá envuelto) que es hijo directo de ese ancestro.
   let child = node;
   let parent = node.parent;
-  while (parent && isErasedOuterExpr(parent)) {
+  while (parent && isValueTransparentParent(parent, child)) {
     child = parent;
     parent = parent.parent;
   }
