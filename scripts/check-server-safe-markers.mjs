@@ -1123,6 +1123,58 @@ function extractNegativeTypeofGuard(expr) {
 }
 
 /**
+ * Nombres con typeof-guard POSITIVO garantizados definidos a la DERECHA de un `&&`
+ * (y en el whenTrue de un ternario): `typeof a !== "undefined" && typeof b !==
+ * "undefined" && <aquí>`. Chain-aware (recurre por `&&`/parens). CONSERVADOR: NO
+ * recurre por `||` — `(typeof a !== "undefined" || foo) && <aquí>` NO garantiza `a`.
+ * Sobre-añadir un guard suprimiría un read real (bypass), por eso solo lo PROVADO.
+ * Reusa `extractPositiveTypeofGuard` (mismo predicado que el if-guard, hereda la
+ * exclusión SAFE + NON_ABSENCE_DENIALS). beta.27 BLOCKER-1 (re-hunt: guard por expr).
+ */
+function collectConjunctionGuards(expr, out) {
+  const g = extractPositiveTypeofGuard(expr);
+  if (g !== null) {
+    out.add(g);
+    return;
+  }
+  if (ts.isParenthesizedExpression(expr)) {
+    collectConjunctionGuards(expr.expression, out);
+    return;
+  }
+  if (
+    ts.isBinaryExpression(expr) &&
+    expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+  ) {
+    collectConjunctionGuards(expr.left, out);
+    collectConjunctionGuards(expr.right, out);
+  }
+}
+
+/**
+ * Análogo para `||` con guards NEGATIVOS (y el whenFalse de un ternario): a la
+ * derecha de `typeof a === "undefined" || typeof b === "undefined" || <aquí>`,
+ * todos los a/b están definidos (la disyunción es falsa). Chain-aware por `||`.
+ */
+function collectDisjunctionGuards(expr, out) {
+  const g = extractNegativeTypeofGuard(expr);
+  if (g !== null) {
+    out.add(g);
+    return;
+  }
+  if (ts.isParenthesizedExpression(expr)) {
+    collectDisjunctionGuards(expr.expression, out);
+    return;
+  }
+  if (
+    ts.isBinaryExpression(expr) &&
+    expr.operatorToken.kind === ts.SyntaxKind.BarBarToken
+  ) {
+    collectDisjunctionGuards(expr.left, out);
+    collectDisjunctionGuards(expr.right, out);
+  }
+}
+
+/**
  * `true` si `stmt` completa SIEMPRE de forma abrupta (return/throw/break/
  * continue), de modo que el control NO cae a los statements posteriores. Para
  * un Block, mira el último statement (simplificación conservadora: no analiza
@@ -2131,6 +2183,67 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         };
         if (node.thenStatement) visit(node.thenStatement, thenContext);
         if (node.elseStatement) visit(node.elseStatement, context);
+        return;
+      }
+    }
+
+    // (a.2) typeof guards a nivel de EXPRESIÓN — MISMO predicado que el if-guard
+    // (reusado, no forkeado: un narrowing duplicado en path paralelo fue el bug
+    // del switch-case). El operando/branch guardado hereda el guard; el resto NO.
+    //   `typeof X !== "undefined" && <X aquí>`   (positivo → right)
+    //   `typeof X === "undefined" || <X aquí>`   (negativo → right)
+    //   `typeof X !== "undefined" ? <X> : …`     (positivo → whenTrue)
+    //   `typeof X === "undefined" ? … : <X>`     (negativo → whenFalse)
+    // La exclusión NON_ABSENCE_DENIALS se hereda vía los extractores → un
+    // `typeof Function !== "undefined" && Function("…")()` NO se exime (el guard
+    // es vacuamente true sobre un escape sink). El eval-sink (c.2) tampoco se
+    // suprime: solo se añade a activeGuards (que gatea no-bare-dom-access, no el
+    // eval-sink). beta.27 BLOCKER-1 (re-hunt: FP guard por expresión).
+    if (ts.isBinaryExpression(node)) {
+      const op = node.operatorToken.kind;
+      if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+        const guards = new Set();
+        collectConjunctionGuards(node.left, guards);
+        if (guards.size > 0) {
+          visit(node.left, context);
+          visit(node.right, {
+            ...context,
+            activeGuards: new Set([...context.activeGuards, ...guards]),
+          });
+          return;
+        }
+      } else if (op === ts.SyntaxKind.BarBarToken) {
+        const guards = new Set();
+        collectDisjunctionGuards(node.left, guards);
+        if (guards.size > 0) {
+          visit(node.left, context);
+          visit(node.right, {
+            ...context,
+            activeGuards: new Set([...context.activeGuards, ...guards]),
+          });
+          return;
+        }
+      }
+    }
+    if (ts.isConditionalExpression(node)) {
+      const pos = new Set();
+      collectConjunctionGuards(node.condition, pos);
+      const neg = new Set();
+      collectDisjunctionGuards(node.condition, neg);
+      if (pos.size > 0 || neg.size > 0) {
+        visit(node.condition, context);
+        visit(
+          node.whenTrue,
+          pos.size > 0
+            ? { ...context, activeGuards: new Set([...context.activeGuards, ...pos]) }
+            : context,
+        );
+        visit(
+          node.whenFalse,
+          neg.size > 0
+            ? { ...context, activeGuards: new Set([...context.activeGuards, ...neg]) }
+            : context,
+        );
         return;
       }
     }

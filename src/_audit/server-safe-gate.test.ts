@@ -1608,6 +1608,38 @@ describe("server-safe gate — guard posicional en cuerpos de función", () => {
 });
 
 /**
+ * typeof guards a nivel de EXPRESIÓN (re-hunt, beta.27). El gate solo reconocía el
+ * `if (typeof X !== "undefined")`; los idiomas SSR everyday por expresión —`&&`,
+ * `||`, ternario— FP-eaban. Fix: reusa el MISMO predicado del if-guard (no forkeado)
+ * → hereda la exclusión NON_ABSENCE_DENIALS, así que un eval-sink bajo guard-por-
+ * expresión NO se exime. Chain-aware y conservador (nunca sobre-añade → sin bypass).
+ */
+describe("server-safe gate — typeof guard por expresión (&&/||/ternario)", () => {
+  it.each([
+    ["ternario positivo → whenTrue", `/** @server-safe */\nexport const Gp = () => { const h = typeof window !== "undefined" ? window.location.href : "/"; return h; };`],
+    ["&& positivo → right", `/** @server-safe */\nexport const Ga = () => { const v = typeof window !== "undefined" && window.innerWidth; return v; };`],
+    ["|| negativo → right", `/** @server-safe */\nexport const Go = () => { const n = typeof document === "undefined" || document.title === ""; return n; };`],
+    ["cadena && doble guard", `/** @server-safe */\nexport const C = () => { const x = typeof window !== "undefined" && typeof document !== "undefined" && window.location.href; return x; };`],
+    ["ternario negativo → whenFalse", `/** @server-safe */\nexport const C = () => (typeof window === "undefined" ? "ssr" : window.location.href);`],
+  ])("NO genera falso positivo bajo guard por expresión: %s", (_label, code) => {
+    expect(checkSourceFile(code, "expr-guard.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    // CRÍTICO (reuse hereda NON_ABSENCE_DENIALS): el guard es vacuamente true sobre
+    // un escape/eval sink → NO lo exime.
+    ["typeof Function && Function()", `/** @server-safe */\nexport const t = typeof Function !== "undefined" && Function("return globalThis")();`],
+    ["&& guard + .constructor eval-sink", `/** @server-safe */\nexport const t = typeof window !== "undefined" && (() => {}).constructor("x")();`],
+    ["ternario + globalThis.eval", `/** @server-safe */\nexport const t = typeof globalThis !== "undefined" ? globalThis.eval("x") : null;`],
+    // Soundness: guard de OTRO nombre, o `||` en el left de `&&` → NO garantiza.
+    ["guard de document, read de window", `/** @server-safe */\nexport const C = () => { const x = typeof document !== "undefined" && window.location.href; return x; };`],
+    ["|| en el left de && no garantiza", `/** @server-safe */\nexport const C = (foo: boolean) => { const x = (foo || typeof window !== "undefined") && window.location.href; return x; };`],
+  ])("SIGUE flaggeando (eval-sink bajo guard / read no garantizado): %s", (_label, code) => {
+    expect(checkSourceFile(code, "expr-guard-flag.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * FPs fail-closed destapados por el re-hunt: self-reference de clase + root de
  * heritage type-only cualificada. Ambos son posiciones que NO leen un global en
  * runtime pero el modelo fail-closed flaggeaba. Cero debilitamiento — el
