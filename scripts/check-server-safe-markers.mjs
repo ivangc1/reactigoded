@@ -392,6 +392,44 @@ const GLOBALS_OVERCLAIMS = new Set([
   "URLPattern",
 ]);
 
+// EDGE-MISSING: globals que `globals.nodeBuiltin` lista (Node los provee) pero el
+// runtime EDGE más estricto (Vercel Edge sin nodejs_compat) NO expone — un read
+// bare lanza ReferenceError ahí. El gate ancla "server-safe" a ese baseline, así
+// que SAFE = (builtin ∪ nodeBuiltin) ∩ edge. Esta lista es la diferencia
+// (SAFE − edgeGlobalThis), derivada DATA-DRIVEN del runtime Edge real, no curada
+// a ojo. Regenerable (provenance, @edge-runtime/vm@5.0.0):
+//   npm i -D @edge-runtime/vm@5 && node -e 'const{EdgeVM}=require("@edge-runtime/vm");
+//   const e=new Set(new EdgeVM().evaluate("Object.getOwnPropertyNames(globalThis)"));
+//   import("./scripts/check-server-safe-markers.mjs").then(m=>console.log(
+//   [...m.SAFE_GLOBALS].filter(n=>!e.has(n)).sort()))'
+// Subtraer SOLO añade strictness (fail-closed): un FP corregible si Edge gana la
+// API, nunca un FN. Codex P1 (BroadcastChannel) + #190. El pin de contenido de
+// SAFE caza el drift al bumpear `globals`.
+const EDGE_MISSING_GLOBALS = new Set([
+  "BroadcastChannel",
+  "ByteLengthQueuingStrategy",
+  "CompressionStream",
+  "CountQueuingStrategy",
+  "CustomEvent",
+  "DecompressionStream",
+  "MessageChannel",
+  "MessageEvent",
+  "MessagePort",
+  "Navigator",
+  "Performance",
+  "PerformanceEntry",
+  "PerformanceMark",
+  "PerformanceMeasure",
+  "PerformanceObserver",
+  "PerformanceObserverEntryList",
+  "PerformanceResourceTiming",
+  "ReadableByteStreamController",
+  "ReadableStreamBYOBRequest",
+  "ReadableStreamDefaultController",
+  "TransformStreamDefaultController",
+  "WritableStreamDefaultController",
+]);
+
 // Whitelist efectiva. Acceso bare a cualquier identificador NO resuelto
 // en scope (local/param/import) y AUSENTE de este set se trata como
 // global no-server-safe y se flaggea. Reemplaza al antiguo `CLIENT_GLOBALS`
@@ -405,7 +443,10 @@ const SAFE_GLOBALS = new Set(
     ...Object.keys(globalsPkg.builtin),
     ...Object.keys(globalsPkg.nodeBuiltin),
   ].filter(
-    (name) => !INTENTIONAL_DENY.has(name) && !GLOBALS_OVERCLAIMS.has(name),
+    (name) =>
+      !INTENTIONAL_DENY.has(name) &&
+      !GLOBALS_OVERCLAIMS.has(name) &&
+      !EDGE_MISSING_GLOBALS.has(name),
   ),
 );
 
@@ -2668,6 +2709,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
 export {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
+  EDGE_MISSING_GLOBALS,
   DYNAMIC_EVAL_SINKS,
   checkSourceFile,
   checkFileWithImports,

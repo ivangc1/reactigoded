@@ -49,6 +49,7 @@ import { describe, it, expect } from "vitest";
 import {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
+  EDGE_MISSING_GLOBALS,
 } from "../../scripts/check-server-safe-markers.mjs";
 
 /** ¿`name` resuelve como binding global en el runtime actual? Usamos `in`
@@ -100,7 +101,7 @@ const MUST_STAY_FLAGGED = [
 ];
 
 /**
- * Contenido EXACTO esperado de `SAFE_GLOBALS` (120 nombres, ordenados). Es
+ * Contenido EXACTO esperado de `SAFE_GLOBALS` (98 nombres, ordenados). Es
  * un PIN del contrato: cualquier cambio en el set (bump de `globals`,
  * denegación nueva, overclaim) debe actualizar esta lista CONSCIENTEMENTE.
  * Sin el pin, un minor bump de `globals` (`^17.6.0`) podría añadir un nombre
@@ -110,25 +111,22 @@ const MUST_STAY_FLAGGED = [
  */
 const SAFE_GLOBALS_PIN = [
   "AbortController", "AbortSignal", "AggregateError", "Array", "ArrayBuffer", "Atomics",
-  "BigInt", "BigInt64Array", "BigUint64Array", "Blob", "Boolean", "BroadcastChannel",
-  "ByteLengthQueuingStrategy", "CompressionStream", "CountQueuingStrategy", "Crypto", "CryptoKey", "CustomEvent",
-  "DOMException", "DataView", "Date", "DecompressionStream", "Error", "EvalError",
+  "BigInt", "BigInt64Array", "BigUint64Array", "Blob", "Boolean", "Crypto",
+  "CryptoKey", "DOMException", "DataView", "Date", "Error", "EvalError",
   "Event", "EventTarget", "File", "FinalizationRegistry", "Float32Array", "Float64Array",
   "FormData", "Headers", "Infinity", "Int16Array", "Int32Array", "Int8Array",
-  "Intl", "Iterator", "JSON", "Map", "Math", "MessageChannel",
-  "MessageEvent", "MessagePort", "NaN", "Navigator", "Number", "Object",
-  "Performance", "PerformanceEntry", "PerformanceMark", "PerformanceMeasure", "PerformanceObserver", "PerformanceObserverEntryList",
-  "PerformanceResourceTiming", "Promise", "Proxy", "RangeError", "ReadableByteStreamController", "ReadableStream",
-  "ReadableStreamBYOBReader", "ReadableStreamBYOBRequest", "ReadableStreamDefaultController", "ReadableStreamDefaultReader", "ReferenceError", "Reflect",
-  "RegExp", "Request", "Response", "Set", "SharedArrayBuffer", "String",
-  "SubtleCrypto", "Symbol", "SyntaxError", "TextDecoder", "TextDecoderStream", "TextEncoder",
-  "TextEncoderStream", "TransformStream", "TransformStreamDefaultController", "TypeError", "URIError", "URL",
-  "URLSearchParams", "Uint16Array", "Uint32Array", "Uint8Array", "Uint8ClampedArray", "WeakMap",
-  "WeakRef", "WeakSet", "WebAssembly", "WebSocket", "WritableStream", "WritableStreamDefaultController",
-  "WritableStreamDefaultWriter", "atob", "btoa", "clearInterval", "clearTimeout", "console",
-  "crypto", "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent", "escape",
-  "fetch", "isFinite", "isNaN", "parseFloat", "parseInt", "performance",
-  "queueMicrotask", "setInterval", "setTimeout", "structuredClone", "undefined", "unescape",
+  "Intl", "Iterator", "JSON", "Map", "Math", "NaN",
+  "Number", "Object", "Promise", "Proxy", "RangeError", "ReadableStream",
+  "ReadableStreamBYOBReader", "ReadableStreamDefaultReader", "ReferenceError", "Reflect", "RegExp", "Request",
+  "Response", "Set", "SharedArrayBuffer", "String", "SubtleCrypto", "Symbol",
+  "SyntaxError", "TextDecoder", "TextDecoderStream", "TextEncoder", "TextEncoderStream", "TransformStream",
+  "TypeError", "URIError", "URL", "URLSearchParams", "Uint16Array", "Uint32Array",
+  "Uint8Array", "Uint8ClampedArray", "WeakMap", "WeakRef", "WeakSet", "WebAssembly",
+  "WebSocket", "WritableStream", "WritableStreamDefaultWriter", "atob", "btoa", "clearInterval",
+  "clearTimeout", "console", "crypto", "decodeURI", "decodeURIComponent", "encodeURI",
+  "encodeURIComponent", "escape", "fetch", "isFinite", "isNaN", "parseFloat",
+  "parseInt", "performance", "queueMicrotask", "setInterval", "setTimeout", "structuredClone",
+  "undefined", "unescape",
 ];
 
 /**
@@ -195,6 +193,23 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     // Workers/Deno). En ese caso, decidir: ¿añadir a INTENTIONAL_DENY o
     // aceptar en el pin?
     expect([...SAFE_GLOBALS].sort()).toEqual([...SAFE_GLOBALS_PIN].sort());
+  });
+
+  it("F. EDGE_MISSING: Node los provee pero NO están en SAFE (edge baseline)", () => {
+    // La clase "Node-tiene / Edge-no": globals de `nodeBuiltin` que el runtime
+    // Edge más estricto (Vercel Edge sin nodejs_compat) NO expone. Derivados
+    // data-driven del globalThis real de @edge-runtime/vm. Invariantes:
+    //   (1) ninguno está en SAFE (un read bare lanzaría ReferenceError en Edge);
+    const leaked = [...EDGE_MISSING_GLOBALS].filter((n) => SAFE_GLOBALS.has(n));
+    expect(leaked).toEqual([]);
+    //   (2) todos existen en el runtime Node (son la cara "Node-tiene" de la
+    //       divergencia — si uno deja de estar en Node, sale de la lista).
+    const notInNode = [...EDGE_MISSING_GLOBALS].filter(
+      (n) => !isRuntimeGlobal(n),
+    );
+    expect(notInNode).toEqual([]);
+    //   (3) ancla concreta del codex P1 — BroadcastChannel cazado.
+    expect(EDGE_MISSING_GLOBALS.has("BroadcastChannel")).toBe(true);
   });
 
   it("F. los GLOBALS_OVERCLAIMS están restados de SAFE_GLOBALS", () => {

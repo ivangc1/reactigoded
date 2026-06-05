@@ -23,6 +23,7 @@ import ts from "typescript";
 import {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
+  EDGE_MISSING_GLOBALS,
   DYNAMIC_EVAL_SINKS,
   checkSourceFile,
   checkFileWithImports,
@@ -213,6 +214,45 @@ describe("server-safe gate — navigator wholesale denylist (#164 beta.27)", () 
     // lados.
     expect(INTENTIONAL_DENY.has("navigator")).toBe(true);
     expect(SAFE_GLOBALS.has("navigator")).toBe(false);
+  });
+});
+
+/**
+ * EDGE-MISSING (codex P1 + #190): globals que Node provee pero el runtime Edge
+ * más estricto (Vercel Edge sin nodejs_compat) NO expone — un read bare lanza
+ * ReferenceError ahí. SAFE = (builtin ∪ nodeBuiltin) ∩ edgeGlobalThis; estos
+ * quedan FUERA. Los edge-available (TextEncoder, URL, streams, structuredClone…)
+ * siguen clean (no over-subtract). Invariante de catálogo en #150 Test F.
+ */
+describe("server-safe gate — Edge-missing Node globals (codex P1, baseline edge)", () => {
+  it.each([
+    ["BroadcastChannel", `const x = BroadcastChannel; void x;`],
+    ["new MessageChannel()", `const c = new MessageChannel(); void c;`],
+    ["MessagePort", `const p: typeof MessagePort = MessagePort; void p;`],
+    ["Navigator", `const n = Navigator; void n;`],
+    ["PerformanceObserver", `const o = new PerformanceObserver(() => {}); void o;`],
+    ["CompressionStream", `const s = new CompressionStream("gzip"); void s;`],
+    ["CustomEvent", `const e = new CustomEvent("x"); void e;`],
+  ])("FLAGGEA el global Edge-missing: %s", (_label, body) => {
+    const v = checkSourceFile(fixture(body), "edge-missing.fixture.tsx");
+    expect(v.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["TextEncoder", `const x = new TextEncoder(); void x;`],
+    ["URL", `const u = new URL("http://x"); void u;`],
+    ["ReadableStream", `const r = new ReadableStream(); void r;`],
+    ["structuredClone", `const c = structuredClone({}); void c;`],
+    ["fetch", `const f = fetch; void f;`],
+    ["crypto.subtle", `const s = crypto.subtle; void s;`],
+  ])("edge-available sigue clean (no over-subtract): %s", (_label, body) => {
+    expect(checkSourceFile(fixture(body), "edge-ok.fixture.tsx")).toEqual([]);
+  });
+
+  it("EDGE_MISSING está excluido de SAFE_GLOBALS", () => {
+    const leaked = [...EDGE_MISSING_GLOBALS].filter((n) => SAFE_GLOBALS.has(n));
+    expect(leaked).toEqual([]);
+    expect(EDGE_MISSING_GLOBALS.has("BroadcastChannel")).toBe(true);
   });
 });
 
@@ -855,7 +895,9 @@ describe("server-safe gate — modelo fail-closed (beta.27 BLOCKER-1)", () => {
       "globals Node (URL/fetch/crypto)",
       `const u = new URL("x", "http://a"); void fetch(u); return crypto.randomUUID();`,
     ],
-    ["Event/CustomEvent (overlap Node)", `const e = new CustomEvent("x"); void e;`],
+    // Event SÍ está en el baseline Edge (CustomEvent NO — ver el bloque
+    // "Edge-missing Node globals"; se subió a EDGE_MISSING_GLOBALS).
+    ["Event (en Edge baseline)", `const e = new Event("x"); void e;`],
     ["import.meta.env (regla 13)", `if (import.meta.env.DEV) { void 0; }`],
   ])("NO genera falso positivo en %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "no-fp.fixture.tsx");

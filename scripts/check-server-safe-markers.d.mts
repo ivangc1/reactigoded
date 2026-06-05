@@ -147,6 +147,12 @@ export declare const SAFE_GLOBALS: ReadonlySet<string>;
  * Excluidos de `SAFE_GLOBALS`.
  */
 export declare const INTENTIONAL_DENY: ReadonlySet<string>;
+/**
+ * Globals que `nodeBuiltin` lista (Node los provee) pero el runtime Edge más
+ * estricto (Vercel Edge sin nodejs_compat) NO expone — derivados data-driven del
+ * globalThis real (@edge-runtime/vm). Excluidos de `SAFE_GLOBALS`. #190.
+ */
+export declare const EDGE_MISSING_GLOBALS: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
 
 /**
