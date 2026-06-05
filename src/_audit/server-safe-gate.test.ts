@@ -1592,6 +1592,14 @@ describe("server-safe gate — eval-sink por operador value-transparente", () =>
     ['await del .constructor (callee)', `/** @server-safe */\nexport async function C() { const w = (await (function () {}).constructor)("return window")(); return w; }`],
     ['await + .call', `/** @server-safe */\nexport async function C() { const w = (await (() => {}).constructor).call(null, "x")(); return w; }`],
     ['await + coma combinado', `/** @server-safe */\nexport async function C() { const w = (await (0, (() => {}).constructor))("x")(); return w; }`],
+    // compound logical-assignment (||=/??=/&&=): mismo valor que ||/??/&& —
+    // miembro de la clase value-transparente acotada (deep re-hunt).
+    ['||= (a ||= ctor)()', `/** @server-safe */\nexport const C = () => { let a: any = null; const fn = () => {}; return (a ||= fn.constructor)("return globalThis")(); };`],
+    ['??= (a ??= ctor)()', `/** @server-safe */\nexport const C = () => { let a: any = 0; const fn = () => {}; return (a ??= fn.constructor)("x")(); };`],
+    ['&&= (a &&= ctor)()', `/** @server-safe */\nexport const C = () => { let a: any = {}; const fn = () => {}; return (a &&= fn.constructor)("x")(); };`],
+    ['base path (a ||= ctor).constructor', `/** @server-safe */\nconst fn = () => {};\nlet a: any;\nconst Dbl = (a ||= fn.constructor).constructor;\nexport const t = Dbl("x")();`],
+    // key con coma cuyo right es un LITERAL → estáticamente "constructor".
+    ['key comma con literal right', `/** @server-safe */\nexport const C = () => { let log = ""; const F = [].constructor[(log = "k", "constructor")] as any; void log; return F("x")(); };`],
   ])("FLAGGEA pese al operador value-transparente: %s", (_label, code) => {
     const v = checkSourceFile(code, "vt-sink.fixture.tsx");
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -1607,6 +1615,10 @@ describe("server-safe gate — eval-sink por operador value-transparente", () =>
     ['(ctor && safeFn)() → safeFn', `/** @server-safe */\nexport const t = ((() => {}).constructor && ((s: string) => s))("x");`],
     ['(x.constructor || Object) === Object', `/** @server-safe */\nexport const eq = (x: any) => (x.constructor || Object) === Object;`],
     ['ternario .name no llamado', `/** @server-safe */\nexport const n = (e: any) => (true ? e.constructor : null)?.name;`],
+    // BOUND: key con OPERADOR de variable (|| con operando variable) = data-flow
+    // → residual (no da un literal único estático).
+    ['key [k || "x"] con k variable (residual)', `/** @server-safe */\nexport const C = () => { const key = "constructor"; const F = [].constructor[key || "x"] as any; return F("x")(); };`],
+    ['(a ||= 2) sin constructor', `/** @server-safe */\nexport const C = () => { let a: any = 1; const b = (a ||= 2); return b; };`],
   ])("NO genera falso positivo / respeta el bound (sin call traversal): %s", (_label, code) => {
     expect(checkSourceFile(code, "vt-ok.fixture.tsx")).toEqual([]);
   });

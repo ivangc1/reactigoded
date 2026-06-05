@@ -1302,7 +1302,17 @@ function accessedMemberName(node) {
     // equivalentes al string literal. Desenvolverlos cierra ese hermano del
     // bypass bracket-string (codex P2). Una key `[k]` (variable) NO es string
     // literal ni siquiera desenvuelta → sigue out-of-scope (residual #3).
-    const arg = skipErasedDown(node.argumentExpression);
+    // Desenvuelve wrappers erased + coma (→right, único valor estático) — la coma
+    // `(side, "constructor")` resuelve a su literal derecho (re-hunt). `||`/`??`/
+    // ternario NO dan un literal único → quedan como residual (data-flow).
+    let arg = skipErasedDown(node.argumentExpression);
+    while (
+      arg &&
+      ts.isBinaryExpression(arg) &&
+      arg.operatorToken.kind === ts.SyntaxKind.CommaToken
+    ) {
+      arg = skipErasedDown(arg.right);
+    }
     if (arg !== undefined && ts.isStringLiteralLike(arg)) return arg.text;
   }
   return undefined;
@@ -1363,10 +1373,19 @@ function isValueTransparentParent(parent, child) {
   if (ts.isBinaryExpression(parent)) {
     const op = parent.operatorToken.kind;
     if (op === ts.SyntaxKind.CommaToken) return parent.right === child;
-    if (op === ts.SyntaxKind.AmpersandAmpersandToken) return parent.right === child;
+    // `&&` y `&&=`: una base truthy (un constructor lo es) pasa el valor a la
+    // derecha. `||`/`??` y sus compound `||=`/`??=`: el valor es left|right.
+    if (
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+    ) {
+      return parent.right === child;
+    }
     if (
       op === ts.SyntaxKind.BarBarToken ||
-      op === ts.SyntaxKind.QuestionQuestionToken
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
     ) {
       return parent.left === child || parent.right === child;
     }
@@ -1394,11 +1413,17 @@ function reachesConstructorAccess(node) {
   if (ts.isBinaryExpression(node)) {
     const op = node.operatorToken.kind;
     if (op === ts.SyntaxKind.CommaToken) return reachesConstructorAccess(node.right);
-    if (op === ts.SyntaxKind.AmpersandAmpersandToken)
+    if (
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+    ) {
       return reachesConstructorAccess(node.right);
+    }
     if (
       op === ts.SyntaxKind.BarBarToken ||
-      op === ts.SyntaxKind.QuestionQuestionToken
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
     ) {
       return (
         reachesConstructorAccess(node.left) ||
