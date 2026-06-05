@@ -1191,7 +1191,12 @@ function extractNegativeEarlyReturnGuard(stmt) {
 function accessedMemberName(node) {
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
   if (ts.isElementAccessExpression(node)) {
-    const arg = node.argumentExpression;
+    // La key puede venir envuelta en wrappers erased (paréntesis `[("call")]`,
+    // cast `["call" as string]`, `!`/satisfies) — contiguos y legibles, runtime-
+    // equivalentes al string literal. Desenvolverlos cierra ese hermano del
+    // bypass bracket-string (codex P2). Una key `[k]` (variable) NO es string
+    // literal ni siquiera desenvuelta → sigue out-of-scope (residual #3).
+    const arg = skipErasedDown(node.argumentExpression);
     if (arg !== undefined && ts.isStringLiteralLike(arg)) return arg.text;
   }
   return undefined;

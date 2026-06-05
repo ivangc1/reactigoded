@@ -1473,6 +1473,11 @@ describe("server-safe gate — eval-sink por bracket notation del .constructor",
     ['constructor["bind"]', `/** @server-safe */\nexport const t = (() => {}).constructor["bind"](null, "x")();`],
     ['paren + bracket combinado', `/** @server-safe */\nexport const t = (({}).constructor)["call"](null, "x")();`],
     ['doble bracket constructor["constructor"]', `/** @server-safe */\nexport const t = ({})["constructor"]["constructor"]("x")();`],
+    // Key envuelta en wrappers erased (paréntesis/cast) — runtime-equivalente al
+    // string literal. codex P2.
+    ['key parentizada [("call")]', `/** @server-safe */\nexport const t = (() => {}).constructor[("call")](null, "return window")();`],
+    ['doble [("constructor")] parentizada', `/** @server-safe */\nexport const t = ({})[("constructor")][("constructor")]("x")();`],
+    ['key con cast ["call" as string]', `/** @server-safe */\nexport const t = (() => {}).constructor[("call") as string](null, "x")();`],
   ])("FLAGGEA el bracket-string igual que el punto: %s", (_label, code) => {
     const v = checkSourceFile(code, "bracket-sink.fixture.tsx");
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
