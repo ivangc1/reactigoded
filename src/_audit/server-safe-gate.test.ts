@@ -1545,6 +1545,11 @@ describe("server-safe gate — eval-sink por operador value-transparente", () =>
     ['nullish null ?? X', `/** @server-safe */\nexport const t = (null ?? (() => {}).constructor)("x")();`],
     ['asignación (f = X)', `/** @server-safe */\nlet f: any;\nexport const t = (f = (() => {}).constructor)("x")();`],
     ['coma + as + bracket ["call"]', `/** @server-safe */\nexport const t = (0, (() => {}).constructor as any)["call"](null, "x")();`],
+    // await de un valor NO-thenable (un constructor no es thenable) es transparente
+    // (codex P1). El operando debe ser un .constructor SINTÁCTICO.
+    ['await del .constructor (callee)', `/** @server-safe */\nexport async function C() { const w = (await (function () {}).constructor)("return window")(); return w; }`],
+    ['await + .call', `/** @server-safe */\nexport async function C() { const w = (await (() => {}).constructor).call(null, "x")(); return w; }`],
+    ['await + coma combinado', `/** @server-safe */\nexport async function C() { const w = (await (0, (() => {}).constructor))("x")(); return w; }`],
   ])("FLAGGEA pese al operador value-transparente: %s", (_label, code) => {
     const v = checkSourceFile(code, "vt-sink.fixture.tsx");
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -1553,6 +1558,9 @@ describe("server-safe gate — eval-sink por operador value-transparente", () =>
   it.each([
     // EL BOUND: call/IIFE NO es transparente → residual out-of-scope (data-flow).
     ['IIFE devuelve ctor (call NO transparente)', `/** @server-safe */\nexport const t = ((() => (() => {}).constructor)())("x")();`],
+    // await de un CALL / promise-var es data-flow → residual (el operando es un call).
+    ['await de un call (data-flow)', `/** @server-safe */\nexport async function C() { const getCtor = () => (() => {}).constructor; const w = (await getCtor())("x")(); return w; }`],
+    ['await p, .constructor.name no llamado', `/** @server-safe */\nexport async function C(p: any) { const n = (await p).constructor.name; return n; }`],
     // &&-left NO carga el valor (base truthy pasa a la derecha) → no FP.
     ['(ctor && safeFn)() → safeFn', `/** @server-safe */\nexport const t = ((() => {}).constructor && ((s: string) => s))("x");`],
     ['(x.constructor || Object) === Object', `/** @server-safe */\nexport const eq = (x: any) => (x.constructor || Object) === Object;`],

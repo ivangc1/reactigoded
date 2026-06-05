@@ -1312,6 +1312,10 @@ function skipErasedDown(node) {
  */
 function isValueTransparentParent(parent, child) {
   if (isErasedOuterExpr(parent)) return true;
+  // `await X` de un valor NO-thenable (un constructor NO es thenable) devuelve X
+  // sin cambiarlo → transparente. Sigue dentro del bound: el operando debe ser un
+  // `.constructor` SINTÁCTICO; `await fn()` (call) no se atraviesa (codex P1).
+  if (ts.isAwaitExpression(parent)) return parent.expression === child;
   if (ts.isConditionalExpression(parent)) {
     return parent.whenTrue === child || parent.whenFalse === child;
   }
@@ -1339,6 +1343,7 @@ function reachesConstructorAccess(node) {
   if (!node) return false;
   if (isConstructorMemberAccess(node)) return true;
   if (isErasedOuterExpr(node)) return reachesConstructorAccess(node.expression);
+  if (ts.isAwaitExpression(node)) return reachesConstructorAccess(node.expression);
   if (ts.isConditionalExpression(node)) {
     return (
       reachesConstructorAccess(node.whenTrue) ||
