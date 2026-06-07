@@ -1754,6 +1754,9 @@ describe("server-safe gate — namespace body locals (FP8)", () => {
     // el NOMBRE del namespace es un binding runtime dentro de su cuerpo (codex P2):
     ["self-ref del nombre (fmt.SEP)", `/** @server-safe */\nexport namespace fmt { export const SEP = ","; export function join(p: string[]) { return p.join(fmt.SEP); } }`],
     ["nested A.B self-ref (B.x + A.B.x)", `/** @server-safe */\nexport namespace A { export namespace B { export const x = 1; export function f() { return B.x + A.B.x; } } }`],
+    // var hoisted del cuerpo (colisiona con un global) — local, no toca el global (codex P2):
+    ["var hoisted que sombrea un global", `/** @server-safe */\nexport namespace N { var window = { x: 1 }; export const y = window.x; }`],
+    ["var hoisted usado en method", `/** @server-safe */\nexport namespace N { var doc: any; doc = {}; export function f() { return doc; } }`],
   ])("NO genera falso positivo en locales del namespace: %s", (_label, code) => {
     expect(checkSourceFile(code, "ns-locals.fixture.tsx")).toEqual([]);
   });

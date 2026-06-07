@@ -2457,8 +2457,15 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           ? addToScope(context, new Set([node.name.text]))
           : context;
       if (ts.isModuleBlock(node.body)) {
-        const blockFns = gatherBlockFunctionDeclarations(node.body);
-        visitOrderedStatements(node.body.statements, nsCtx, blockFns);
+        const preloaded = gatherBlockFunctionDeclarations(node.body);
+        // `var` declarations del cuerpo: hoisted al scope de la IIFE del namespace
+        // (`namespace N { var window = {x:1}; … window.x … }` → window es local).
+        // extractPostStatementBindings salta `var`, así que se precargan aquí
+        // (espejo de gatherFunctionVarHoisted para function bodies). codex P2.
+        ts.forEachChild(node.body, (child) =>
+          collectVarHoistedRecursive(child, preloaded),
+        );
+        visitOrderedStatements(node.body.statements, nsCtx, preloaded);
       } else {
         // `namespace A.B {}` — el body es otro ModuleDeclaration (la `B`).
         visit(node.body, nsCtx);
