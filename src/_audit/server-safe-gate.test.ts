@@ -1764,6 +1764,10 @@ describe("server-safe gate — namespace body locals (FP8)", () => {
   it.each([
     ["global real en namespace body", `/** @server-safe */\nexport namespace bad { export function f() { return window.location.href; } }`],
     ["global real en nested A.B body", `/** @server-safe */\nexport namespace A { export namespace B { export function f() { return window.location.href; } } }`],
+    // var en static block de clase NO se hoista al namespace/función (scoped al
+    // bloque) → el global homónimo posterior SIGUE flaggeando (codex P2, bypass).
+    ["var en static block (namespace) no hoista", `/** @server-safe */\nexport namespace N { class C { static { var window = {} as any; void window; } } export const x = window.location; }`],
+    ["var en static block (función) no hoista", `/** @server-safe */\nexport function F() { class C { static { var window = {} as any; void window; } } return window.location.href; }`],
   ])("read de un global REAL dentro del namespace SIGUE flaggeando: %s", (_label, code) => {
     expect(checkSourceFile(code, "ns-global.fixture.tsx").length).toBeGreaterThan(0);
   });

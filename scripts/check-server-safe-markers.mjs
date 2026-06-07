@@ -884,6 +884,12 @@ function collectVarHoistedRecursive(node, names) {
     ts.isGetAccessorDeclaration(node) ||
     ts.isSetAccessorDeclaration(node) ||
     ts.isConstructorDeclaration(node) ||
+    // class: un `var` en un static block / property initializer está scoped a ESE
+    // bloque, NO al function/namespace scope envolvente (`class C { static { var
+    // window } }` no hoista `window` fuera). No parar aquí preloadeaba ese var →
+    // bypass de un global homónimo leído después. codex P2.
+    ts.isClassDeclaration(node) ||
+    ts.isClassExpression(node) ||
     // namespace/module: sus `var` son scoped al módulo, NO al archivo — y un
     // `declare global { var X }` es AMBIENT (borrado, no emite binding). En
     // ninguno de los dos casos el `var` debe hoistarse al scope del archivo.
