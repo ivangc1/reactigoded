@@ -1774,6 +1774,32 @@ describe("server-safe gate — namespace body locals (FP8)", () => {
 });
 
 /**
+ * Static block de clase es un scope de var-hoisting PROPIO (codex P2, la cara
+ * interna del fix anterior): un `var` declarado dentro es local al bloque y leerlo
+ * en el mismo bloque NO se flaggea. Pero el global REAL (sin local) dentro del
+ * bloque SÍ flaggea (corre durante la evaluación de la clase, render-path), y el
+ * `var` NO se hoista fuera de la clase (la rama de clase corta el leak — cubierto
+ * en FP8 arriba). Cierra el FP que `collectVarHoistedRecursive` para-en-clase abrió.
+ */
+describe("server-safe gate — static block es scope de var-hoisting propio (FP, codex P2)", () => {
+  it.each([
+    ["var local leído en el mismo static block", `/** @server-safe */\nexport class C { static { var window = { location: { href: "" } }; void window.location.href; } }`],
+    ["var anidado en if dentro del static block", `/** @server-safe */\nexport class C { static { if (true) { var window = { x: 1 }; } void window.x; } }`],
+    ["function decl homónima de un global, pre-cargada", `/** @server-safe */\nexport class C { static { void location.toString(); function location() { return ""; } } }`],
+    ["static block tras guard typeof hereda el narrowing", `/** @server-safe */\nexport function make() { if (typeof window === "undefined") return null; class C { static { void window.location.href; } } return C; }`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "static-block.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    ["global real (sin local) en static block", `/** @server-safe */\nexport class C { static { void window.location.href; } }`],
+    ["instance field init leyendo un global", `/** @server-safe */\nexport class C { x = window.location.href; }`],
+  ])("read de un global REAL en cuerpo de clase SIGUE flaggeando: %s", (_label, code) => {
+    expect(checkSourceFile(code, "static-block-global.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * Guards: narrowing en más posiciones (deep re-hunt). El `||` de guards negativos
  * en early-return narrowea TODOS (`if (typeof a === "undefined" || typeof b ===
  * "undefined") return`); un then-branch exhaustivo via if/else cuenta como salida;

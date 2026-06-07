@@ -2448,6 +2448,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       return;
     }
 
+    // (b.0a) Static block de clase: su cuerpo es un SCOPE de var-hoisting PROPIO
+    // — los `var` declarados dentro son locales al bloque (no se hoistan a la
+    // clase ni a la función externa; por eso collectVarHoistedRecursive PARA en
+    // la clase). Sin pre-cargarlos, leer el propio `var` homónimo de un global
+    // (`static { var window = {…}; window.x }`) se flaggeaba como global bare
+    // (FP, codex P2). Espejo del var-hoist del namespace/función. Soundness: el
+    // acceso al GLOBAL real dentro del bloque (sin local) lo sigue flaggeando,
+    // y el `var` NO se hoista fuera de la clase (la rama de clase corta el leak).
+    if (ts.isClassStaticBlockDeclaration(node) && node.body) {
+      const preloaded = gatherBlockFunctionDeclarations(node.body);
+      ts.forEachChild(node.body, (child) =>
+        collectVarHoistedRecursive(child, preloaded),
+      );
+      visitOrderedStatements(node.body.statements, context, preloaded);
+      return;
+    }
+
     // (b.0b) Namespace/module: el cuerpo es un SCOPE — sus declaraciones locales
     // (const/let/function/class…) son visibles dentro. Procesarlo como un Block
     // (scope-tracked) evita un FP sobre reads de sus propios locales (`namespace N
