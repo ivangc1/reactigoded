@@ -1715,6 +1715,53 @@ describe("server-safe gate — typeof guard por expresión (&&/||/ternario)", ()
 });
 
 /**
+ * Eval-sink en deferred TIMER vs CLIENT-ONLY (deep re-hunt). Un eval-sink
+ * (Function/eval/.constructor) throw en el isolate Edge SIEMPRE que se ejecute, y
+ * setTimeout/setInterval/queueMicrotask PUEDEN disparar en Edge durante SSR → su
+ * callback NO exime eval-sinks. useEffect/event-handler NO corren en SSR (corren
+ * tras hidratación, donde eval funciona) → siguen exentos. El read de un global
+ * AUSENTE (window) sí sigue exento en cualquier deferred (comportamiento previo).
+ */
+describe("server-safe gate — eval-sink en timer deferido NO se exime", () => {
+  it.each([
+    ["queueMicrotask + Function()", `/** @server-safe */\nexport function W() { queueMicrotask(() => { const g = Function("return window")(); void g; }); return <div />; }`],
+    ["setTimeout + eval()", `/** @server-safe */\nexport function W() { setTimeout(() => { eval("x"); }, 0); return <div />; }`],
+    ["setInterval + .constructor sink", `/** @server-safe */\nexport function W() { setInterval(() => { (() => {}).constructor("x")(); }, 100); return <div />; }`],
+  ])("FLAGGEA el eval-sink en un timer: %s", (_label, code) => {
+    const v = checkSourceFile(code, "timer-sink.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it.each([
+    ["useEffect + Function (client-only)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { const g = Function("return 1")(); void g; }, []); return <div />; }`],
+    ["onClick + eval (client-only)", `/** @server-safe */\nexport function W() { return <button onClick={() => { eval("x"); }}>x</button>; }`],
+    ["timer ANIDADO en useEffect (sticky client)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { setTimeout(() => { eval("x"); }, 0); }, []); return <div />; }`],
+    ["window read en setTimeout (global ausente, exento)", `/** @server-safe */\nexport function W() { setTimeout(() => { window.scrollTo(0, 0); }, 0); return <div />; }`],
+  ])("NO flaggea (client-only deferred / window-absence): %s", (_label, code) => {
+    expect(checkSourceFile(code, "deferred-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * Cuerpo de namespace es un scope con sus locales (deep re-hunt FP8): un `const`/
+ * `function` local del namespace usado en sus miembros NO se flaggea. Un read de
+ * un global REAL dentro del namespace sí.
+ */
+describe("server-safe gate — namespace body locals (FP8)", () => {
+  it.each([
+    ["const local usado en method", `/** @server-safe */\nexport namespace format { const SEP = ", "; export function join(parts: readonly string[]): string { return parts.join(SEP); } }`],
+    ["fn local en namespace", `/** @server-safe */\nexport namespace util { function helper() { return 1; } export function f() { return helper(); } }`],
+  ])("NO genera falso positivo en locales del namespace: %s", (_label, code) => {
+    expect(checkSourceFile(code, "ns-locals.fixture.tsx")).toEqual([]);
+  });
+
+  it("read de un global REAL dentro del namespace SIGUE flaggeando", () => {
+    const code = `/** @server-safe */\nexport namespace bad { export function f() { return window.location.href; } }`;
+    expect(checkSourceFile(code, "ns-global.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * Guards: narrowing en más posiciones (deep re-hunt). El `||` de guards negativos
  * en early-return narrowea TODOS (`if (typeof a === "undefined" || typeof b ===
  * "undefined") return`); un then-branch exhaustivo via if/else cuenta como salida;

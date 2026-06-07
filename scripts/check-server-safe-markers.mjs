@@ -547,10 +547,17 @@ const DEFERRED_LATER_FNS = new Set([
 ]);
 
 /**
- * Devuelve `true` si `fnNode` (ArrowFunction / FunctionExpression /
- * FunctionDeclaration / Method / Accessor / Constructor) está
- * sintácticamente colocado como argumento de un sink de ejecución
- * diferida reconocido — su body NO se invoca durante el render server.
+ * Devuelve el KIND de ejecución diferida de `fnNode` (ArrowFunction /
+ * FunctionExpression / … colocado como callback de un sink reconocido):
+ *   - "none"   → render path (su body corre durante el render server).
+ *   - "client" → hook (useEffect…) / event handler — NO corre en SSR (corre tras
+ *                hidratación en cliente). Eval-sinks aquí son safe (eval funciona
+ *                post-hidratación) → exentos.
+ *   - "timer"  → setTimeout/setInterval/queueMicrotask — su callback PUEDE
+ *                disparar en el isolate Edge durante SSR. Un eval-sink ahí throw
+ *                (code-gen deshabilitado) → NO exento; un read de global ausente
+ *                (window) sí sigue exento (deferred).
+ * Su body NO se invoca durante el render server (salvo "none").
  *
  * Sinks reconocidos:
  *   - JSX event handler: `<X onFoo={fn}>` con nombre matching /^on[A-Z]/.
@@ -579,7 +586,7 @@ function isDeferredExecutionContext(fnNode, context) {
     current = parent;
     parent = parent.parent;
   }
-  if (!parent) return false;
+  if (!parent) return "none";
 
   // (1) JSX event handler RESTRICTED a intrinsic HTML elements:
   // `<button onClick={fn}>`. Custom components `<MyComp onFoo={fn}>`
@@ -601,7 +608,7 @@ function isDeferredExecutionContext(fnNode, context) {
         if (ts.isIdentifier(tagName)) {
           const first = tagName.text.charAt(0);
           if (first && first === first.toLowerCase()) {
-            return true;
+            return "client";
           }
         }
       }
@@ -610,9 +617,9 @@ function isDeferredExecutionContext(fnNode, context) {
 
   // (2) Argumento de CallExpression a sink reconocido.
   if (ts.isCallExpression(parent)) {
-    if (parent.expression === current) return false;
+    if (parent.expression === current) return "none";
     const isArg = parent.arguments.some((a) => a === current);
-    if (!isArg) return false;
+    if (!isArg) return "none";
     const callee = parent.expression;
     let calleeName = null;
     let rootIdent = null;
@@ -641,7 +648,7 @@ function isDeferredExecutionContext(fnNode, context) {
         rootIdent !== null &&
         context.nonImportBindings.has(rootIdent)
       ) {
-        return false;
+        return "none";
       }
       if (DEFERRED_HOOKS.has(calleeName)) {
         // Codex round 17 P1.1: solo exempt si el binding viene
@@ -650,9 +657,9 @@ function isDeferredExecutionContext(fnNode, context) {
         // El check usa root del callee chain — cubre tanto `useEffect`
         // bare como `React.useEffect` (`React` debe venir de "react").
         if (rootIdent !== null && context.reactImports.has(rootIdent)) {
-          return true;
+          return "client";
         }
-        return false;
+        return "none";
       }
       if (DEFERRED_LATER_FNS.has(calleeName)) {
         // Codex round 18 P1: solo exempt si el timer es el GLOBAL real
@@ -667,14 +674,14 @@ function isDeferredExecutionContext(fnNode, context) {
           rootIdent === null ||
           context.localBindings.has(rootIdent)
         ) {
-          return false;
+          return "none";
         }
-        return true;
+        return "timer";
       }
     }
   }
 
-  return false;
+  return "none";
 }
 
 function listSourceFiles(dir) {
@@ -2373,7 +2380,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ts.isSetAccessorDeclaration(node) ||
       ts.isConstructorDeclaration(node)
     ) {
-      const isDeferred = isDeferredExecutionContext(node, context);
+      const deferredKind = isDeferredExecutionContext(node, context);
+      const isDeferred = deferredKind !== "none";
       const fnScopeBindings = gatherFunctionVarHoisted(node);
       // `arguments` es un binding implícito en funciones NO-arrow (no existe
       // en arrows). Inyectarlo evita un falso positivo bajo fail-closed:
@@ -2387,6 +2395,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const bodyContext = {
         ...addToScope(context, fnScopeBindings),
         isInDeferredBody: context.isInDeferredBody || isDeferred,
+        // CLIENT-ONLY deferred (hook/handler) vs TIMER (setTimeout/setInterval/
+        // queueMicrotask). Sticky: una vez en client-only, los timers anidados
+        // también corren en cliente. Los eval-sinks (Function/eval/.constructor)
+        // throw en Edge SIEMPRE que se ejecuten, y los timers SÍ disparan en Edge
+        // durante SSR → solo se eximen en client-only, NO en timer (deep re-hunt).
+        isInClientOnlyDeferredBody:
+          context.isInClientOnlyDeferredBody || deferredKind === "client",
         // ¿El cuerpo hereda los guards activos en SU posición de definición?
         // El narrowing es POSICIONAL y sound para todo lo que se invoca según su
         // posición léxica: una función-expr/arrow/método/IIFE solo es llamable
@@ -2424,6 +2439,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     ) {
       const classCtx = addToScope(context, new Set([node.name.text]));
       ts.forEachChild(node, (child) => visit(child, classCtx));
+      return;
+    }
+
+    // (b.0b) Namespace/module: el cuerpo es un SCOPE — sus declaraciones locales
+    // (const/let/function/class…) son visibles dentro. Procesarlo como un Block
+    // (scope-tracked) evita un FP sobre reads de sus propios locales (`namespace N
+    // { const SEP = ","; export function f(){ return x.join(SEP); } }`). El nombre
+    // del namespace ya lo manejan los colectores del shadow-set. re-hunt FP8.
+    if (ts.isModuleDeclaration(node) && node.body) {
+      if (ts.isModuleBlock(node.body)) {
+        const blockFns = gatherBlockFunctionDeclarations(node.body);
+        visitOrderedStatements(node.body.statements, context, blockFns);
+      } else {
+        // `namespace A.B {}` — el body es otro ModuleDeclaration (la `B`).
+        visit(node.body, context);
+      }
       return;
     }
 
@@ -2538,9 +2569,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // import, etc.), NO es ref al global — skip. También skip si el
           // property-access está en una heritage TYPE-ONLY (`interface X extends
           // navigator.Foo`) — se borra, no hay read runtime (re-hunt FP).
+          // eval-sink: solo exento en deferred client-only (throw en Edge siempre,
+          // los timers fire en Edge). window/global: exento en cualquier deferred.
+          const deferredExempt = isEvalSink
+            ? context.isInClientOnlyDeferredBody
+            : context.isInDeferredBody;
           if (
             !context.localBindings.has(api) &&
-            !context.isInDeferredBody &&
+            !deferredExempt &&
             !isInTypeOnlyHeritageExpr(node)
           ) {
             if (!context.activeGuards.has(api)) {
@@ -2612,7 +2648,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       (ts.isPropertyAccessExpression(node) ||
         ts.isElementAccessExpression(node)) &&
       isConstructorMemberAccess(node) &&
-      !context.isInDeferredBody &&
+      // eval-sink: throw en Edge siempre → solo exento en client-only deferred,
+      // NO en timer (queueMicrotask/setTimeout fire en Edge). deep re-hunt.
+      !context.isInClientOnlyDeferredBody &&
       // (a) doble `x.constructor.constructor`; (b) callee directo
       // `x.constructor(...)`; (c) `x.constructor.call/.apply/.bind`; (d) tagged
       // `x.constructor\`code\``. Todas saltando ParenthesizedExpression a ambos
@@ -2657,7 +2695,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           !context.localBindings.has(api) &&
           !isNonReferencePosition(node, moduleDeclaredNames)
         ) {
-          if (!context.isInDeferredBody && !context.activeGuards.has(api)) {
+          // Un eval-sink (eval/Function/globalThis/global) throw en Edge SIEMPRE
+          // → solo exento en deferred CLIENT-ONLY. Un read de global ausente
+          // (window…) se exime en cualquier deferred (incl. timer). deep re-hunt.
+          const deferredExempt = isEvalSink
+            ? context.isInClientOnlyDeferredBody
+            : context.isInDeferredBody;
+          if (!deferredExempt && !context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
             const lineText =
@@ -2729,6 +2773,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     activeGuards: new Set(),
     blockEntryGuards: new Set(),
     isInDeferredBody: false,
+    isInClientOnlyDeferredBody: false,
     localBindings: moduleAll,
     nonImportBindings: moduleNonImports,
     reactImports,
