@@ -1247,6 +1247,13 @@ function statementAlwaysExits(stmt) {
   if (ts.isBlock(stmt) && stmt.statements.length > 0) {
     return statementAlwaysExits(stmt.statements[stmt.statements.length - 1]);
   }
+  // if/else donde AMBAS ramas salen siempre → el control no cae (re-hunt FP6).
+  if (ts.isIfStatement(stmt) && stmt.elseStatement) {
+    return (
+      statementAlwaysExits(stmt.thenStatement) &&
+      statementAlwaysExits(stmt.elseStatement)
+    );
+  }
   return false;
 }
 
@@ -1257,12 +1264,16 @@ function statementAlwaysExits(stmt) {
  * idioma React/SSR dominante (equivalente al narrowing de TS/ESLint). Devuelve
  * el nombre guardado o null. beta.27 BLOCKER-1 (workflow honest-construct).
  */
-function extractNegativeEarlyReturnGuard(stmt) {
-  if (!ts.isIfStatement(stmt) || stmt.elseStatement) return null;
-  const name = extractNegativeTypeofGuard(stmt.expression);
-  if (!name) return null;
-  if (!statementAlwaysExits(stmt.thenStatement)) return null;
-  return name;
+function extractNegativeEarlyReturnGuards(stmt) {
+  if (!ts.isIfStatement(stmt) || stmt.elseStatement) return new Set();
+  // `||` de guards negativos: `if (typeof a === "undefined" || typeof b ===
+  // "undefined") return` → tras el return AMBOS están definidos (la disyunción
+  // es falsa) (re-hunt FP5). Reusa collectDisjunctionGuards (chain-aware).
+  const names = new Set();
+  collectDisjunctionGuards(stmt.expression, names);
+  if (names.size === 0) return names;
+  if (!statementAlwaysExits(stmt.thenStatement)) return new Set();
+  return names;
 }
 
 /**
@@ -2258,18 +2269,32 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // hereda el guard activo. El else-branch NO (en else, X está
     // undefined per la negación de la condición positiva).
     if (ts.isIfStatement(node)) {
-      // chain-aware (`if (typeof a !== "undefined" && typeof b !== "undefined")`)
-      // vía el mismo colector que el guard por expresión — no forkeado.
-      const guards = new Set();
-      collectConjunctionGuards(node.expression, guards);
-      if (guards.size > 0) {
+      // chain-aware vía los mismos colectores que el guard por expresión (no
+      // forkeado). POSITIVO (`typeof X !== "undefined"`) → narrowea el THEN;
+      // NEGATIVO (`typeof X === "undefined"`) → narrowea el ELSE (X está definido
+      // ahí, espejo del ternario whenFalse). re-hunt FP7.
+      const posGuards = new Set();
+      collectConjunctionGuards(node.expression, posGuards);
+      const negGuards = new Set();
+      collectDisjunctionGuards(node.expression, negGuards);
+      if (posGuards.size > 0 || negGuards.size > 0) {
         visit(node.expression, context);
-        const thenContext = {
-          ...context,
-          activeGuards: new Set([...context.activeGuards, ...guards]),
-        };
-        if (node.thenStatement) visit(node.thenStatement, thenContext);
-        if (node.elseStatement) visit(node.elseStatement, context);
+        if (node.thenStatement) {
+          visit(
+            node.thenStatement,
+            posGuards.size > 0
+              ? { ...context, activeGuards: new Set([...context.activeGuards, ...posGuards]) }
+              : context,
+          );
+        }
+        if (node.elseStatement) {
+          visit(
+            node.elseStatement,
+            negGuards.size > 0
+              ? { ...context, activeGuards: new Set([...context.activeGuards, ...negGuards]) }
+              : context,
+          );
+        }
         return;
       }
     }
@@ -2444,11 +2469,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           const additions = extractPostStatementBindings(stmt);
           current = addToScope(current, additions);
           clauseCtx = addToScope(clauseCtx, additions);
-          const negGuard = extractNegativeEarlyReturnGuard(stmt);
-          if (negGuard) {
+          const negGuards = extractNegativeEarlyReturnGuards(stmt);
+          if (negGuards.size > 0) {
             clauseCtx = {
               ...clauseCtx,
-              activeGuards: new Set([...clauseCtx.activeGuards, negGuard]),
+              activeGuards: new Set([...clauseCtx.activeGuards, ...negGuards]),
             };
           }
         }
@@ -2681,11 +2706,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       current = addToScope(current, additions);
       // Narrowing por early-return: tras `if (typeof X === "undefined") return;`
       // X existe en los statements posteriores del bloque → guard activo.
-      const negGuard = extractNegativeEarlyReturnGuard(stmt);
-      if (negGuard) {
+      const negGuards = extractNegativeEarlyReturnGuards(stmt);
+      if (negGuards.size > 0) {
         current = {
           ...current,
-          activeGuards: new Set([...current.activeGuards, negGuard]),
+          activeGuards: new Set([...current.activeGuards, ...negGuards]),
         };
       }
     }

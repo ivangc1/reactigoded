@@ -1715,6 +1715,31 @@ describe("server-safe gate — typeof guard por expresión (&&/||/ternario)", ()
 });
 
 /**
+ * Guards: narrowing en más posiciones (deep re-hunt). El `||` de guards negativos
+ * en early-return narrowea TODOS (`if (typeof a === "undefined" || typeof b ===
+ * "undefined") return`); un then-branch exhaustivo via if/else cuenta como salida;
+ * la rama ELSE de un guard negativo narrowea (X definido ahí). Todo reusa los
+ * mismos colectores (no forkeado); la rama equivocada sigue flaggeando.
+ */
+describe("server-safe gate — guard narrowing extendido (||-early-return, else, if/else)", () => {
+  it.each([
+    ["|| de negativos en early-return", `/** @server-safe */\nexport function C() { if (typeof window === "undefined" || typeof document === "undefined") return null; return window.location.href + document.title; }`],
+    ["then exhaustivo via if/else", `/** @server-safe */\nexport function C({ a }: { a: boolean }) { if (typeof window === "undefined") { if (a) { return "a"; } else { return "b"; } } return window.location.href; }`],
+    ["read en ELSE de guard negativo", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") { return "ssr"; } else { return window.location.href; } }`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "guard-ext.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    ["read en THEN de guard negativo (undefined ahí)", `/** @server-safe */\nexport function C() { if (typeof window === "undefined") { return window.location.href; } return "x"; }`],
+    ["|| con no-guard: el otro nombre no garantizado", `/** @server-safe */\nexport function C(foo: boolean) { if (typeof window === "undefined" || foo) return null; return window.location.href + document.title; }`],
+    ["then NO exhaustivo (if sin else)", `/** @server-safe */\nexport function C({ a }: { a: boolean }) { if (typeof window === "undefined") { if (a) { return "a"; } } return window.location.href; }`],
+  ])("SIGUE flaggeando (rama equivocada / no garantizado): %s", (_label, code) => {
+    expect(checkSourceFile(code, "guard-ext-flag.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * FPs fail-closed destapados por el re-hunt: self-reference de clase + root de
  * heritage type-only cualificada. Ambos son posiciones que NO leen un global en
  * runtime pero el modelo fail-closed flaggeaba. Cero debilitamiento — el
