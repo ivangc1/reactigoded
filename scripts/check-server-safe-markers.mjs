@@ -817,7 +817,7 @@ function producesRuntimeValue(decl) {
   )
     return true;
   if (ts.isImportEqualsDeclaration(decl))
-    return importEqualsProducesRuntimeValue(decl, 0);
+    return importEqualsProducesRuntimeValue(decl);
   if (ts.isModuleDeclaration(decl)) return namespaceIsInstantiated(decl);
   // interface, type alias, y todo lo demás type-space → NO produce valor.
   return false;
@@ -892,6 +892,19 @@ function resolveDeclsInScope(name, fromNode) {
       const decls = findAllDeclsInStatements(scope.statements, name);
       if (decls.length > 0) return decls;
     }
+    // Un namespace hace visible su PROPIO nombre dentro de su body. Clave para el
+    // dotted `namespace A.B { … B.window … }`: `B` NO es un statement de ningún bloque
+    // (es el `.body` de A) → findAllDeclsInStatements no lo ve. (En el nested-bloque
+    // `namespace A { namespace B {} }`, B SÍ es statement de A, ya resuelto arriba.)
+    // codex P1 dotted-self-ref.
+    if (
+      ts.isModuleDeclaration(scope) &&
+      scope.name &&
+      ts.isIdentifier(scope.name) &&
+      scope.name.text === name
+    ) {
+      return [scope];
+    }
     scope = scope.parent;
   }
   return [];
@@ -902,18 +915,22 @@ function resolveDeclsInScope(name, fromNode) {
  * descender. Una namespace se alcanza directa (ModuleDeclaration) o vía un `import X =`
  * SAME-FILE cuyo RHS resuelve a un namespace (`import Cfg = N.Cfg` → el namespace Cfg).
  * Sin esto, un alias-a-namespace como contenedor se filtraba como no-namespace → no se
- * podía descender → bypass (codex P1). Guard de profundidad contra ciclos de alias.
+ * podía descender → bypass (codex P1 alias-ns). `seen` = los import-equals ya visitados
+ * en ESTE camino (path-local, copy-on-recurse): corta SOLO los ciclos reales, no las
+ * cadenas largas legítimas (un límite numérico FP-eaba cadenas válidas — codex P1).
  */
-function expandToNamespaces(decls, depth) {
+function expandToNamespaces(decls, seen) {
   const out = [];
   for (const d of decls) {
     if (ts.isModuleDeclaration(d)) {
       out.push(d);
-    } else if (ts.isImportEqualsDeclaration(d) && depth < 12) {
+    } else if (ts.isImportEqualsDeclaration(d) && !seen.has(d)) {
       const ref = d.moduleReference;
       if (ref && !ts.isExternalModuleReference(ref)) {
-        const targets = resolveSameFileEntity(ref, d, depth + 1);
-        if (targets) out.push(...expandToNamespaces(targets, depth + 1));
+        const next = new Set(seen);
+        next.add(d);
+        const targets = resolveSameFileEntity(ref, d, next);
+        if (targets) out.push(...expandToNamespaces(targets, next));
       }
     }
   }
@@ -925,14 +942,13 @@ function expandToNamespaces(decls, depth) {
  * empezando por el scope LÉXICO de `fromNode`. Devuelve el ARRAY de declaraciones del
  * miembro final (merge), o undefined si no resuelve same-file (→ cross-module / no
  * resoluble sintácticamente). Para DESCENDER expande a los namespace(s) entre las decls
- * merged Y los alias `import X = NS` a namespace (`function Cfg` no tiene miembros;
- * `namespace Cfg` y `import Cfg = N.Cfg` sí — codex P1 merge + alias); busca el miembro
- * en TODOS los bloques de un namespace partido. Trabajo de-un-solo-archivo, 100%
- * sintáctico, sin type-checker. beta.27 BLOCKER-1 (B4 + P1 nested + merge + alias-ns).
+ * merged Y los alias `import X = NS` a namespace; busca el miembro en TODOS los bloques
+ * de un namespace partido. `seen` arrastra los alias del camino (detección de ciclos).
+ * Trabajo de-un-solo-archivo, 100% sintáctico, sin type-checker. beta.27 BLOCKER-1
+ * (B4 + P1 nested + merge + alias-ns + dotted-self + chain-cycle).
  */
-function resolveSameFileEntity(entityName, fromNode, depth) {
-  const d = depth || 0;
-  if (d > 24) return undefined; // backstop anti-ciclo
+function resolveSameFileEntity(entityName, fromNode, seen) {
+  const visited = seen || new Set();
   const parts = [];
   let e = entityName;
   while (e && ts.isQualifiedName(e)) {
@@ -944,7 +960,7 @@ function resolveSameFileEntity(entityName, fromNode, depth) {
   let decls = resolveDeclsInScope(parts[0], fromNode);
   if (decls.length === 0) return undefined;
   for (let i = 1; i < parts.length; i++) {
-    const namespaces = expandToNamespaces(decls, d);
+    const namespaces = expandToNamespaces(decls, visited);
     if (namespaces.length === 0) return undefined; // no se puede descender → no resuelve
     let found = [];
     for (const ns of namespaces) found = found.concat(namespaceChildDecls(ns, parts[i]));
@@ -966,16 +982,19 @@ function resolveSameFileEntity(entityName, fromNode, depth) {
  * (`function foo` + `namespace foo` → valor). Lo consultan el preload Y la regla 11.
  * beta.27 BLOCKER-1 (+ codex P1 nested + merge).
  */
-function importEqualsProducesRuntimeValue(decl, depth) {
+function importEqualsProducesRuntimeValue(decl, seen) {
   if (decl.isTypeOnly) return false;
   const ref = decl.moduleReference;
   if (!ref || ts.isExternalModuleReference(ref)) return true;
-  if ((depth || 0) > 8) return true; // cadena/posible ciclo → conservador value-alias
-  const targets = resolveSameFileEntity(ref, decl, 0);
+  const visited = seen || new Set();
+  if (visited.has(decl)) return true; // ciclo → conservador value-alias
+  const next = new Set(visited);
+  next.add(decl);
+  const targets = resolveSameFileEntity(ref, decl, next);
   if (targets === undefined || targets.length === 0) return true; // cross-module
   return targets.some((t) =>
     ts.isImportEqualsDeclaration(t)
-      ? importEqualsProducesRuntimeValue(t, (depth || 0) + 1)
+      ? importEqualsProducesRuntimeValue(t, next)
       : producesRuntimeValue(t),
   );
 }
@@ -1869,7 +1888,7 @@ function isNonReferencePosition(node, declaredNames) {
         top.parent &&
         ts.isImportEqualsDeclaration(top.parent) &&
         top.parent.moduleReference === top &&
-        importEqualsProducesRuntimeValue(top.parent, 0)
+        importEqualsProducesRuntimeValue(top.parent)
       ) {
         return false; // root de import-equals que produce valor = read runtime
       }

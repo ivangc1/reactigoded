@@ -1502,6 +1502,12 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     // un namespace (`import Cfg = N.Cfg`). Debe resolverse el alias para descender a
     // `.window` (interface erased), no tratarse como cross-module value.
     ["root es import= alias a namespace", `namespace N { export namespace Cfg { export const v = 1; export interface window {} } }\nimport Cfg = N.Cfg;\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href + Cfg.v; }`],
+    // codex P1 dotted-self: dentro de `namespace A.B { … }` el nombre `B` es visible
+    // (no es un statement de ningún bloque, es el .body de A) → `B.window` resuelve.
+    ["dotted self-ref `B.window` dentro de namespace A.B", `namespace A.B { export interface window {}; export import w = B.window; }\nimport window = A.B.w;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
+    // codex P1 chain: cadena de 13 alias NO-cíclica (TS válida) debe resolver hasta el
+    // namespace real — un límite numérico la FP-eaba. Detección de ciclos, no profundidad.
+    ["cadena larga de alias (13) a tipo", `namespace N { export namespace Real { export const v = 1; export interface window {} } }\nimport A12 = N.Real;\nimport A11 = A12; import A10 = A11; import A9 = A10; import A8 = A9; import A7 = A8;\nimport A6 = A7; import A5 = A6; import A4 = A5; import A3 = A4; import A2 = A3;\nimport A1 = A2; import A0 = A1;\nimport window = A0.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
   ])("FLAGGEA el global tras el alias-a-tipo erased: %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-type.fixture.tsx").length).toBeGreaterThan(0);
   });
@@ -1532,6 +1538,9 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     ["merge a miembro de valor (some-produces-value)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export const win = { x: 1 }; }\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
     // root es import= alias a namespace, miembro de VALOR → resuelve y precarga → clean.
     ["root alias-ns a miembro de valor", `namespace N { export namespace Cfg { export const v = 1; export const win = { x: 1 }; } }\nimport Cfg = N.Cfg;\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x + Cfg.v; }`],
+    // cadena larga de alias a un miembro de VALOR → resuelve y precarga → clean (la
+    // detección de ciclos NO corta la cadena legítima).
+    ["cadena larga (13) a miembro de valor", `namespace N { export namespace Real { export const win = { x: 1 }; } }\nimport A12 = N.Real;\nimport A11 = A12; import A10 = A11; import A9 = A10; import A8 = A9; import A7 = A8;\nimport A6 = A7; import A5 = A6; import A4 = A5; import A3 = A4; import A2 = A3;\nimport A1 = A2; import A0 = A1;\nimport win = A0.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
   ])("NO genera falso positivo (value-alias / residual cross-module): %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-val.fixture.tsx")).toEqual([]);
   });
