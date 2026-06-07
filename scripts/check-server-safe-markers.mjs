@@ -476,9 +476,14 @@ const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 
 // Denegaciones para las que un guard `typeof X !== "undefined"` NO hace el
 // body safe — el typeof-guard NO se reconoce para ellas:
-//   - `eval`/`Function`/`globalThis`/`global`: sinks de eval / raíz de escape,
-//     SIEMPRE presentes en Node → el guard es vacuamente true y solo
-//     suprimiría la detección. (Codex P1 round 3.)
+//   - `eval`/`Function`/`globalThis`/`global`/`self`: sinks de eval / raíz de
+//     escape (el objeto global por sus tres nombres `globalThis`/`global`/`self`).
+//     `globalThis` está siempre presente; `global` es el alias de Node; `self` es
+//     el alias presente en Vercel Edge (typeof self === "object" ahí) → en Edge el
+//     guard es vacuamente true y `self.eval`/`self.Function` LANZAN EvalError igual.
+//     Un typeof-guard solo suprimiría la detección. (Codex P1 round 3; `self`:
+//     re-hunt B2.) NO incluye `window`/`parent`/`top`/`frames`: esos están AUSENTES
+//     en Edge, su hazard SÍ es la ausencia → ahí el guard typeof protege de verdad.
 //   - `setImmediate`/`clearImmediate`: en Vercel Edge están DEFINIDOS como un
 //     stub que LANZA al llamarse → `typeof setImmediate !== "undefined"` pasa
 //     pero la llamada revienta. El guard da falsa confianza; por eso se trata
@@ -490,9 +495,31 @@ const NON_ABSENCE_DENIALS = new Set([
   "Function",
   "globalThis",
   "global",
+  "self",
   "setImmediate",
   "clearImmediate",
 ]);
+
+/**
+ * Política ÚNICA de exención en body diferido (ramas (c) y (d)). Las
+ * `NON_ABSENCE_DENIALS` (sinks de eval + raíces de escape + stubs que lanzan)
+ * disparan en Edge SIEMPRE → solo se eximen en deferred CLIENT-ONLY (useEffect/
+ * handler, que NO corren en SSR), NUNCA en timers (setTimeout/setInterval/
+ * queueMicrotask, que SÍ disparan en el isolate Edge durante SSR). El resto, cuyo
+ * hazard es la AUSENCIA (window/document…), se exime en CUALQUIER deferred.
+ *
+ * Centralización (re-hunt B3): antes cada rama llaveaba esto por DYNAMIC_EVAL_SINKS
+ * ({eval,Function}), un subconjunto ESTRICTO de NON_ABSENCE_DENIALS → globalThis/
+ * global/self/setImmediate/clearImmediate quedaban exentos en timers y escapaban
+ * (`setTimeout(() => globalThis.window.location.href)` → TypeError real en Edge).
+ * Render-vs-timer eran paths paralelos con set de exención distinto; ahora ambos
+ * llaman a ESTE. beta.27 BLOCKER-1.
+ */
+function isExemptInDeferredBody(api, context) {
+  return NON_ABSENCE_DENIALS.has(api)
+    ? context.isInClientOnlyDeferredBody
+    : context.isInDeferredBody;
+}
 
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
 // phase) en client. Los effects no corren en SSR, por tanto sus bodies
@@ -789,10 +816,99 @@ function producesRuntimeValue(decl) {
     ts.isParameter(decl)
   )
     return true;
-  if (ts.isImportEqualsDeclaration(decl)) return !decl.isTypeOnly;
+  if (ts.isImportEqualsDeclaration(decl))
+    return importEqualsProducesRuntimeValue(decl, 0);
   if (ts.isModuleDeclaration(decl)) return namespaceIsInstantiated(decl);
   // interface, type alias, y todo lo demás type-space → NO produce valor.
   return false;
+}
+
+/**
+ * Miembro de un `ModuleBlock` (cuerpo de namespace) cuyo nombre declarado es `name`.
+ * Cubre las formas con binding nombrado (namespace/interface/type/class/enum/function/
+ * import-equals) y las variables. undefined si no existe. Resolución SAME-FILE pura.
+ */
+function findNamespaceMember(moduleBlock, name) {
+  for (const stmt of moduleBlock.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      for (const d of stmt.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.name.text === name) return d;
+      }
+      continue;
+    }
+    if (
+      (ts.isModuleDeclaration(stmt) ||
+        ts.isInterfaceDeclaration(stmt) ||
+        ts.isTypeAliasDeclaration(stmt) ||
+        ts.isClassDeclaration(stmt) ||
+        ts.isEnumDeclaration(stmt) ||
+        ts.isFunctionDeclaration(stmt) ||
+        ts.isImportEqualsDeclaration(stmt)) &&
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      stmt.name.text === name
+    ) {
+      return stmt;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resuelve un EntityName (`A` o `A.B.C`) contra los namespaces TOP-LEVEL del MISMO
+ * archivo. Devuelve la declaración del miembro final, o undefined si el root no es un
+ * namespace del archivo (→ cross-module / alias no resoluble sintácticamente). Trabajo
+ * de-un-solo-archivo: 100% sintáctico, sin type-checker (re-hunt B4).
+ */
+function resolveSameFileEntity(entityName, sourceFile) {
+  const parts = [];
+  let e = entityName;
+  while (e && ts.isQualifiedName(e)) {
+    parts.unshift(e.right.text);
+    e = e.left;
+  }
+  if (!e || !ts.isIdentifier(e)) return undefined;
+  parts.unshift(e.text);
+  let container = sourceFile.statements.find(
+    (s) =>
+      ts.isModuleDeclaration(s) &&
+      s.name &&
+      ts.isIdentifier(s.name) &&
+      s.name.text === parts[0],
+  );
+  if (!container) return undefined;
+  for (let i = 1; i < parts.length; i++) {
+    const body = container.body;
+    if (!body || !ts.isModuleBlock(body)) return undefined;
+    const member = findNamespaceMember(body, parts[i]);
+    if (!member) return undefined;
+    if (i === parts.length - 1) return member;
+    if (!ts.isModuleDeclaration(member)) return undefined;
+    container = member;
+  }
+  return container; // `import X = A` (el namespace mismo)
+}
+
+/**
+ * ¿`import X = …` emite un binding runtime `X`? Antes era `!isTypeOnly`, que añadía
+ * el binding SIN mirar el RHS — un `import window = Cfg.window` cuyo `Cfg.window` es
+ * una `interface` se BORRA al emit (no hay `var window`), así que `window.*` resuelve
+ * al GLOBAL real → erased-shadow bypass (re-hunt B4). `require("x")` y los aliases
+ * CROSS-MODULE no se resuelven sin type-checker → conservador value-alias (residual
+ * documentado, honesto). Pero un alias a un miembro SAME-FILE SÍ es decidible: el
+ * namespace está en el archivo, resolvemos el miembro y reusamos producesRuntimeValue
+ * (colectores no-espejados → un único predicado). beta.27 BLOCKER-1.
+ */
+function importEqualsProducesRuntimeValue(decl, depth) {
+  if (decl.isTypeOnly) return false;
+  const ref = decl.moduleReference;
+  if (!ref || ts.isExternalModuleReference(ref)) return true;
+  if ((depth || 0) > 8) return true; // cadena/posible ciclo → conservador value-alias
+  const target = resolveSameFileEntity(ref, decl.getSourceFile());
+  if (target === undefined) return true; // root no es namespace same-file → cross-module
+  if (ts.isImportEqualsDeclaration(target))
+    return importEqualsProducesRuntimeValue(target, (depth || 0) + 1);
+  return producesRuntimeValue(target);
 }
 
 function addBindingNamesFromPattern(node, names) {
@@ -1103,9 +1219,10 @@ function gatherModulePreloadedBindings(sourceFile) {
       all.add(stmt.name.text);
       continue;
     }
-    // `import X = NS.Y` / `import X = require("y")` (TS import-equals): si no es
-    // type-only, emite un binding runtime `X`. beta.27 BLOCKER-1.
-    if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) {
+    // `import X = NS.Y` / `import X = require("y")` (TS import-equals): emite un
+    // binding runtime `X` SOLO si el RHS produce valor — un alias a un miembro-TIPO
+    // same-file se borra y NO debe sombrear (mismo predicado central; re-hunt B4).
+    if (ts.isImportEqualsDeclaration(stmt) && producesRuntimeValue(stmt)) {
       all.add(stmt.name.text);
       continue;
     }
@@ -1321,23 +1438,25 @@ function extractNegativeEarlyReturnGuards(stmt) {
 function accessedMemberName(node) {
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
   if (ts.isElementAccessExpression(node)) {
-    // La key puede venir envuelta en wrappers erased (paréntesis `[("call")]`,
-    // cast `["call" as string]`, `!`/satisfies) — contiguos y legibles, runtime-
-    // equivalentes al string literal. Desenvolverlos cierra ese hermano del
-    // bypass bracket-string (codex P2). Una key `[k]` (variable) NO es string
-    // literal ni siquiera desenvuelta → sigue out-of-scope (residual #3).
-    // Desenvuelve wrappers erased + coma (→right, único valor estático) — la coma
-    // `(side, "constructor")` resuelve a su literal derecho (re-hunt). `||`/`??`/
-    // ternario NO dan un literal único → quedan como residual (data-flow).
-    let arg = skipErasedDown(node.argumentExpression);
-    while (
-      arg &&
-      ts.isBinaryExpression(arg) &&
-      arg.operatorToken.kind === ts.SyntaxKind.CommaToken
-    ) {
-      arg = skipErasedDown(arg.right);
-    }
-    if (arg !== undefined && ts.isStringLiteralLike(arg)) return arg.text;
+    // La key se resuelve por las MISMAS hojas value-transparentes que la base
+    // (`valueTransparentLeaves`) — no solo coma/erased: `x.constructor[1 && "call"]`
+    // reduce su key a "call" igual que `(0,"call")`. Antes la key solo desenvolvía
+    // erased+coma mientras la base seguía &&/||/??/ternario → asimetría base-vs-key
+    // por la que escapaba `({})["constructor"][1 && "constructor"](…)` (re-hunt B1).
+    // Fail-closed: si ALGUNA hoja es un nombre weaponizable, ese gana (la key PUEDE
+    // resolverse a él aunque otra rama no). Una key `[k]` (variable) es su propia hoja
+    // no-literal → undefined → residual data-flow (#3); `[k || "x"]` con "x" benigno
+    // tampoco da weaponizable → sigue residual.
+    const leaves = valueTransparentLeaves(node.argumentExpression);
+    const literals = leaves
+      .filter((l) => ts.isStringLiteralLike(l))
+      .map((l) => l.text);
+    const weaponizable = literals.find(
+      (t) => t === "constructor" || t === "call" || t === "apply" || t === "bind",
+    );
+    if (weaponizable !== undefined) return weaponizable;
+    // Forma simple `x["foo"]` (hoja única literal) → ese nombre.
+    if (leaves.length === 1 && literals.length === 1) return literals[0];
   }
   return undefined;
 }
@@ -1366,82 +1485,37 @@ function isErasedOuterExpr(node) {
   );
 }
 
-/** Desenvuelve hacia ABAJO todos los wrappers erased: `((x as any)!)` → `x`. */
-function skipErasedDown(node) {
-  while (node && isErasedOuterExpr(node)) node = node.expression;
-  return node;
-}
-
 /**
- * Conjunto ACOTADO de constructos VALUE-TRANSPARENTES: el valor de la expresión ES
- * (sintácticamente) el de uno de sus hijos, sin evaluar nada — wrappers erased
- * (`()`,`!`,`as`,`satisfies`,`<T>`) + operadores cuyo resultado es un operando:
- * coma (→right), `&&` (→right: una base truthy como un constructor pasa a la
- * derecha), `||`/`??` (→left|right), asignación `=` (→right), ternario (→branch).
+ * Mapeo ÚNICO del set ACOTADO de constructos VALUE-TRANSPARENTES → las sub-expresiones
+ * cuyo valor ES (sintácticamente) el de la expresión, sin evaluar nada: wrappers erased
+ * (`()`,`!`,`as`,`satisfies`,`<T>`) + `await` de un no-thenable (operando — un constructor
+ * NO es thenable, devuelve el operando sin cambiarlo) + coma (→right) + `&&`/`&&=` (→right:
+ * una base truthy como un constructor pasa a la derecha) + `||`/`??`/`||=`/`??=` (→left|right)
+ * + asignación `=` (→right) + ternario (→ambas ramas). `[]` si `node` es una HOJA.
  *
- * CRÍTICO — el set EXCLUYE las CALLS/IIFE: `(() => X)()` NO es transparente, su
- * valor exige EVALUAR el cuerpo = data-flow = residual infinito. Atravesar un call
- * reintroduciría el muro. El bound de la frontera (legible-contiguo vs ofuscado)
- * aguanta SOLO porque este set es finito y no incluye calls. El test pinea el set.
- * beta.27 BLOCKER-1 (re-hunt: coma/condicional/lógico envolviendo el eval-sink).
+ * CRÍTICO — EXCLUYE las CALLS/IIFE: `(() => X)()` NO es transparente, su valor exige EVALUAR
+ * el cuerpo = data-flow = residual infinito. El bound (legible-contiguo vs ofuscado) aguanta
+ * SOLO porque este set es finito y no incluye calls.
+ *
+ * Centralización (re-hunt B1): ESTE es el ÚNICO sitio que define el set. El descenso
+ * (`valueTransparentLeaves` → base de reachesConstructorAccess + resolución de la key en
+ * accessedMemberName) y el ascenso (`isValueTransparentParent`) lo CONSULTAN. Antes la key
+ * solo desenvolvía erased+coma → el bypass `({})["constructor"][1 && "constructor"](…)`
+ * escapaba por la asimetría base-vs-key. beta.27 BLOCKER-1.
  */
-function isValueTransparentParent(parent, child) {
-  if (isErasedOuterExpr(parent)) return true;
-  // `await X` de un valor NO-thenable (un constructor NO es thenable) devuelve X
-  // sin cambiarlo → transparente. Sigue dentro del bound: el operando debe ser un
-  // `.constructor` SINTÁCTICO; `await fn()` (call) no se atraviesa (codex P1).
-  if (ts.isAwaitExpression(parent)) return parent.expression === child;
-  if (ts.isConditionalExpression(parent)) {
-    return parent.whenTrue === child || parent.whenFalse === child;
-  }
-  if (ts.isBinaryExpression(parent)) {
-    const op = parent.operatorToken.kind;
-    if (op === ts.SyntaxKind.CommaToken) return parent.right === child;
-    // `&&` y `&&=`: una base truthy (un constructor lo es) pasa el valor a la
-    // derecha. `||`/`??` y sus compound `||=`/`??=`: el valor es left|right.
-    if (
-      op === ts.SyntaxKind.AmpersandAmpersandToken ||
-      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
-    ) {
-      return parent.right === child;
-    }
-    if (
-      op === ts.SyntaxKind.BarBarToken ||
-      op === ts.SyntaxKind.QuestionQuestionToken ||
-      op === ts.SyntaxKind.BarBarEqualsToken ||
-      op === ts.SyntaxKind.QuestionQuestionEqualsToken
-    ) {
-      return parent.left === child || parent.right === child;
-    }
-    if (op === ts.SyntaxKind.EqualsToken) return parent.right === child;
-  }
-  return false;
-}
-
-/**
- * ¿El valor de `node` ES (vía constructos value-transparentes, sin calls) un member
- * access `constructor`? Recursivo, cierra el anidamiento. Usado para la base del
- * doble `.constructor.constructor` cuando viene envuelta en wrappers/operadores.
- */
-function reachesConstructorAccess(node) {
-  if (!node) return false;
-  if (isConstructorMemberAccess(node)) return true;
-  if (isErasedOuterExpr(node)) return reachesConstructorAccess(node.expression);
-  if (ts.isAwaitExpression(node)) return reachesConstructorAccess(node.expression);
-  if (ts.isConditionalExpression(node)) {
-    return (
-      reachesConstructorAccess(node.whenTrue) ||
-      reachesConstructorAccess(node.whenFalse)
-    );
-  }
+function valueTransparentChildren(node) {
+  if (!node) return [];
+  if (isErasedOuterExpr(node)) return [node.expression];
+  if (ts.isAwaitExpression(node)) return [node.expression];
+  if (ts.isConditionalExpression(node)) return [node.whenTrue, node.whenFalse];
   if (ts.isBinaryExpression(node)) {
     const op = node.operatorToken.kind;
-    if (op === ts.SyntaxKind.CommaToken) return reachesConstructorAccess(node.right);
+    if (op === ts.SyntaxKind.CommaToken) return [node.right];
     if (
       op === ts.SyntaxKind.AmpersandAmpersandToken ||
       op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
     ) {
-      return reachesConstructorAccess(node.right);
+      return [node.right];
     }
     if (
       op === ts.SyntaxKind.BarBarToken ||
@@ -1449,14 +1523,41 @@ function reachesConstructorAccess(node) {
       op === ts.SyntaxKind.BarBarEqualsToken ||
       op === ts.SyntaxKind.QuestionQuestionEqualsToken
     ) {
-      return (
-        reachesConstructorAccess(node.left) ||
-        reachesConstructorAccess(node.right)
-      );
+      return [node.left, node.right];
     }
-    if (op === ts.SyntaxKind.EqualsToken) return reachesConstructorAccess(node.right);
+    if (op === ts.SyntaxKind.EqualsToken) return [node.right];
   }
-  return false;
+  return [];
+}
+
+/**
+ * Hojas value-transparentes de `node`: las expresiones terminales a las que su valor se
+ * reduce siguiendo `valueTransparentChildren`. Multi-hoja (`||`/`??`/ternario). Un operando
+ * VARIABLE es una hoja (su valor no se resuelve → data-flow residual).
+ */
+function valueTransparentLeaves(node, out) {
+  const acc = out || [];
+  const kids = valueTransparentChildren(node);
+  if (kids.length === 0) {
+    if (node) acc.push(node);
+    return acc;
+  }
+  for (const kid of kids) valueTransparentLeaves(kid, acc);
+  return acc;
+}
+
+/** ¿`child` es una sub-expresión value-transparente de `parent`? (ascenso). */
+function isValueTransparentParent(parent, child) {
+  return valueTransparentChildren(parent).indexOf(child) !== -1;
+}
+
+/**
+ * ¿El valor de `node` ES (vía constructos value-transparentes, sin calls) un member access
+ * `constructor`? ALGUNA hoja value-transparente es un `.constructor`. Cierra el anidamiento;
+ * usado para la base del doble `.constructor.constructor`.
+ */
+function reachesConstructorAccess(node) {
+  return valueTransparentLeaves(node).some((leaf) => isConstructorMemberAccess(leaf));
 }
 
 /**
@@ -2607,11 +2708,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // import, etc.), NO es ref al global — skip. También skip si el
           // property-access está en una heritage TYPE-ONLY (`interface X extends
           // navigator.Foo`) — se borra, no hay read runtime (re-hunt FP).
-          // eval-sink: solo exento en deferred client-only (throw en Edge siempre,
-          // los timers fire en Edge). window/global: exento en cualquier deferred.
-          const deferredExempt = isEvalSink
-            ? context.isInClientOnlyDeferredBody
-            : context.isInDeferredBody;
+          // Exención en body diferido: política única (NON_ABSENCE_DENIALS solo en
+          // client-only; el resto en cualquier deferred). Ver isExemptInDeferredBody.
+          const deferredExempt = isExemptInDeferredBody(api, context);
           if (
             !context.localBindings.has(api) &&
             !deferredExempt &&
@@ -2733,12 +2832,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           !context.localBindings.has(api) &&
           !isNonReferencePosition(node, moduleDeclaredNames)
         ) {
-          // Un eval-sink (eval/Function/globalThis/global) throw en Edge SIEMPRE
-          // → solo exento en deferred CLIENT-ONLY. Un read de global ausente
-          // (window…) se exime en cualquier deferred (incl. timer). deep re-hunt.
-          const deferredExempt = isEvalSink
-            ? context.isInClientOnlyDeferredBody
-            : context.isInDeferredBody;
+          // Exención en body diferido: política única (NON_ABSENCE_DENIALS solo en
+          // client-only; el resto en cualquier deferred). Ver isExemptInDeferredBody.
+          const deferredExempt = isExemptInDeferredBody(api, context);
           if (!deferredExempt && !context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);

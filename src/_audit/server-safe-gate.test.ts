@@ -1299,6 +1299,10 @@ describe("server-safe gate — typeof guard NO suprime eval/escape sinks (codex 
     ["typeof Function + Function()", `/** @server-safe */\nexport const C = () => { if (typeof Function !== "undefined") { return Function("return 1")(); } return null; };`],
     ["typeof eval + eval()", `/** @server-safe */\nexport const C = () => { if (typeof eval !== "undefined") { return eval("1"); } return null; };`],
     ["typeof global + global.process", `/** @server-safe */\nexport const C = () => { if (typeof global !== "undefined") { return global.process.env.X; } return null; };`],
+    // B2 (re-hunt): `self` es el alias de globalThis PRESENTE en Edge — el guard
+    // `typeof self !== "undefined"` es vacuo ahí y self.eval/self.Function LANZAN.
+    ["typeof self + self.Function", `/** @server-safe */\nexport function A() { if (typeof self !== "undefined") { return self.Function("return 1")(); } return null; }`],
+    ["typeof self + self.eval", `/** @server-safe */\nexport function B() { if (typeof self !== "undefined") { return self.eval("1"); } return null; }`],
   ])("FLAGGEA pese al guard typeof: %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-evalsink.fixture.tsx").length).toBeGreaterThan(0);
   });
@@ -1470,6 +1474,36 @@ describe("server-safe gate — import-equals value-alias (regla 11)", () => {
 });
 
 /**
+ * import-equals a un miembro TIPO same-file (re-hunt B4). `import window = Cfg.window`
+ * cuyo `Cfg.window` es una `interface`/`type` se BORRA al emit (no hay `var window`),
+ * así que un `window.*` posterior resuelve al GLOBAL → erased-shadow bypass. El preload
+ * añadía el binding por `!isTypeOnly` SIN mirar el RHS. Fix: resolver el RHS contra los
+ * namespaces del MISMO archivo (100% sintáctico) y reusar `producesRuntimeValue` —
+ * miembro-tipo → no precargar (flaggea); miembro-valor → precargar (clean). El alias
+ * CROSS-MODULE no es resoluble sin type-checker → conservador value-alias (residual
+ * honesto, documentado en el ADR).
+ */
+describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased-shadow, B4)", () => {
+  it.each([
+    ["miembro interface same-file", `/** @server-safe */\nnamespace Cfg { export interface window { x: number } export const VERSION = "1.0"; }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href + Cfg.VERSION; }`],
+    ["miembro type-alias same-file", `/** @server-safe */\nnamespace Cfg { export type document = { y: number }; export const V = 1; }\nimport document = Cfg.document;\n/** @server-safe */\nexport function C() { return document.title + Cfg.V; }`],
+    ["nested A.B.window (miembro tipo)", `/** @server-safe */\nnamespace A { export namespace B { export interface window { x: number } } export const V = 1; }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href + A.V; }`],
+  ])("FLAGGEA el global tras el alias-a-tipo erased: %s", (_label, code) => {
+    expect(checkSourceFile(code, "import-eq-type.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    // miembro de VALOR same-file → emite `var window = Cfg.win` → binding real, clean.
+    ["miembro const same-file (value-alias)", `/** @server-safe */\nnamespace Cfg { export const win = { x: 1 }; }\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
+    ["miembro function same-file", `/** @server-safe */\nnamespace Cfg { export function make() { return 1; } }\nimport make = Cfg.make;\n/** @server-safe */\nexport function C() { return make(); }`],
+    // cross-module no resoluble → conservador value-alias (residual): no flaggea.
+    ["alias cross-module (residual honesto)", `import * as Ext from "./other";\nimport win = Ext.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
+  ])("NO genera falso positivo (value-alias / residual cross-module): %s", (_label, code) => {
+    expect(checkSourceFile(code, "import-eq-val.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * Eval-sink PAREN-WRAP (hunt, beta.27 BLOCKER-1). Las ramas (b/c/d) de la
  * detección `.constructor` exigían `node.parent` directo = Call/PropertyAccess/
  * Tagged; un `ParenthesizedExpression` rompía la cadena y `((fn).constructor)()`
@@ -1600,6 +1634,14 @@ describe("server-safe gate — eval-sink por operador value-transparente", () =>
     ['base path (a ||= ctor).constructor', `/** @server-safe */\nconst fn = () => {};\nlet a: any;\nconst Dbl = (a ||= fn.constructor).constructor;\nexport const t = Dbl("x")();`],
     // key con coma cuyo right es un LITERAL → estáticamente "constructor".
     ['key comma con literal right', `/** @server-safe */\nexport const C = () => { let log = ""; const F = [].constructor[(log = "k", "constructor")] as any; void log; return F("x")(); };`],
+    // B1 (re-hunt): operador value-transparente (&&/||/??/?:) en la KEY del
+    // ElementAccess — la key reusa el MISMO unwrap value-transparent que la base
+    // (`valueTransparentLeaves`), cerrando la asimetría base-vs-key.
+    ['key [1 && "constructor"] (doble ctor)', `/** @server-safe */\nexport const t = ({})["constructor"][1 && "constructor"]("return globalThis")();`],
+    ['key ["" || "constructor"]', `/** @server-safe */\nexport const t = ({})["constructor"]["" || "constructor"]("x")();`],
+    ['key [null ?? "constructor"]', `/** @server-safe */\nexport const t = ({})["constructor"][null ?? "constructor"]("x")();`],
+    ['key [true ? "constructor" : "x"]', `/** @server-safe */\nexport const t = ({})["constructor"][true ? "constructor" : "x"]("x")();`],
+    ['key [c && "call"] sobre ctor', `/** @server-safe */\nexport const t = ((c: boolean) => (() => {}).constructor[c && "call"](null, "x")())(true);`],
   ])("FLAGGEA pese al operador value-transparente: %s", (_label, code) => {
     const v = checkSourceFile(code, "vt-sink.fixture.tsx");
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -1739,6 +1781,27 @@ describe("server-safe gate — eval-sink en timer deferido NO se exime", () => {
     ["window read en setTimeout (global ausente, exento)", `/** @server-safe */\nexport function W() { setTimeout(() => { window.scrollTo(0, 0); }, 0); return <div />; }`],
   ])("NO flaggea (client-only deferred / window-absence): %s", (_label, code) => {
     expect(checkSourceFile(code, "deferred-ok.fixture.tsx")).toEqual([]);
+  });
+
+  // B3 (re-hunt): las NON_ABSENCE_DENIALS (raíces de escape / stubs que lanzan:
+  // globalThis/global/self/setImmediate/clearImmediate) NO son hazards de ausencia
+  // — disparan en Edge SIEMPRE, así que un timer (que SÍ corre en SSR) NO las exime
+  // (antes la exención se llaveaba por DYNAMIC_EVAL_SINKS ⊊ NON_ABSENCE_DENIALS).
+  it.each([
+    ["bare globalThis en setTimeout", `/** @server-safe */\nexport function W() { setTimeout(() => { const g = globalThis; void g; }, 0); return <div />; }`],
+    ["globalThis.window.location en setTimeout (TypeError Edge)", `/** @server-safe */\nexport function W() { setTimeout(() => { void globalThis.window.location.href; }, 0); return <div />; }`],
+    ["bare global en setInterval", `/** @server-safe */\nexport function W() { setInterval(() => { const g = global; void g; }, 0); return <div />; }`],
+    ["bare globalThis en queueMicrotask", `/** @server-safe */\nexport function W() { queueMicrotask(() => { const g = globalThis; void g; }); return <div />; }`],
+    ["setImmediate en setTimeout (stub que lanza)", `/** @server-safe */\nexport function W() { setTimeout(() => { setImmediate(() => {}); }, 0); return <div />; }`],
+  ])("FLAGGEA la raíz de escape en un timer: %s", (_label, code) => {
+    expect(checkSourceFile(code, "timer-escape.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    // Las MISMAS raíces de escape en client-only deferred (useEffect) SÍ se eximen.
+    ["globalThis en useEffect (client-only)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { const g = globalThis; void g; }, []); return <div />; }`],
+  ])("NO flaggea raíz de escape en client-only deferred: %s", (_label, code) => {
+    expect(checkSourceFile(code, "escape-client-ok.fixture.tsx")).toEqual([]);
   });
 });
 
