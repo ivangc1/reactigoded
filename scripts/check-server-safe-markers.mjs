@@ -2445,15 +2445,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // (b.0b) Namespace/module: el cuerpo es un SCOPE — sus declaraciones locales
     // (const/let/function/class…) son visibles dentro. Procesarlo como un Block
     // (scope-tracked) evita un FP sobre reads de sus propios locales (`namespace N
-    // { const SEP = ","; export function f(){ return x.join(SEP); } }`). El nombre
-    // del namespace ya lo manejan los colectores del shadow-set. re-hunt FP8.
+    // { const SEP = ","; export function f(){ return x.join(SEP); } }`). El NOMBRE
+    // del namespace también es un binding runtime dentro de su cuerpo (la IIFE
+    // emitida) — `N.x` self-reference; se añade al scope. Para `A.B`, A se añade
+    // al entrar A y B al entrar B (la recursión usa el nsCtx con A ya dentro), así
+    // que ambos quedan en scope en el cuerpo de B (codex P2). El acceso EXTERNO a
+    // un namespace elidido lo siguen flaggeando los colectores del shadow-set.
     if (ts.isModuleDeclaration(node) && node.body) {
+      const nsCtx =
+        node.name && ts.isIdentifier(node.name)
+          ? addToScope(context, new Set([node.name.text]))
+          : context;
       if (ts.isModuleBlock(node.body)) {
         const blockFns = gatherBlockFunctionDeclarations(node.body);
-        visitOrderedStatements(node.body.statements, context, blockFns);
+        visitOrderedStatements(node.body.statements, nsCtx, blockFns);
       } else {
         // `namespace A.B {}` — el body es otro ModuleDeclaration (la `B`).
-        visit(node.body, context);
+        visit(node.body, nsCtx);
       }
       return;
     }

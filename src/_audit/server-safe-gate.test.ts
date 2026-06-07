@@ -1751,12 +1751,17 @@ describe("server-safe gate — namespace body locals (FP8)", () => {
   it.each([
     ["const local usado en method", `/** @server-safe */\nexport namespace format { const SEP = ", "; export function join(parts: readonly string[]): string { return parts.join(SEP); } }`],
     ["fn local en namespace", `/** @server-safe */\nexport namespace util { function helper() { return 1; } export function f() { return helper(); } }`],
+    // el NOMBRE del namespace es un binding runtime dentro de su cuerpo (codex P2):
+    ["self-ref del nombre (fmt.SEP)", `/** @server-safe */\nexport namespace fmt { export const SEP = ","; export function join(p: string[]) { return p.join(fmt.SEP); } }`],
+    ["nested A.B self-ref (B.x + A.B.x)", `/** @server-safe */\nexport namespace A { export namespace B { export const x = 1; export function f() { return B.x + A.B.x; } } }`],
   ])("NO genera falso positivo en locales del namespace: %s", (_label, code) => {
     expect(checkSourceFile(code, "ns-locals.fixture.tsx")).toEqual([]);
   });
 
-  it("read de un global REAL dentro del namespace SIGUE flaggeando", () => {
-    const code = `/** @server-safe */\nexport namespace bad { export function f() { return window.location.href; } }`;
+  it.each([
+    ["global real en namespace body", `/** @server-safe */\nexport namespace bad { export function f() { return window.location.href; } }`],
+    ["global real en nested A.B body", `/** @server-safe */\nexport namespace A { export namespace B { export function f() { return window.location.href; } } }`],
+  ])("read de un global REAL dentro del namespace SIGUE flaggeando: %s", (_label, code) => {
     expect(checkSourceFile(code, "ns-global.fixture.tsx").length).toBeGreaterThan(0);
   });
 });
