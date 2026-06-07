@@ -1498,8 +1498,18 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     ["merge function+namespace (descender por el namespace)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
     ["namespace partido en dos bloques (miembro en el 2º)", `/** @server-safe */\nnamespace Cfg { export const A = 1; }\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
     ["dotted namespace A.B { interface }", `/** @server-safe */\nnamespace A.B { export interface window { x: number } }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
+    // codex P1 alias-ns: el ROOT del qualified name es a su vez un `import = alias` a
+    // un namespace (`import Cfg = N.Cfg`). Debe resolverse el alias para descender a
+    // `.window` (interface erased), no tratarse como cross-module value.
+    ["root es import= alias a namespace", `namespace N { export namespace Cfg { export const v = 1; export interface window {} } }\nimport Cfg = N.Cfg;\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href + Cfg.v; }`],
   ])("FLAGGEA el global tras el alias-a-tipo erased: %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-type.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("ciclo de alias no cuelga (guard de profundidad)", () => {
+    const code = `namespace M { export import a = M.b; export import b = M.a; }\nimport x = M.a.window;\n/** @server-safe */\nexport function C() { return x; }`;
+    // No debe colgar ni lanzar; el guard de profundidad corta el ciclo (conservador).
+    expect(Array.isArray(checkSourceFile(code, "import-eq-cycle.fixture.tsx"))).toBe(true);
   });
 
   it("NO FP-ea el root del moduleReference cuando el alias es a un TIPO (regla 11 ↔ preload coinciden)", () => {
@@ -1520,6 +1530,8 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     ["alias cross-module (residual honesto)", `import * as Ext from "./other";\nimport win = Ext.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
     // merge function+namespace donde el miembro ES de VALOR → produce valor → clean.
     ["merge a miembro de valor (some-produces-value)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export const win = { x: 1 }; }\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
+    // root es import= alias a namespace, miembro de VALOR → resuelve y precarga → clean.
+    ["root alias-ns a miembro de valor", `namespace N { export namespace Cfg { export const v = 1; export const win = { x: 1 }; } }\nimport Cfg = N.Cfg;\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x + Cfg.v; }`],
   ])("NO genera falso positivo (value-alias / residual cross-module): %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-val.fixture.tsx")).toEqual([]);
   });

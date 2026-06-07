@@ -898,15 +898,41 @@ function resolveDeclsInScope(name, fromNode) {
 }
 
 /**
+ * Expande `decls` a las DECLARACIONES DE NAMESPACE que representan, para poder
+ * descender. Una namespace se alcanza directa (ModuleDeclaration) o vía un `import X =`
+ * SAME-FILE cuyo RHS resuelve a un namespace (`import Cfg = N.Cfg` → el namespace Cfg).
+ * Sin esto, un alias-a-namespace como contenedor se filtraba como no-namespace → no se
+ * podía descender → bypass (codex P1). Guard de profundidad contra ciclos de alias.
+ */
+function expandToNamespaces(decls, depth) {
+  const out = [];
+  for (const d of decls) {
+    if (ts.isModuleDeclaration(d)) {
+      out.push(d);
+    } else if (ts.isImportEqualsDeclaration(d) && depth < 12) {
+      const ref = d.moduleReference;
+      if (ref && !ts.isExternalModuleReference(ref)) {
+        const targets = resolveSameFileEntity(ref, d, depth + 1);
+        if (targets) out.push(...expandToNamespaces(targets, depth + 1));
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Resuelve un EntityName (`A` o `A.B.C`) contra los namespaces del MISMO archivo,
  * empezando por el scope LÉXICO de `fromNode`. Devuelve el ARRAY de declaraciones del
  * miembro final (merge), o undefined si no resuelve same-file (→ cross-module / no
- * resoluble sintácticamente). Para DESCENDER usa el/los namespace(s) entre las decls
- * merged (`function Cfg` no tiene miembros; `namespace Cfg` sí — codex P1 merge); busca
- * el miembro en TODOS los bloques de un namespace partido. Trabajo de-un-solo-archivo,
- * 100% sintáctico, sin type-checker. beta.27 BLOCKER-1 (B4 + P1 nested + P1 merge).
+ * resoluble sintácticamente). Para DESCENDER expande a los namespace(s) entre las decls
+ * merged Y los alias `import X = NS` a namespace (`function Cfg` no tiene miembros;
+ * `namespace Cfg` y `import Cfg = N.Cfg` sí — codex P1 merge + alias); busca el miembro
+ * en TODOS los bloques de un namespace partido. Trabajo de-un-solo-archivo, 100%
+ * sintáctico, sin type-checker. beta.27 BLOCKER-1 (B4 + P1 nested + merge + alias-ns).
  */
-function resolveSameFileEntity(entityName, fromNode) {
+function resolveSameFileEntity(entityName, fromNode, depth) {
+  const d = depth || 0;
+  if (d > 24) return undefined; // backstop anti-ciclo
   const parts = [];
   let e = entityName;
   while (e && ts.isQualifiedName(e)) {
@@ -918,7 +944,7 @@ function resolveSameFileEntity(entityName, fromNode) {
   let decls = resolveDeclsInScope(parts[0], fromNode);
   if (decls.length === 0) return undefined;
   for (let i = 1; i < parts.length; i++) {
-    const namespaces = decls.filter((d) => ts.isModuleDeclaration(d));
+    const namespaces = expandToNamespaces(decls, d);
     if (namespaces.length === 0) return undefined; // no se puede descender → no resuelve
     let found = [];
     for (const ns of namespaces) found = found.concat(namespaceChildDecls(ns, parts[i]));
@@ -945,7 +971,7 @@ function importEqualsProducesRuntimeValue(decl, depth) {
   const ref = decl.moduleReference;
   if (!ref || ts.isExternalModuleReference(ref)) return true;
   if ((depth || 0) > 8) return true; // cadena/posible ciclo → conservador value-alias
-  const targets = resolveSameFileEntity(ref, decl);
+  const targets = resolveSameFileEntity(ref, decl, 0);
   if (targets === undefined || targets.length === 0) return true; // cross-module
   return targets.some((t) =>
     ts.isImportEqualsDeclaration(t)
