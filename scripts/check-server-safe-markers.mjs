@@ -816,187 +816,15 @@ function producesRuntimeValue(decl) {
     ts.isParameter(decl)
   )
     return true;
-  if (ts.isImportEqualsDeclaration(decl))
-    return importEqualsProducesRuntimeValue(decl);
+  // `import X = …`: conservador `!isTypeOnly`. Resolver si el RHS es un miembro-TIPO
+  // SAME-FILE (erased) exige reimplementar el binder de TS (merge / scope-léxico /
+  // alias-chains / dotted / self-ref) — fuera del diseño parser-puro del gate. Ese
+  // caso same-file queda como RESIDUAL honesto (ver ADR: "binder, no indecidibilidad
+  // ni gratis"). El alias CROSS-MODULE ya era residual por la misma razón categórica.
+  if (ts.isImportEqualsDeclaration(decl)) return !decl.isTypeOnly;
   if (ts.isModuleDeclaration(decl)) return namespaceIsInstantiated(decl);
   // interface, type alias, y todo lo demás type-space → NO produce valor.
   return false;
-}
-
-/**
- * TODAS las declaraciones nombradas `name` entre `statements` (cuerpo de namespace o
- * source file). Devuelve un array porque un nombre puede tener MÚLTIPLES declaraciones
- * que MERGEAN (`function Cfg(){}` + `namespace Cfg {}`, class+namespace, enum+namespace,
- * namespace partido en dos bloques). Cubre namespace/interface/type/class/enum/function/
- * import-equals y variables. Resolución SAME-FILE pura.
- */
-function findAllDeclsInStatements(statements, name) {
-  const out = [];
-  for (const stmt of statements) {
-    if (ts.isVariableStatement(stmt)) {
-      for (const d of stmt.declarationList.declarations) {
-        if (ts.isIdentifier(d.name) && d.name.text === name) out.push(d);
-      }
-      continue;
-    }
-    if (
-      (ts.isModuleDeclaration(stmt) ||
-        ts.isInterfaceDeclaration(stmt) ||
-        ts.isTypeAliasDeclaration(stmt) ||
-        ts.isClassDeclaration(stmt) ||
-        ts.isEnumDeclaration(stmt) ||
-        ts.isFunctionDeclaration(stmt) ||
-        ts.isImportEqualsDeclaration(stmt)) &&
-      stmt.name &&
-      ts.isIdentifier(stmt.name) &&
-      stmt.name.text === name
-    ) {
-      out.push(stmt);
-    }
-  }
-  return out;
-}
-
-/**
- * Las declaraciones miembro `name` DENTRO de un namespace `ns`. Maneja el cuerpo
- * ModuleBlock (`namespace N { … }`) y el dotted (`namespace A.B { … }`, cuyo body ES
- * otro ModuleDeclaration `B`): en el dotted, el único "miembro" es `B`.
- */
-function namespaceChildDecls(ns, name) {
-  const body = ns.body;
-  if (!body) return [];
-  if (ts.isModuleBlock(body)) return findAllDeclsInStatements(body.statements, name);
-  if (
-    ts.isModuleDeclaration(body) &&
-    body.name &&
-    ts.isIdentifier(body.name) &&
-    body.name.text === name
-  ) {
-    return [body];
-  }
-  return [];
-}
-
-/**
- * Resuelve el ROOT de una EntityName LÉXICAMENTE desde `fromNode`: las declaraciones
- * `name` visibles en su scope, caminando de los namespace-bodies que lo contienen hacia
- * AFUERA hasta el source file (TS resuelve `Types.window` declarado dentro de `Cfg`
- * mirando primero el scope de `Cfg`). Devuelve TODAS las del scope MÁS INTERNO que lo
- * declara (merge-aware; el interno gana por shadowing). Antes se resolvía desde el
- * top-level y a una sola decl → bypass del alias anidado + del merge (codex P1 ×2).
- */
-function resolveDeclsInScope(name, fromNode) {
-  let scope = fromNode.parent;
-  while (scope) {
-    if (ts.isModuleBlock(scope) || ts.isSourceFile(scope)) {
-      const decls = findAllDeclsInStatements(scope.statements, name);
-      if (decls.length > 0) return decls;
-    }
-    // Un namespace hace visible su PROPIO nombre dentro de su body. Clave para el
-    // dotted `namespace A.B { … B.window … }`: `B` NO es un statement de ningún bloque
-    // (es el `.body` de A) → findAllDeclsInStatements no lo ve. (En el nested-bloque
-    // `namespace A { namespace B {} }`, B SÍ es statement de A, ya resuelto arriba.)
-    // codex P1 dotted-self-ref.
-    if (
-      ts.isModuleDeclaration(scope) &&
-      scope.name &&
-      ts.isIdentifier(scope.name) &&
-      scope.name.text === name
-    ) {
-      return [scope];
-    }
-    scope = scope.parent;
-  }
-  return [];
-}
-
-/**
- * Expande `decls` a las DECLARACIONES DE NAMESPACE que representan, para poder
- * descender. Una namespace se alcanza directa (ModuleDeclaration) o vía un `import X =`
- * SAME-FILE cuyo RHS resuelve a un namespace (`import Cfg = N.Cfg` → el namespace Cfg).
- * Sin esto, un alias-a-namespace como contenedor se filtraba como no-namespace → no se
- * podía descender → bypass (codex P1 alias-ns). `seen` = los import-equals ya visitados
- * en ESTE camino (path-local, copy-on-recurse): corta SOLO los ciclos reales, no las
- * cadenas largas legítimas (un límite numérico FP-eaba cadenas válidas — codex P1).
- */
-function expandToNamespaces(decls, seen) {
-  const out = [];
-  for (const d of decls) {
-    if (ts.isModuleDeclaration(d)) {
-      out.push(d);
-    } else if (ts.isImportEqualsDeclaration(d) && !seen.has(d)) {
-      const ref = d.moduleReference;
-      if (ref && !ts.isExternalModuleReference(ref)) {
-        const next = new Set(seen);
-        next.add(d);
-        const targets = resolveSameFileEntity(ref, d, next);
-        if (targets) out.push(...expandToNamespaces(targets, next));
-      }
-    }
-  }
-  return out;
-}
-
-/**
- * Resuelve un EntityName (`A` o `A.B.C`) contra los namespaces del MISMO archivo,
- * empezando por el scope LÉXICO de `fromNode`. Devuelve el ARRAY de declaraciones del
- * miembro final (merge), o undefined si no resuelve same-file (→ cross-module / no
- * resoluble sintácticamente). Para DESCENDER expande a los namespace(s) entre las decls
- * merged Y los alias `import X = NS` a namespace; busca el miembro en TODOS los bloques
- * de un namespace partido. `seen` arrastra los alias del camino (detección de ciclos).
- * Trabajo de-un-solo-archivo, 100% sintáctico, sin type-checker. beta.27 BLOCKER-1
- * (B4 + P1 nested + merge + alias-ns + dotted-self + chain-cycle).
- */
-function resolveSameFileEntity(entityName, fromNode, seen) {
-  const visited = seen || new Set();
-  const parts = [];
-  let e = entityName;
-  while (e && ts.isQualifiedName(e)) {
-    parts.unshift(e.right.text);
-    e = e.left;
-  }
-  if (!e || !ts.isIdentifier(e)) return undefined;
-  parts.unshift(e.text);
-  let decls = resolveDeclsInScope(parts[0], fromNode);
-  if (decls.length === 0) return undefined;
-  for (let i = 1; i < parts.length; i++) {
-    const namespaces = expandToNamespaces(decls, visited);
-    if (namespaces.length === 0) return undefined; // no se puede descender → no resuelve
-    let found = [];
-    for (const ns of namespaces) found = found.concat(namespaceChildDecls(ns, parts[i]));
-    if (found.length === 0) return undefined;
-    decls = found;
-  }
-  return decls; // declaraciones (merge) del target final
-}
-
-/**
- * ¿`import X = …` emite un binding runtime `X`? Antes era `!isTypeOnly`, que añadía
- * el binding SIN mirar el RHS — un `import window = Cfg.window` cuyo `Cfg.window` es
- * una `interface` se BORRA al emit (no hay `var window`), así que `window.*` resuelve
- * al GLOBAL real → erased-shadow bypass (re-hunt B4). `require("x")` y los aliases
- * CROSS-MODULE no se resuelven sin type-checker → conservador value-alias (residual
- * documentado, honesto). Pero un alias a un miembro SAME-FILE SÍ es decidible: el
- * namespace está en el archivo, resolvemos el miembro (scope léxico, merge-aware) y
- * reusamos producesRuntimeValue. Merge: produce valor si ALGUNA decl del target lo hace
- * (`function foo` + `namespace foo` → valor). Lo consultan el preload Y la regla 11.
- * beta.27 BLOCKER-1 (+ codex P1 nested + merge).
- */
-function importEqualsProducesRuntimeValue(decl, seen) {
-  if (decl.isTypeOnly) return false;
-  const ref = decl.moduleReference;
-  if (!ref || ts.isExternalModuleReference(ref)) return true;
-  const visited = seen || new Set();
-  if (visited.has(decl)) return true; // ciclo → conservador value-alias
-  const next = new Set(visited);
-  next.add(decl);
-  const targets = resolveSameFileEntity(ref, decl, next);
-  if (targets === undefined || targets.length === 0) return true; // cross-module
-  return targets.some((t) =>
-    ts.isImportEqualsDeclaration(t)
-      ? importEqualsProducesRuntimeValue(t, next)
-      : producesRuntimeValue(t),
-  );
 }
 
 function addBindingNamesFromPattern(node, names) {
@@ -1870,16 +1698,16 @@ function isNonReferencePosition(node, declaredNames) {
   //     aparece en type-space → ni `left` ni `right` leen un binding
   //     runtime. (Caza `React`/`ReactNode` en `children?: React.ReactNode`.)
   //
-  //     EXCEPCIÓN: el `moduleReference` de un `import x = A.B.C` que PRODUCE VALOR
-  //     es una EntityName en posición de VALOR. `import h = window.location.href`
+  //     EXCEPCIÓN: el `moduleReference` de un `import x = A.B.C` NO-type-only es
+  //     una EntityName en posición de VALOR. `import h = window.location.href`
   //     emite `var h = window.location.href` — un read runtime del root
   //     (`window`). El root es el `.left` más interno; los miembros (`.right`,
-  //     `location`/`href`) ya los exime la regla 1. Solo el root se des-exime —
-  //     y SOLO si el import-equals produce valor: un alias a un miembro-TIPO
-  //     same-file se borra, el root NO se lee en runtime (mismo predicado que el
-  //     preload → ambos paths coinciden; antes la regla usaba `!isTypeOnly` stale
-  //     y FP-eaba el root `Types` de `import w = Types.window` con window type).
-  //     beta.27 BLOCKER-1 (hunt: import-equals value-alias; codex P1 nested).
+  //     `location`/`href`) ya los exime la regla 1. Solo el root se des-exime.
+  //     Discriminador conservador `!isTypeOnly` (acotado, sin binder): NO se intenta
+  //     resolver si el RHS same-file es un miembro-TIPO — eso exige el binder de TS
+  //     y queda RESIDUAL por diseño (ver ADR). Caso bounded que SÍ cazamos: el root
+  //     es un GLOBAL (`window`/`navigator`…), flaggeado pase lo que pase el RHS.
+  //     beta.27 BLOCKER-1 (hunt: import-equals value-alias).
   if (ts.isQualifiedName(parent)) {
     if (parent.left === node) {
       let top = parent;
@@ -1888,9 +1716,9 @@ function isNonReferencePosition(node, declaredNames) {
         top.parent &&
         ts.isImportEqualsDeclaration(top.parent) &&
         top.parent.moduleReference === top &&
-        importEqualsProducesRuntimeValue(top.parent)
+        !top.parent.isTypeOnly
       ) {
-        return false; // root de import-equals que produce valor = read runtime
+        return false; // root de import-equals value-alias = read runtime
       }
     }
     return true;

@@ -1474,73 +1474,38 @@ describe("server-safe gate — import-equals value-alias (regla 11)", () => {
 });
 
 /**
- * import-equals a un miembro TIPO same-file (re-hunt B4). `import window = Cfg.window`
- * cuyo `Cfg.window` es una `interface`/`type` se BORRA al emit (no hay `var window`),
- * así que un `window.*` posterior resuelve al GLOBAL → erased-shadow bypass. El preload
- * añadía el binding por `!isTypeOnly` SIN mirar el RHS. Fix: resolver el RHS contra los
- * namespaces del MISMO archivo (100% sintáctico) y reusar `producesRuntimeValue` —
- * miembro-tipo → no precargar (flaggea); miembro-valor → precargar (clean). El alias
- * CROSS-MODULE no es resoluble sin type-checker → conservador value-alias (residual
- * honesto, documentado en el ADR).
+ * import-equals a un miembro TIPO same-file = RESIDUAL POR DISEÑO (degradado de B4).
+ * `import window = Cfg.window` cuyo `Cfg.window` es un tipo se BORRA al emit, así que un
+ * `window.*` posterior resuelve al global. Cazarlo exige resolver el RHS contra los
+ * namespaces del archivo CON merge / scope-léxico / alias-chains / dotted / self-ref —
+ * eso ES el binder de TS, que el gate renuncia a tener (parser-puro, solo
+ * `createSourceFile`). Probado empíricamente: tras B4, codex enumeró 7 constructos
+ * consecutivos del binder. Decisión: NO reimplementar el binder; queda residual, MISMA
+ * clase categórica que el alias CROSS-MODULE (necesita binder) y que la ofuscación del
+ * eval-sink — decidible-solo-por-binder, contrived + opt-in/first-party. Estos tests
+ * PINEAN el residual: el gate NO los caza, a propósito (ver ADR, cláusula de caducidad
+ * doble: revisitar si deja de ser opt-in/first-party O si el gate adopta binder).
  */
-describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased-shadow, B4)", () => {
+describe("server-safe gate — import-equals a tipo same-file = RESIDUAL (binder, fuera de diseño)", () => {
   it.each([
     ["miembro interface same-file", `/** @server-safe */\nnamespace Cfg { export interface window { x: number } export const VERSION = "1.0"; }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href + Cfg.VERSION; }`],
-    ["miembro type-alias same-file", `/** @server-safe */\nnamespace Cfg { export type document = { y: number }; export const V = 1; }\nimport document = Cfg.document;\n/** @server-safe */\nexport function C() { return document.title + Cfg.V; }`],
     ["nested A.B.window (miembro tipo)", `/** @server-safe */\nnamespace A { export namespace B { export interface window { x: number } } export const V = 1; }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href + A.V; }`],
-    // codex P1: alias ANIDADO `export import w = Types.window` DENTRO del namespace
-    // — el RHS `Types.window` debe resolverse en el scope LÉXICO de Cfg, no en el
-    // top-level. tsc borra ambos aliases → window.location.href lee el global.
-    ["alias anidado en namespace (resolución léxica)", `/** @server-safe */\nnamespace Cfg { export namespace Types { export interface window { x: number } } export import w = Types.window; }\nimport window = Cfg.w;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
-    // codex P1 merge: `function Cfg` precede a `namespace Cfg` (merge declaration) —
-    // resolver Cfg.window debe DESCENDER por el namespace merged, no parar en la
-    // función. El namespace tiene el miembro-tipo → erased → window es el global.
-    ["merge function+namespace (descender por el namespace)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
-    ["namespace partido en dos bloques (miembro en el 2º)", `/** @server-safe */\nnamespace Cfg { export const A = 1; }\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
-    ["dotted namespace A.B { interface }", `/** @server-safe */\nnamespace A.B { export interface window { x: number } }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
-    // codex P1 alias-ns: el ROOT del qualified name es a su vez un `import = alias` a
-    // un namespace (`import Cfg = N.Cfg`). Debe resolverse el alias para descender a
-    // `.window` (interface erased), no tratarse como cross-module value.
-    ["root es import= alias a namespace", `namespace N { export namespace Cfg { export const v = 1; export interface window {} } }\nimport Cfg = N.Cfg;\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href + Cfg.v; }`],
-    // codex P1 dotted-self: dentro de `namespace A.B { … }` el nombre `B` es visible
-    // (no es un statement de ningún bloque, es el .body de A) → `B.window` resuelve.
-    ["dotted self-ref `B.window` dentro de namespace A.B", `namespace A.B { export interface window {}; export import w = B.window; }\nimport window = A.B.w;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
-    // codex P1 chain: cadena de 13 alias NO-cíclica (TS válida) debe resolver hasta el
-    // namespace real — un límite numérico la FP-eaba. Detección de ciclos, no profundidad.
-    ["cadena larga de alias (13) a tipo", `namespace N { export namespace Real { export const v = 1; export interface window {} } }\nimport A12 = N.Real;\nimport A11 = A12; import A10 = A11; import A9 = A10; import A8 = A9; import A7 = A8;\nimport A6 = A7; import A5 = A6; import A4 = A5; import A3 = A4; import A2 = A3;\nimport A1 = A2; import A0 = A1;\nimport window = A0.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
-  ])("FLAGGEA el global tras el alias-a-tipo erased: %s", (_label, code) => {
-    expect(checkSourceFile(code, "import-eq-type.fixture.tsx").length).toBeGreaterThan(0);
-  });
-
-  it("ciclo de alias no cuelga (guard de profundidad)", () => {
-    const code = `namespace M { export import a = M.b; export import b = M.a; }\nimport x = M.a.window;\n/** @server-safe */\nexport function C() { return x; }`;
-    // No debe colgar ni lanzar; el guard de profundidad corta el ciclo (conservador).
-    expect(Array.isArray(checkSourceFile(code, "import-eq-cycle.fixture.tsx"))).toBe(true);
-  });
-
-  it("NO FP-ea el root del moduleReference cuando el alias es a un TIPO (regla 11 ↔ preload coinciden)", () => {
-    // `import w = Cfg.window` con window=interface se BORRA → `Cfg` (root del
-    // moduleReference) NO se lee en runtime. La regla 11 reusa
-    // importEqualsProducesRuntimeValue (no `!isTypeOnly`), así que NO de-exime el
-    // root. Antes lo flaggeaba (FP). `w` se usa en posición de TIPO (compila); el
-    // value-read `Cfg.V` sigue clean (Cfg instanciado). Ningún hallazgo.
-    const code = `/** @server-safe */\nnamespace Cfg { export interface window { x: number } export const V = 1; }\nimport w = Cfg.window;\n/** @server-safe */\nexport const C = (p: w): number => p.x + Cfg.V;`;
-    expect(checkSourceFile(code, "import-eq-root-fp.fixture.tsx")).toEqual([]);
+    ["merge function+namespace", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
+    // namespace instanciado (const V) → el ROOT no se flaggea; aísla el residual del
+    // bypass (window.location no se caza) del FP-contrived del root type-only.
+    ["dotted namespace A.B { interface } (ns instanciado)", `/** @server-safe */\nnamespace A.B { export interface window { x: number } export const V = 1; }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href + A.B.V; }`],
+  ])("NO se caza (residual binder, opt-in/first-party): %s", (_label, code) => {
+    // Documentación honesta del residual: el gate devuelve [] a propósito. Si algún día
+    // adopta un binder/type-checker, estos pasarían a cazarse (cláusula de caducidad).
+    expect(checkSourceFile(code, "import-eq-residual.fixture.tsx")).toEqual([]);
   });
 
   it.each([
-    // miembro de VALOR same-file → emite `var window = Cfg.win` → binding real, clean.
+    // miembro de VALOR same-file → emite `var win = Cfg.win` → binding real, clean.
     ["miembro const same-file (value-alias)", `/** @server-safe */\nnamespace Cfg { export const win = { x: 1 }; }\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
     ["miembro function same-file", `/** @server-safe */\nnamespace Cfg { export function make() { return 1; } }\nimport make = Cfg.make;\n/** @server-safe */\nexport function C() { return make(); }`],
     // cross-module no resoluble → conservador value-alias (residual): no flaggea.
     ["alias cross-module (residual honesto)", `import * as Ext from "./other";\nimport win = Ext.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
-    // merge function+namespace donde el miembro ES de VALOR → produce valor → clean.
-    ["merge a miembro de valor (some-produces-value)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export const win = { x: 1 }; }\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
-    // root es import= alias a namespace, miembro de VALOR → resuelve y precarga → clean.
-    ["root alias-ns a miembro de valor", `namespace N { export namespace Cfg { export const v = 1; export const win = { x: 1 }; } }\nimport Cfg = N.Cfg;\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x + Cfg.v; }`],
-    // cadena larga de alias a un miembro de VALOR → resuelve y precarga → clean (la
-    // detección de ciclos NO corta la cadena legítima).
-    ["cadena larga (13) a miembro de valor", `namespace N { export namespace Real { export const win = { x: 1 }; } }\nimport A12 = N.Real;\nimport A11 = A12; import A10 = A11; import A9 = A10; import A8 = A9; import A7 = A8;\nimport A6 = A7; import A5 = A6; import A4 = A5; import A3 = A4; import A2 = A3;\nimport A1 = A2; import A0 = A1;\nimport win = A0.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
   ])("NO genera falso positivo (value-alias / residual cross-module): %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-val.fixture.tsx")).toEqual([]);
   });
