@@ -1492,6 +1492,12 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     // — el RHS `Types.window` debe resolverse en el scope LÉXICO de Cfg, no en el
     // top-level. tsc borra ambos aliases → window.location.href lee el global.
     ["alias anidado en namespace (resolución léxica)", `/** @server-safe */\nnamespace Cfg { export namespace Types { export interface window { x: number } } export import w = Types.window; }\nimport window = Cfg.w;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
+    // codex P1 merge: `function Cfg` precede a `namespace Cfg` (merge declaration) —
+    // resolver Cfg.window debe DESCENDER por el namespace merged, no parar en la
+    // función. El namespace tiene el miembro-tipo → erased → window es el global.
+    ["merge function+namespace (descender por el namespace)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
+    ["namespace partido en dos bloques (miembro en el 2º)", `/** @server-safe */\nnamespace Cfg { export const A = 1; }\nnamespace Cfg { export interface window { x: number } }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
+    ["dotted namespace A.B { interface }", `/** @server-safe */\nnamespace A.B { export interface window { x: number } }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
   ])("FLAGGEA el global tras el alias-a-tipo erased: %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-type.fixture.tsx").length).toBeGreaterThan(0);
   });
@@ -1512,6 +1518,8 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     ["miembro function same-file", `/** @server-safe */\nnamespace Cfg { export function make() { return 1; } }\nimport make = Cfg.make;\n/** @server-safe */\nexport function C() { return make(); }`],
     // cross-module no resoluble → conservador value-alias (residual): no flaggea.
     ["alias cross-module (residual honesto)", `import * as Ext from "./other";\nimport win = Ext.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
+    // merge function+namespace donde el miembro ES de VALOR → produce valor → clean.
+    ["merge a miembro de valor (some-produces-value)", `/** @server-safe */\nfunction Cfg() {}\nnamespace Cfg { export const win = { x: 1 }; }\nimport win = Cfg.win;\n/** @server-safe */\nexport function C() { return win.x; }`],
   ])("NO genera falso positivo (value-alias / residual cross-module): %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-val.fixture.tsx")).toEqual([]);
   });

@@ -824,15 +824,18 @@ function producesRuntimeValue(decl) {
 }
 
 /**
- * Declaración nombrada `name` entre `statements` (cuerpo de namespace o source file).
- * Cubre namespace/interface/type/class/enum/function/import-equals y variables.
- * undefined si no existe. Resolución SAME-FILE pura.
+ * TODAS las declaraciones nombradas `name` entre `statements` (cuerpo de namespace o
+ * source file). Devuelve un array porque un nombre puede tener MÚLTIPLES declaraciones
+ * que MERGEAN (`function Cfg(){}` + `namespace Cfg {}`, class+namespace, enum+namespace,
+ * namespace partido en dos bloques). Cubre namespace/interface/type/class/enum/function/
+ * import-equals y variables. Resolución SAME-FILE pura.
  */
-function findDeclInStatements(statements, name) {
+function findAllDeclsInStatements(statements, name) {
+  const out = [];
   for (const stmt of statements) {
     if (ts.isVariableStatement(stmt)) {
       for (const d of stmt.declarationList.declarations) {
-        if (ts.isIdentifier(d.name) && d.name.text === name) return d;
+        if (ts.isIdentifier(d.name) && d.name.text === name) out.push(d);
       }
       continue;
     }
@@ -848,38 +851,60 @@ function findDeclInStatements(statements, name) {
       ts.isIdentifier(stmt.name) &&
       stmt.name.text === name
     ) {
-      return stmt;
+      out.push(stmt);
     }
   }
-  return undefined;
+  return out;
 }
 
 /**
- * Resuelve el ROOT de una EntityName LÉXICAMENTE desde `fromNode`: busca la declaración
- * `name` visible en su scope, caminando de los namespace-bodies que lo contienen hacia
- * AFUERA hasta el source file (TS resuelve `Types.window` declarado dentro de `Cfg`
- * mirando primero el scope de `Cfg`, no el top-level). Antes se resolvía siempre desde
- * el top-level → un alias anidado `namespace Cfg { import w = Types.window }` no se
- * resolvía → bypass (codex P1). beta.27 BLOCKER-1.
+ * Las declaraciones miembro `name` DENTRO de un namespace `ns`. Maneja el cuerpo
+ * ModuleBlock (`namespace N { … }`) y el dotted (`namespace A.B { … }`, cuyo body ES
+ * otro ModuleDeclaration `B`): en el dotted, el único "miembro" es `B`.
  */
-function resolveRootInScope(name, fromNode) {
+function namespaceChildDecls(ns, name) {
+  const body = ns.body;
+  if (!body) return [];
+  if (ts.isModuleBlock(body)) return findAllDeclsInStatements(body.statements, name);
+  if (
+    ts.isModuleDeclaration(body) &&
+    body.name &&
+    ts.isIdentifier(body.name) &&
+    body.name.text === name
+  ) {
+    return [body];
+  }
+  return [];
+}
+
+/**
+ * Resuelve el ROOT de una EntityName LÉXICAMENTE desde `fromNode`: las declaraciones
+ * `name` visibles en su scope, caminando de los namespace-bodies que lo contienen hacia
+ * AFUERA hasta el source file (TS resuelve `Types.window` declarado dentro de `Cfg`
+ * mirando primero el scope de `Cfg`). Devuelve TODAS las del scope MÁS INTERNO que lo
+ * declara (merge-aware; el interno gana por shadowing). Antes se resolvía desde el
+ * top-level y a una sola decl → bypass del alias anidado + del merge (codex P1 ×2).
+ */
+function resolveDeclsInScope(name, fromNode) {
   let scope = fromNode.parent;
   while (scope) {
     if (ts.isModuleBlock(scope) || ts.isSourceFile(scope)) {
-      const decl = findDeclInStatements(scope.statements, name);
-      if (decl) return decl;
+      const decls = findAllDeclsInStatements(scope.statements, name);
+      if (decls.length > 0) return decls;
     }
     scope = scope.parent;
   }
-  return undefined;
+  return [];
 }
 
 /**
  * Resuelve un EntityName (`A` o `A.B.C`) contra los namespaces del MISMO archivo,
- * empezando por el scope LÉXICO de `fromNode` (no el top-level). Devuelve la declaración
- * del miembro final, o undefined si el root no resuelve a un namespace del archivo (→
- * cross-module / alias no resoluble sintácticamente). Trabajo de-un-solo-archivo: 100%
- * sintáctico, sin type-checker (re-hunt B4 + codex P1 nested).
+ * empezando por el scope LÉXICO de `fromNode`. Devuelve el ARRAY de declaraciones del
+ * miembro final (merge), o undefined si no resuelve same-file (→ cross-module / no
+ * resoluble sintácticamente). Para DESCENDER usa el/los namespace(s) entre las decls
+ * merged (`function Cfg` no tiene miembros; `namespace Cfg` sí — codex P1 merge); busca
+ * el miembro en TODOS los bloques de un namespace partido. Trabajo de-un-solo-archivo,
+ * 100% sintáctico, sin type-checker. beta.27 BLOCKER-1 (B4 + P1 nested + P1 merge).
  */
 function resolveSameFileEntity(entityName, fromNode) {
   const parts = [];
@@ -890,17 +915,17 @@ function resolveSameFileEntity(entityName, fromNode) {
   }
   if (!e || !ts.isIdentifier(e)) return undefined;
   parts.unshift(e.text);
-  let container = resolveRootInScope(parts[0], fromNode);
-  if (!container) return undefined;
+  let decls = resolveDeclsInScope(parts[0], fromNode);
+  if (decls.length === 0) return undefined;
   for (let i = 1; i < parts.length; i++) {
-    if (!ts.isModuleDeclaration(container)) return undefined;
-    const body = container.body;
-    if (!body || !ts.isModuleBlock(body)) return undefined;
-    const member = findDeclInStatements(body.statements, parts[i]);
-    if (!member) return undefined;
-    container = member;
+    const namespaces = decls.filter((d) => ts.isModuleDeclaration(d));
+    if (namespaces.length === 0) return undefined; // no se puede descender → no resuelve
+    let found = [];
+    for (const ns of namespaces) found = found.concat(namespaceChildDecls(ns, parts[i]));
+    if (found.length === 0) return undefined;
+    decls = found;
   }
-  return container; // último miembro, o `import X = A` (el namespace mismo)
+  return decls; // declaraciones (merge) del target final
 }
 
 /**
@@ -910,20 +935,23 @@ function resolveSameFileEntity(entityName, fromNode) {
  * al GLOBAL real → erased-shadow bypass (re-hunt B4). `require("x")` y los aliases
  * CROSS-MODULE no se resuelven sin type-checker → conservador value-alias (residual
  * documentado, honesto). Pero un alias a un miembro SAME-FILE SÍ es decidible: el
- * namespace está en el archivo, resolvemos el miembro (en su scope léxico) y reusamos
- * producesRuntimeValue (colectores no-espejados → un único predicado). Lo consultan el
- * preload Y la regla 11 (de-exención del root). beta.27 BLOCKER-1 (+ codex P1 nested).
+ * namespace está en el archivo, resolvemos el miembro (scope léxico, merge-aware) y
+ * reusamos producesRuntimeValue. Merge: produce valor si ALGUNA decl del target lo hace
+ * (`function foo` + `namespace foo` → valor). Lo consultan el preload Y la regla 11.
+ * beta.27 BLOCKER-1 (+ codex P1 nested + merge).
  */
 function importEqualsProducesRuntimeValue(decl, depth) {
   if (decl.isTypeOnly) return false;
   const ref = decl.moduleReference;
   if (!ref || ts.isExternalModuleReference(ref)) return true;
   if ((depth || 0) > 8) return true; // cadena/posible ciclo → conservador value-alias
-  const target = resolveSameFileEntity(ref, decl);
-  if (target === undefined) return true; // root no resoluble same-file → cross-module
-  if (ts.isImportEqualsDeclaration(target))
-    return importEqualsProducesRuntimeValue(target, (depth || 0) + 1);
-  return producesRuntimeValue(target);
+  const targets = resolveSameFileEntity(ref, decl);
+  if (targets === undefined || targets.length === 0) return true; // cross-module
+  return targets.some((t) =>
+    ts.isImportEqualsDeclaration(t)
+      ? importEqualsProducesRuntimeValue(t, (depth || 0) + 1)
+      : producesRuntimeValue(t),
+  );
 }
 
 function addBindingNamesFromPattern(node, names) {
