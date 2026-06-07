@@ -1488,8 +1488,22 @@ describe("server-safe gate — import-equals a tipo same-file NO sombrea (erased
     ["miembro interface same-file", `/** @server-safe */\nnamespace Cfg { export interface window { x: number } export const VERSION = "1.0"; }\nimport window = Cfg.window;\n/** @server-safe */\nexport function C() { return window.location.href + Cfg.VERSION; }`],
     ["miembro type-alias same-file", `/** @server-safe */\nnamespace Cfg { export type document = { y: number }; export const V = 1; }\nimport document = Cfg.document;\n/** @server-safe */\nexport function C() { return document.title + Cfg.V; }`],
     ["nested A.B.window (miembro tipo)", `/** @server-safe */\nnamespace A { export namespace B { export interface window { x: number } } export const V = 1; }\nimport window = A.B.window;\n/** @server-safe */\nexport function C() { return window.location.href + A.V; }`],
+    // codex P1: alias ANIDADO `export import w = Types.window` DENTRO del namespace
+    // — el RHS `Types.window` debe resolverse en el scope LÉXICO de Cfg, no en el
+    // top-level. tsc borra ambos aliases → window.location.href lee el global.
+    ["alias anidado en namespace (resolución léxica)", `/** @server-safe */\nnamespace Cfg { export namespace Types { export interface window { x: number } } export import w = Types.window; }\nimport window = Cfg.w;\n/** @server-safe */\nexport function C() { return window.location.href; }`],
   ])("FLAGGEA el global tras el alias-a-tipo erased: %s", (_label, code) => {
     expect(checkSourceFile(code, "import-eq-type.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("NO FP-ea el root del moduleReference cuando el alias es a un TIPO (regla 11 ↔ preload coinciden)", () => {
+    // `import w = Cfg.window` con window=interface se BORRA → `Cfg` (root del
+    // moduleReference) NO se lee en runtime. La regla 11 reusa
+    // importEqualsProducesRuntimeValue (no `!isTypeOnly`), así que NO de-exime el
+    // root. Antes lo flaggeaba (FP). `w` se usa en posición de TIPO (compila); el
+    // value-read `Cfg.V` sigue clean (Cfg instanciado). Ningún hallazgo.
+    const code = `/** @server-safe */\nnamespace Cfg { export interface window { x: number } export const V = 1; }\nimport w = Cfg.window;\n/** @server-safe */\nexport const C = (p: w): number => p.x + Cfg.V;`;
+    expect(checkSourceFile(code, "import-eq-root-fp.fixture.tsx")).toEqual([]);
   });
 
   it.each([

@@ -824,12 +824,12 @@ function producesRuntimeValue(decl) {
 }
 
 /**
- * Miembro de un `ModuleBlock` (cuerpo de namespace) cuyo nombre declarado es `name`.
- * Cubre las formas con binding nombrado (namespace/interface/type/class/enum/function/
- * import-equals) y las variables. undefined si no existe. Resolución SAME-FILE pura.
+ * Declaración nombrada `name` entre `statements` (cuerpo de namespace o source file).
+ * Cubre namespace/interface/type/class/enum/function/import-equals y variables.
+ * undefined si no existe. Resolución SAME-FILE pura.
  */
-function findNamespaceMember(moduleBlock, name) {
-  for (const stmt of moduleBlock.statements) {
+function findDeclInStatements(statements, name) {
+  for (const stmt of statements) {
     if (ts.isVariableStatement(stmt)) {
       for (const d of stmt.declarationList.declarations) {
         if (ts.isIdentifier(d.name) && d.name.text === name) return d;
@@ -855,12 +855,33 @@ function findNamespaceMember(moduleBlock, name) {
 }
 
 /**
- * Resuelve un EntityName (`A` o `A.B.C`) contra los namespaces TOP-LEVEL del MISMO
- * archivo. Devuelve la declaración del miembro final, o undefined si el root no es un
- * namespace del archivo (→ cross-module / alias no resoluble sintácticamente). Trabajo
- * de-un-solo-archivo: 100% sintáctico, sin type-checker (re-hunt B4).
+ * Resuelve el ROOT de una EntityName LÉXICAMENTE desde `fromNode`: busca la declaración
+ * `name` visible en su scope, caminando de los namespace-bodies que lo contienen hacia
+ * AFUERA hasta el source file (TS resuelve `Types.window` declarado dentro de `Cfg`
+ * mirando primero el scope de `Cfg`, no el top-level). Antes se resolvía siempre desde
+ * el top-level → un alias anidado `namespace Cfg { import w = Types.window }` no se
+ * resolvía → bypass (codex P1). beta.27 BLOCKER-1.
  */
-function resolveSameFileEntity(entityName, sourceFile) {
+function resolveRootInScope(name, fromNode) {
+  let scope = fromNode.parent;
+  while (scope) {
+    if (ts.isModuleBlock(scope) || ts.isSourceFile(scope)) {
+      const decl = findDeclInStatements(scope.statements, name);
+      if (decl) return decl;
+    }
+    scope = scope.parent;
+  }
+  return undefined;
+}
+
+/**
+ * Resuelve un EntityName (`A` o `A.B.C`) contra los namespaces del MISMO archivo,
+ * empezando por el scope LÉXICO de `fromNode` (no el top-level). Devuelve la declaración
+ * del miembro final, o undefined si el root no resuelve a un namespace del archivo (→
+ * cross-module / alias no resoluble sintácticamente). Trabajo de-un-solo-archivo: 100%
+ * sintáctico, sin type-checker (re-hunt B4 + codex P1 nested).
+ */
+function resolveSameFileEntity(entityName, fromNode) {
   const parts = [];
   let e = entityName;
   while (e && ts.isQualifiedName(e)) {
@@ -869,24 +890,17 @@ function resolveSameFileEntity(entityName, sourceFile) {
   }
   if (!e || !ts.isIdentifier(e)) return undefined;
   parts.unshift(e.text);
-  let container = sourceFile.statements.find(
-    (s) =>
-      ts.isModuleDeclaration(s) &&
-      s.name &&
-      ts.isIdentifier(s.name) &&
-      s.name.text === parts[0],
-  );
+  let container = resolveRootInScope(parts[0], fromNode);
   if (!container) return undefined;
   for (let i = 1; i < parts.length; i++) {
+    if (!ts.isModuleDeclaration(container)) return undefined;
     const body = container.body;
     if (!body || !ts.isModuleBlock(body)) return undefined;
-    const member = findNamespaceMember(body, parts[i]);
+    const member = findDeclInStatements(body.statements, parts[i]);
     if (!member) return undefined;
-    if (i === parts.length - 1) return member;
-    if (!ts.isModuleDeclaration(member)) return undefined;
     container = member;
   }
-  return container; // `import X = A` (el namespace mismo)
+  return container; // último miembro, o `import X = A` (el namespace mismo)
 }
 
 /**
@@ -896,16 +910,17 @@ function resolveSameFileEntity(entityName, sourceFile) {
  * al GLOBAL real → erased-shadow bypass (re-hunt B4). `require("x")` y los aliases
  * CROSS-MODULE no se resuelven sin type-checker → conservador value-alias (residual
  * documentado, honesto). Pero un alias a un miembro SAME-FILE SÍ es decidible: el
- * namespace está en el archivo, resolvemos el miembro y reusamos producesRuntimeValue
- * (colectores no-espejados → un único predicado). beta.27 BLOCKER-1.
+ * namespace está en el archivo, resolvemos el miembro (en su scope léxico) y reusamos
+ * producesRuntimeValue (colectores no-espejados → un único predicado). Lo consultan el
+ * preload Y la regla 11 (de-exención del root). beta.27 BLOCKER-1 (+ codex P1 nested).
  */
 function importEqualsProducesRuntimeValue(decl, depth) {
   if (decl.isTypeOnly) return false;
   const ref = decl.moduleReference;
   if (!ref || ts.isExternalModuleReference(ref)) return true;
   if ((depth || 0) > 8) return true; // cadena/posible ciclo → conservador value-alias
-  const target = resolveSameFileEntity(ref, decl.getSourceFile());
-  if (target === undefined) return true; // root no es namespace same-file → cross-module
+  const target = resolveSameFileEntity(ref, decl);
+  if (target === undefined) return true; // root no resoluble same-file → cross-module
   if (ts.isImportEqualsDeclaration(target))
     return importEqualsProducesRuntimeValue(target, (depth || 0) + 1);
   return producesRuntimeValue(target);
@@ -1782,12 +1797,16 @@ function isNonReferencePosition(node, declaredNames) {
   //     aparece en type-space → ni `left` ni `right` leen un binding
   //     runtime. (Caza `React`/`ReactNode` en `children?: React.ReactNode`.)
   //
-  //     EXCEPCIÓN: el `moduleReference` de un `import x = A.B.C` NO-type-only es
-  //     una EntityName en posición de VALOR. `import h = window.location.href`
+  //     EXCEPCIÓN: el `moduleReference` de un `import x = A.B.C` que PRODUCE VALOR
+  //     es una EntityName en posición de VALOR. `import h = window.location.href`
   //     emite `var h = window.location.href` — un read runtime del root
   //     (`window`). El root es el `.left` más interno; los miembros (`.right`,
-  //     `location`/`href`) ya los exime la regla 1. Solo el root se des-exime.
-  //     beta.27 BLOCKER-1 (hunt: import-equals value-alias).
+  //     `location`/`href`) ya los exime la regla 1. Solo el root se des-exime —
+  //     y SOLO si el import-equals produce valor: un alias a un miembro-TIPO
+  //     same-file se borra, el root NO se lee en runtime (mismo predicado que el
+  //     preload → ambos paths coinciden; antes la regla usaba `!isTypeOnly` stale
+  //     y FP-eaba el root `Types` de `import w = Types.window` con window type).
+  //     beta.27 BLOCKER-1 (hunt: import-equals value-alias; codex P1 nested).
   if (ts.isQualifiedName(parent)) {
     if (parent.left === node) {
       let top = parent;
@@ -1796,9 +1815,9 @@ function isNonReferencePosition(node, declaredNames) {
         top.parent &&
         ts.isImportEqualsDeclaration(top.parent) &&
         top.parent.moduleReference === top &&
-        !top.parent.isTypeOnly
+        importEqualsProducesRuntimeValue(top.parent, 0)
       ) {
-        return false; // root de import-equals value-alias = read runtime
+        return false; // root de import-equals que produce valor = read runtime
       }
     }
     return true;
