@@ -1190,7 +1190,10 @@ function classifyTypeofGuard(expr) {
     { typeofExpr: expr.right, stringExpr: expr.left },
   ]) {
     if (!ts.isTypeOfExpression(typeofExpr)) continue;
-    const operand = typeofExpr.expression;
+    // El operando puede venir en wrappers runtime-transparentes: `typeof (window)`,
+    // `typeof (window as any)` ≡ `typeof window` (re-hunt FP paren-operand).
+    let operand = typeofExpr.expression;
+    while (operand && isErasedOuterExpr(operand)) operand = operand.expression;
     if (!ts.isIdentifier(operand)) continue;
     if (SAFE_GLOBALS.has(operand.text)) continue;
     if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
@@ -1550,9 +1553,20 @@ function isNonReferencePosition(node, declaredNames) {
     return true;
   }
 
-  // 2. Operand of TypeOfExpression: `typeof window` short-circuita
-  //    ReferenceError sobre identifiers bare.
-  if (ts.isTypeOfExpression(parent) && parent.expression === node) {
+  // 2. Operand of TypeOfExpression: `typeof window` short-circuita ReferenceError
+  //    sobre el identifier BARE — incluso envuelto en wrappers RUNTIME-TRANSPARENTES
+  //    (`typeof (window)`, `typeof (window as any)`): los parens/erased no cambian
+  //    que el operando es el bare ident, así que sigue sin lanzar. `typeof window.foo`
+  //    (property access, NO erased) SÍ ejecuta el read → no se exime (el up-walk para
+  //    en el PropertyAccess). re-hunt FP paren-operand.
+  let typeofTop = node;
+  while (typeofTop.parent && isErasedOuterExpr(typeofTop.parent)) {
+    typeofTop = typeofTop.parent;
+  }
+  if (
+    ts.isTypeOfExpression(typeofTop.parent) &&
+    typeofTop.parent.expression === typeofTop
+  ) {
     return true;
   }
 

@@ -1918,6 +1918,12 @@ describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => 
     // F5: cast (as/satisfies) entre el callback y su sink diferido.
     ["F5 useEffect callback casteado (as)", `import { useEffect } from "react";\n/** @server-safe */\nexport function R() { useEffect((() => { document.title = String(window.innerWidth); }) as () => void, []); }`],
     ["F5 useEffect callback casteado (satisfies)", `import { useEffect } from "react";\n/** @server-safe */\nexport function R() { useEffect((() => { document.title = "x"; }) satisfies () => void, []); }`],
+    // FP paren-operand (review adversarial del batch): el operando de typeof envuelto
+    // en wrappers runtime-transparentes (`typeof (window)`, `typeof (window as any)`)
+    // ≡ `typeof window` — guard reconocido Y el bare ident interno exento.
+    ["paren typeof operand guard", `/** @server-safe */\nexport function C() { if (typeof (window) !== "undefined") { return window.location.href; } return null; }`],
+    ["typeof (window) solo (operando exento)", `/** @server-safe */\nexport const ok = typeof (window) !== "undefined";`],
+    ["typeof (X as any) === object guard", `/** @server-safe */\nexport function C() { if (typeof (document as any) === "object") { return (document as any).title; } return ""; }`],
   ])("NO genera falso positivo: %s", (_label, code) => {
     expect(checkSourceFile(code, "fp-batch.fixture.tsx")).toEqual([]);
   });
@@ -1939,6 +1945,13 @@ describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => 
     ["global directo render-path", `/** @server-safe */\nexport const x = window.location.href;`],
     // F5 soundness: eval-sink en un timer casteado SIGUE flaggeando (timer dispara en Edge).
     ["eval-sink en setTimeout casteado", `/** @server-safe */\nexport function B() { setTimeout((() => { Function("return 1")(); }) as () => void, 0); }`],
+    // paren-operand soundness: `typeof window.location` (property access) EJECUTA el
+    // read → FLAG; el unwrap solo cubre wrappers erased, no member access.
+    ["typeof window.location (property access ejecuta)", `/** @server-safe */\nexport function C() { return typeof window.location; }`],
+    ["typeof (window).location.href (read real)", `/** @server-safe */\nexport function C() { return typeof (window).location.href; }`],
+    // paren-operand soundness: un NON_ABSENCE_DENIAL con operando parentizado NO se
+    // exime → el eval-sink bajo ese guard sigue flaggeando.
+    ["typeof (Function) parentizado NO exime eval-sink", `/** @server-safe */\nexport function C() { if (typeof (Function) === "function") { return Function("return 1")(); } return null; }`],
   ])("SIGUE flaggeando (soundness, sin bypass): %s", (_label, code) => {
     expect(checkSourceFile(code, "fp-batch-sound.fixture.tsx").length).toBeGreaterThan(0);
   });
