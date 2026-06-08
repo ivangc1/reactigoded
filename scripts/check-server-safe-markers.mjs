@@ -606,10 +606,11 @@ const DEFERRED_LATER_FNS = new Set([
 function isDeferredExecutionContext(fnNode, context) {
   let current = fnNode;
   let parent = current.parent;
-  while (
-    parent &&
-    (ts.isParenthesizedExpression(parent) || ts.isJsxExpression(parent))
-  ) {
+  // Sube saltando wrappers RUNTIME-TRANSPARENTES entre el callback y su sink: parens,
+  // JsxExpression, y los erased (`as`/`satisfies`/`!`/`<T>`). `(() => {…}) as () =>
+  // void` pasado a useEffect ES el mismo callback diferido — antes el unwrap solo
+  // quitaba paren/jsx y un cast rompía la detección → FP (F5). Reusa isErasedOuterExpr.
+  while (parent && (isErasedOuterExpr(parent) || ts.isJsxExpression(parent))) {
     current = parent;
     parent = parent.parent;
   }
@@ -1153,73 +1154,65 @@ function gatherModulePreloadedBindings(sourceFile) {
 }
 
 /**
- * Si la expresión es `typeof <ident> !== "undefined"` (o `!=`), donde
- * `<ident>` es un client global, devuelve el nombre. Si no, null.
+ * Clasifica un typeof-guard de EXISTENCIA: `{ name, presentWhenTrue }` o null.
+ * `presentWhenTrue` = el identificador está DEFINIDO cuando la expresión es true
+ * (positivo) o cuando es false (negativo). Único predicado para todas las formas de
+ * comparación + negación (re-hunt F1/F2). Soundness de existencia:
+ *   typeof X !== "undefined"        → present cuando TRUE   (positivo)
+ *   typeof X === "undefined"        → present cuando FALSE  (negativo)
+ *   typeof X === S  (S≠"undefined") → present cuando TRUE   (si fuera undefined no sería S)
+ *   typeof X !== S  (S≠"undefined") → present cuando FALSE  (false ⇒ typeof===S≠undefined)
+ *   !(expr)                         → invierte presentWhenTrue
+ * Acepta `==`/`!=` (typeof siempre da string). MANTIENE las exclusiones SAFE (irrelevante)
+ * y NON_ABSENCE_DENIALS (un guard sobre eval/Function/globalThis/global/self/setImmediate
+ * es vacuo en Edge → reconocerlo suprimiría la detección — load-bearing, no tocar).
  */
-function extractPositiveTypeofGuard(expr) {
+function classifyTypeofGuard(expr) {
+  if (
+    ts.isPrefixUnaryExpression(expr) &&
+    expr.operator === ts.SyntaxKind.ExclamationToken
+  ) {
+    const inner = classifyTypeofGuard(expr.operand);
+    return inner ? { name: inner.name, presentWhenTrue: !inner.presentWhenTrue } : null;
+  }
+  if (ts.isParenthesizedExpression(expr)) return classifyTypeofGuard(expr.expression);
   if (!ts.isBinaryExpression(expr)) return null;
   const op = expr.operatorToken.kind;
-  // Solo formas positivas: !== y !=. El negativo (=== / ==) NO es guard.
-  if (
-    op !== ts.SyntaxKind.ExclamationEqualsEqualsToken &&
-    op !== ts.SyntaxKind.ExclamationEqualsToken
-  ) {
-    return null;
-  }
-  // Permitir orden: `typeof X !== "undefined"` O `"undefined" !== typeof X`.
-  const candidates = [
+  const isEq =
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsToken;
+  const isNeq =
+    op === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+    op === ts.SyntaxKind.ExclamationEqualsToken;
+  if (!isEq && !isNeq) return null;
+  for (const { typeofExpr, stringExpr } of [
     { typeofExpr: expr.left, stringExpr: expr.right },
     { typeofExpr: expr.right, stringExpr: expr.left },
-  ];
-  for (const { typeofExpr, stringExpr } of candidates) {
+  ]) {
     if (!ts.isTypeOfExpression(typeofExpr)) continue;
     const operand = typeofExpr.expression;
     if (!ts.isIdentifier(operand)) continue;
-    // fail-closed: el guard `typeof X !== "undefined"` es significativo
-    // para cualquier global NO-seguro. Los SAFE nunca se flaggean, así que
-    // reconocer el guard sobre ellos es irrelevante — skip.
     if (SAFE_GLOBALS.has(operand.text)) continue;
-    // …pero un guard NO se reconoce para los sinks de eval/escape
-    // (`eval`/`Function`/`globalThis`/`global`): están siempre presentes en
-    // Node, el guard es siempre true y NO hace el body safe — reconocerlo
-    // suprimiría la detección eval-sink/escape. Codex P1 round 3.
     if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
     if (!ts.isStringLiteral(stringExpr)) continue;
-    if (stringExpr.text !== "undefined") continue;
-    return operand.text;
+    const isUndefined = stringExpr.text === "undefined";
+    // undefined: presente cuando !==; otro tipo: presente cuando ===.
+    const presentWhenTrue = isUndefined ? isNeq : isEq;
+    return { name: operand.text, presentWhenTrue };
   }
   return null;
 }
 
-/**
- * Como `extractPositiveTypeofGuard` pero para la forma NEGATIVA
- * `typeof X === "undefined"` (=== / ==). Devuelve el nombre o null. Usado
- * para el narrowing por early-return (abajo).
- */
+/** Nombre con guard que prueba PRESENCIA cuando la expresión es TRUE (positivo), o null. */
+function extractPositiveTypeofGuard(expr) {
+  const c = classifyTypeofGuard(expr);
+  return c && c.presentWhenTrue ? c.name : null;
+}
+
+/** Nombre con guard que prueba PRESENCIA cuando la expresión es FALSE (negativo), o null. */
 function extractNegativeTypeofGuard(expr) {
-  if (!ts.isBinaryExpression(expr)) return null;
-  const op = expr.operatorToken.kind;
-  if (
-    op !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
-    op !== ts.SyntaxKind.EqualsEqualsToken
-  ) {
-    return null;
-  }
-  const candidates = [
-    { typeofExpr: expr.left, stringExpr: expr.right },
-    { typeofExpr: expr.right, stringExpr: expr.left },
-  ];
-  for (const { typeofExpr, stringExpr } of candidates) {
-    if (!ts.isTypeOfExpression(typeofExpr)) continue;
-    const operand = typeofExpr.expression;
-    if (!ts.isIdentifier(operand)) continue;
-    if (SAFE_GLOBALS.has(operand.text)) continue;
-    if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
-    if (!ts.isStringLiteral(stringExpr)) continue;
-    if (stringExpr.text !== "undefined") continue;
-    return operand.text;
-  }
-  return null;
+  const c = classifyTypeofGuard(expr);
+  return c && !c.presentWhenTrue ? c.name : null;
 }
 
 /**
@@ -2421,6 +2414,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // (parameters + var hoisted dentro del fn body).
       const bodyContext = {
         ...addToScope(context, fnScopeBindings),
+        // Dentro de un cuerpo de función: los reads son call-time. Un nombre
+        // declarado a NIVEL DE MÓDULO leído aquí ya está inicializado al llamarse
+        // (módulo evaluado) → es un local, no un global, independientemente del
+        // orden textual (F4: `function P(){ return X } const X = …`). Render-path
+        // directo (fuera de función) sí mantiene el orden TDZ.
+        isInFunctionBody: true,
         isInDeferredBody: context.isInDeferredBody || isDeferred,
         // CLIENT-ONLY deferred (hook/handler) vs TIMER (setTimeout/setInterval/
         // queueMicrotask). Sticky: una vez en client-only, los timers anidados
@@ -2585,29 +2584,48 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       }
     }
 
-    // (b.3) For/ForIn/ForOf con initializer let/const: el binding es
-    // visible en el initializer (condition/incrementor) y el body del
-    // for, no más allá.
+    // (b.3) For/ForIn/ForOf/While: (1) el binding let/const del for-init es visible
+    // en condition/incrementor/body, no más allá. (2) un typeof-guard POSITIVO en la
+    // condición narrowea el BODY — el body solo corre con la condición truthy, que
+    // exige el guard true → el identificador está definido (F3). do-while NO entra:
+    // su body corre ANTES del primer check. Solo POSITIVO (collectConjunctionGuards):
+    // un `||` o un guard negativo en la condición NO garantiza presencia en el body.
     if (
       ts.isForStatement(node) ||
       ts.isForInStatement(node) ||
-      ts.isForOfStatement(node)
+      ts.isForOfStatement(node) ||
+      ts.isWhileStatement(node)
     ) {
-      const init = node.initializer;
-      if (init && ts.isVariableDeclarationList(init)) {
-        const flags = init.flags;
-        const blockScoped = isBlockScopedDeclList(flags);
-        if (blockScoped) {
-          const forBindings = new Set();
-          for (const decl of init.declarations) {
-            addBindingNamesFromPattern(decl.name, forBindings);
-          }
-          if (forBindings.size > 0) {
-            const bodyContext = addToScope(context, forBindings);
-            ts.forEachChild(node, (child) => visit(child, bodyContext));
-            return;
-          }
+      const forBindings = new Set();
+      const init = ts.isWhileStatement(node) ? undefined : node.initializer;
+      if (
+        init &&
+        ts.isVariableDeclarationList(init) &&
+        isBlockScopedDeclList(init.flags)
+      ) {
+        for (const decl of init.declarations) {
+          addBindingNamesFromPattern(decl.name, forBindings);
         }
+      }
+      const cond = ts.isWhileStatement(node) ? node.expression : node.condition;
+      const bodyGuards = new Set();
+      if (cond) collectConjunctionGuards(cond, bodyGuards);
+      if (forBindings.size > 0 || bodyGuards.size > 0) {
+        const baseCtx =
+          forBindings.size > 0 ? addToScope(context, forBindings) : context;
+        const bodyCtx =
+          bodyGuards.size > 0
+            ? {
+                ...baseCtx,
+                activeGuards: new Set([...baseCtx.activeGuards, ...bodyGuards]),
+              }
+            : baseCtx;
+        // El body (.statement) hereda los guards; el resto (init/condition/
+        // incrementor/expression) solo el scope del for-init, sin los guards.
+        ts.forEachChild(node, (child) =>
+          visit(child, child === node.statement ? bodyCtx : baseCtx),
+        );
+        return;
       }
     }
 
@@ -2634,6 +2652,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           if (
             !context.localBindings.has(api) &&
             !deferredExempt &&
+            // Nombre declarado a nivel de módulo leído DENTRO de una función (call-
+            // time) = local inicializado, no un global — independiente del orden
+            // textual (F4: forward value-read). El espejo JSX (regla 9) ya lo hacía.
+            !(context.isInFunctionBody && moduleDeclaredNames.has(api)) &&
             !isInTypeOnlyHeritageExpr(node)
           ) {
             if (!context.activeGuards.has(api)) {
@@ -2750,6 +2772,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       if (isUnsafeGlobal || isEvalSink) {
         if (
           !context.localBindings.has(api) &&
+          // Forward value-read de un nombre module-declared dentro de una función
+          // (call-time → ya inicializado, es local no global). Ver rama (c)/F4.
+          !(context.isInFunctionBody && moduleDeclaredNames.has(api)) &&
           !isNonReferencePosition(node, moduleDeclaredNames)
         ) {
           // Exención en body diferido: política única (NON_ABSENCE_DENIALS solo en
@@ -2828,6 +2853,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     blockEntryGuards: new Set(),
     isInDeferredBody: false,
     isInClientOnlyDeferredBody: false,
+    isInFunctionBody: false,
     localBindings: moduleAll,
     nonImportBindings: moduleNonImports,
     reactImports,

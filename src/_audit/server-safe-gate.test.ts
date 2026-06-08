@@ -1896,6 +1896,55 @@ describe("server-safe gate — guard narrowing extendido (||-early-return, else,
 });
 
 /**
+ * Batch de FPs del deep re-hunt (cluster C: F1/F2/F3 reconocimiento de guard; F4
+ * forward value-read; F5 cast en callback diferido). Todos son código legítimo y
+ * compilable que el gate flaggeaba; cada fix viene con su contra-test de SOUNDNESS
+ * (la dirección que SÍ debe flaggear sigue flaggeando — cero bypass).
+ */
+describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => {
+  it.each([
+    // F1: typeof X === "object" (idioma UMD) es existencia-positiva.
+    ["F1 typeof window === object", `/** @server-safe */\nexport function C() { if (typeof window === "object") { return window.innerWidth; } return 0; }`],
+    ["F1 doble === object &&", `/** @server-safe */\nexport function C() { if (typeof window === "object" && typeof document === "object") { return window.innerWidth + document.body.clientWidth; } return 0; }`],
+    // F2: !(typeof X === "undefined") y typeof X !== "object" early-return.
+    ["F2 !(typeof === undefined)", `/** @server-safe */\nexport function C() { if (!(typeof window === "undefined")) { return window.innerWidth; } return 0; }`],
+    ["F2 typeof !== object early-return", `/** @server-safe */\nexport function C() { if (typeof window !== "object") return 0; return window.innerWidth; }`],
+    // F3: guard positivo en condición de for/while narrowea el body.
+    ["F3 guard en condición de for", `/** @server-safe */\nexport function C() { let s = 0; for (let i = 0; typeof window !== "undefined" && i < 3; i++) { s += window.innerWidth; } return s; }`],
+    ["F3 guard en condición de while", `/** @server-safe */\nexport function C() { let s = 0, n = 0; while (typeof window !== "undefined" && n < 3) { s += window.innerWidth; n++; } return s; }`],
+    // F4: forward value-read de un nombre module-declared dentro de una función.
+    ["F4 forward const (function)", `/** @server-safe */\nexport function Price() { return CURRENCY + "9.99"; }\nconst CURRENCY = "$";`],
+    ["F4 forward const (arrow) + property + class", `/** @server-safe */\nexport const P = () => CURRENCY;\nconst CURRENCY = "$";\n/** @server-safe */\nexport function T() { return TABLE.length; }\nconst TABLE = [1];\n/** @server-safe */\nexport function H() { return new Helper(); }\nclass Helper {}`],
+    // F5: cast (as/satisfies) entre el callback y su sink diferido.
+    ["F5 useEffect callback casteado (as)", `import { useEffect } from "react";\n/** @server-safe */\nexport function R() { useEffect((() => { document.title = String(window.innerWidth); }) as () => void, []); }`],
+    ["F5 useEffect callback casteado (satisfies)", `import { useEffect } from "react";\n/** @server-safe */\nexport function R() { useEffect((() => { document.title = "x"; }) satisfies () => void, []); }`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "fp-batch.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    // F1/F2 soundness: typeof !== "object" en el THEN (no early-return) → window puede
+    // ser undefined ahí → FLAG.
+    ["typeof !== object en THEN (no early-return)", `/** @server-safe */\nexport function C() { if (typeof window !== "object") { return window.innerWidth; } return 0; }`],
+    // F3 soundness: || en la condición NO garantiza presencia en el body.
+    ["|| en condición de while → body no seguro", `/** @server-safe */\nexport function C() { let i = 0; while (typeof window !== "undefined" || i < 3) { i += window.innerWidth; } return i; }`],
+    // F3 soundness: do-while corre el body ANTES del primer check.
+    ["do-while → body antes del check", `/** @server-safe */\nexport function C() { let i = 0; do { i += window.innerWidth; } while (typeof window !== "undefined" && i < 3); return i; }`],
+    // F1/F2 soundness: guard sobre un eval-sink/escape root (NON_ABSENCE_DENIAL) por
+    // cualquier forma de comparación NO lo exime.
+    ["typeof Function === function NO exime eval-sink", `/** @server-safe */\nexport function C() { if (typeof Function === "function") { return Function("return 1")(); } return null; }`],
+    // F4 soundness: un GLOBAL real (no module-declared) dentro de una función → FLAG.
+    ["global real dentro de función", `/** @server-safe */\nexport function C() { return window.location.href; }`],
+    // F4 soundness: read DIRECTO render-path de un global → FLAG (no es función).
+    ["global directo render-path", `/** @server-safe */\nexport const x = window.location.href;`],
+    // F5 soundness: eval-sink en un timer casteado SIGUE flaggeando (timer dispara en Edge).
+    ["eval-sink en setTimeout casteado", `/** @server-safe */\nexport function B() { setTimeout((() => { Function("return 1")(); }) as () => void, 0); }`],
+  ])("SIGUE flaggeando (soundness, sin bypass): %s", (_label, code) => {
+    expect(checkSourceFile(code, "fp-batch-sound.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * FPs fail-closed destapados por el re-hunt: self-reference de clase + root de
  * heritage type-only cualificada. Ambos son posiciones que NO leen un global en
  * runtime pero el modelo fail-closed flaggeaba. Cero debilitamiento — el
