@@ -678,15 +678,30 @@ function isDeferredExecutionContext(fnNode, context) {
       ) {
         return "none";
       }
+      // Deferred React hook — resuelto por el EXPORT CANÓNICO de react, no el alias
+      // local. `import { useState as useEffect }` (callee local "useEffect") resuelve
+      // a "useState" → render-phase → NO deferred (deep adversarial bypass); la cara
+      // inversa `import { useEffect as ue }` resuelve a "useEffect" → SÍ deferred (FP).
+      // `React.useEffect`: el miembro YA es canónico si `React` viene de react.
+      // Codex round 17 P1.1: solo cuenta si viene de "react" (un `import { useEffect }
+      // from "./fake"` con impl síncrona NO se exime).
+      let canonicalCallee = null;
+      if (ts.isIdentifier(callee)) {
+        const mapped = context.reactImports.named.get(calleeName);
+        if (mapped !== undefined) canonicalCallee = mapped;
+      } else if (
+        rootIdent !== null &&
+        context.reactImports.namespaces.has(rootIdent)
+      ) {
+        canonicalCallee = calleeName;
+      }
+      if (canonicalCallee !== null && DEFERRED_HOOKS.has(canonicalCallee)) {
+        return "client";
+      }
       if (DEFERRED_HOOKS.has(calleeName)) {
-        // Codex round 17 P1.1: solo exempt si el binding viene
-        // específicamente de `"react"`. `import { useEffect } from
-        // "./fake-helper"` con synchronous impl NO debe exempt-ear.
-        // El check usa root del callee chain — cubre tanto `useEffect`
-        // bare como `React.useEffect` (`React` debe venir de "react").
-        if (rootIdent !== null && context.reactImports.has(rootIdent)) {
-          return "client";
-        }
+        // Nombre de hook diferido que NO resuelve a un export de react (alias-spoof
+        // `useState as useEffect`, o un hook de un módulo no-react): el binding real
+        // corre síncrono en render → NO diferido.
         return "none";
       }
       if (DEFERRED_LATER_FNS.has(calleeName)) {
@@ -1089,15 +1104,40 @@ function addRuntimeImportBindings(importClause, names) {
   }
 }
 
+/**
+ * Imports de "react", resueltos por su EXPORT CANÓNICO (no el binding local). Un
+ * deferred-hook se reconoce por el nombre que EXPORTA react, no por el alias local:
+ * `import { useState as useEffect }` tiene binding local "useEffect" ∈ DEFERRED_HOOKS
+ * pero su export es "useState" (render-phase, su lazy-init corre en SSR) → NO deferred
+ * (deep adversarial: alias-spoof bypass). Devuelve { named, namespaces }:
+ *   named: Map<localName, exportName> de named imports (`useEffect`→`useEffect`,
+ *          `useEffect`(alias de useState)→`useState`).
+ *   namespaces: Set<localName> de default (`import React`) + `import * as React`,
+ *          cuyos miembros `React.useEffect` YA son el nombre canónico.
+ */
 function gatherReactImports(sourceFile) {
-  const names = new Set();
+  const named = new Map();
+  const namespaces = new Set();
   for (const stmt of sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt)) continue;
     if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
     if (stmt.moduleSpecifier.text !== "react") continue;
-    addRuntimeImportBindings(stmt.importClause, names);
+    const clause = stmt.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    if (clause.name) namespaces.add(clause.name.text); // default import: React
+    const nb = clause.namedBindings;
+    if (!nb) continue;
+    if (ts.isNamespaceImport(nb)) {
+      namespaces.add(nb.name.text); // import * as React
+    } else if (ts.isNamedImports(nb)) {
+      for (const spec of nb.elements) {
+        if (spec.isTypeOnly) continue;
+        const exportName = spec.propertyName ? spec.propertyName.text : spec.name.text;
+        named.set(spec.name.text, exportName);
+      }
+    }
   }
-  return names;
+  return { named, namespaces };
 }
 
 /**
@@ -1185,10 +1225,17 @@ function classifyTypeofGuard(expr) {
     op === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
     op === ts.SyntaxKind.ExclamationEqualsToken;
   if (!isEq && !isNeq) return null;
-  for (const { typeofExpr, stringExpr } of [
+  for (const cand of [
     { typeofExpr: expr.left, stringExpr: expr.right },
     { typeofExpr: expr.right, stringExpr: expr.left },
   ]) {
+    // El lado typeof puede venir en wrappers erased: `(typeof window) !== "undefined"`,
+    // `(typeof window as string) !== …` ≡ `typeof window !== …` (runtime-transparente,
+    // tsc lo narrowea). Desenvolver antes del check (deep adversarial FP). El stringExpr
+    // se queda como está (debe ser un string literal directo).
+    let typeofExpr = cand.typeofExpr;
+    while (typeofExpr && isErasedOuterExpr(typeofExpr)) typeofExpr = typeofExpr.expression;
+    const stringExpr = cand.stringExpr;
     if (!ts.isTypeOfExpression(typeofExpr)) continue;
     // El operando puede venir en wrappers runtime-transparentes: `typeof (window)`,
     // `typeof (window as any)` ≡ `typeof window` (re-hunt FP paren-operand).
@@ -2462,7 +2509,19 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           ? new Set(context.blockEntryGuards ?? [])
           : context.activeGuards,
       };
-      ts.forEachChild(node, (child) => visit(child, bodyContext));
+      // Los DEFAULTS de los parámetros corren en el scope de PARÁMETROS, padre del
+      // body: NO ven los `var` hoisted del body (ES spec). Visitarlos bajo bodyContext
+      // suprimía un read del global homónimo de un `var` del body (`function f(x =
+      // window.x){ var window }` → el default lee el GLOBAL real → ReferenceError en
+      // Edge; deep adversarial bypass). Scope de params = outer + nombres de params
+      // (para `f(a, b=a)`) + `arguments`, SIN los var del body. El body sí usa bodyContext.
+      const paramScope = new Set(context.localBindings);
+      for (const p of node.parameters) addBindingNamesFromPattern(p.name, paramScope);
+      if (!ts.isArrowFunction(node)) paramScope.add("arguments");
+      const paramContext = { ...bodyContext, localBindings: paramScope };
+      ts.forEachChild(node, (child) =>
+        visit(child, child === node.body ? bodyContext : paramContext),
+      );
       return;
     }
 
@@ -2496,6 +2555,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         collectVarHoistedRecursive(child, preloaded),
       );
       visitOrderedStatements(node.body.statements, context, preloaded);
+      return;
+    }
+
+    // (b.0a-ns) Una ModuleDeclaration AMBIENT (`declare global`, `declare namespace`,
+    // `declare module`) es type-space puro: se borra al emit, no hay reads runtime. NO
+    // recursar — un `declare global { class X extends HTMLElement {} }` (augmentación
+    // de custom-elements, idiomática en un DS) flaggeaba `HTMLElement` aunque no emite
+    // nada (deep adversarial FP). El class-extends ahí NO es runtime (a diferencia de un
+    // `namespace NS { class C extends window.Base }` instanciado, que sí emite y flaggea).
+    if (ts.isModuleDeclaration(node) && isAmbientDeclaration(node)) {
       return;
     }
 

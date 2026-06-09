@@ -1986,6 +1986,76 @@ describe("server-safe gate — F4 sound SOLO si moduleDeclaredNames excluye lo b
 });
 
 /**
+ * DEEPEST adversarial (16 lentes) — 2 bypasses raíz + 2 FPs, antes del freeze de #173.
+ *
+ * B-α (alias-spoof DEFERRED_HOOK): `import { useState as useEffect }` — el deferred-hook
+ *   se reconocía por el NOMBRE LOCAL (alias) contra DEFERRED_HOOKS, no el export canónico.
+ *   useState (render-phase, su lazy-init corre en SSR) renombrado a useEffect eximía
+ *   window/document Y eval/Function/.constructor. Fix: resolver el export canónico.
+ * B-β (param-default var-hoist): `function f(x = window.x){ var window }` — el default-param
+ *   corre en scope de PARÁMETRO (no ve el `var` del body), pero el gate aplicaba el
+ *   bodyContext (con var hoisted) a los defaults → suprimía el read del GLOBAL real.
+ */
+describe("server-safe gate — DEEPEST: alias-spoof DEFERRED_HOOK (B-α) por export canónico", () => {
+  it.each([
+    ["useState as useEffect + window", `import { useState as useEffect } from "react";\n/** @server-safe */\nexport function C(): string { const [v] = useEffect((): string => window.location.href); return v; }`],
+    ["useState as useEffect + eval-sink", `import { useState as useEffect } from "react";\n/** @server-safe */\nexport function C(): number { const [v] = useEffect((): number => { eval("globalThis"); return 0; }); return v; }`],
+    ["useMemo as useLayoutEffect + .constructor", `import { useMemo as useLayoutEffect } from "react";\n/** @server-safe */\nexport function C(): unknown { return useLayoutEffect(() => (() => {}).constructor("return globalThis")(), []); }`],
+    ["React.useState (namespace) lazy-init", `import * as React from "react";\n/** @server-safe */\nexport function C(): string { const [v] = React.useState((): string => window.location.href); return v; }`],
+  ])("FLAGGEA el render-phase hook spoofeado: %s", (_label, code) => {
+    expect(checkSourceFile(code, "alias-spoof.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    // El deferred-hook GENUINO (aunque aliaseado) SÍ se exime — la cara FP, mismo fix.
+    ["useEffect normal", `import { useEffect } from "react";\n/** @server-safe */\nexport function C() { useEffect(() => { window.location.href; }); return null; }`],
+    ["useEffect as ue (alias de un deferred genuino)", `import { useEffect as ue } from "react";\n/** @server-safe */\nexport function C() { ue(() => { window.location.href; }); return null; }`],
+    ["React.useEffect (namespace)", `import * as React from "react";\n/** @server-safe */\nexport function C() { React.useEffect(() => { window.location.href; }); return null; }`],
+  ])("NO flaggea el deferred-hook genuino (client-only): %s", (_label, code) => {
+    expect(checkSourceFile(code, "alias-genuine.fixture.tsx")).toEqual([]);
+  });
+});
+
+describe("server-safe gate — DEEPEST: param-default corre en scope de parámetro (B-β)", () => {
+  it.each([
+    ["var window body + param default lee global", `/** @server-safe */\nexport function f(href: string = window.location.href): string { var window: { location: { href: string } } = { location: { href: "" } }; return href; }`],
+    ["var navigator body + param default", `/** @server-safe */\nexport function f(ua: string = navigator.userAgent): string { var navigator: { userAgent: string } = { userAgent: "" }; return ua; }`],
+    ["arrow + destructuring default lee global con var body", `/** @server-safe */\nexport const g = ({ x = window.location.href }: { x?: string } = {}): string => { var window = {}; void window; return x; };`],
+    ["param default sin shadow lee global real", `/** @server-safe */\nexport function f(x: string = navigator.userAgent): string { return x; }`],
+  ])("FLAGGEA el global leído en el default-param: %s", (_label, code) => {
+    expect(checkSourceFile(code, "param-default.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    // El param-default ve los PARÁMETROS anteriores (no FP); el body sí ve su var local.
+    ["param default lee parámetro anterior", `/** @server-safe */\nexport function f(a: number, b: number = a + 1): number { return a + b; }`],
+    ["body lee su propio var local (F4/static-block style)", `/** @server-safe */\nexport function f(): string { var window = { location: { href: "" } }; return window.location.href; }`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "param-default-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+describe("server-safe gate — DEEPEST FPs: paren-typeof-operando + ambient declare", () => {
+  it.each([
+    ["(typeof window) !== undefined", `/** @server-safe */\nexport function C(): string { if ((typeof window) !== "undefined") { return window.location.href; } return ""; }`],
+    ["(typeof window as string) !== undefined", `/** @server-safe */\nexport function C(): number { if ((typeof window as string) !== "undefined") { return window.innerWidth; } return 0; }`],
+    ["declare global { class X extends HTMLElement }", `/** @server-safe */\ndeclare global { class MyElement extends HTMLElement {} }\nexport {};`],
+    ["declare namespace { class C extends Navigator }", `/** @server-safe */\ndeclare namespace NS { class C extends Navigator {} }\nexport {};`],
+  ])("NO genera falso positivo: %s", (_label, code) => {
+    expect(checkSourceFile(code, "deepest-fp.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    // SOUNDNESS: namespace INSTANCIADO (no-ambient) con class extends runtime → FLAG.
+    ["namespace instanciado class extends window.Base", `/** @server-safe */\nexport namespace NS { export class C extends (window as any).Base {} }`],
+    // typeof de un MEMBER ejecuta el read → FLAG (el guard no aplica al bare window).
+    ["typeof window.location (member ejecuta read)", `/** @server-safe */\nexport function C(): string { if ((typeof window.location) !== "undefined") { return window.location.href; } return ""; }`],
+  ])("SIGUE flaggeando (soundness): %s", (_label, code) => {
+    expect(checkSourceFile(code, "deepest-fp-sound.fixture.tsx").length).toBeGreaterThan(0);
+  });
+});
+
+/**
  * FPs fail-closed destapados por el re-hunt: self-reference de clase + root de
  * heritage type-only cualificada. Ambos son posiciones que NO leen un global en
  * runtime pero el modelo fail-closed flaggeaba. Cero debilitamiento — el
