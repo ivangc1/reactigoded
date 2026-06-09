@@ -2073,6 +2073,32 @@ describe("server-safe gate — named fn-expr self-name (P2 + body, deep verify)"
   });
 });
 
+/**
+ * Computed method/accessor key (codex P1). La key `{ [window.x]() {} }` se evalúa al
+ * CREAR el objeto/clase (render path, scope EXTERNO), ANTES de que exista el scope de
+ * parámetros. Visitarla con el param scope (que tiene los params) suprimía un read del
+ * GLOBAL real cuando un param lo sombreaba (runtime verificado: lee el global). Fix: la
+ * computed key + decoradores + tipos se visitan en el scope externo; solo los defaults
+ * de params usan el param scope.
+ */
+describe("server-safe gate — computed method key en scope externo (codex P1)", () => {
+  it.each([
+    ["object computed key lee global con param shadow", `/** @server-safe */\nexport const o = { [window.location.href](window: unknown): void { void window; } };`],
+    ["class computed method key", `/** @server-safe */\nexport class C { [navigator.userAgent](navigator: unknown): void { void navigator; } }`],
+    ["class computed accessor key", `/** @server-safe */\nexport class C { get [document.title](): number { return 1; } }`],
+  ])("FLAGGEA el global leído en la computed key: %s", (_label, code) => {
+    expect(checkSourceFile(code, "computed-key.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    // computed key legítima (const local / param de fn externa) → NO flaggea.
+    ["computed key con const local", `/** @server-safe */\nconst KEY = "dynamic";\nexport const o = { [KEY](x: number): number { return x; } };`],
+    ["computed key lee un param de la fn externa", `/** @server-safe */\nexport function make(k: string) { return { [k](x: number): number { return x; } }; }`],
+  ])("NO genera falso positivo (computed key no-global): %s", (_label, code) => {
+    expect(checkSourceFile(code, "computed-key-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
 describe("server-safe gate — DEEPEST FPs: paren-typeof-operando + ambient declare", () => {
   it.each([
     ["(typeof window) !== undefined", `/** @server-safe */\nexport function C(): string { if ((typeof window) !== "undefined") { return window.location.href; } return ""; }`],

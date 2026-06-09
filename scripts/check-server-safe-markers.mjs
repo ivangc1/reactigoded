@@ -2550,9 +2550,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       for (const p of node.parameters) addBindingNamesFromPattern(p.name, paramScope);
       if (!ts.isArrowFunction(node)) paramScope.add("arguments");
       const paramContext = { ...bodyContext, localBindings: paramScope };
-      ts.forEachChild(node, (child) =>
-        visit(child, child === node.body ? bodyContext : paramContext),
-      );
+      const paramNodes = new Set(node.parameters);
+      ts.forEachChild(node, (child) => {
+        if (child === node.body) {
+          visit(child, bodyContext);
+        } else if (paramNodes.has(child)) {
+          // Solo los PARÁMETROS (sus defaults) usan el param scope.
+          visit(child, paramContext);
+        } else {
+          // Computed key de método/accessor (`{ [window.x]() {} }`), decoradores, tipos,
+          // nombre: se evalúan en la DEFINICIÓN del objeto/clase, en el scope EXTERNO —
+          // NO ven los parámetros. La computed key corre al crear el objeto (render path)
+          // → si lee un global debe FLAGGEAR aunque un param lo sombree (codex P1:
+          // computed-key bypass, runtime verificado leyendo el global real).
+          visit(child, context);
+        }
+      });
       return;
     }
 
