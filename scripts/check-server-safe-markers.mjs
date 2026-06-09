@@ -654,14 +654,22 @@ function isDeferredExecutionContext(fnNode, context) {
     if (ts.isIdentifier(callee)) {
       calleeName = callee.text;
       rootIdent = callee.text;
-    } else if (ts.isPropertyAccessExpression(callee)) {
-      // Soporte para `React.useEffect`, `window.setTimeout`, etc.
-      // (Nota: `window.setTimeout` por sí mismo sería otra violación si
-      // está en render path, capturada por el check de access bare.)
-      if (ts.isIdentifier(callee.name)) calleeName = callee.name.text;
-      // Encontrar el root identifier de la cadena para chequear shadow.
+    } else if (
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) {
+      // Soporte para `React.useEffect`, `React["useEffect"]`, `window.setTimeout`.
+      // accessedMemberName resuelve punto Y bracket-string igual — antes solo se
+      // reconocía la forma punto y `React["useEffect"]` se trataba como render-path
+      // (FP, deep adversarial). Una key dinámica (`React[k]`) → undefined → no
+      // reconocido (render-path), correcto: no es un hook conocido.
+      calleeName = accessedMemberName(callee) ?? null;
+      // Root identifier de la cadena para chequear shadow (punto o bracket).
       let chain = callee.expression;
-      while (ts.isPropertyAccessExpression(chain)) {
+      while (
+        ts.isPropertyAccessExpression(chain) ||
+        ts.isElementAccessExpression(chain)
+      ) {
         chain = chain.expression;
       }
       if (ts.isIdentifier(chain)) rootIdent = chain.text;
@@ -1236,13 +1244,13 @@ function classifyTypeofGuard(expr) {
     { typeofExpr: expr.left, stringExpr: expr.right },
     { typeofExpr: expr.right, stringExpr: expr.left },
   ]) {
-    // El lado typeof puede venir en wrappers erased: `(typeof window) !== "undefined"`,
+    // Ambos lados pueden venir en wrappers erased: `(typeof window) !== ("undefined")`,
     // `(typeof window as string) !== …` ≡ `typeof window !== …` (runtime-transparente,
-    // tsc lo narrowea). Desenvolver antes del check (deep adversarial FP). El stringExpr
-    // se queda como está (debe ser un string literal directo).
+    // tsc lo narrowea). Desenvolver antes del check (deep adversarial FP).
     let typeofExpr = cand.typeofExpr;
     while (typeofExpr && isErasedOuterExpr(typeofExpr)) typeofExpr = typeofExpr.expression;
-    const stringExpr = cand.stringExpr;
+    let stringExpr = cand.stringExpr;
+    while (stringExpr && isErasedOuterExpr(stringExpr)) stringExpr = stringExpr.expression;
     if (!ts.isTypeOfExpression(typeofExpr)) continue;
     // El operando puede venir en wrappers runtime-transparentes: `typeof (window)`,
     // `typeof (window as any)` ≡ `typeof window` (re-hunt FP paren-operand).
@@ -1251,7 +1259,10 @@ function classifyTypeofGuard(expr) {
     if (!ts.isIdentifier(operand)) continue;
     if (SAFE_GLOBALS.has(operand.text)) continue;
     if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
-    if (!ts.isStringLiteral(stringExpr)) continue;
+    // El lado string puede ser StringLiteral O un template SIN sustitución (`` `undefined` ``)
+    // — runtime-idénticos (deep adversarial FP). isStringLiteralLike cubre ambos; `.text`
+    // funciona para los dos. (Un template CON sustitución no es literal → no se acepta.)
+    if (!ts.isStringLiteralLike(stringExpr)) continue;
     const isUndefined = stringExpr.text === "undefined";
     // undefined: presente cuando !==; otro tipo: presente cuando ===.
     const presentWhenTrue = isUndefined ? isNeq : isEq;

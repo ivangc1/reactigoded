@@ -1924,6 +1924,11 @@ describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => 
     ["paren typeof operand guard", `/** @server-safe */\nexport function C() { if (typeof (window) !== "undefined") { return window.location.href; } return null; }`],
     ["typeof (window) solo (operando exento)", `/** @server-safe */\nexport const ok = typeof (window) !== "undefined";`],
     ["typeof (X as any) === object guard", `/** @server-safe */\nexport function C() { if (typeof (document as any) === "object") { return (document as any).title; } return ""; }`],
+    // template-literal SIN sustitución y string parentizado en el lado de comparación
+    // (deep adversarial FP): runtime-idénticos a un string literal directo.
+    ["typeof === template-literal undefined", `/** @server-safe */\nexport function C(): string | null { if (typeof window === \`undefined\`) return null; return window.location.href; }`],
+    ["typeof === template-literal object", `/** @server-safe */\nexport function C(): number { if (typeof window === \`object\`) { return window.innerWidth; } return 0; }`],
+    ["typeof !== string parentizado", `/** @server-safe */\nexport function C(): string | null { if (typeof window !== ("undefined")) { return window.location.href; } return null; }`],
   ])("NO genera falso positivo: %s", (_label, code) => {
     expect(checkSourceFile(code, "fp-batch.fixture.tsx")).toEqual([]);
   });
@@ -2013,8 +2018,16 @@ describe("server-safe gate — DEEPEST: alias-spoof DEFERRED_HOOK (B-α) por exp
     ["React.useEffect (namespace)", `import * as React from "react";\n/** @server-safe */\nexport function C() { React.useEffect(() => { window.location.href; }); return null; }`],
     // `import { default as React }` ≡ `import React` (codex P2): React.useEffect exento.
     ["{ default as React } + React.useEffect", `import { default as React } from "react";\n/** @server-safe */\nexport function C() { React.useEffect(() => { window.location.href; }); return null; }`],
+    // bracket-access `React["useEffect"]` === React.useEffect (deep adversarial FP): el
+    // callee por ElementAccess con key string se reconoce igual que por punto.
+    ['React["useEffect"] bracket-access', `import * as React from "react";\n/** @server-safe */\nexport function C() { React["useEffect"](() => { window.location.href; }); return null; }`],
   ])("NO flaggea el deferred-hook genuino (client-only): %s", (_label, code) => {
     expect(checkSourceFile(code, "alias-genuine.fixture.tsx")).toEqual([]);
+  });
+
+  it('soundness: React["useState"] bracket lazy-init SIGUE flaggeando (render-phase)', () => {
+    const code = `import * as React from "react";\n/** @server-safe */\nexport function C(): string { const [v] = React["useState"]((): string => window.location.href); return v; }`;
+    expect(checkSourceFile(code, "bracket-soundness.fixture.tsx").length).toBeGreaterThan(0);
   });
 
   it("soundness: { default as React } + React.useState lazy-init SIGUE flaggeando", () => {
