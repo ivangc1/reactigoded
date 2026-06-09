@@ -2094,7 +2094,11 @@ describe("server-safe gate — computed method key en scope externo (codex P1)",
     // computed key legítima (const local / param de fn externa) → NO flaggea.
     ["computed key con const local", `/** @server-safe */\nconst KEY = "dynamic";\nexport const o = { [KEY](x: number): number { return x; } };`],
     ["computed key lee un param de la fn externa", `/** @server-safe */\nexport function make(k: string) { return { [k](x: number): number { return x; } }; }`],
-  ])("NO genera falso positivo (computed key no-global): %s", (_label, code) => {
+    // RETURN TYPE que referencia un param (type-predicate `r is T`): debe verse bajo el
+    // param scope, NO el externo. Regresión real cazada en CI (composeRefs.ts:35).
+    ["type-predicate en return type referencia el param", `import type { Ref } from "react";\n/** @server-safe */\nexport function clean<T>(refs: Array<Ref<T> | null>): Ref<T>[] { return refs.filter((r): r is Ref<T> => r != null); }`],
+    ["arrow con type-predicate inline", `/** @server-safe */\nexport const f = (xs: unknown[]) => xs.filter((x): x is string => typeof x === "string");`],
+  ])("NO genera falso positivo (computed key no-global / return type ve params): %s", (_label, code) => {
     expect(checkSourceFile(code, "computed-key-ok.fixture.tsx")).toEqual([]);
   });
 });
