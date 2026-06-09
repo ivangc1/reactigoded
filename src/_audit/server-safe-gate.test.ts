@@ -2037,8 +2037,39 @@ describe("server-safe gate — DEEPEST: param-default corre en scope de parámet
     // El param-default ve los PARÁMETROS anteriores (no FP); el body sí ve su var local.
     ["param default lee parámetro anterior", `/** @server-safe */\nexport function f(a: number, b: number = a + 1): number { return a + b; }`],
     ["body lee su propio var local (F4/static-block style)", `/** @server-safe */\nexport function f(): string { var window = { location: { href: "" } }; return window.location.href; }`],
+    // codex P1 = NO-bug (verificado empíricamente: gate+tsc+runtime). El caso directo
+    // `f(x = window.x, window)` lo RECHAZA tsc (TS2373 "cannot reference identifier
+    // declared after it") → no llega al gate; el closure que captura un param posterior
+    // lee el PARAM (no el global). Aquí el closure NO debe flaggear (window es el param):
+    ["closure en default captura param posterior (lee el param)", `/** @server-safe */\nexport function f(x: () => string = () => (window as any).location.href, window?: { location: { href: string } }): string { return x(); }`],
   ])("NO genera falso positivo: %s", (_label, code) => {
     expect(checkSourceFile(code, "param-default-ok.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
+ * named function-expression self-name (codex P2 + deep verify). El nombre de una
+ * `function self(){…}` está en scope DENTRO de la función — defaults Y body. `self`
+ * resuelve a la FUNCIÓN, no al global homónimo (runtime verificado: "IS_FUNCTION").
+ * Sin esto el gate lo flaggeaba (FP en ambos sitios). Soundness: una fn cuyo nombre NO
+ * colisiona con el read sigue flaggeando el global real.
+ */
+describe("server-safe gate — named fn-expr self-name (P2 + body, deep verify)", () => {
+  it.each([
+    ["self-name en default", `/** @server-safe */\nexport const fn = function self(x: unknown = self): unknown { return x; };`],
+    ["self-name en body (window)", `/** @server-safe */\nexport const f = function window(): unknown { return (window as any); };`],
+    ["self-name en body con propiedad (localStorage)", `/** @server-safe */\nexport const h = function localStorage(): unknown { return (localStorage as any).getItem("x"); };`],
+    ["self-name en default + body", `/** @server-safe */\nexport const r = function navigator(x: unknown = navigator): unknown { void x; return (navigator as any); };`],
+  ])("NO genera falso positivo (self-name = la función): %s", (_label, code) => {
+    expect(checkSourceFile(code, "self-name.fixture.tsx")).toEqual([]);
+  });
+
+  it.each([
+    // La fn NO se llama como el global → el read es el global real → FLAG.
+    ["arrow lee window (no self-name)", `/** @server-safe */\nexport const f = function helper(): string { return window.location.href; };`],
+    ["function helper lee navigator", `/** @server-safe */\nexport const g = function helper(): string { return navigator.userAgent; };`],
+  ])("SIGUE flaggeando el global real (soundness): %s", (_label, code) => {
+    expect(checkSourceFile(code, "self-name-sound.fixture.tsx").length).toBeGreaterThan(0);
   });
 });
 

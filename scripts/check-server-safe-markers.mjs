@@ -2478,6 +2478,17 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       if (!ts.isArrowFunction(node)) {
         fnScopeBindings.add("arguments");
       }
+      // El nombre de una named function-expr está en scope DENTRO de la función — tanto
+      // en los defaults de params como en el BODY: `const f = function self(){ return
+      // self }` → `self` es la FUNCIÓN, no el global homónimo (deep verify: runtime
+      // confirma "IS_FUNCTION"). Sin esto el body lo flaggeaba (FP). Una function
+      // DECLARATION ya tiene su nombre en el outer scope; añadirlo es redundante-inocuo.
+      if (
+        (ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
+        node.name
+      ) {
+        fnScopeBindings.add(node.name.text);
+      }
       // Acumular con outer scope. Estas bindings son TODAS non-import
       // (parameters + var hoisted dentro del fn body).
       const bodyContext = {
@@ -2521,8 +2532,21 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // suprimía un read del global homónimo de un `var` del body (`function f(x =
       // window.x){ var window }` → el default lee el GLOBAL real → ReferenceError en
       // Edge; deep adversarial bypass). Scope de params = outer + nombres de params
-      // (para `f(a, b=a)`) + `arguments`, SIN los var del body. El body sí usa bodyContext.
+      // (para `f(a, b=a)`) + el nombre de la fn (named function-expr `function self(x =
+      // self)`, self visible en sus defaults — codex P2) + `arguments`, SIN los var del
+      // body. El body sí usa bodyContext. (Pre-cargar TODOS los params upfront es correcto
+      // y compila-equivalente al modelo incremental: un default que referencia un param
+      // POSTERIOR directamente lo rechaza tsc — TS2373 "cannot reference identifier
+      // declared after it" — así que nunca llega al gate; y el único caso que SÍ compila,
+      // un closure que captura un param posterior `f(x = () => p, p)`, lee el PARAM no el
+      // global → upfront lo trata bien, el modelo incremental FP-earía. codex P1: no-bug.)
       const paramScope = new Set(context.localBindings);
+      if (
+        (ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
+        node.name
+      ) {
+        paramScope.add(node.name.text);
+      }
       for (const p of node.parameters) addBindingNamesFromPattern(p.name, paramScope);
       if (!ts.isArrowFunction(node)) paramScope.add("arguments");
       const paramContext = { ...bodyContext, localBindings: paramScope };
