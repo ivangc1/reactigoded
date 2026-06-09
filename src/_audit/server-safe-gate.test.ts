@@ -1958,6 +1958,34 @@ describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => 
 });
 
 /**
+ * INVARIANTE ACOPLADA de F4 (QA review de Iván). La soundness de F4 — eximir un nombre
+ * module-declared leído dentro de una función — NO es auto-contenida: descansa sobre que
+ * `gatherModuleDeclaredNames` EXCLUYA lo que se borra al emit. Si un nombre ERASED (phantom:
+ * namespace type-only / interface / type-alias / import-type / inline-type / ambient
+ * `declare`) se colara en el set, F4 eximiría un read del GLOBAL REAL (dom-access bypass,
+ * NO un TDZ-de-local — no hay binding local que sombree). Estos tests PINEAN el acoplamiento:
+ * un phantom leído en cuerpo de función DEBE flaggear. Si una regresión en los excludes de
+ * erased-shadow rompe esto, falla AQUÍ (ruidoso) en vez de convertir F4 en bypass silencioso.
+ */
+describe("server-safe gate — F4 sound SOLO si moduleDeclaredNames excluye lo borrado (phantom DEBE flaggear)", () => {
+  it.each([
+    ["namespace type-only", `/** @server-safe */\nnamespace window { export interface X { a: number } }\nexport function C() { return window.location.href; }`],
+    ["interface", `/** @server-safe */\ninterface window { a: number }\nexport function C() { return window.location.href; }`],
+    ["type alias", `/** @server-safe */\ntype window = { a: number };\nexport function C() { return window.location.href; }`],
+    ["import type { window }", `/** @server-safe */\nimport type { window } from "./x";\nexport function C(): unknown { return window.location.href; }`],
+    ["import { type window } inline", `/** @server-safe */\nimport { type window } from "./x";\nexport function C(): unknown { return window.location.href; }`],
+    ["declare const (ambient)", `/** @server-safe */\ndeclare const window: { location: { href: string } };\nexport function C() { return window.location.href; }`],
+  ])("phantom borrado leído en función SIGUE flaggeando (F4 NO lo exime): %s", (_label, code) => {
+    expect(checkSourceFile(code, "f4-phantom.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("control: un binding REAL (const) leído en función SÍ se exime (F4 sound)", () => {
+    const code = `/** @server-safe */\nconst window = { location: { href: "" } };\nexport function C() { return window.location.href; }`;
+    expect(checkSourceFile(code, "f4-real.fixture.tsx")).toEqual([]);
+  });
+});
+
+/**
  * FPs fail-closed destapados por el re-hunt: self-reference de clase + root de
  * heritage type-only cualificada. Ambos son posiciones que NO leen un global en
  * runtime pero el modelo fail-closed flaggeaba. Cero debilitamiento — el
