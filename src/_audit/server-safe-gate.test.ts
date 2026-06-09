@@ -2086,7 +2086,10 @@ describe("server-safe gate — computed method key en scope externo (codex P1)",
     ["object computed key lee global con param shadow", `/** @server-safe */\nexport const o = { [window.location.href](window: unknown): void { void window; } };`],
     ["class computed method key", `/** @server-safe */\nexport class C { [navigator.userAgent](navigator: unknown): void { void navigator; } }`],
     ["class computed accessor key", `/** @server-safe */\nexport class C { get [document.title](): number { return 1; } }`],
-  ])("FLAGGEA el global leído en la computed key: %s", (_label, code) => {
+    // Decorador de PARÁMETRO: corre en DEFINICIÓN (scope externo, antes del param) → lee
+    // el global aunque el param se llame igual (codex P1; compila con experimentalDecorators).
+    ["param decorator lee global con param shadow", `/** @server-safe */\nexport class C { m(@((window as any).location.href) window: any): void { void window; } }`],
+  ])("FLAGGEA el global leído en la computed key / decorador: %s", (_label, code) => {
     expect(checkSourceFile(code, "computed-key.fixture.tsx").length).toBeGreaterThan(0);
   });
 

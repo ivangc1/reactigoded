@@ -2550,6 +2550,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       for (const p of node.parameters) addBindingNamesFromPattern(p.name, paramScope);
       if (!ts.isArrowFunction(node)) paramScope.add("arguments");
       const paramContext = { ...bodyContext, localBindings: paramScope };
+      const paramNodes = new Set(node.parameters);
       ts.forEachChild(node, (child) => {
         if (child === node.body) {
           visit(child, bodyContext);
@@ -2557,16 +2558,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           (child === node.name && ts.isComputedPropertyName(child)) ||
           ts.isDecorator(child)
         ) {
-          // Computed key de método/accessor (`{ [window.x]() {} }`) y decoradores: se
-          // EVALÚAN al crear el objeto/clase (render path, scope EXTERNO), antes de que
-          // exista el param scope → NO ven los parámetros. Si la key lee un global debe
-          // FLAGGEAR aunque un param lo sombree (codex P1, runtime verificado).
+          // Computed key de método/accessor (`{ [window.x]() {} }`) y decoradores de la
+          // función/método: se EVALÚAN al crear el objeto/clase (render path, scope
+          // EXTERNO), antes de que exista el param scope → NO ven los parámetros. Si la
+          // key lee un global debe FLAGGEAR aunque un param lo sombree (codex P1).
           visit(child, context);
+        } else if (paramNodes.has(child)) {
+          // Un PARÁMETRO: su DEFAULT corre en el param scope (ve params anteriores), pero
+          // sus DECORADORES corren en la DEFINICIÓN (scope externo, antes de que exista el
+          // param) → un `m(@(window.x) window)` lee el GLOBAL aunque el param se llame
+          // window. Decompón: decoradores→externo, default/tipo/nombre→param (codex P1).
+          ts.forEachChild(child, (pc) =>
+            visit(pc, ts.isDecorator(pc) ? context : paramContext),
+          );
         } else {
-          // Parámetros (sus defaults), RETURN TYPE (un type-predicate `x is T` referencia
-          // el param → debe verlo; mover esto al scope externo flaggeaba `r` en
-          // `refs.filter((r): r is Ref<T> => …)` — regresión real en composeRefs.ts),
-          // type-params y nombre: bajo el param scope.
+          // RETURN TYPE (un type-predicate `x is T` referencia el param → debe verlo;
+          // mover esto al scope externo flaggeaba `r` en `refs.filter((r): r is Ref<T> =>
+          // …)` — regresión real en composeRefs.ts), type-params y nombre: param scope.
           visit(child, paramContext);
         }
       });
