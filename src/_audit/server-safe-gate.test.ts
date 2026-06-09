@@ -2011,8 +2011,15 @@ describe("server-safe gate — DEEPEST: alias-spoof DEFERRED_HOOK (B-α) por exp
     ["useEffect normal", `import { useEffect } from "react";\n/** @server-safe */\nexport function C() { useEffect(() => { window.location.href; }); return null; }`],
     ["useEffect as ue (alias de un deferred genuino)", `import { useEffect as ue } from "react";\n/** @server-safe */\nexport function C() { ue(() => { window.location.href; }); return null; }`],
     ["React.useEffect (namespace)", `import * as React from "react";\n/** @server-safe */\nexport function C() { React.useEffect(() => { window.location.href; }); return null; }`],
+    // `import { default as React }` ≡ `import React` (codex P2): React.useEffect exento.
+    ["{ default as React } + React.useEffect", `import { default as React } from "react";\n/** @server-safe */\nexport function C() { React.useEffect(() => { window.location.href; }); return null; }`],
   ])("NO flaggea el deferred-hook genuino (client-only): %s", (_label, code) => {
     expect(checkSourceFile(code, "alias-genuine.fixture.tsx")).toEqual([]);
+  });
+
+  it("soundness: { default as React } + React.useState lazy-init SIGUE flaggeando", () => {
+    const code = `import { default as React } from "react";\n/** @server-safe */\nexport function C(): string { const [v] = React.useState((): string => window.location.href); return v; }`;
+    expect(checkSourceFile(code, "default-react-soundness.fixture.tsx").length).toBeGreaterThan(0);
   });
 });
 

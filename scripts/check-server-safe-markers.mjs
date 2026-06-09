@@ -1133,7 +1133,14 @@ function gatherReactImports(sourceFile) {
       for (const spec of nb.elements) {
         if (spec.isTypeOnly) continue;
         const exportName = spec.propertyName ? spec.propertyName.text : spec.name.text;
-        named.set(spec.name.text, exportName);
+        // `import { default as React }` ≡ `import React` — el export `default` de react
+        // ES el objeto-namespace (React.useEffect…). Va a namespaces, no a named (codex
+        // P2: si no, React.useEffect no se reconoce → FP).
+        if (exportName === "default") {
+          namespaces.add(spec.name.text);
+        } else {
+          named.set(spec.name.text, exportName);
+        }
       }
     }
   }
