@@ -951,18 +951,28 @@ function addBindingNamesFromPattern(node, names) {
 function gatherBlockLexicalNames(statements) {
   const out = new Set();
   for (const stmt of statements) {
-    if (
-      ts.isVariableStatement(stmt) &&
-      (stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0
-    ) {
-      for (const d of stmt.declarationList.declarations) {
-        addBindingNamesFromPattern(d.name, out);
+    if (ts.isVariableStatement(stmt)) {
+      // const/let/using/await-using son block-scoped (TDZ); `var` es function-scoped
+      // → NO aplica aquí. isBlockScopedDeclList cubre los 4 (codex P2: faltaba `using`).
+      if (isBlockScopedDeclList(stmt.declarationList.flags)) {
+        for (const d of stmt.declarationList.declarations) {
+          addBindingNamesFromPattern(d.name, out);
+        }
       }
     } else if (
-      (ts.isClassDeclaration(stmt) || ts.isFunctionDeclaration(stmt)) &&
       stmt.name &&
-      ts.isIdentifier(stmt.name)
+      ts.isIdentifier(stmt.name) &&
+      (ts.isClassDeclaration(stmt) ||
+        ts.isFunctionDeclaration(stmt) ||
+        ts.isEnumDeclaration(stmt) ||
+        ts.isModuleDeclaration(stmt) ||
+        ts.isImportEqualsDeclaration(stmt)) &&
+      producesRuntimeValue(stmt)
     ) {
+      // class/function/enum/namespace-instanciado/import-equals-de-valor crean un binding
+      // de VALOR block-scoped que sombrea el alias. producesRuntimeValue excluye los que
+      // NO crean valor (función sin cuerpo, namespace type-only, import-equals type-only)
+      // → esos no sombrean el alias-de-valor, no se purgan (evita over-flag).
       out.add(stmt.name.text);
     }
   }

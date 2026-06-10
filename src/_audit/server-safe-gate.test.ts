@@ -2593,6 +2593,17 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
     // CONTROL: el narrowing de `switch (typeof X)` NO se rompe
     expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "object": return window.innerWidth; default: return 0; } }`)).toBe(false);
   });
+  it("SOUNDNESS alias: shadow por using/let/enum/function (block-scoped) invalida el alias (codex P2)", () => {
+    const pre = `/** @server-safe */\nexport function g(): number { const has = typeof window !== "undefined"; { const fn = () => has ? window.innerWidth : 0; `;
+    const post = ` return fn(); } }`;
+    expect(flagged(pre + `using has = (null as unknown as Disposable);` + post)).toBe(true); // using
+    expect(flagged(pre + `let has = true;` + post)).toBe(true); // let
+    expect(flagged(`/** @server-safe */\nexport function g(): number { const has = typeof window !== "undefined"; { const fn = () => has ? window.innerWidth : 0; enum has { a } void has; return fn(); } }`)).toBe(true); // enum
+    expect(flagged(`/** @server-safe */\nexport function g(): number { const has = typeof window !== "undefined"; { const fn = () => has ? window.innerWidth : 0; function has() { return 1; } void has; return fn(); } }`)).toBe(true); // function
+  });
+  it("SOUNDNESS alias: una decl TYPE-ONLY (interface) NO over-purga el alias de valor", () => {
+    expect(flagged(`/** @server-safe */\nexport function g(): number { const has = typeof window !== "undefined"; { interface has { x: number } return has ? window.innerWidth : 0; } }`)).toBe(false);
+  });
 
   it("SOUNDNESS FP9: condición false / variable / rama-constructor-viva SIGUEN flaggeando", () => {
     expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[false ? "name" : "constructor"]; }`)).toBe(true);
