@@ -2464,3 +2464,61 @@ describe("server-safe gate — DEEPEST re-hunt #173: eval-sink template-selector
     expect(() => checkSourceFile(code, "dynkey.fixture.tsx")).not.toThrow();
   });
 });
+
+describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "fp.fixture.tsx").length > 0;
+
+  // — Type-space class members (FP1/2/3/16) —
+  it("FP1: computed-key de `declare class` (ambient) NO flaggea", () => {
+    expect(flagged(`/** @server-safe */\ndeclare const screen: { x: symbol };\ndeclare class K { [screen.x](): number; }\nexport function C() { return null; }`)).toBe(false);
+  });
+  it("FP2: computed-key de método `abstract` NO flaggea", () => {
+    expect(flagged(`/** @server-safe */\ndeclare const screen: unique symbol;\nexport abstract class K { abstract [screen](): number; }`)).toBe(false);
+  });
+  it("FP3: overload-signatures NO flaggean; SOLO la implementación (con cuerpo) sí", () => {
+    const v = checkSourceFile(`/** @server-safe */\ndeclare const screen: unique symbol;\nexport class K {\n  [screen](): number;\n  [screen](x: number): number;\n  [screen](x?: number): number { return x ?? 1; }\n}`, "ovl.fixture.tsx");
+    expect(v.map((x) => x.line)).toEqual([6]); // solo la impl
+  });
+  it("FP16: computed-key en get-accessor SIGNATURE de interface NO flaggea", () => {
+    expect(flagged(`/** @server-safe */\ndeclare const sym: unique symbol;\nexport interface I { get [sym](): number; }\nexport const z = 1;`)).toBe(false);
+  });
+  it("SOUNDNESS: computed-key de método/accessor de clase CON cuerpo SIGUE flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nexport class K { [window.location.href]() { return 1; } }`)).toBe(true);
+    expect(flagged(`/** @server-safe */\nexport class K { get [window.location.href]() { return 1; } }`)).toBe(true);
+  });
+
+  // — import-attributes (FP17) —
+  it("FP17: nombre de import-attribute (`with { type: \"json\" }`) NO flaggea", () => {
+    expect(flagged(`/** @server-safe */\nimport tokens from "./tokens.json" with { type: "json" };\nexport function S() { return <div data-x={(tokens as { c: string }).c} />; }`)).toBe(false);
+  });
+
+  // — typeof-guard template-substitution (FP18) —
+  it("FP18: guard `typeof X !== \\`${\"undefined\"}\\`` (template constante) se reconoce", () => {
+    expect(flagged('/** @server-safe */\nexport function C() { if (typeof window !== `${"undefined"}`) { return window.location.href; } return null; }')).toBe(false);
+  });
+  it("SOUNDNESS: template DINÁMICO en el guard NO se reconoce (sigue flaggeando)", () => {
+    expect(flagged('/** @server-safe */\nexport function C(x: string) { if (typeof window !== `${x}`) { return window.location.href; } return null; }')).toBe(true);
+  });
+
+  // — deferred handler value-transparent (FP7) —
+  it("FP7: handler en ternario/&& sobre elemento intrínseco NO flaggea", () => {
+    expect(flagged(`/** @server-safe */\nexport function C(cond: boolean) { return <button onClick={cond ? () => { void window.location.href; } : undefined}>x</button>; }`)).toBe(false);
+    expect(flagged(`/** @server-safe */\nexport function C(cond: boolean) { return <button onClick={cond && (() => { void window.location.href; })}>x</button>; }`)).toBe(false);
+  });
+  it("SOUNDNESS: handler en ternario sobre COMPONENTE custom SIGUE flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nfunction Foo(p: { onClick?: () => void }) { return null; }\nexport function C(cond: boolean) { return <Foo onClick={cond ? () => { void window.location.href; } : undefined} />; }`)).toBe(true);
+  });
+
+  // — import-equals alias de hook react (FP14/15) —
+  it("FP14/15: import-equals alias de hook deferido (ue=React.useEffect, R=React) NO flaggea", () => {
+    const base = `/** @server-safe */\nimport * as React from "react";\n`;
+    expect(flagged(base + `import ue = React.useEffect;\nexport function C() { ue(() => { void window.location.href; }); return null; }`)).toBe(false);
+    expect(flagged(base + `import R = React;\nexport function C() { R.useEffect(() => { void window.location.href; }); return null; }`)).toBe(false);
+    // cadena
+    expect(flagged(base + `import R = React;\nimport ue = R.useEffect;\nexport function C() { ue(() => { void window.location.href; }); return null; }`)).toBe(false);
+  });
+  it("SOUNDNESS: alias-spoof import-equals de hook render-phase (ue=React.useState) SIGUE flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nimport * as React from "react";\nimport ue = React.useState;\nexport function C() { return ue(() => window.innerWidth); }`)).toBe(true);
+  });
+});

@@ -607,10 +607,17 @@ function isDeferredExecutionContext(fnNode, context) {
   let current = fnNode;
   let parent = current.parent;
   // Sube saltando wrappers RUNTIME-TRANSPARENTES entre el callback y su sink: parens,
-  // JsxExpression, y los erased (`as`/`satisfies`/`!`/`<T>`). `(() => {…}) as () =>
-  // void` pasado a useEffect ES el mismo callback diferido — antes el unwrap solo
-  // quitaba paren/jsx y un cast rompía la detección → FP (F5). Reusa isErasedOuterExpr.
-  while (parent && (isErasedOuterExpr(parent) || ts.isJsxExpression(parent))) {
+  // JsxExpression, erased (`as`/`satisfies`/`!`/`<T>`), y los constructos VALUE-TRANSPARENTES
+  // de los que el callback ES el valor (`cond ? cb : x`, `cond && cb`, `cb ?? x`, `(0, cb)`)
+  // — `onClick={cond ? () => {…} : undefined}` pasa el arrow como handler del intrínseco
+  // igual que `onClick={() => {…}}` (deepest re-hunt #173: handler en ternario). Reusa
+  // valueTransparentChildren (el callback es una de sus hojas transparentes).
+  while (
+    parent &&
+    (isErasedOuterExpr(parent) ||
+      ts.isJsxExpression(parent) ||
+      valueTransparentChildren(parent).includes(current))
+  ) {
     current = parent;
     parent = parent.parent;
   }
@@ -1202,6 +1209,34 @@ function gatherReactImports(sourceFile) {
       }
     }
   }
+  // import-equals que aliasan react: `import R = React` (R es namespace si React lo es),
+  // `import ue = React.useEffect` (ue→"useEffect" si React es namespace). Fixpoint para
+  // cadenas (`import R = React; import ue = R.useEffect`). Sound: solo resuelve contra
+  // react YA reconocido; un alias-spoof `import ue = React.useState` mapea al canónico
+  // "useState" (render-phase → NO deferred). deepest re-hunt #173 (import-alias).
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const stmt of sourceFile.statements) {
+      if (!ts.isImportEqualsDeclaration(stmt) || stmt.isTypeOnly) continue;
+      const ref = stmt.moduleReference;
+      const local = stmt.name.text;
+      if (ts.isIdentifier(ref)) {
+        if (namespaces.has(ref.text) && !namespaces.has(local)) {
+          namespaces.add(local);
+          changed = true;
+        }
+      } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.left)) {
+        if (
+          namespaces.has(ref.left.text) &&
+          named.get(local) !== ref.right.text
+        ) {
+          named.set(local, ref.right.text);
+          changed = true;
+        }
+      }
+    }
+  }
   return { named, namespaces };
 }
 
@@ -1316,11 +1351,13 @@ function classifyTypeofGuard(expr) {
     if (!ts.isIdentifier(operand)) continue;
     if (SAFE_GLOBALS.has(operand.text)) continue;
     if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
-    // El lado string puede ser StringLiteral O un template SIN sustitución (`` `undefined` ``)
-    // — runtime-idénticos (deep adversarial FP). isStringLiteralLike cubre ambos; `.text`
-    // funciona para los dos. (Un template CON sustitución no es literal → no se acepta.)
-    if (!ts.isStringLiteralLike(stringExpr)) continue;
-    const isUndefined = stringExpr.text === "undefined";
+    // El lado string puede ser StringLiteral, template SIN sustitución (`` `undefined` ``)
+    // O template CON sustituciones CONSTANTES (`` `${"undefined"}` `` → "undefined"):
+    // runtime-idénticos. foldConstString los folda todos (deepest re-hunt #173:
+    // typeof-guard-template-substitution). Un template con sustitución dinámica → undefined.
+    const stringValue = foldConstString(stringExpr);
+    if (stringValue === undefined) continue;
+    const isUndefined = stringValue === "undefined";
     // undefined: presente cuando !==; otro tipo: presente cuando ===.
     const presentWhenTrue = isUndefined ? isNeq : isEq;
     return { name: operand.text, presentWhenTrue };
@@ -1810,7 +1847,12 @@ function isNonReferencePosition(node, declaredNames) {
     ts.isComputedPropertyName(parent) &&
     parent.parent &&
     (ts.isPropertySignature(parent.parent) ||
-      ts.isMethodSignature(parent.parent))
+      ts.isMethodSignature(parent.parent) ||
+      // get/set accessor SIGNATURE de interface/type-literal (sin cuerpo) — type-space
+      // erased. El accessor de CLASE lleva cuerpo → no se exime (deepest re-hunt #173).
+      ((ts.isGetAccessorDeclaration(parent.parent) ||
+        ts.isSetAccessorDeclaration(parent.parent)) &&
+        parent.parent.body === undefined))
   ) {
     return true;
   }
@@ -1825,6 +1867,20 @@ function isNonReferencePosition(node, declaredNames) {
   //     global. `this is T` no afecta: `this` es keyword, no Identifier. hunt
   //     final new-fp-source.
   if (ts.isTypePredicateNode(parent) && parent.parameterName === node) {
+    return true;
+  }
+
+  // 6d. Nombre de un import-attribute (`import x from "./y.json" with { type: "json" }`,
+  //     o el viejo `assert { type: "json" }`): es metadata del loader/resolver, NO una
+  //     ref runtime al global. TS lo modela como ImportAttribute.name (AssertEntry.name
+  //     en versiones previas). deepest re-hunt #173 (exotic-syntax).
+  if (
+    ((typeof ts.isImportAttribute === "function" &&
+      ts.isImportAttribute(parent)) ||
+      (typeof ts.isAssertEntry === "function" && ts.isAssertEntry(parent))) &&
+    "name" in parent &&
+    parent.name === node
+  ) {
     return true;
   }
 
@@ -2697,14 +2753,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ts.forEachChild(node, (child) => {
         if (child === node.body) {
           visit(child, bodyContext);
-        } else if (
-          (child === node.name && ts.isComputedPropertyName(child)) ||
-          ts.isDecorator(child)
-        ) {
-          // Computed key de método/accessor (`{ [window.x]() {} }`) y decoradores de la
-          // función/método: se EVALÚAN al crear el objeto/clase (render path, scope
-          // EXTERNO), antes de que exista el param scope → NO ven los parámetros. Si la
-          // key lee un global debe FLAGGEAR aunque un param lo sombree (codex P1).
+        } else if (child === node.name && ts.isComputedPropertyName(child)) {
+          // Computed key de método/accessor (`{ [window.x]() {} }`): se EVALÚA al crear
+          // el objeto/clase (render path, scope EXTERNO) → si lee un global FLAGGEA aunque
+          // un param lo sombree (codex P1). EXCEPCIÓN: un miembro de clase SIN cuerpo
+          // (abstract o overload-signature) se BORRA al emit — esbuild emite solo la
+          // implementación con cuerpo, su key nunca se evalúa. Saltarla evita el FP
+          // (deepest re-hunt #173: abstract/overload computed-key). La implementación
+          // (con cuerpo) SÍ visita la key y flaggea un read real.
+          const memberErased =
+            node.body === undefined &&
+            (ts.isMethodDeclaration(node) ||
+              ts.isGetAccessorDeclaration(node) ||
+              ts.isSetAccessorDeclaration(node));
+          if (!memberErased) visit(child, context);
+        } else if (ts.isDecorator(child)) {
+          // Decoradores de la función/método: se evalúan en la definición (scope externo).
           visit(child, context);
         } else if (paramNodes.has(child)) {
           // Un PARÁMETRO: su DEFAULT corre en el param scope (ve params anteriores), pero
@@ -2721,6 +2785,17 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           visit(child, paramContext);
         }
       });
+      return;
+    }
+
+    // (b.0-ambient) Una clase AMBIENT (`declare class K {…}`) es type-space pura: se
+    // borra ENTERA al emit (esbuild no emite nada). NO recursar — su computed-key,
+    // tipos de miembro y heritage no leen nada en runtime. Espejo del guard de
+    // ModuleDeclaration ambient (b.0a-ns). deepest re-hunt #173: declare-class computed-key.
+    if (
+      (ts.isClassDeclaration(node) || ts.isClassExpression(node)) &&
+      isAmbientDeclaration(node)
+    ) {
       return;
     }
 
