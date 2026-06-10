@@ -1325,7 +1325,7 @@ function gatherModulePreloadedBindings(sourceFile) {
  * y NON_ABSENCE_DENIALS (un guard sobre eval/Function/globalThis/global/self/setImmediate
  * es vacuo en Edge → reconocerlo suprimiría la detección — load-bearing, no tocar).
  */
-function classifyTypeofGuard(expr) {
+function classifyTypeofGuard(expr, guardAliases) {
   // Desenvolver wrappers RUNTIME-TRANSPARENTES de TODA la expresión-guard:
   // `(G)`, `(G) as boolean`, `(G)!`, `(G satisfies …)`, `<T>(G)` narrowean
   // idéntico a G en runtime (el cast se borra). Antes solo se desenvolvía el
@@ -1338,8 +1338,16 @@ function classifyTypeofGuard(expr) {
     ts.isPrefixUnaryExpression(expr) &&
     expr.operator === ts.SyntaxKind.ExclamationToken
   ) {
-    const inner = classifyTypeofGuard(expr.operand);
+    const inner = classifyTypeofGuard(expr.operand, guardAliases);
     return inner ? { name: inner.name, presentWhenTrue: !inner.presentWhenTrue } : null;
+  }
+  // Alias booleano de un guard: `const has = typeof X !== "undefined"; … has ? X : …`.
+  // guardAliases mapea el nombre del const (SOLO const, inmutable) a la clasificación
+  // de su initializer; se construye en visitOrderedStatements y solo contiene guards
+  // REALES (NON_ABSENCE_DENIALS/SAFE ya excluidos al clasificar el initializer).
+  // deepest re-hunt #173 (boolean-alias-typeof-guard).
+  if (guardAliases && ts.isIdentifier(expr) && guardAliases.has(expr.text)) {
+    return guardAliases.get(expr.text);
   }
   if (!ts.isBinaryExpression(expr)) return null;
   const op = expr.operatorToken.kind;
@@ -1384,14 +1392,14 @@ function classifyTypeofGuard(expr) {
 }
 
 /** Nombre con guard que prueba PRESENCIA cuando la expresión es TRUE (positivo), o null. */
-function extractPositiveTypeofGuard(expr) {
-  const c = classifyTypeofGuard(expr);
+function extractPositiveTypeofGuard(expr, guardAliases) {
+  const c = classifyTypeofGuard(expr, guardAliases);
   return c && c.presentWhenTrue ? c.name : null;
 }
 
 /** Nombre con guard que prueba PRESENCIA cuando la expresión es FALSE (negativo), o null. */
-function extractNegativeTypeofGuard(expr) {
-  const c = classifyTypeofGuard(expr);
+function extractNegativeTypeofGuard(expr, guardAliases) {
+  const c = classifyTypeofGuard(expr, guardAliases);
   return c && !c.presentWhenTrue ? c.name : null;
 }
 
@@ -1404,22 +1412,22 @@ function extractNegativeTypeofGuard(expr) {
  * Reusa `extractPositiveTypeofGuard` (mismo predicado que el if-guard, hereda la
  * exclusión SAFE + NON_ABSENCE_DENIALS). beta.27 BLOCKER-1 (re-hunt: guard por expr).
  */
-function collectConjunctionGuards(expr, out) {
-  const g = extractPositiveTypeofGuard(expr);
+function collectConjunctionGuards(expr, out, guardAliases) {
+  const g = extractPositiveTypeofGuard(expr, guardAliases);
   if (g !== null) {
     out.add(g);
     return;
   }
   if (ts.isParenthesizedExpression(expr)) {
-    collectConjunctionGuards(expr.expression, out);
+    collectConjunctionGuards(expr.expression, out, guardAliases);
     return;
   }
   if (
     ts.isBinaryExpression(expr) &&
     expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
   ) {
-    collectConjunctionGuards(expr.left, out);
-    collectConjunctionGuards(expr.right, out);
+    collectConjunctionGuards(expr.left, out, guardAliases);
+    collectConjunctionGuards(expr.right, out, guardAliases);
   }
 }
 
@@ -1428,23 +1436,42 @@ function collectConjunctionGuards(expr, out) {
  * derecha de `typeof a === "undefined" || typeof b === "undefined" || <aquí>`,
  * todos los a/b están definidos (la disyunción es falsa). Chain-aware por `||`.
  */
-function collectDisjunctionGuards(expr, out) {
-  const g = extractNegativeTypeofGuard(expr);
+function collectDisjunctionGuards(expr, out, guardAliases) {
+  const g = extractNegativeTypeofGuard(expr, guardAliases);
   if (g !== null) {
     out.add(g);
     return;
   }
   if (ts.isParenthesizedExpression(expr)) {
-    collectDisjunctionGuards(expr.expression, out);
+    collectDisjunctionGuards(expr.expression, out, guardAliases);
     return;
   }
   if (
     ts.isBinaryExpression(expr) &&
     expr.operatorToken.kind === ts.SyntaxKind.BarBarToken
   ) {
-    collectDisjunctionGuards(expr.left, out);
-    collectDisjunctionGuards(expr.right, out);
+    collectDisjunctionGuards(expr.left, out, guardAliases);
+    collectDisjunctionGuards(expr.right, out, guardAliases);
   }
+}
+
+/**
+ * Si `stmt` es `const X = <typeof-guard>` (UN solo declarator, nombre identificador,
+ * inicializador clasificable como guard de existencia), devuelve `[X, classification]`
+ * para registrarlo como alias booleano del guard; si no, null. SOLO `const` (inmutable
+ * — un `let`/`var` reasignable haría el alias unsound → bypass). El initializer se
+ * clasifica con el guardAliases vigente (permite `const b = a` si `a` ya es alias).
+ * deepest re-hunt #173 (boolean-alias-typeof-guard).
+ */
+function extractConstGuardAlias(stmt, guardAliases) {
+  if (!ts.isVariableStatement(stmt)) return null;
+  const list = stmt.declarationList;
+  if ((list.flags & ts.NodeFlags.Const) === 0) return null;
+  if (list.declarations.length !== 1) return null;
+  const decl = list.declarations[0];
+  if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+  const c = classifyTypeofGuard(decl.initializer, guardAliases);
+  return c ? [decl.name.text, c] : null;
 }
 
 /**
@@ -2546,6 +2573,21 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
    */
   function addToScope(currentContext, names) {
     if (!names || names.size === 0) return currentContext;
+    // Un binding NUEVO (const/let/var/param/fn/clase…) SOMBREA cualquier guard-alias
+    // outer homónimo → invalidarlo en el scope interno, o `const has = false`
+    // (shadow no-guard) seguiría resolviendo al guard outer = BYPASS (deepest re-hunt
+    // #173, soundness). El alias propio se re-añade DESPUÉS en visitOrderedStatements.
+    let guardAliases = currentContext.guardAliases;
+    if (guardAliases && guardAliases.size > 0) {
+      let purged = null;
+      for (const n of names) {
+        if (guardAliases.has(n)) {
+          if (!purged) purged = new Map(guardAliases);
+          purged.delete(n);
+        }
+      }
+      if (purged) guardAliases = purged;
+    }
     return {
       ...currentContext,
       localBindings: new Set([...currentContext.localBindings, ...names]),
@@ -2553,6 +2595,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         ...currentContext.nonImportBindings,
         ...names,
       ]),
+      ...(guardAliases !== currentContext.guardAliases ? { guardAliases } : {}),
     };
   }
 
@@ -2586,9 +2629,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // NEGATIVO (`typeof X === "undefined"`) → narrowea el ELSE (X está definido
       // ahí, espejo del ternario whenFalse). re-hunt FP7.
       const posGuards = new Set();
-      collectConjunctionGuards(node.expression, posGuards);
+      collectConjunctionGuards(node.expression, posGuards, context.guardAliases);
       const negGuards = new Set();
-      collectDisjunctionGuards(node.expression, negGuards);
+      collectDisjunctionGuards(node.expression, negGuards, context.guardAliases);
       if (posGuards.size > 0 || negGuards.size > 0) {
         visit(node.expression, context);
         if (node.thenStatement) {
@@ -2627,7 +2670,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const op = node.operatorToken.kind;
       if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
         const guards = new Set();
-        collectConjunctionGuards(node.left, guards);
+        collectConjunctionGuards(node.left, guards, context.guardAliases);
         if (guards.size > 0) {
           visit(node.left, context);
           visit(node.right, {
@@ -2638,7 +2681,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
       } else if (op === ts.SyntaxKind.BarBarToken) {
         const guards = new Set();
-        collectDisjunctionGuards(node.left, guards);
+        collectDisjunctionGuards(node.left, guards, context.guardAliases);
         if (guards.size > 0) {
           visit(node.left, context);
           visit(node.right, {
@@ -2651,9 +2694,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     }
     if (ts.isConditionalExpression(node)) {
       const pos = new Set();
-      collectConjunctionGuards(node.condition, pos);
+      collectConjunctionGuards(node.condition, pos, context.guardAliases);
       const neg = new Set();
-      collectDisjunctionGuards(node.condition, neg);
+      collectDisjunctionGuards(node.condition, neg, context.guardAliases);
       if (pos.size > 0 || neg.size > 0) {
         visit(node.condition, context);
         visit(
@@ -3033,7 +3076,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       }
       const cond = ts.isWhileStatement(node) ? node.expression : node.condition;
       const bodyGuards = new Set();
-      if (cond) collectConjunctionGuards(cond, bodyGuards);
+      if (cond) collectConjunctionGuards(cond, bodyGuards, context.guardAliases);
       if (forBindings.size > 0 || bodyGuards.size > 0) {
         const baseCtx =
           forBindings.size > 0 ? addToScope(context, forBindings) : context;
@@ -3251,6 +3294,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       visit(stmt, current);
       const additions = extractPostStatementBindings(stmt);
       current = addToScope(current, additions);
+      // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
+      // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
+      // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
+      const alias = extractConstGuardAlias(stmt, current.guardAliases);
+      if (alias) {
+        current = {
+          ...current,
+          guardAliases: new Map([...current.guardAliases, alias]),
+        };
+      }
       // Narrowing por early-return: tras `if (typeof X === "undefined") return;`
       // X existe en los statements posteriores del bloque → guard activo.
       const negGuards = extractNegativeEarlyReturnGuards(stmt);
@@ -3275,6 +3328,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const baseContext = {
     activeGuards: new Set(),
     blockEntryGuards: new Set(),
+    guardAliases: new Map(),
     isInDeferredBody: false,
     isInClientOnlyDeferredBody: false,
     isInFunctionBody: false,

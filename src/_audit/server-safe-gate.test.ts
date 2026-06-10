@@ -2538,4 +2538,28 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
   it("SOUNDNESS switch: read DENTRO de `case \"undefined\"` SIGUE flaggeando", () => {
     expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "undefined": return window.innerWidth; default: return 0; } }`)).toBe(true);
   });
+
+  // — boolean-alias typeof-guard (FP13) —
+  it("FP13: `const has = typeof X !== \"undefined\"; has ? X : 0` narrowea (alias)", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { const has = typeof window !== "undefined"; return has ? window.innerWidth : 0; }`)).toBe(false);
+    expect(flagged(`/** @server-safe */\nexport function g() { const has = typeof window !== "undefined"; return has && window.innerWidth; }`)).toBe(false);
+    // alias NEGATIVO + `!`
+    expect(flagged(`/** @server-safe */\nexport function g() { const noWin = typeof window === "undefined"; if (!noWin) { return window.innerWidth; } return 0; }`)).toBe(false);
+  });
+  it("SOUNDNESS alias: `let` reasignable NO narrowea", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { let has = typeof window !== "undefined"; has = true; return has ? window.innerWidth : 0; }`)).toBe(true);
+  });
+  it("SOUNDNESS alias: const NO-guard NO narrowea", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { const has = Math.random() > 0.5; return has ? window.innerWidth : 0; }`)).toBe(true);
+  });
+  it("SOUNDNESS alias: rama whenFalse SIGUE flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { const has = typeof window !== "undefined"; return has ? 0 : window.innerWidth; }`)).toBe(true);
+  });
+  it("SOUNDNESS alias: shadow interno NO-guard invalida el alias (era bypass)", () => {
+    // `const has = false` en bloque interno SOMBREA el alias outer → no debe resolver.
+    expect(flagged(`/** @server-safe */\nexport function g() { const has = typeof window !== "undefined"; { const has: boolean = false; if (has) return window.innerWidth; } return 0; }`)).toBe(true);
+  });
+  it("SOUNDNESS alias: PARÁMETRO homónimo sombrea el alias", () => {
+    expect(flagged(`/** @server-safe */\nconst has = typeof window !== "undefined";\nexport function f(has: boolean) { return has ? window.innerWidth : 0; }`)).toBe(true);
+  });
 });
