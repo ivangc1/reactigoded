@@ -279,7 +279,11 @@ Un re-hunt adversarial sobre el gate YA con los 5 FP-fixes (saturante: cada lent
 - **deferred / import** (3): handler en value-transparent `onClick={cond ? cb : x}` (up-walk por valueTransparentChildren); import-equals alias de hook react `import ue = React.useEffect` / `import R = React` (gatherReactImports por fixpoint).
 - **eval-sink** (1): key con ternario de condición LITERAL `x.constructor[true ? "name" : "ctor"]` — `valueTransparentChildren` folda la rama muerta (puro fold sintáctico; `false`/variable/rama-ctor-viva siguen flaggeando).
 
-**Nota de soundness:** el fix del alias booleano (FP13) abrió un bypass en su primer intento (un binding interno homónimo no invalidaba el alias outer) — cazado por los contra-tests y cerrado purgando `guardAliases` en `addToScope`. Confirma el patrón de la sesión: cada relajación del fail-closed exige su soundness-test.
+**Nota de soundness — el alias booleano (FP13) tuvo DOS bypasses antes de ser sound:**
+1. Primer intento: un binding interno homónimo no invalidaba el alias outer — cazado por mis contra-tests, cerrado purgando `guardAliases` en `addToScope` (purga POSICIONAL).
+2. La purga posicional NO bastaba: un `const`/`let`/`class`/`function` block-scoped homónimo SOMBREA el alias para TODO el bloque (lexical/TDZ), pero addToScope solo purgaba TRAS la declaración → un closure/uso ANTERIOR (`const fn = () => isC ? X : 0; const isC = true; fn()`) resolvía al guard outer = **bypass in-mandate** (compila + gate `[]` + runtime lee el global). **Lo cazó el codex re-review** (no mis tests). Fix: `visitOrderedStatements` purga los nombres block-lexical al ENTRAR el bloque, no posicionalmente.
+
+Confirma el patrón de toda la sesión: **cada relajación del fail-closed exige su soundness-test**, y la sombra léxica/TDZ es más amplia que la posicional. El feature de narrowing-por-alias es el más delicado del gate por esto.
 
 **2 FPs ACEPTADOS como over-flag fail-closed** (NO se arreglan — el over-flag ES el comportamiento correcto; arreglarlos sería fail-open o exigiría data-flow; contrivados, 0 en el DS):
 - **FP8** handler en object-spread `<button {...handlers}>`: saber que el objeto va a un intrínseco exige data-flow → eximirlo sería fail-open (un objeto-config con `onClick` llamado en render se eximiría = bypass).
