@@ -1667,7 +1667,20 @@ function valueTransparentChildren(node) {
   if (!node) return [];
   if (isErasedOuterExpr(node)) return [node.expression];
   if (ts.isAwaitExpression(node)) return [node.expression];
-  if (ts.isConditionalExpression(node)) return [node.whenTrue, node.whenFalse];
+  if (ts.isConditionalExpression(node)) {
+    // Condición literal CONSTANTE → solo la rama viva (la muerta no se evalúa).
+    // `true ? "name" : "constructor"` es SIEMPRE "name" → la rama "constructor" es
+    // código muerto, no un selector alcanzable. Puro fold sintáctico (no data-flow):
+    // solo `true`/`false` keyword (desenvueltos de erased). `false ? fn.ctor : null`
+    // → solo null (no alcanza el constructor) — el lado base se beneficia igual.
+    // deepest re-hunt #173 (FP eval-sink con key estáticamente reducible). Fail-closed
+    // intacto: una condición VARIABLE devuelve ambas ramas (si alguna es weaponizable,
+    // flaggea).
+    const cond = unwrapErased(node.condition);
+    if (cond.kind === ts.SyntaxKind.TrueKeyword) return [node.whenTrue];
+    if (cond.kind === ts.SyntaxKind.FalseKeyword) return [node.whenFalse];
+    return [node.whenTrue, node.whenFalse];
+  }
   if (ts.isBinaryExpression(node)) {
     const op = node.operatorToken.kind;
     if (op === ts.SyntaxKind.CommaToken) return [node.right];

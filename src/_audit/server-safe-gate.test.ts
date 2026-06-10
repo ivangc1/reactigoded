@@ -2562,4 +2562,16 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
   it("SOUNDNESS alias: PARÁMETRO homónimo sombrea el alias", () => {
     expect(flagged(`/** @server-safe */\nconst has = typeof window !== "undefined";\nexport function f(has: boolean) { return has ? window.innerWidth : 0; }`)).toBe(true);
   });
+
+  // — eval-sink key con ternario de condición LITERAL (FP9) —
+  it("FP9: `x.constructor[true ? \"name\" : \"constructor\"]` no flaggea (rama muerta)", () => {
+    expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[true ? "name" : "constructor"]; }`)).toBe(false);
+  });
+  it("SOUNDNESS FP9: condición false / variable / rama-constructor-viva SIGUEN flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[false ? "name" : "constructor"]; }`)).toBe(true);
+    expect(flagged(`/** @server-safe */\nexport function g(x: object, c: boolean) { return x.constructor[c ? "name" : "constructor"]; }`)).toBe(true);
+    expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[true ? "constructor" : "name"]; }`)).toBe(true);
+    // base value-transparente: `false ? null : ctor` → el ctor sigue vivo
+    expect(flagged(`/** @server-safe */\nexport function h() { return (false ? null : (() => {}).constructor)("return 1")(); }`)).toBe(true);
+  });
 });
