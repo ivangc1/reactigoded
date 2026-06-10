@@ -2604,6 +2604,12 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
   it("SOUNDNESS alias: una decl TYPE-ONLY (interface) NO over-purga el alias de valor", () => {
     expect(flagged(`/** @server-safe */\nexport function g(): number { const has = typeof window !== "undefined"; { interface has { x: number } return has ? window.innerWidth : 0; } }`)).toBe(false);
   });
+  it("FP (codex P2): import-equals de VALOR en cuerpo de namespace es un binding local (no global)", () => {
+    // `import window = N.real` aliasa un valor → `window` es local, no el global.
+    expect(flagged(`/** @server-safe */\nnamespace N { export const real = 1; import window = N.real; export const z = window; }\nexport const out = N.z;`)).toBe(false);
+    // SOUNDNESS: un read bare del global real (sin alias) SIGUE flaggeando
+    expect(flagged(`/** @server-safe */\nnamespace N { export const z = window.location.href; }\nexport const out = N.z;`)).toBe(true);
+  });
 
   it("SOUNDNESS FP9: condición false / variable / rama-constructor-viva SIGUEN flaggeando", () => {
     expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[false ? "name" : "constructor"]; }`)).toBe(true);

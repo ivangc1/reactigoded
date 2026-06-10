@@ -1174,32 +1174,43 @@ function gatherSourceFileFunctionDeclarations(sourceFile) {
  * anteriores.
  */
 function extractPostStatementBindings(stmt) {
-  const names = new Set();
+  // `all`: todos los bindings (para localBindings — sombrean globals). `nonImport`:
+  // SOLO los locales NO-import (para nonImportBindings, que distingue un shadow local
+  // de un hook real). `import X = …` es IMPORT-LIKE → va a `all` pero NO a `nonImport`
+  // (si entrara, `import ue = React.useEffect; ue(cb)` se trataría como shadow local y
+  // se flaggearía — regresión). Espejo de gatherModulePreloadedBindings.
+  const all = new Set();
+  const nonImport = new Set();
   if (ts.isVariableStatement(stmt)) {
     const flags = stmt.declarationList.flags;
     const blockScoped = isBlockScopedDeclList(flags);
     if (blockScoped) {
       for (const decl of stmt.declarationList.declarations) {
         if (isAmbientDeclaration(decl)) continue; // declare const/let → erased
-        addBindingNamesFromPattern(decl.name, names);
+        addBindingNamesFromPattern(decl.name, all);
+        addBindingNamesFromPattern(decl.name, nonImport);
       }
     }
   } else if (
     (ts.isClassDeclaration(stmt) ||
       ts.isEnumDeclaration(stmt) ||
-      ts.isModuleDeclaration(stmt)) &&
+      ts.isModuleDeclaration(stmt) ||
+      ts.isImportEqualsDeclaration(stmt)) &&
     stmt.name &&
     ts.isIdentifier(stmt.name) &&
     // `class`/`enum` emiten binding; `namespace` SOLO si está instanciado (≥1
-    // miembro de valor). Un namespace type-only/vacío se elide → NO sombra: si
-    // se añadiera, `navigator.x` con `namespace navigator {}` pasaría como
-    // local. `producesRuntimeValue` cierra la CLASE (fail-closed, no denylist).
-    // beta.27 BLOCKER-1 (erased-shadow #3: type-only import → declare → ns).
+    // miembro de valor); `import X = N.Y` (import-equals) es un alias de VALOR
+    // local si el RHS produce valor (`!isTypeOnly`). Un namespace type-only/vacío
+    // o un import-equals type-only se elide → NO sombra. `producesRuntimeValue`
+    // cierra la CLASE (fail-closed). beta.27 BLOCKER-1 + codex P2 (import-equals en
+    // cuerpo de namespace).
     producesRuntimeValue(stmt)
   ) {
-    names.add(stmt.name.text);
+    all.add(stmt.name.text);
+    // import-equals es import-like → NO va a nonImport (no es un shadow local).
+    if (!ts.isImportEqualsDeclaration(stmt)) nonImport.add(stmt.name.text);
   }
-  return names;
+  return { all, nonImport };
 }
 
 /**
@@ -2639,7 +2650,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
    * la distinción permite chequear si un callee de deferred sink está
    * shadow-eado por un local (skip exemption) vs es el import real (exempt).
    */
-  function addToScope(currentContext, names) {
+  function addToScope(currentContext, names, nonImportNames = names) {
     if (!names || names.size === 0) return currentContext;
     // Un binding NUEVO (const/let/var/param/fn/clase…) SOMBREA cualquier guard-alias
     // outer homónimo → invalidarlo en el scope interno, o `const has = false`
@@ -2656,12 +2667,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       }
       if (purged) guardAliases = purged;
     }
+    // `nonImportNames` (default = `names`) separa los locales NO-import de los
+    // import-like (`import X = …`): estos sombrean globals (localBindings) pero NO
+    // cuentan como shadow local de un hook (nonImportBindings) — ver
+    // extractPostStatementBindings (codex P2).
     return {
       ...currentContext,
       localBindings: new Set([...currentContext.localBindings, ...names]),
       nonImportBindings: new Set([
         ...currentContext.nonImportBindings,
-        ...names,
+        ...nonImportNames,
       ]),
       ...(guardAliases !== currentContext.guardAliases ? { guardAliases } : {}),
     };
@@ -3102,9 +3117,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
         for (const stmt of clause.statements) {
           visit(stmt, clauseCtx);
-          const additions = extractPostStatementBindings(stmt);
-          current = addToScope(current, additions);
-          clauseCtx = addToScope(clauseCtx, additions);
+          const { all, nonImport } = extractPostStatementBindings(stmt);
+          current = addToScope(current, all, nonImport);
+          clauseCtx = addToScope(clauseCtx, all, nonImport);
           const negGuards = extractNegativeEarlyReturnGuards(stmt, clauseCtx.guardAliases);
           if (negGuards.size > 0) {
             clauseCtx = {
@@ -3381,8 +3396,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     current = purgeGuardAliasShadows(current, gatherBlockLexicalNames(statements));
     for (const stmt of statements) {
       visit(stmt, current);
-      const additions = extractPostStatementBindings(stmt);
-      current = addToScope(current, additions);
+      const { all, nonImport } = extractPostStatementBindings(stmt);
+      current = addToScope(current, all, nonImport);
       // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
       // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
       // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
