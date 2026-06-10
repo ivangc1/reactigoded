@@ -2326,15 +2326,18 @@ describe("server-safe gate — DEEPEST: const-enum namespace instancia (preserve
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
-  it("ANCLA CONFIG: el tsconfig REAL fuerza preserveConstEnums (verbatimModuleSyntax) — sostiene el `true` hardcodeado", () => {
-    // El fix pasa preserveConstEnums=true a isInstantiatedModule porque el build
-    // EFECTIVO lo fuerza. Si alguien quita verbatimModuleSyntax (o pone
-    // preserveConstEnums:false), `true` pasaría a SOBRE-sombrear → bypass. Este
-    // test rompe RUIDOSO ante ese cambio de config en vez de degradar en silencio.
+  it("ANCLA BUILD-EMIT: el tsconfig de BUILD emite el shell de un namespace const-enum-only — sostiene isInstantiatedModule(_, true)", () => {
+    // FP-B asume que `namespace N { export const enum E {} }` SOMBREA el global
+    // porque el build lo INSTANCIA. Eso depende del emit de RUNTIME, gobernado por
+    // tsconfig.BUILD.json (tsc emite el JS; vite solo bundlea ese JS ya compilado),
+    // NO por el tsconfig de typecheck. Si el build dejara de preservar const-enums
+    // (quitar verbatimModuleSyntax / poner preserveConstEnums:false), el namespace se
+    // elidiría y FP-B pasaría a BYPASS silencioso. Anclamos contra el EMIT REAL del
+    // build config — no contra un flag — para romper RUIDOSO ante ese cambio.
     const cfgPath = ts.findConfigFile(
       process.cwd(),
       ts.sys.fileExists,
-      "tsconfig.json",
+      "tsconfig.build.json",
     );
     expect(cfgPath).toBeTruthy();
     const cfg = ts.readConfigFile(cfgPath as string, ts.sys.readFile);
@@ -2343,10 +2346,12 @@ describe("server-safe gate — DEEPEST: const-enum namespace instancia (preserve
       ts.sys,
       process.cwd(),
     );
-    const o = parsed.options;
-    const preservesConstEnums =
-      o.preserveConstEnums === true || o.verbatimModuleSyntax === true;
-    expect(preservesConstEnums).toBe(true);
+    const out = ts.transpileModule(
+      "namespace navigator { export const enum E { a } }\nexport const w = navigator;",
+      { compilerOptions: parsed.options },
+    );
+    // El shell `var navigator;(IIFE)` DEBE emitirse (namespace instanciado → shadow real).
+    expect(/var navigator/.test(out.outputText)).toBe(true);
   });
 });
 
