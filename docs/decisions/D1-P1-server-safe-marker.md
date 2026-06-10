@@ -272,6 +272,16 @@ Un re-hunt adversarial sobre el gate YA con los 5 FP-fixes (saturante: cada lent
 
 **Debunk:** el candidato del completeness-critic "eval-sink por concatenación `+`" (`g.constructor["ca"+"ll"]`) **NO compila** (TS7053 — `+` no folda a literal, `string` no indexa `Function`) → fuera de mandato, no es bypass. La lente eval-sink ya lo había marcado fuera.
 
-**Pendiente (calidad, no security-blockers):** el re-hunt confirmó además **18 FPs** (over-flag de código legítimo) en ~7 clases — extensiones de 6b/6c (declare-class/abstract/overload computed-key, accessor-signature, más posiciones de TypePredicate), deferred-handler condicional/spread, typeof-guard switch/alias, import-equals de hook react, import-attributes, template-substitution guard. Fail-closed (no abren bypass); se cierran en una fase de calidad separada.
+**Fase de calidad — FPs (over-flag de código legítimo, todos fail-closed, NO bypasses).** El re-hunt reportó 18 candidatos a FP; **3 no eran reales** (FP4/5/6: la regla 6c ya cubría el TypePredicate-en-tipo) → **15 FPs**. Cerrados **12**, cada uno con contra-test de soundness:
+
+- **Type-space** (5): computed-key de `declare class` (ambient), método `abstract` y overload-signature (sin cuerpo; la impl con cuerpo sigue flaggeando), get/set accessor-signature de interface/type-literal (regla 6b), import-attributes `with { type: "json" }` (regla 6d).
+- **typeof-guard** (4): template-substitution `` typeof X !== `${"undefined"}` `` (foldConstString); `switch (typeof X)` discriminant (sound con fall-through: solo narrowea sin fall-through entrante / default-con-case-undefined); alias booleano `const has = typeof X...; has ? X` (guardAliases por const, con purga en addToScope para shadowing).
+- **deferred / import** (3): handler en value-transparent `onClick={cond ? cb : x}` (up-walk por valueTransparentChildren); import-equals alias de hook react `import ue = React.useEffect` / `import R = React` (gatherReactImports por fixpoint).
+
+**Nota de soundness:** el fix del alias booleano (FP13) abrió un bypass en su primer intento (un binding interno homónimo no invalidaba el alias outer) — cazado por los contra-tests y cerrado purgando `guardAliases` en `addToScope`. Confirma el patrón de la sesión: cada relajación del fail-closed exige su soundness-test.
+
+**3 FPs ACEPTADOS como over-flag fail-closed** (NO se arreglan — el over-flag ES el comportamiento correcto; arreglarlos sería fail-open o exigiría data-flow; contrivados, 0 en el DS):
+- **FP8** handler en object-spread `<button {...handlers}>`: saber que el objeto va a un intrínseco exige data-flow → exa­mir­lo sería fail-open (un objeto-config con `onClick` llamado en render se eximiría = bypass).
+- **FP9/10** eval-sink con key estáticamente reducible `x.constructor[true ? "name" : "ctor"]` / `[key ?? "ctor"]`: relajar el check fail-closed del eval-sink (que flaggea si ALGUNA hoja es weaponizable) vía constant-fold/const-resolution es justo donde se cuelan los bypasses.
 
 **Histórico vs final (evitar confusión de conteos).** Los bypasses B1-B4 y los FPs F1-F5 (secciones arriba) son rounds ANTERIORES a la convergencia. El hunt final #173 produjo **0 bypasses nuevos**; sus 5 FPs tienen nombres distintos (deferred-alias-spoof, shadow-scoping, nonref-heritage, new-fp-source, typeof-guard top-cast). El criterio de "taggeable en seguridad" (líneas 218/222) se cumple: el re-hunt sobre el estado endurecido volvió 0 bypasses verificados.
