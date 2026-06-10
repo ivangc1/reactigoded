@@ -1510,13 +1510,15 @@ function statementAlwaysExits(stmt) {
  * idioma React/SSR dominante (equivalente al narrowing de TS/ESLint). Devuelve
  * el nombre guardado o null. beta.27 BLOCKER-1 (workflow honest-construct).
  */
-function extractNegativeEarlyReturnGuards(stmt) {
+function extractNegativeEarlyReturnGuards(stmt, guardAliases) {
   if (!ts.isIfStatement(stmt) || stmt.elseStatement) return new Set();
   // `||` de guards negativos: `if (typeof a === "undefined" || typeof b ===
   // "undefined") return` → tras el return AMBOS están definidos (la disyunción
   // es falsa) (re-hunt FP5). Reusa collectDisjunctionGuards (chain-aware).
+  // guardAliases hila el alias booleano (`const noWin = typeof X === "undefined";
+  // if (noWin) return; X`) — antes faltaba aquí → FP (codex P2, 3ª ronda).
   const names = new Set();
-  collectDisjunctionGuards(stmt.expression, names);
+  collectDisjunctionGuards(stmt.expression, names, guardAliases);
   if (names.size === 0) return names;
   if (!statementAlwaysExits(stmt.thenStatement)) return new Set();
   return names;
@@ -3037,7 +3039,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           const additions = extractPostStatementBindings(stmt);
           current = addToScope(current, additions);
           clauseCtx = addToScope(clauseCtx, additions);
-          const negGuards = extractNegativeEarlyReturnGuards(stmt);
+          const negGuards = extractNegativeEarlyReturnGuards(stmt, clauseCtx.guardAliases);
           if (negGuards.size > 0) {
             clauseCtx = {
               ...clauseCtx,
@@ -3319,7 +3321,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       }
       // Narrowing por early-return: tras `if (typeof X === "undefined") return;`
       // X existe en los statements posteriores del bloque → guard activo.
-      const negGuards = extractNegativeEarlyReturnGuards(stmt);
+      const negGuards = extractNegativeEarlyReturnGuards(stmt, current.guardAliases);
       if (negGuards.size > 0) {
         current = {
           ...current,

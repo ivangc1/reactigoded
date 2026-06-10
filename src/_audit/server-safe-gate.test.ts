@@ -2567,6 +2567,18 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
   it("FP9: `x.constructor[true ? \"name\" : \"constructor\"]` no flaggea (rama muerta)", () => {
     expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[true ? "name" : "constructor"]; }`)).toBe(false);
   });
+  it("FP (codex P2 3ª ronda): alias en EARLY-RETURN narrowea", () => {
+    // `const no = typeof X === "undefined"; if (no) return; X` — el alias debe resolver
+    // también en el narrowing por early-return (no solo if/ternario/&&/||).
+    expect(flagged(`/** @server-safe */\nexport function g() { const noWindow = typeof window === "undefined"; if (noWindow) return null; return window.innerWidth; }`)).toBe(false);
+    expect(flagged(`/** @server-safe */\nexport function g() { const has = typeof window !== "undefined"; if (!has) return null; return window.innerWidth; }`)).toBe(false);
+  });
+  it("SOUNDNESS early-return alias: param/shadow homónimo SIGUE flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nconst isClient = typeof window !== "undefined";\nexport function g(isClient: boolean) { if (!isClient) return null; return window.innerWidth; }`)).toBe(true);
+    // sin early-return real (if sin return) NO narrowea
+    expect(flagged(`/** @server-safe */\nexport function g() { const no = typeof window === "undefined"; if (no) {} return window.innerWidth; }`)).toBe(true);
+  });
+
   it("SOUNDNESS FP9: condición false / variable / rama-constructor-viva SIGUEN flaggeando", () => {
     expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[false ? "name" : "constructor"]; }`)).toBe(true);
     expect(flagged(`/** @server-safe */\nexport function g(x: object, c: boolean) { return x.constructor[c ? "name" : "constructor"]; }`)).toBe(true);
