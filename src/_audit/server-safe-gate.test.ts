@@ -2274,3 +2274,141 @@ describe("server-safe gate — codex P2 round 5 (switch-guard)", () => {
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });
+
+describe("server-safe gate — DEEPEST: callee diferido envuelto en wrapper erased (deferred-alias-spoof)", () => {
+  it("(useEffect)(cb) con paréntesis NO genera FP (sink diferido reconocido)", () => {
+    const code = `/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { (useEffect)(() => { window.location.href; }); return null; }`;
+    expect(checkSourceFile(code, "callee-paren.fixture.tsx")).toEqual([]);
+  });
+
+  it("(useEffect as typeof useEffect)(cb) — cast erased en callee, sin FP", () => {
+    const code = `/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { (useEffect as typeof useEffect)(() => { window.location.href; }); return null; }`;
+    expect(checkSourceFile(code, "callee-as.fixture.tsx")).toEqual([]);
+  });
+
+  it("(React).useEffect(cb) y (React)[\"useEffect\"](cb) — chain-root en paren, sin FP", () => {
+    const dot = `/** @server-safe */\nimport * as React from "react";\nexport function C() { (React).useEffect(() => { window.location.href; }); return null; }`;
+    expect(checkSourceFile(dot, "chain-paren-dot.fixture.tsx")).toEqual([]);
+    const bracket = `/** @server-safe */\nimport * as React from "react";\nexport function C() { (React)["useEffect"](() => { window.location.href; }); return null; }`;
+    expect(checkSourceFile(bracket, "chain-paren-bracket.fixture.tsx")).toEqual([]);
+  });
+
+  it("(setTimeout)(cb,0) — timer global envuelto, sin FP", () => {
+    const code = `/** @server-safe */\nexport function C() { (setTimeout)(() => { window.location.href; }, 0); return null; }`;
+    expect(checkSourceFile(code, "callee-timer.fixture.tsx")).toEqual([]);
+  });
+
+  it("SOUNDNESS: (React).useState(lazy) render-phase envuelto SIGUE flaggeando", () => {
+    // Desenvolver el callee NO debe convertir un hook render-phase en diferido:
+    // el lazy-initializer de useState corre en render (SSR) → debe flaggearse.
+    const code = `/** @server-safe */\nimport * as React from "react";\nexport function C() { return (React).useState(() => window.innerWidth); }`;
+    const v = checkSourceFile(code, "callee-soundness-state.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("SOUNDNESS: alias-spoof (useState as useEffect) envuelto SIGUE flaggeando", () => {
+    // El nombre local es useEffect pero el export canónico es useState (render-phase).
+    const code = `/** @server-safe */\nimport { useState as useEffect } from "react";\nexport function C() { (useEffect)(() => { window.location.href; }); return null; }`;
+    const v = checkSourceFile(code, "callee-soundness-alias.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+});
+
+describe("server-safe gate — DEEPEST: const-enum namespace instancia (preserveConstEnums forzado, shadow-scoping)", () => {
+  it("namespace con solo const-enum SOMBREA el global (verbatimModuleSyntax → emite shell), sin FP", () => {
+    const code = `/** @server-safe */\nnamespace navigator { export const enum E { a } }\nexport const v = navigator.E.a;`;
+    expect(checkSourceFile(code, "const-enum-ns.fixture.tsx")).toEqual([]);
+  });
+
+  it("SOUNDNESS: namespace SOLO type-only sigue elided → ref bare SIGUE flaggeando", () => {
+    const code = `/** @server-safe */\nnamespace navigator { export interface I { a: number } }\nexport const v: navigator.I = { a: 1 };\nexport const w = navigator;`;
+    const v = checkSourceFile(code, "typeonly-ns-sound.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("ANCLA CONFIG: el tsconfig REAL fuerza preserveConstEnums (verbatimModuleSyntax) — sostiene el `true` hardcodeado", () => {
+    // El fix pasa preserveConstEnums=true a isInstantiatedModule porque el build
+    // EFECTIVO lo fuerza. Si alguien quita verbatimModuleSyntax (o pone
+    // preserveConstEnums:false), `true` pasaría a SOBRE-sombrear → bypass. Este
+    // test rompe RUIDOSO ante ese cambio de config en vez de degradar en silencio.
+    const cfgPath = ts.findConfigFile(
+      process.cwd(),
+      ts.sys.fileExists,
+      "tsconfig.json",
+    );
+    expect(cfgPath).toBeTruthy();
+    const cfg = ts.readConfigFile(cfgPath as string, ts.sys.readFile);
+    const parsed = ts.parseJsonConfigFileContent(
+      cfg.config,
+      ts.sys,
+      process.cwd(),
+    );
+    const o = parsed.options;
+    const preservesConstEnums =
+      o.preserveConstEnums === true || o.verbatimModuleSyntax === true;
+    expect(preservesConstEnums).toBe(true);
+  });
+});
+
+describe("server-safe gate — DEEPEST: computed key en miembro type-space (nonref-heritage)", () => {
+  it("branded type `T & { readonly [tag]: B }` con symbol ambient NO genera FP", () => {
+    const code = `/** @server-safe */\ndeclare const tag: unique symbol;\nexport type Brand<T, B> = T & { readonly [tag]: B };\nexport type UserId = Brand<string, "UserId">;\nexport const z = 1;`;
+    expect(checkSourceFile(code, "branded.fixture.tsx")).toEqual([]);
+  });
+
+  it("interface con computed key (PropertySignature) NO genera FP", () => {
+    const code = `/** @server-safe */\ndeclare const sym: unique symbol;\nexport interface I { [sym]: number }\nexport const z = 1;`;
+    expect(checkSourceFile(code, "iface-computed.fixture.tsx")).toEqual([]);
+  });
+
+  it("SOUNDNESS: computed key de CLASE (PropertyDeclaration, runtime) SIGUE flaggeando", () => {
+    // Una clase EMITE la computed key → es un read runtime real, no type-space.
+    const code = `/** @server-safe */\nexport class C { [window.location.href]() { return 1; } }`;
+    const v = checkSourceFile(code, "class-computed-sound.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+});
+
+describe("server-safe gate — DEEPEST: TypePredicate parameterName en tipo standalone (new-fp-source)", () => {
+  it("type alias `(val) => val is string` NO flaggea el parameterName", () => {
+    const code = `/** @server-safe */\nexport type Guard = (val: unknown) => val is string;\nexport const z = 1;`;
+    expect(checkSourceFile(code, "predicate-alias.fixture.tsx")).toEqual([]);
+  });
+
+  it("method-signature de interface y asserts NO generan FP", () => {
+    const iface = `/** @server-safe */\nexport interface Checker { check(val: unknown): val is number; }\nexport const z = 1;`;
+    expect(checkSourceFile(iface, "predicate-iface.fixture.tsx")).toEqual([]);
+    const asserts = `/** @server-safe */\nexport type Assert = (val: unknown) => asserts val is number;\nexport const z = 1;`;
+    expect(checkSourceFile(asserts, "predicate-asserts.fixture.tsx")).toEqual([]);
+  });
+
+  it("SOUNDNESS: función REAL con type-predicate sigue sin FP (param masked) y un read bare real SIGUE flaggeando", () => {
+    const ok = `/** @server-safe */\nexport function isNum(val: unknown): val is number { return typeof val === "number"; }`;
+    expect(checkSourceFile(ok, "predicate-real-fn.fixture.tsx")).toEqual([]);
+    const bad = `/** @server-safe */\nexport function isNum(val: unknown): val is number { return window.innerWidth > 0 && typeof val === "number"; }`;
+    const v = checkSourceFile(bad, "predicate-real-fn-sound.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+});
+
+describe("server-safe gate — DEEPEST: typeof-guard envuelto en cast top-level (simetría erased)", () => {
+  it("`(typeof window !== \"undefined\") as boolean` se reconoce como guard, sin FP", () => {
+    const code = `/** @server-safe */\nexport function C(): string | null { if ((typeof window !== "undefined") as boolean) { return window.location.href; } return null; }`;
+    expect(checkSourceFile(code, "guard-as.fixture.tsx")).toEqual([]);
+  });
+
+  it("`(typeof window !== \"undefined\")!` NonNull top-level se reconoce, sin FP", () => {
+    const code = `/** @server-safe */\nexport function C(): number { if ((typeof window !== "undefined")!) { return window.innerWidth; } return 0; }`;
+    expect(checkSourceFile(code, "guard-nonnull.fixture.tsx")).toEqual([]);
+  });
+
+  it("SOUNDNESS: el `!` LÓGICO sigue flipando (no se desenvuelve como erased)", () => {
+    // `!(typeof window !== "undefined")` es TRUE cuando window AUSENTE → el read en
+    // la rama whenFalse (window presente) está guardado; un read en whenTrue NO.
+    const guarded = `/** @server-safe */\nexport function C(): number { return !(typeof window !== "undefined") ? 0 : window.innerWidth; }`;
+    expect(checkSourceFile(guarded, "guard-logical-not.fixture.tsx")).toEqual([]);
+    const bad = `/** @server-safe */\nexport function C(): number { return !(typeof window !== "undefined") ? window.innerWidth : 0; }`;
+    const v = checkSourceFile(bad, "guard-logical-not-sound.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+});

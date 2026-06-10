@@ -648,7 +648,13 @@ function isDeferredExecutionContext(fnNode, context) {
     if (parent.expression === current) return "none";
     const isArg = parent.arguments.some((a) => a === current);
     if (!isArg) return "none";
-    const callee = parent.expression;
+    // El callee puede venir envuelto en wrappers RUNTIME-TRANSPARENTES igual que el
+    // callback (L613): `(useEffect)(cb)`, `(useEffect as typeof useEffect)(cb)`,
+    // `(setTimeout)(cb,0)`. Sin desenvolver, `ts.isIdentifier`/`isPropertyAccess`
+    // daban false → calleeName=null → sink no reconocido → render-path → FP. Espejo
+    // exacto del unwrap del callback (hunt final deferred-alias-spoof). Fail-closed:
+    // un hook render-phase envuelto (`(React).useState(lazy)`) sigue flaggeándose.
+    const callee = unwrapErased(parent.expression);
     let calleeName = null;
     let rootIdent = null;
     if (ts.isIdentifier(callee)) {
@@ -665,12 +671,16 @@ function isDeferredExecutionContext(fnNode, context) {
       // reconocido (render-path), correcto: no es un hook conocido.
       calleeName = accessedMemberName(callee) ?? null;
       // Root identifier de la cadena para chequear shadow (punto o bracket).
-      let chain = callee.expression;
+      // Desenvolver erased en cada hop: `(React).useEffect`, `React!.useEffect`,
+      // `(React satisfies typeof React).useEffect` → chain-root `React`. Antes el
+      // walk solo atravesaba Property/ElementAccess y un wrapper intermedio cortaba
+      // la cadena → rootIdent=null → no canónico → FP (hunt final).
+      let chain = unwrapErased(callee.expression);
       while (
         ts.isPropertyAccessExpression(chain) ||
         ts.isElementAccessExpression(chain)
       ) {
-        chain = chain.expression;
+        chain = unwrapErased(chain.expression);
       }
       if (ts.isIdentifier(chain)) rootIdent = chain.text;
     }
@@ -799,11 +809,19 @@ function isAmbientDeclaration(node) {
  * vez de un whitelist hand-rolled de miembros de valor. La versión previa omitía
  * los value-members AMBIENT (`export declare const/function/class`), que SÍ
  * instancian el namespace (emiten el shell) → FP sobre un patrón typed-config
- * legítimo (re-hunt). preserveConstEnums=false: el proyecto no lo activa
- * (tsconfig) — coincide con el primer emit del build (tsc). beta.27 BLOCKER-1.
+ * legítimo (re-hunt). preserveConstEnums=TRUE: el tsconfig del DS pone
+ * `verbatimModuleSyntax:true`, que (TS5091) FUERZA preserveConstEnums:true — un
+ * `namespace N { export const enum E {} }` SÍ instancia (emite `var N;(IIFE)`,
+ * verificado vs emit real). Pasar `false` lo computaba elided → el nombre no
+ * entraba en localBindings → toda ref a `N` se flaggeaba aunque en runtime
+ * sombrea el global (FP, hunt final shadow-scoping). `true` = la semántica de
+ * emit EFECTIVA del build; cualquier futuro cambio de config lo cubre el guard
+ * test `tsconfig-preserves-const-enums`. beta.27 BLOCKER-1.
  */
 function namespaceIsInstantiated(moduleDecl) {
-  return ts.isInstantiatedModule(moduleDecl, false);
+  // Debe coincidir con preserveConstEnums EFECTIVO del build (verbatimModuleSyntax
+  // → true). El test de soundness ancla este invariante contra tsconfig real.
+  return ts.isInstantiatedModule(moduleDecl, true);
 }
 
 /**
@@ -1223,6 +1241,14 @@ function gatherModulePreloadedBindings(sourceFile) {
  * es vacuo en Edge → reconocerlo suprimiría la detección — load-bearing, no tocar).
  */
 function classifyTypeofGuard(expr) {
+  // Desenvolver wrappers RUNTIME-TRANSPARENTES de TODA la expresión-guard:
+  // `(G)`, `(G) as boolean`, `(G)!`, `(G satisfies …)`, `<T>(G)` narrowean
+  // idéntico a G en runtime (el cast se borra). Antes solo se desenvolvía el
+  // paréntesis → `(typeof window !== "undefined") as boolean` no se reconocía
+  // (FP, asimetría con el unwrap de operandos en L1251/1258). isErasedOuterExpr
+  // NO incluye el `!` LÓGICO (PrefixUnary) — ese SÍ flipea presentWhenTrue y se
+  // maneja justo debajo; solo el `!` NonNull (postfijo) es erased.
+  expr = unwrapErased(expr);
   if (
     ts.isPrefixUnaryExpression(expr) &&
     expr.operator === ts.SyntaxKind.ExclamationToken
@@ -1230,7 +1256,6 @@ function classifyTypeofGuard(expr) {
     const inner = classifyTypeofGuard(expr.operand);
     return inner ? { name: inner.name, presentWhenTrue: !inner.presentWhenTrue } : null;
   }
-  if (ts.isParenthesizedExpression(expr)) return classifyTypeofGuard(expr.expression);
   if (!ts.isBinaryExpression(expr)) return null;
   const op = expr.operatorToken.kind;
   const isEq =
@@ -1460,6 +1485,21 @@ function isErasedOuterExpr(node) {
     (typeof ts.isTypeAssertionExpression === "function" &&
       ts.isTypeAssertionExpression(node))
   );
+}
+
+/**
+ * Desenvuelve TODOS los wrappers runtime-transparentes (`()`,`!`,`as`,`satisfies`,
+ * `<T>`) que rodean `node` y devuelve el operando real. Espejo iterativo de
+ * `isErasedOuterExpr`: el valor emitido de `(((x as T)))!` ES `x`. Centraliza el
+ * patrón `while (n && isErasedOuterExpr(n)) n = n.expression` que ya aparecía en
+ * isDeferredExecutionContext (callback), classifyTypeofGuard (operandos) e
+ * isNonReferencePosition (typeof-operand) — el CALLEE y su chain-root no lo
+ * aplicaban → FP `(useEffect)(cb)` / `(React).useEffect(cb)` (hunt final
+ * deferred-alias-spoof). beta.27 BLOCKER-1.
+ */
+function unwrapErased(node) {
+  while (node && isErasedOuterExpr(node)) node = node.expression;
+  return node;
 }
 
 /**
@@ -1693,6 +1733,37 @@ function isNonReferencePosition(node, declaredNames) {
     "name" in parent &&
     parent.name === node
   ) {
+    return true;
+  }
+
+  // 6b. Computed-property key DENTRO de un miembro TYPE-SPACE
+  //     (PropertySignature/MethodSignature de interface o type-literal):
+  //     `interface I { [sym]: T }`, `type U = { [sym](): void }`, branded
+  //     types `T & { readonly [brand]: B }`. El miembro entero se BORRA al
+  //     emit → la key nunca lee un binding runtime. Solo PropertySignature/
+  //     MethodSignature (NUNCA Property/MethodDeclaration de clase u object
+  //     literal, que SÍ emiten) → no exime computed keys de clase (runtime).
+  //     Dispara con `declare const sym: unique symbol` ambient (sin binding
+  //     runtime, antes caía al fail-closed y FP-eaba). hunt final nonref-heritage.
+  if (
+    ts.isComputedPropertyName(parent) &&
+    parent.parent &&
+    (ts.isPropertySignature(parent.parent) ||
+      ts.isMethodSignature(parent.parent))
+  ) {
+    return true;
+  }
+
+  // 6c. parameterName de un TypePredicateNode (`x is T`, `asserts x is T`) en
+  //     posición de TIPO standalone: `type G = (val) => val is string`,
+  //     `interface { check(val): val is T }`, callback-prop `(item: T) => item
+  //     is T`, anotación de un const `(x) => asserts x is number`. El predicate
+  //     es type-space (se borra); en una función REAL el param está en
+  //     localBindings y queda enmascarado, pero en un tipo suelto no hay binding
+  //     → caía al fail-closed y flaggeaba el nombre (`val`,`item`) aunque ni es
+  //     global. `this is T` no afecta: `this` es keyword, no Identifier. hunt
+  //     final new-fp-source.
+  if (ts.isTypePredicateNode(parent) && parent.parameterName === node) {
     return true;
   }
 
