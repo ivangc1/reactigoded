@@ -20,6 +20,7 @@
  */
 import { describe, it, expect } from "vitest";
 import ts from "typescript";
+import { transformSync } from "esbuild";
 import {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
@@ -2326,32 +2327,22 @@ describe("server-safe gate — DEEPEST: const-enum namespace instancia (preserve
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
-  it("ANCLA BUILD-EMIT: el tsconfig de BUILD emite el shell de un namespace const-enum-only — sostiene isInstantiatedModule(_, true)", () => {
-    // FP-B asume que `namespace N { export const enum E {} }` SOMBREA el global
-    // porque el build lo INSTANCIA. Eso depende del emit de RUNTIME, gobernado por
-    // tsconfig.BUILD.json (tsc emite el JS; vite solo bundlea ese JS ya compilado),
-    // NO por el tsconfig de typecheck. Si el build dejara de preservar const-enums
-    // (quitar verbatimModuleSyntax / poner preserveConstEnums:false), el namespace se
-    // elidiría y FP-B pasaría a BYPASS silencioso. Anclamos contra el EMIT REAL del
-    // build config — no contra un flag — para romper RUIDOSO ante ese cambio.
-    const cfgPath = ts.findConfigFile(
-      process.cwd(),
-      ts.sys.fileExists,
-      "tsconfig.build.json",
-    );
-    expect(cfgPath).toBeTruthy();
-    const cfg = ts.readConfigFile(cfgPath as string, ts.sys.readFile);
-    const parsed = ts.parseJsonConfigFileContent(
-      cfg.config,
-      ts.sys,
-      process.cwd(),
-    );
-    const out = ts.transpileModule(
+  it("ANCLA BUILD-EMIT: esbuild (el transformer REAL de Vite) instancia el const-enum-namespace — sostiene isInstantiatedModule(_, true)", () => {
+    // FP-B asume que `namespace N { export const enum E {} }` SOMBREA el global porque
+    // el build lo INSTANCIA. El emisor de RUNTIME NO es tsc: `tsconfig.build.json` es
+    // `emitDeclarationOnly` (solo .d.ts); el JS de runtime lo emite Vite vía esbuild
+    // (loader "ts"). Anclar a `ts.transpileModule` daba falsa confianza (codex P2): si
+    // esbuild elidiera/inlineara el const-enum-namespace, `namespaceIsInstantiated(_, true)`
+    // lo metería en localBindings y suprimiría un read global real → BYPASS. Anclamos al
+    // EMIT REAL de esbuild: con una ref bare al namespace, el shell `var navigator` DEBE
+    // emitirse (→ la ref se liga al LOCAL, no al global). Verificado member-only, bare-ref
+    // y minify (bajo minify esbuild renombra pero declara local). Rompe ruidoso si esbuild
+    // cambiara su emit de const-enum-namespaces o si el DS cambiara de transformer.
+    const out = transformSync(
       "namespace navigator { export const enum E { a } }\nexport const w = navigator;",
-      { compilerOptions: parsed.options },
+      { loader: "ts", format: "esm" },
     );
-    // El shell `var navigator;(IIFE)` DEBE emitirse (namespace instanciado → shadow real).
-    expect(/var navigator/.test(out.outputText)).toBe(true);
+    expect(/\bvar navigator\b/.test(out.code)).toBe(true);
   });
 });
 
