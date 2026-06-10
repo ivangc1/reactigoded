@@ -802,6 +802,24 @@ function isAmbientDeclaration(node) {
 }
 
 /**
+ * ¿La lista de statements de un case/default-clause TERMINA el control de flujo
+ * (no cae por fall-through al siguiente clause)? Conservador: solo el caso simple
+ * en que el ÚLTIMO statement es return/break/continue/throw. Si no es obvio,
+ * devuelve false → se trata como fall-through (no se narrowea → FP seguro, no
+ * bypass). Usado por el narrowing de `switch (typeof X)`. deepest re-hunt #173.
+ */
+function caseClauseTerminates(statements) {
+  if (!statements || statements.length === 0) return false;
+  const last = statements[statements.length - 1];
+  return (
+    ts.isReturnStatement(last) ||
+    ts.isBreakStatement(last) ||
+    ts.isContinueStatement(last) ||
+    ts.isThrowStatement(last)
+  );
+}
+
+/**
  * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿el emit de RUNTIME produce
  * `var N;(IIFE)`? Si lo está, su nombre ES una sombra runtime legítima; si se
  * elide, una ref bare a `N` (= global ausente en Edge) resuelve al global real →
@@ -2898,7 +2916,40 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+      // `switch (typeof X) { … }`: X está PRESENTE en los cases que lo implican —
+      // equivalente a `if (typeof X === "<tipo>")`. Sound con fall-through: solo
+      // narrowea un clause si NO se puede entrar por fall-through desde un case
+      // ausente/desconocido (es el primero O el anterior TERMINA), y el `default`
+      // solo si hay un `case "undefined"` que captura el caso ausente. deepest
+      // re-hunt #173 (switch-discriminant). SAFE/NON_ABSENCE_DENIALS excluidos.
+      let typeofName = null;
+      let hasUndefinedCase = false;
+      const sw = node.parent;
+      if (sw && ts.isSwitchStatement(sw)) {
+        let disc = sw.expression;
+        while (disc && isErasedOuterExpr(disc)) disc = disc.expression;
+        if (ts.isTypeOfExpression(disc)) {
+          let op = disc.expression;
+          while (op && isErasedOuterExpr(op)) op = op.expression;
+          if (
+            ts.isIdentifier(op) &&
+            !SAFE_GLOBALS.has(op.text) &&
+            !NON_ABSENCE_DENIALS.has(op.text)
+          ) {
+            typeofName = op.text;
+          }
+        }
+        for (const clause of node.clauses) {
+          if (
+            ts.isCaseClause(clause) &&
+            foldConstString(clause.expression) === "undefined"
+          ) {
+            hasUndefinedCase = true;
+          }
+        }
+      }
       let current = addToScope(context, blockFns);
+      let prevTerminates = true; // antes del 1er clause no hay fall-through entrante
       for (const clause of node.clauses) {
         if (ts.isCaseClause(clause) && clause.expression) {
           visit(clause.expression, current);
@@ -2910,6 +2961,21 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         // comparten (scope léxico del switch) → se acumulan en `current`.
         // beta.27 BLOCKER-1 (codex P2 round 5: guard no propagado en switch).
         let clauseCtx = current;
+        if (typeofName) {
+          const present = ts.isCaseClause(clause)
+            ? prevTerminates &&
+              (() => {
+                const lbl = foldConstString(clause.expression);
+                return lbl !== undefined && lbl !== "undefined";
+              })()
+            : prevTerminates && hasUndefinedCase; // default
+          if (present) {
+            clauseCtx = {
+              ...clauseCtx,
+              activeGuards: new Set([...clauseCtx.activeGuards, typeofName]),
+            };
+          }
+        }
         for (const stmt of clause.statements) {
           visit(stmt, clauseCtx);
           const additions = extractPostStatementBindings(stmt);
@@ -2923,6 +2989,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             };
           }
         }
+        prevTerminates = caseClauseTerminates(clause.statements);
       }
       return;
     }

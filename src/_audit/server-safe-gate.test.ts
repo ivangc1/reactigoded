@@ -2521,4 +2521,21 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
   it("SOUNDNESS: alias-spoof import-equals de hook render-phase (ue=React.useState) SIGUE flaggeando", () => {
     expect(flagged(`/** @server-safe */\nimport * as React from "react";\nimport ue = React.useState;\nexport function C() { return ue(() => window.innerWidth); }`)).toBe(true);
   });
+
+  // — switch (typeof X) discriminant narrowing (FP11/12) —
+  it("FP11: `switch (typeof X) { case \"object\": X.foo }` narrowea (case positivo)", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "object": return window.innerWidth; default: return 0; } }`)).toBe(false);
+  });
+  it("FP12: `default` tras `case \"undefined\": return` narrowea presencia", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof document) { case "undefined": return null; default: return document.title; } }`)).toBe(false);
+  });
+  it("SOUNDNESS switch: fall-through desde `case \"undefined\"` NO narrowea", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "undefined": case "object": return window.innerWidth; default: return 0; } }`)).toBe(true);
+  });
+  it("SOUNDNESS switch: `default` SIN `case \"undefined\"` NO narrowea", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "object": return 0; default: return window.innerWidth; } }`)).toBe(true);
+  });
+  it("SOUNDNESS switch: read DENTRO de `case \"undefined\"` SIGUE flaggeando", () => {
+    expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "undefined": return window.innerWidth; default: return 0; } }`)).toBe(true);
+  });
 });
