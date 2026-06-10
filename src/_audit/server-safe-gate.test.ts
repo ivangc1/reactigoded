@@ -2408,3 +2408,59 @@ describe("server-safe gate — DEEPEST: typeof-guard envuelto en cast top-level 
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 });
+
+describe("server-safe gate — DEEPEST re-hunt #173: namespaceIsInstantiated = oráculo ESBUILD (BYPASS-2)", () => {
+  // El gate debe coincidir con el emit REAL de esbuild (el transformer de Vite), NO con
+  // ts.isInstantiatedModule, que divergía en namespaces ambient-anidados → bypass. Ancla
+  // data-driven: para cada forma, gate-flaggea ⟺ esbuild ELIDE. Ver feedback_esbuild_emit_oracle.
+  const FORMS: ReadonlyArray<readonly [string, string]> = [
+    ["direct const", "namespace navigator { export const x = 1 }"],
+    ["direct const-enum", "namespace navigator { export const enum E { a } }"],
+    ["top-level ambient const", "namespace navigator { export declare const z: number }"],
+    ["top-level ambient fn", "namespace navigator { export declare function f(): void }"],
+    ["top-level ambient class", "namespace navigator { export declare class C {} }"],
+    ["nested AMBIENT const-enum", "namespace navigator { export declare namespace I { const enum E { a } } }"],
+    ["nested AMBIENT value", "namespace navigator { export declare namespace I { const z: number } }"],
+    ["nested NON-ambient value", "namespace navigator { export namespace I { export const z = 1 } }"],
+    ["type-only interface", "namespace navigator { export interface I {} }"],
+    ["direct enum", "namespace navigator { export enum E { a } }"],
+  ];
+  for (const [label, ns] of FORMS) {
+    it(`coincide con esbuild: ${label}`, () => {
+      const code = `/** @server-safe */\n${ns}\nexport const w = navigator;`;
+      const instantiates = /\bvar navigator\b/.test(
+        transformSync(code, { loader: "ts", format: "esm" }).code,
+      );
+      // instancia → sombra → no flag ; elide → flag
+      expect(checkSourceFile(code, "ns.fixture.tsx").length > 0).toBe(!instantiates);
+    });
+  }
+
+  it("SOUNDNESS BYPASS-2: namespace ambient-anidado const-enum FLAGGEA (esbuild elide)", () => {
+    const code = `/** @server-safe */\nnamespace document { export declare namespace I { const enum E { a } } }\nexport const w = document;`;
+    expect(checkSourceFile(code, "bypass2.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("FP-B: const-enum DIRECTO sigue sombreando (esbuild instancia, no over-flag)", () => {
+    const code = `/** @server-safe */\nnamespace navigator { export const enum E { a } }\nexport const w = navigator;`;
+    expect(checkSourceFile(code, "directenum.fixture.tsx")).toEqual([]);
+  });
+});
+
+describe("server-safe gate — DEEPEST re-hunt #173: eval-sink template-selector fold", () => {
+  const EVAL: ReadonlyArray<readonly [string, string]> = [
+    ["call", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`ca${"ll"}`](null, "return window")(); }'],
+    ["apply", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`app${"ly"}`](null, ["return window"])(); }'],
+    ["bind", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`bi${"nd"}`](null)(); }'],
+  ];
+  for (const [sel, code] of EVAL) {
+    it(`.${sel} via template-substitution FLAGGEA (selector foldeado)`, () => {
+      expect(checkSourceFile(code, `evalsink-${sel}.fixture.tsx`).length).toBeGreaterThan(0);
+    });
+  }
+
+  it("SOUNDNESS: key dinámica real [k] no foldea (residual data-flow, no crashea)", () => {
+    const code = `/** @server-safe */\nexport function f(g: () => void, k: string) { return (g.constructor as Record<string, (...a: unknown[]) => unknown>)[k]; }`;
+    expect(() => checkSourceFile(code, "dynkey.fixture.tsx")).not.toThrow();
+  });
+});

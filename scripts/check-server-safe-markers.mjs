@@ -795,33 +795,65 @@ function isAmbientDeclaration(node) {
 }
 
 /**
- * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿emite un binding runtime
- * `var N`(IIFE)? Si lo está, su nombre ES una sombra runtime legítima; si se
- * elide (`namespace navigator {}`), una ref bare a `navigator` resuelve al global
- * real → debe flaggearse, no sombrearse.
+ * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿el emit de RUNTIME produce
+ * `var N;(IIFE)`? Si lo está, su nombre ES una sombra runtime legítima; si se
+ * elide, una ref bare a `N` (= global ausente en Edge) resuelve al global real →
+ * debe flaggearse.
  *
- *   namespace N {}                          → ELIDED  (vacío)
- *   namespace N { export interface I {} }   → ELIDED  (solo tipos)
- *   namespace N { export const x = 1 }      → EMITE   var N;(IIFE)
- *   namespace N { export declare const x }  → EMITE   var N;(IIFE)  ← clave
+ * ORÁCULO = ESBUILD (el transformer de Vite), **NO** `ts.isInstantiatedModule`.
+ * tsc NO emite el JS de runtime (`tsconfig.build.json` es `emitDeclarationOnly`);
+ * el bundler es esbuild, que DIVERGE de `ts.isInstantiatedModule` en un caso REAL:
+ * un namespace cuyo único miembro instanciante vive en un `namespace` AMBIENT
+ * ANIDADO. `ts.isInstantiatedModule(_, true)` lo cuenta instanciado → el nombre
+ * entra en localBindings → ref bare al global NO se flaggea, pero esbuild ELIDE
+ * todo lo `declare` anidado → la ref filtra al global = **BYPASS** (deepest
+ * re-hunt #173: `namespace document { export declare namespace I { const enum E } }`).
+ * Ver `feedback_esbuild_emit_oracle`. Regla de esbuild VERIFICADA empíricamente
+ * sobre 10 formas (test `esbuild-namespace-instantiation`):
  *
- * Usamos `ts.isInstantiatedModule`, la semántica de emit AUTORITATIVA de TS, en
- * vez de un whitelist hand-rolled de miembros de valor. La versión previa omitía
- * los value-members AMBIENT (`export declare const/function/class`), que SÍ
- * instancian el namespace (emiten el shell) → FP sobre un patrón typed-config
- * legítimo (re-hunt). preserveConstEnums=TRUE: el tsconfig del DS pone
- * `verbatimModuleSyntax:true`, que (TS5091) FUERZA preserveConstEnums:true — un
- * `namespace N { export const enum E {} }` SÍ instancia (emite `var N;(IIFE)`,
- * verificado vs emit real). Pasar `false` lo computaba elided → el nombre no
- * entraba en localBindings → toda ref a `N` se flaggeaba aunque en runtime
- * sombrea el global (FP, hunt final shadow-scoping). `true` = la semántica de
- * emit EFECTIVA del build; cualquier futuro cambio de config lo cubre el guard
- * test `tsconfig-preserves-const-enums`. beta.27 BLOCKER-1.
+ *   INSTANCIA: miembro DIRECTO var/let/const/function/class/enum (declare o no),
+ *              o `namespace` anidado NO-ambient que a su vez instancia.
+ *   ELIDE:     `namespace` anidado AMBIENT (declare), interface/type/import-type, vacío.
+ *
+ * Nota clave: esbuild SÍ instancia por un value-member ambient TOP-LEVEL (`export
+ * declare const z` → `var N`), pero NO por uno ambient ANIDADO — esa es la única
+ * divergencia. Fail-closed: ante un statement no reconocido devolvemos `false`
+ * (over-flag seguro, nunca bypass). beta.27 BLOCKER-1.
  */
 function namespaceIsInstantiated(moduleDecl) {
-  // Debe coincidir con preserveConstEnums EFECTIVO del build (verbatimModuleSyntax
-  // → true). El test de soundness ancla este invariante contra tsconfig real.
-  return ts.isInstantiatedModule(moduleDecl, true);
+  const body = moduleDecl.body;
+  if (!body) return false;
+  // `namespace X.Y { … }`: el body es otro ModuleDeclaration (forma dotted).
+  if (ts.isModuleDeclaration(body)) {
+    return isAmbientDeclaration(body) ? false : namespaceIsInstantiated(body);
+  }
+  if (!ts.isModuleBlock(body)) return false;
+  return body.statements.some(esbuildInstantiatesViaStatement);
+}
+
+/** Un statement de cuerpo de namespace que hace que esbuild EMITA el shell `var N`. */
+function esbuildInstantiatesViaStatement(stmt) {
+  // Productores de valor DIRECTOS — esbuild emite el shell aunque sean `declare`
+  // (el ambient TOP-LEVEL instancia; verificado): const/let/var/function/class/enum.
+  if (
+    ts.isVariableStatement(stmt) ||
+    ts.isFunctionDeclaration(stmt) ||
+    ts.isClassDeclaration(stmt) ||
+    ts.isEnumDeclaration(stmt)
+  ) {
+    return true;
+  }
+  // `import Y = Z` de valor instancia; type-only no (RHS same-file a tipo = binder,
+  // residual — conservador `!isTypeOnly`, mismo criterio que producesRuntimeValue).
+  if (ts.isImportEqualsDeclaration(stmt)) return !stmt.isTypeOnly;
+  // Namespace anidado: instancia SOLO si NO es ambient Y a su vez instancia. El
+  // ambient anidado (`export declare namespace I { … }`) esbuild lo BORRA entero →
+  // NO cuenta (raíz del bypass). El no-ambient anidado recurre.
+  if (ts.isModuleDeclaration(stmt)) {
+    return isAmbientDeclaration(stmt) ? false : namespaceIsInstantiated(stmt);
+  }
+  // interface, type alias, import-type, export-decl sin valor → no emite. Fail-closed.
+  return false;
 }
 
 /**
@@ -1450,15 +1482,44 @@ function accessedMemberName(node) {
     // no-literal → undefined → residual data-flow (#3); `[k || "x"]` con "x" benigno
     // tampoco da weaponizable → sigue residual.
     const leaves = valueTransparentLeaves(node.argumentExpression);
+    // foldConstString folda además TemplateExpression con sustituciones constantes
+    // (`` `cal${"l"}` `` → "call") — antes solo isStringLiteralLike, así que la
+    // sustitución de template en el selector escapaba (`g.constructor[`cal${"l"}`]`,
+    // bypass eval-sink, deepest re-hunt #173). El no-substitution template y el literal
+    // ya se cazaban.
     const literals = leaves
-      .filter((l) => ts.isStringLiteralLike(l))
-      .map((l) => l.text);
+      .map(foldConstString)
+      .filter((s) => s !== undefined);
     const weaponizable = literals.find(
       (t) => t === "constructor" || t === "call" || t === "apply" || t === "bind",
     );
     if (weaponizable !== undefined) return weaponizable;
     // Forma simple `x["foo"]` (hoja única literal) → ese nombre.
     if (leaves.length === 1 && literals.length === 1) return literals[0];
+  }
+  return undefined;
+}
+
+/**
+ * Valor string CONSTANTE de un nodo si es foldeable en compile-time: StringLiteral,
+ * NoSubstitutionTemplate, o TemplateExpression cuyas sustituciones son TODAS strings
+ * constantes (recursivo). Desenvuelve wrappers erased. `` `cal${"l"}` `` → "call".
+ * Cierra el bypass eval-sink por template-substitution en el selector — el gate ya
+ * cazaba `["call"]`, `` [`call`] ``, `[(0,"call")]`; solo la sustitución escapaba
+ * `valueTransparentLeaves` (deepest re-hunt #173). undefined si alguna parte NO es
+ * constante (→ residual data-flow, como `[k]`).
+ */
+function foldConstString(node) {
+  node = unwrapErased(node);
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isTemplateExpression(node)) {
+    let out = node.head.text;
+    for (const span of node.templateSpans) {
+      const v = foldConstString(span.expression);
+      if (v === undefined) return undefined;
+      out += v + span.literal.text;
+    }
+    return out;
   }
   return undefined;
 }
