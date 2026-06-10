@@ -2586,6 +2586,13 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
     // CONTROL: sin shadow, el alias en bloque interno SÍ narrowea (no romper FP13)
     expect(flagged(`/** @server-safe */\nexport function g(cond: boolean) { const has = typeof window !== "undefined"; if (cond) { return has ? window.innerWidth : 0; } return 0; }`)).toBe(false);
   });
+  it("SOUNDNESS alias TDZ en SWITCH CaseBlock (codex P2): shadow léxico en un case invalida el alias", () => {
+    // El CaseBlock es UN scope léxico — un `const` en un case sombrea el alias outer
+    // para todo el switch; un closure ANTERIOR no debe resolver al guard outer.
+    expect(flagged(`/** @server-safe */\nexport function g(x: number): number { const has = typeof window !== "undefined"; switch (x) { case 0: const fn = () => has ? window.innerWidth : 0; const has = true; return fn(); default: return 0; } }`)).toBe(true);
+    // CONTROL: el narrowing de `switch (typeof X)` NO se rompe
+    expect(flagged(`/** @server-safe */\nexport function g() { switch (typeof window) { case "object": return window.innerWidth; default: return 0; } }`)).toBe(false);
+  });
 
   it("SOUNDNESS FP9: condición false / variable / rama-constructor-viva SIGUEN flaggeando", () => {
     expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[false ? "name" : "constructor"]; }`)).toBe(true);
