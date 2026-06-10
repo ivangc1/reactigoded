@@ -3305,6 +3305,42 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ...addToScope(context, preloadedFns),
       blockEntryGuards: context.activeGuards,
     };
+    // TDZ / lexical scope: un `const`/`let`/`class`/`function` block-scoped con el nombre
+    // de un guard-alias OUTER lo SOMBREA para TODO el bloque (no solo tras su declaración).
+    // La purga posicional de addToScope no cubre los usos ANTERIORES a la declaración
+    // (un closure `const f = () => has ? X : 0; const has = true; f()` resuelve `has` al
+    // guard outer aunque runtime lo liga al binding interno → BYPASS, codex P2 3ª ronda).
+    // Purgamos esos nombres al ENTRAR el bloque; el alias propio del bloque se re-añade
+    // posicionalmente tras su `const X = <guard>`.
+    if (current.guardAliases && current.guardAliases.size > 0) {
+      const blockLexical = new Set();
+      for (const stmt of statements) {
+        if (
+          ts.isVariableStatement(stmt) &&
+          (stmt.declarationList.flags &
+            (ts.NodeFlags.Const | ts.NodeFlags.Let)) !==
+            0
+        ) {
+          for (const d of stmt.declarationList.declarations) {
+            addBindingNamesFromPattern(d.name, blockLexical);
+          }
+        } else if (
+          (ts.isClassDeclaration(stmt) || ts.isFunctionDeclaration(stmt)) &&
+          stmt.name &&
+          ts.isIdentifier(stmt.name)
+        ) {
+          blockLexical.add(stmt.name.text);
+        }
+      }
+      let purged = null;
+      for (const n of blockLexical) {
+        if (current.guardAliases.has(n)) {
+          if (!purged) purged = new Map(current.guardAliases);
+          purged.delete(n);
+        }
+      }
+      if (purged) current = { ...current, guardAliases: purged };
+    }
     for (const stmt of statements) {
       visit(stmt, current);
       const additions = extractPostStatementBindings(stmt);

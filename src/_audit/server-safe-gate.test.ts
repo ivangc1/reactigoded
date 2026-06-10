@@ -2578,6 +2578,14 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
     // sin early-return real (if sin return) NO narrowea
     expect(flagged(`/** @server-safe */\nexport function g() { const no = typeof window === "undefined"; if (no) {} return window.innerWidth; }`)).toBe(true);
   });
+  it("SOUNDNESS alias TDZ (codex P2 3ª ronda): shadow LEXICAL antes de la declaración invalida el alias", () => {
+    // Un `const`/`let` block-scoped homónimo sombrea el alias outer para TODO el bloque
+    // (TDZ) — un closure/uso ANTERIOR a la declaración NO debe resolver al guard outer.
+    expect(flagged(`/** @server-safe */\nexport function g(): number { const isC = typeof window !== "undefined"; { const fn = () => isC ? window.innerWidth : 0; const isC = true; return fn(); } }`)).toBe(true);
+    expect(flagged(`/** @server-safe */\nexport function g(): number { const has = typeof window !== "undefined"; { if (has) return window.innerWidth; const has = false as boolean; void has; } return 0; }`)).toBe(true);
+    // CONTROL: sin shadow, el alias en bloque interno SÍ narrowea (no romper FP13)
+    expect(flagged(`/** @server-safe */\nexport function g(cond: boolean) { const has = typeof window !== "undefined"; if (cond) { return has ? window.innerWidth : 0; } return 0; }`)).toBe(false);
+  });
 
   it("SOUNDNESS FP9: condición false / variable / rama-constructor-viva SIGUEN flaggeando", () => {
     expect(flagged(`/** @server-safe */\nexport function g(x: object) { return x.constructor[false ? "name" : "constructor"]; }`)).toBe(true);
