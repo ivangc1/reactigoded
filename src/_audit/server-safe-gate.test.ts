@@ -1443,9 +1443,16 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     expect(checkSourceFile(code, "ns-inst.fixture.tsx")).toEqual([]);
   });
 
-  // PIN ANTI-DIVERGENCIA: el veredicto del gate (exime ⟺ cree instanciado) DEBE
-  // coincidir con el EMIT REAL de esbuild (el oráculo del build, no tsc) en cada
-  // forma de miembro de namespace. Si TS/esbuild/refactor divergen, esto revienta.
+  // PIN DE SOUNDNESS (no bypass) — la invariante que importa para el freeze:
+  // **gate-EXIME ⟹ esbuild-INSTANCIA** (un read exento ⟹ existe shadow runtime real).
+  // `esbuildInstantiatesViaStatement` es una UNDER-APPROXIMATION CONSERVADORA de la
+  // instanciación de esbuild: whitelist de productores de valor decidibles. El REVERSO
+  // NO se exige — el gate PUEDE over-flaggear (un namespace instanciado SOLO por un
+  // statement runtime-only —expression-statement `Q.z;`, control-flow— no se reconoce →
+  // FP FAIL-CLOSED, seguro). Codex P2 (round-9): el gate NO coincide EXACTO con esbuild
+  // (esos casos divergen), pero la divergencia es 100% fail-closed → 0 bypasses. Over-
+  // aproximar para cerrar ese FP es la dirección FAIL-OPEN que abrió los 17 (rechazada,
+  // §184). Lo que pinea esto: si una forma EXIME pero esbuild ELIDE → bypass → revienta.
   it.each([
     ["declare var", "declare var v: number;"],
     ["export declare const", "export declare const v: number;"],
@@ -1457,7 +1464,7 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     ["declare enum", "declare enum E { A }"],
     ["export declare enum", "export declare enum E { A }"],
     ["import value-dead", "import Q = Other; export type Z = typeof Q.z;"],
-    ["import value-used", "import Q = Other; export const y = Q.z;"],
+    ["import value-used (export const)", "import Q = Other; export const y = Q.z;"],
     ["export import", "export import Q = Other;"],
     ["non-ambient const", "const v = 1;"],
     ["export const", "export const v = 1;"],
@@ -1466,7 +1473,11 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     ["interface only", "interface I { a: number }"],
     ["type only", "type T = number;"],
     ["empty", ""],
-  ])("gate == esbuild para namespace { %s }", (_label, member) => {
+    // Casos runtime-only de codex P2 — esbuild INSTANCIA, gate over-flagea (fail-closed):
+    ["import + expression-statement", "import Q = Other; Q.z;"],
+    ["bare expression-statement", "Other.z;"],
+    ["control-flow", "if (Other.z) { }"],
+  ])("SOUNDNESS gate-exime⟹esbuild-instancia (no bypass): namespace { %s }", (_label, member) => {
     const code =
       "/** @server-safe */\nnamespace Other { export const z = 1; }\nnamespace window { " +
       member +
@@ -1476,7 +1487,27 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
       /\bvar window\b/.test(emit) || /\(\s*window2?\s*=>/.test(emit);
     const gateExempts =
       checkSourceFile(code, "matrix.fixture.tsx").length === 0;
-    expect(gateExempts).toBe(esbuildInstantiates);
+    if (gateExempts) expect(esbuildInstantiates).toBe(true); // exime ⟹ esbuild instancia
+  });
+
+  // FP FAIL-CLOSED CONOCIDO (codex P2): un namespace instanciado SOLO por un statement
+  // runtime-only (expression-statement / control-flow) NO lo reconoce el whitelist
+  // conservador → over-flagea un shadow genuino. SEGURO (over-flag, no bypass), contrivado
+  // (`namespace window { Q.z; }` no lo escribe nadie; 0 en source real), y NO se cierra a
+  // propósito: el fix sería expandir el reconocimiento de instanciación = dirección fail-open
+  // que abrió los 17. Documentado, no enmascarado (codex: el test viejo lo ocultaba).
+  it.each([
+    ["import + expr-stmt", "import Q = Other; Q.z;"],
+    ["bare expr-stmt", "Other.z;"],
+    ["control-flow if", "if (Other.z) { }"],
+  ])("FP fail-closed conocido (esbuild instancia, gate over-flagea): { %s }", (_label, member) => {
+    const code =
+      "/** @server-safe */\nnamespace Other { export const z = 1; }\nnamespace window { " +
+      member +
+      " }\nexport function P() { return window.innerWidth; }\n";
+    const emit = transformSync(code, { loader: "tsx", format: "esm" }).code;
+    expect(/\bvar window\b/.test(emit) || /\(\s*window2?\s*=>/.test(emit)).toBe(true); // esbuild SÍ instancia
+    expect(checkSourceFile(code, "fp.fixture.tsx").length).toBeGreaterThan(0); // gate over-flagea (fail-closed)
   });
 });
 

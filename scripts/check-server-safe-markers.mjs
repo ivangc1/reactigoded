@@ -868,12 +868,22 @@ function hasExportModifier(stmt) {
 /**
  * Un statement de cuerpo de namespace que hace que esbuild EMITA el shell `var N`.
  *
- * REGLA REAL DE ESBUILD (medida empíricamente sobre 16 formas, deepest final hunt
- * #173 — NO la que asumía el código anterior). El error previo: tratar TODO
- * value-producer (incl. `declare` no-exportado y `import Q = N` value-dead) como
- * instanciante. esbuild NO los emite → un `namespace document { declare var x }` se
- * ELIDE entero y `document.title` leía el GLOBAL real con el gate exento = BYPASS
- * (17 confirmados, todas las superficies: window/document/navigator/localStorage/…).
+ * **UNDER-APPROXIMATION CONSERVADORA (fail-closed) — NO igualdad exacta con esbuild.**
+ * La invariante de soundness es `true ⟹ esbuild-instancia` (si decimos instanciado, lo
+ * está → el nombre es shadow runtime → eximir el read es seguro). El REVERSO no se cumple:
+ * esto es un WHITELIST de productores de valor DECIDIBLES; un namespace instanciado SOLO
+ * por un statement runtime-only (expression-statement `Q.z;`, control-flow `if(){}`) NO se
+ * reconoce → devolvemos `false` → over-flag FAIL-CLOSED (codex P2 round-9, verificado: esos
+ * casos divergen de esbuild pero 100% en la dirección segura). Cerrar ese FP exigiría
+ * RECONOCER MÁS instanciación (default-true / blacklist) = la dirección FAIL-OPEN que abrió
+ * los 17 bypasses (§184): un statement que añadiéramos y que esbuild ELIDA sería bypass. Se
+ * mantiene el whitelist; el FP es contrivado (`namespace window { Q.z; }`, 0 en source real).
+ *
+ * REGLA REAL DE ESBUILD para el whitelist (medida empíricamente, deepest final hunt #173 —
+ * NO la que asumía el código anterior). El error previo: tratar TODO value-producer (incl.
+ * `declare` no-exportado y `import Q = N` value-dead) como instanciante. esbuild NO los emite
+ * → un `namespace document { declare var x }` se ELIDE entero y `document.title` leía el
+ * GLOBAL real con el gate exento = BYPASS (17 confirmados: window/document/navigator/…).
  *
  *   INSTANCIA: const/let/var/function/class/enum NO-ambient; o `declare` (ambient)
  *              PERO SOLO si va `export` (`export declare const z` re-exporta una
