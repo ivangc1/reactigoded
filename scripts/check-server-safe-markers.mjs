@@ -856,24 +856,59 @@ function namespaceIsInstantiated(moduleDecl) {
   return body.statements.some(esbuildInstantiatesViaStatement);
 }
 
-/** Un statement de cuerpo de namespace que hace que esbuild EMITA el shell `var N`. */
+/** ¿El statement lleva el modificador `export`? (robusto a la API nueva/vieja de TS). */
+function hasExportModifier(stmt) {
+  const mods =
+    ts.canHaveModifiers && ts.canHaveModifiers(stmt)
+      ? ts.getModifiers(stmt)
+      : stmt.modifiers;
+  return !!mods && mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+}
+
+/**
+ * Un statement de cuerpo de namespace que hace que esbuild EMITA el shell `var N`.
+ *
+ * REGLA REAL DE ESBUILD (medida empíricamente sobre 16 formas, deepest final hunt
+ * #173 — NO la que asumía el código anterior). El error previo: tratar TODO
+ * value-producer (incl. `declare` no-exportado y `import Q = N` value-dead) como
+ * instanciante. esbuild NO los emite → un `namespace document { declare var x }` se
+ * ELIDE entero y `document.title` leía el GLOBAL real con el gate exento = BYPASS
+ * (17 confirmados, todas las superficies: window/document/navigator/localStorage/…).
+ *
+ *   INSTANCIA: const/let/var/function/class/enum NO-ambient; o `declare` (ambient)
+ *              PERO SOLO si va `export` (`export declare const z` re-exporta una
+ *              propiedad → `var N`; un `declare const z` pelado es ambient puro →
+ *              ELIDE); o `import Y = Z` que esbuild emite = value-USED o `export
+ *              import`; o `namespace` anidado NO-ambient que a su vez instancia.
+ *   ELIDE:     `declare …` no-exportado, `import Y = Z` value-dead no-exportado,
+ *              `namespace` anidado ambient, interface/type/import-type, vacío.
+ *
+ * Para import-equals la value-use es binder-territory (parser-puro no la prueba
+ * barato) → fail-closed: solo cuenta `export import` (la forma que esbuild SIEMPRE
+ * emite). Un `import Q = N` no-exportado value-USED igual instancia el namespace
+ * por SU statement de uso (`export const y = Q.z`), no por el import → no se pierde
+ * ningún caso legítimo. Fail-closed: statement no reconocido → false (over-flag).
+ */
 function esbuildInstantiatesViaStatement(stmt) {
-  // Productores de valor DIRECTOS — esbuild emite el shell aunque sean `declare`
-  // (el ambient TOP-LEVEL instancia; verificado): const/let/var/function/class/enum.
+  // Productores de valor: const/let/var/function/class/enum. NO-ambient siempre
+  // instancia; `declare` (ambient) solo si `export` (verificado contra esbuild).
   if (
     ts.isVariableStatement(stmt) ||
     ts.isFunctionDeclaration(stmt) ||
     ts.isClassDeclaration(stmt) ||
     ts.isEnumDeclaration(stmt)
   ) {
-    return true;
+    return isAmbientDeclaration(stmt) ? hasExportModifier(stmt) : true;
   }
-  // `import Y = Z` de valor instancia; type-only no (RHS same-file a tipo = binder,
-  // residual — conservador `!isTypeOnly`, mismo criterio que producesRuntimeValue).
-  if (ts.isImportEqualsDeclaration(stmt)) return !stmt.isTypeOnly;
+  // `import Y = Z`: esbuild instancia si la value-use ocurre, o si es `export import`
+  // (re-export, siempre emitido). El `import` pelado value-dead se ELIDE (raíz de 5
+  // bypasses) → fail-closed: solo `export import` de valor cuenta.
+  if (ts.isImportEqualsDeclaration(stmt)) {
+    return hasExportModifier(stmt) && !stmt.isTypeOnly;
+  }
   // Namespace anidado: instancia SOLO si NO es ambient Y a su vez instancia. El
   // ambient anidado (`export declare namespace I { … }`) esbuild lo BORRA entero →
-  // NO cuenta (raíz del bypass). El no-ambient anidado recurre.
+  // NO cuenta. El no-ambient anidado recurre.
   if (ts.isModuleDeclaration(stmt)) {
     return isAmbientDeclaration(stmt) ? false : namespaceIsInstantiated(stmt);
   }
@@ -1668,6 +1703,22 @@ function foldConstString(node) {
       out += v + span.literal.text;
     }
     return out;
+  }
+  // Concatenación binaria de strings CONSTANTES: `"construc" + "tor"` → "constructor".
+  // Con base `any` (`([] as any)["construc"+"tor"]…`) el `+`-concat compila y escapaba
+  // el selector del eval-sink (deepest final hunt #173, 2 bypasses al Function-ctor).
+  // Solo folda si AMBOS lados son constantes-string (recursivo, cubre concat anidada
+  // y concat dentro de sustitución de template); cualquier operando no-constante
+  // (variable) → undefined → residual data-flow, como `[k]`.
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const l = foldConstString(node.left);
+    if (l === undefined) return undefined;
+    const r = foldConstString(node.right);
+    if (r === undefined) return undefined;
+    return l + r;
   }
   return undefined;
 }

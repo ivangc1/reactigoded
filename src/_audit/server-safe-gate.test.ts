@@ -1391,6 +1391,96 @@ describe("server-safe gate — namespace type-only NO sombrea el global (erased-
 });
 
 /**
+ * DEEPEST FINAL HUNT #173 — 17 bypasses majority-confirmed (cerrados).
+ *
+ * El hunt adversarial final (14 lentes, loop-until-dry, 5 escépticos/superviviente,
+ * oráculo esbuild) cazó 17 bypasses REALES verificados a mano contra esbuild: el gate
+ * EXIMÍA + esbuild emitía 0 shadow → leían el global de cliente REAL. DOS raíces:
+ *
+ *  A) `esbuildInstantiatesViaStatement` marcaba instanciante TODO value-producer,
+ *     incl. `declare` NO-exportado (`namespace document { declare var slot }`) y
+ *     `import Q = N` value-dead (`namespace document { import Q=N; type Z=typeof Q.z }`).
+ *     esbuild ELIDE ambos → el namespace se borra → el read filtra al global. Regla
+ *     REAL de esbuild (medida): ambient instancia SOLO con `export`; import-equals
+ *     SOLO si value-used / `export import`. Misma raíz que el ADR §F4 pinneó como
+ *     riesgo (un nombre erased en el shadow-set = bypass-de-global silencioso).
+ *  B) `foldConstString` no foldeaba `BinaryExpression` `+`: `([] as any)["construc"
+ *     +"tor"]["construc"+"tor"]("return window")` esquivaba el selector del eval-sink.
+ *
+ * Cada bypass DEBE flaggear ahora. Cuerpo del corpus = los snippets exactos del hunt.
+ */
+describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace erased-shadow + eval-sink +concat)", () => {
+  it.each([
+    ["#0 document", "/** @server-safe */\nnamespace N {\n  export const z = 1;\n}\nnamespace document {\n  import Q = N;\n  export type Z = typeof Q.z;\n}\ntype _Use = document.Z;\nexport const Probe = (): _Use => document.title as unknown as _Use;\n"],
+    ["#1 document", "/** @server-safe */\nconst enum Colors {\n  Red,\n}\nnamespace document {\n  import Q = Colors;\n  export type C = Q;\n}\ntype _Touch = document.C;\nexport const Probe = (): string => {\n  const _t = \"\" as unknown as _Touch;\n  void _t;\n  return document.title;\n};\n"],
+    ["#2 window", "/** @server-safe */\nnamespace WinHelpers {\n  export const tag = 1;\n}\nnamespace window {\n  import Q = WinHelpers;\n  export type T = typeof Q.tag;\n}\ntype _Touch = window.T;\nexport const Probe = (): number => {\n  const _t: _Touch = 1;\n  void _t;\n  return window.innerWidth;\n};\n"],
+    ["#3 navigator", "/** @server-safe */\nnamespace UAData {\n  export const ua = \"x\";\n}\nnamespace navigator {\n  import Q = UAData;\n  export type U = typeof Q.ua;\n}\ntype _Touch = navigator.U;\nexport const Probe = (): string => {\n  const _t: _Touch = \"x\";\n  void _t;\n  return navigator.userAgent;\n};\n"],
+    ["#4 localStorage", "/** @server-safe */\nnamespace StoreImpl {\n  export const v = { get(_k: string): string { return \"\"; } };\n}\nnamespace localStorage {\n  import Q = StoreImpl;\n  export type S = typeof Q.v;\n}\ntype _Touch = localStorage.S;\nexport const Probe = (k: string): string => {\n  const _t: _Touch | null = null;\n  void _t;\n  return localStorage.getItem(k) ?? \"\";\n};\n"],
+    ["#5 localStorage", "/** @server-safe */\nexport namespace localStorage {\n  declare var slot: number;\n}\nexport function readToken(): string | null {\n  return (localStorage as unknown as Storage).getItem(\"auth-token\");\n}\n"],
+    ["#6 sessionStorage", "/** @server-safe */\nexport namespace sessionStorage {\n  declare function noop(): void;\n}\nexport function readSession(key: string): string | null {\n  return (sessionStorage as unknown as Storage).getItem(key);\n}\n"],
+    ["#7 document", "/** @server-safe */\nexport namespace document {\n  declare class Marker {}\n}\nexport function findRoot(): Element | null {\n  return (document as unknown as Document).querySelector(\"#root\");\n}\n"],
+    ["#8 indexedDB", "/** @server-safe */\nexport namespace indexedDB {\n  namespace Schema {\n    declare const version: number;\n  }\n}\nexport function openStore(name: string): unknown {\n  return (indexedDB as unknown as IDBFactory).open(name);\n}\n"],
+    ["#9 window", "/** @server-safe */\nexport namespace window {\n  declare enum Phase { Idle, Active }\n}\nexport function getInnerWidth(): number {\n  return (window as unknown as { innerWidth: number }).innerWidth;\n}\n"],
+    ["#10 window eval-sink +concat", "/** @server-safe */\nexport function Banner() {\n  const read = ([] as any)[\"construc\" + \"tor\"][\"construc\" + \"tor\"](\"return window.location.href\");\n  return <div data-href={String(read())} />;\n}\n"],
+    ["#11 window eval-sink +concat en template", "/** @server-safe */\nexport function C() {\n  const w = ([] as any)[`${\"construc\" + \"tor\"}`][`${\"construc\" + \"tor\"}`](\"return window\")();\n  return <i>{String(w)}</i>;\n}\n"],
+    ["#12 screen", "/** @server-safe */\nnamespace screen {\n  declare const _internal: number;\n}\nexport const Screen = () => {\n  const dims = screen as unknown as { width: number; height: number };\n  return dims.width * dims.height;\n};\n"],
+    ["#13 navigator", "/** @server-safe */\nnamespace navigator {\n  declare class _Probe {}\n}\nexport const UA = () => {\n  const { userAgent } = navigator as unknown as { userAgent: string };\n  return userAgent.toLowerCase();\n};\n"],
+    ["#14 indexedDB", "/** @server-safe */\nnamespace indexedDB {\n  declare enum _Tag { X }\n}\nexport const OpenDb = () => {\n  const idb = indexedDB as unknown as { open(name: string): { result: unknown } };\n  return idb.open(\"app\").result;\n};\n"],
+    ["#15 caches", "/** @server-safe */\nnamespace caches {\n  declare function _shape(): void;\n}\nexport const HasCache = () => {\n  const store = caches as unknown as { has(k: string): Promise<boolean> };\n  return store.has(\"v1\");\n};\n"],
+    ["#16 localStorage default-param", "/** @server-safe */\nnamespace localStorage {\n  declare const _slot: string;\n}\nexport const Read = (\n  key: string | null = (localStorage as unknown as { getItem(k: string): string | null }).getItem(\"k\"),\n) => {\n  return key;\n};\n"],
+  ])("FLAGGEA bypass cazado por el hunt: %s", (_label, code) => {
+    expect(checkSourceFile(code, "deepest-hunt.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  // 0-FP: instanciación GENUINA (la regla real de esbuild) sigue eximiendo.
+  it.each([
+    ["export declare const (ambient exportado instancia)", "/** @server-safe */\nnamespace document { export declare const slot: number; }\nexport function P() { return document.slot; }"],
+    ["export declare function", "/** @server-safe */\nnamespace navigator { export declare function probe(): void; }\nexport function P() { navigator.probe(); return null; }"],
+    ["import-equals value-USED instancia (via export const)", "/** @server-safe */\nnamespace Other { export const z = 1; }\nnamespace window { import Q = Other; export const y = Q.z; }\nexport function P() { return window.y; }"],
+    ["export import instancia", "/** @server-safe */\nnamespace Other { export const z = 1; }\nnamespace screen { export import Q = Other; }\nexport function P() { return screen.Q.z; }"],
+    ["non-ambient const instancia", "/** @server-safe */\nnamespace localStorage { export const slot = 1; }\nexport function P() { return localStorage.slot; }"],
+  ])("0-FP namespace genuinamente instanciado sigue clean: %s", (_label, code) => {
+    expect(checkSourceFile(code, "ns-inst.fixture.tsx")).toEqual([]);
+  });
+
+  // PIN ANTI-DIVERGENCIA: el veredicto del gate (exime ⟺ cree instanciado) DEBE
+  // coincidir con el EMIT REAL de esbuild (el oráculo del build, no tsc) en cada
+  // forma de miembro de namespace. Si TS/esbuild/refactor divergen, esto revienta.
+  it.each([
+    ["declare var", "declare var v: number;"],
+    ["export declare const", "export declare const v: number;"],
+    ["declare const", "declare const v: number;"],
+    ["declare function", "declare function f(): void;"],
+    ["export declare function", "export declare function f(): void;"],
+    ["declare class", "declare class C {}"],
+    ["export declare class", "export declare class C {}"],
+    ["declare enum", "declare enum E { A }"],
+    ["export declare enum", "export declare enum E { A }"],
+    ["import value-dead", "import Q = Other; export type Z = typeof Q.z;"],
+    ["import value-used", "import Q = Other; export const y = Q.z;"],
+    ["export import", "export import Q = Other;"],
+    ["non-ambient const", "const v = 1;"],
+    ["export const", "export const v = 1;"],
+    ["nested declare namespace", "declare namespace I { const e: number }"],
+    ["nested ns + const", "namespace I { export const e = 1 }"],
+    ["interface only", "interface I { a: number }"],
+    ["type only", "type T = number;"],
+    ["empty", ""],
+  ])("gate == esbuild para namespace { %s }", (_label, member) => {
+    const code =
+      "/** @server-safe */\nnamespace Other { export const z = 1; }\nnamespace window { " +
+      member +
+      " }\nexport function P() { return window.innerWidth; }\n";
+    const emit = transformSync(code, { loader: "tsx", format: "esm" }).code;
+    const esbuildInstantiates =
+      /\bvar window\b/.test(emit) || /\(\s*window2?\s*=>/.test(emit);
+    const gateExempts =
+      checkSourceFile(code, "matrix.fixture.tsx").length === 0;
+    expect(gateExempts).toBe(esbuildInstantiates);
+  });
+});
+
+/**
  * INVARIANTE DE CAPA — tsc bloquea el shadow TDZ (rebuttal PINEADO, beta.27).
  *
  * Codex (P2) señaló que el gate pasa `if (typeof window === "undefined") return;
