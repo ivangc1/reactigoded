@@ -1665,11 +1665,11 @@ function accessedMemberName(node) {
     // no-literal → undefined → residual data-flow (#3); `[k || "x"]` con "x" benigno
     // tampoco da weaponizable → sigue residual.
     const leaves = valueTransparentLeaves(node.argumentExpression);
-    // foldConstString folda además TemplateExpression con sustituciones constantes
-    // (`` `cal${"l"}` `` → "call") — antes solo isStringLiteralLike, así que la
-    // sustitución de template en el selector escapaba (`g.constructor[`cal${"l"}`]`,
-    // bypass eval-sink, deepest re-hunt #173). El no-substitution template y el literal
-    // ya se cazaban.
+    // foldConstString resuelve SOLO un string-literal único por hoja (frontera
+    // token-unidad-vs-ensamblado, §141): `["constructor"]`, `` [`constructor`] `` y los
+    // wrappers value-transparentes (`[1 && "constructor"]`, `[(0,"constructor")]`) se cazan;
+    // CUALQUIER key ENSAMBLADA (`["construc"+"tor"]`, `` [`cons${"tructor"}`] ``,
+    // `[String.fromCharCode(…)]`, `[k]` variable) → undefined → residual por diseño.
     const literals = leaves
       .map(foldConstString)
       .filter((s) => s !== undefined);
@@ -1695,31 +1695,30 @@ function accessedMemberName(node) {
 function foldConstString(node) {
   node = unwrapErased(node);
   if (ts.isStringLiteralLike(node)) return node.text;
-  if (ts.isTemplateExpression(node)) {
-    let out = node.head.text;
-    for (const span of node.templateSpans) {
-      const v = foldConstString(span.expression);
-      if (v === undefined) return undefined;
-      out += v + span.literal.text;
-    }
-    return out;
-  }
-  // Concatenación binaria de strings CONSTANTES: `"construc" + "tor"` → "constructor".
-  // Con base `any` (`([] as any)["construc"+"tor"]…`) el `+`-concat compila y escapaba
-  // el selector del eval-sink (deepest final hunt #173, 2 bypasses al Function-ctor).
-  // Solo folda si AMBOS lados son constantes-string (recursivo, cubre concat anidada
-  // y concat dentro de sustitución de template); cualquier operando no-constante
-  // (variable) → undefined → residual data-flow, como `[k]`.
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind === ts.SyntaxKind.PlusToken
-  ) {
-    const l = foldConstString(node.left);
-    if (l === undefined) return undefined;
-    const r = foldConstString(node.right);
-    if (r === undefined) return undefined;
-    return l + r;
-  }
+  // FRONTERA token-unidad-vs-ENSAMBLADO (ADR §141, eje del eval-sink). SOLO se resuelve
+  // una key que sea un string-literal ÚNICO — `StringLiteral` o template SIN sustitución
+  // (`` `constructor` ``); ambos son `isStringLiteralLike`. Los wrappers value-transparentes
+  // (`(0,"x")`, `("x")`, `"x" as T`, `1 && "x"`, ternario-literal) los desenvuelve antes
+  // `valueTransparentLeaves`, así que el token ENVUELTO sigue cazándose (B1).
+  //
+  // CUALQUIER ENSAMBLAJE del token queda SIN RESOLVER → residual POR DISEÑO:
+  //   - concat:           `["construc" + "tor"]`
+  //   - sustitución tmpl: `` [`cons${"tructor"}`] ``
+  //   - intrínsecos:      `[String.fromCharCode(99,…)]`, `[[".."].join("")]`, `[".".slice()]`
+  //   - indirección:      `const k = "constructor"; [k]` (data-flow)
+  //
+  // Foldear un SUBCONJUNTO del ensamblaje (lo hacían el `+`-concat —CLASE B 4924427— y la
+  // sustitución de template) era FALSA COMPLETITUD, exactamente lo que el §141 (ratificado)
+  // rechaza: cazaba 1-de-∞ escrituras equivalentes (el ternario-concat `"cons"+(true?"tructor":"")`
+  // y fromCharCode se escapaban igual → verificado), daba falsa confianza ("manejamos
+  // string-building" = mentira), y bajo el modelo opt-in-first-party NINGÚN autor honesto
+  // ensambla el token sin querer (todo ensamblaje es deliberado = el no-adversario descartado).
+  // Revertir ambos folds hace VERDADERA la afirmación de la frontera ("cazo el token en su
+  // sitio como unidad; ensamblaje e indirección son residual") y reduce la superficie de FP
+  // (§184). La alternativa "folder TODO inline-constante" (fromCharCode/join/slice/…) es el
+  // mismo 1-de-∞ sin cierre + reimplementar el evaluador de constantes. Línea = ¿el token está
+  // presente como UNIDAD (literal/member), o ARMADO de piezas? — sintáctica, sin folder ni
+  // call-graph. deepest final hunt #173.
   return undefined;
 }
 

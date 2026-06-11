@@ -1391,21 +1391,23 @@ describe("server-safe gate — namespace type-only NO sombrea el global (erased-
 });
 
 /**
- * DEEPEST FINAL HUNT #173 — 17 bypasses majority-confirmed (cerrados).
+ * DEEPEST FINAL HUNT #173 — 15 bypasses de namespace cerrados (los 2 eval-sink → residual).
  *
  * El hunt adversarial final (14 lentes, loop-until-dry, 5 escépticos/superviviente,
- * oráculo esbuild) cazó 17 bypasses REALES verificados a mano contra esbuild: el gate
- * EXIMÍA + esbuild emitía 0 shadow → leían el global de cliente REAL. DOS raíces:
+ * oráculo esbuild) cazó 17 candidatos. **15 (namespace erased-shadow) eran bypasses REALES
+ * del MODELO del gate** (su predicado de instanciación divergía de esbuild) → cerrados aquí.
+ * Los 2 eval-sink (`+`-concat / template-sub) NO eran bug del modelo: el gate entiende el
+ * emit, solo declina la ofuscación → son el residual §141 (ver el bloque "frontera del
+ * eval-sink" abajo); el fold que los cazaba se REVIRTIÓ por incoherencia con §141 (falsa
+ * completitud). Aquí queda la raíz de namespace:
  *
- *  A) `esbuildInstantiatesViaStatement` marcaba instanciante TODO value-producer,
+ *     `esbuildInstantiatesViaStatement` marcaba instanciante TODO value-producer,
  *     incl. `declare` NO-exportado (`namespace document { declare var slot }`) y
  *     `import Q = N` value-dead (`namespace document { import Q=N; type Z=typeof Q.z }`).
  *     esbuild ELIDE ambos → el namespace se borra → el read filtra al global. Regla
  *     REAL de esbuild (medida): ambient instancia SOLO con `export`; import-equals
  *     SOLO si value-used / `export import`. Misma raíz que el ADR §F4 pinneó como
  *     riesgo (un nombre erased en el shadow-set = bypass-de-global silencioso).
- *  B) `foldConstString` no foldeaba `BinaryExpression` `+`: `([] as any)["construc"
- *     +"tor"]["construc"+"tor"]("return window")` esquivaba el selector del eval-sink.
  *
  * Cada bypass DEBE flaggear ahora. Cuerpo del corpus = los snippets exactos del hunt.
  */
@@ -1421,8 +1423,6 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     ["#7 document", "/** @server-safe */\nexport namespace document {\n  declare class Marker {}\n}\nexport function findRoot(): Element | null {\n  return (document as unknown as Document).querySelector(\"#root\");\n}\n"],
     ["#8 indexedDB", "/** @server-safe */\nexport namespace indexedDB {\n  namespace Schema {\n    declare const version: number;\n  }\n}\nexport function openStore(name: string): unknown {\n  return (indexedDB as unknown as IDBFactory).open(name);\n}\n"],
     ["#9 window", "/** @server-safe */\nexport namespace window {\n  declare enum Phase { Idle, Active }\n}\nexport function getInnerWidth(): number {\n  return (window as unknown as { innerWidth: number }).innerWidth;\n}\n"],
-    ["#10 window eval-sink +concat", "/** @server-safe */\nexport function Banner() {\n  const read = ([] as any)[\"construc\" + \"tor\"][\"construc\" + \"tor\"](\"return window.location.href\");\n  return <div data-href={String(read())} />;\n}\n"],
-    ["#11 window eval-sink +concat en template", "/** @server-safe */\nexport function C() {\n  const w = ([] as any)[`${\"construc\" + \"tor\"}`][`${\"construc\" + \"tor\"}`](\"return window\")();\n  return <i>{String(w)}</i>;\n}\n"],
     ["#12 screen", "/** @server-safe */\nnamespace screen {\n  declare const _internal: number;\n}\nexport const Screen = () => {\n  const dims = screen as unknown as { width: number; height: number };\n  return dims.width * dims.height;\n};\n"],
     ["#13 navigator", "/** @server-safe */\nnamespace navigator {\n  declare class _Probe {}\n}\nexport const UA = () => {\n  const { userAgent } = navigator as unknown as { userAgent: string };\n  return userAgent.toLowerCase();\n};\n"],
     ["#14 indexedDB", "/** @server-safe */\nnamespace indexedDB {\n  declare enum _Tag { X }\n}\nexport const OpenDb = () => {\n  const idb = indexedDB as unknown as { open(name: string): { result: unknown } };\n  return idb.open(\"app\").result;\n};\n"],
@@ -2537,19 +2537,50 @@ describe("server-safe gate — DEEPEST re-hunt #173: namespaceIsInstantiated = o
   });
 });
 
-describe("server-safe gate — DEEPEST re-hunt #173: eval-sink template-selector fold", () => {
-  const EVAL: ReadonlyArray<readonly [string, string]> = [
-    ["call", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`ca${"ll"}`](null, "return window")(); }'],
-    ["apply", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`app${"ly"}`](null, ["return window"])(); }'],
-    ["bind", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`bi${"nd"}`](null)(); }'],
-  ];
-  for (const [sel, code] of EVAL) {
-    it(`.${sel} via template-substitution FLAGGEA (selector foldeado)`, () => {
-      expect(checkSourceFile(code, `evalsink-${sel}.fixture.tsx`).length).toBeGreaterThan(0);
-    });
-  }
+/**
+ * FRONTERA DEL EVAL-SINK — token-UNIDAD-EN-SU-SITIO caza; ENSAMBLAJE/INDIRECCIÓN = residual.
+ *
+ * ADR §141. La línea NO es "legible vs ofuscado" (gradiente) sino sintáctica y decidible
+ * sin folder ni call-graph: ¿el token peligroso (`constructor`/`call`/`apply`/`bind`) está
+ * presente como UNIDAD —member `.constructor`, o string-literal único `["constructor"]`,
+ * con wrappers value-transparentes desenvueltos— = CAZAR; o está ARMADO de piezas
+ * (concat, sustitución de template, `String.fromCharCode`/`.join`/`.slice`) o alcanzado por
+ * INDIRECCIÓN (variable, data-flow) = RESIDUAL POR DISEÑO?
+ *
+ * El `+`-concat (CLASE B, 4924427) y la sustitución de template se foldeaban antes; se
+ * REVIRTIERON (deepest final hunt #173) por INCOHERENCIA con el §141 ratificado: foldear un
+ * SUBCONJUNTO del ensamblaje es FALSA COMPLETITUD (caza 1-de-∞ — el ternario-concat y
+ * fromCharCode pasan igual, verificado), da falsa confianza, y bajo el modelo opt-in-first-party
+ * ningún autor honesto ensambla el token sin querer. Revertir hace VERDADERA la afirmación de
+ * la frontera y reduce superficie de FP (§184). La alternativa (folder TODO inline-constante)
+ * es el mismo 1-de-∞ + reimplementar el evaluador de constantes (out-of-design, B4/F4).
+ */
+describe("server-safe gate — frontera eval-sink: token-unidad caza, ensamblaje = residual (§141)", () => {
+  // Token EN SU SITIO como unidad (member o literal único), wrappers value-transparentes OK → CAZA.
+  it.each([
+    ["member .constructor.constructor()", '/** @server-safe */\nexport function f(){ return ([] as any).constructor.constructor("return window")(); }'],
+    ["literal [\"constructor\"][\"constructor\"]", '/** @server-safe */\nexport function f(){ return ([] as any)["constructor"]["constructor"]("return window")(); }'],
+    ["no-sub template [`constructor`]", '/** @server-safe */\nexport function f(){ return ([] as any)[`constructor`][`constructor`]("return window")(); }'],
+    ["value-transparent (0,\"constructor\")", '/** @server-safe */\nexport function f(){ return ([] as any)[(0,"constructor")][(0,"constructor")]("return window")(); }'],
+    ["value-transparent 1 && \"constructor\"", '/** @server-safe */\nexport function f(){ return ([] as any)[1 && "constructor"]["constructor"]("return window")(); }'],
+    [".call literal sobre .constructor", '/** @server-safe */\nexport function f(g: () => void){ return g.constructor["call"](null, "return window")(); }'],
+  ])("CAZA token-unidad: %s", (_l, code) => {
+    expect(checkSourceFile(code, "unit.fixture.tsx").length).toBeGreaterThan(0);
+  });
 
-  it("SOUNDNESS: key dinámica real [k] no foldea (residual data-flow, no crashea)", () => {
+  // Token ENSAMBLADO de piezas → RESIDUAL POR DISEÑO (exime). NO es bug: §141 lo declina.
+  it.each([
+    ["concat literal [\"construc\"+\"tor\"]", '/** @server-safe */\nexport function f(){ return ([] as any)["construc"+"tor"]["construc"+"tor"]("return window")(); }'],
+    ["sustitución template [`cons${\"tructor\"}`]", '/** @server-safe */\nexport function f(){ return ([] as any)[`cons${"tructor"}`][`cons${"tructor"}`]("return window")(); }'],
+    ["concat con ternario-literal (ambas keys)", '/** @server-safe */\nexport function f(){ return ([] as any)["cons"+(true?"tructor":"")]["cons"+(true?"tructor":"")]("return window")(); }'],
+    ["String.fromCharCode", '/** @server-safe */\nexport function f(){ return ([] as any)[String.fromCharCode(99,111,110,115,116,114,117,99,116,111,114)]("return window")(); }'],
+    ["[..].join('')", '/** @server-safe */\nexport function f(){ return ([] as any)[["construc","tor"].join("")]("return window")(); }'],
+    [".call via template-substitution", '/** @server-safe */\nexport function f(g: () => void) { return g.constructor[`ca${"ll"}`](null, "return window")(); }'],
+  ])("RESIDUAL §141 (token ensamblado, exime por diseño): %s", (_l, code) => {
+    expect(checkSourceFile(code, "assembled.fixture.tsx")).toEqual([]);
+  });
+
+  it("SOUNDNESS: key dinámica real [k] (indirección) tampoco foldea, no crashea", () => {
     const code = `/** @server-safe */\nexport function f(g: () => void, k: string) { return (g.constructor as Record<string, (...a: unknown[]) => unknown>)[k]; }`;
     expect(() => checkSourceFile(code, "dynkey.fixture.tsx")).not.toThrow();
   });
@@ -2583,9 +2614,19 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
     expect(flagged(`/** @server-safe */\nimport tokens from "./tokens.json" with { type: "json" };\nexport function S() { return <div data-x={(tokens as { c: string }).c} />; }`)).toBe(false);
   });
 
-  // — typeof-guard template-substitution (FP18) —
-  it("FP18: guard `typeof X !== \\`${\"undefined\"}\\`` (template constante) se reconoce", () => {
-    expect(flagged('/** @server-safe */\nexport function C() { if (typeof window !== `${"undefined"}`) { return window.location.href; } return null; }')).toBe(false);
+  // — typeof-guard: string ENSAMBLADO no se reconoce (frontera §141, misma foldConstString) —
+  // El string del guard se resuelve con la MISMA regla token-unidad que el eval-sink: literal
+  // (`"undefined"`) y no-sub template (`` `undefined` ``) SÍ; sustitución (`` `${"undefined"}` ``)
+  // es ENSAMBLAJE → no se resuelve → el guard no se reconoce → over-flag FAIL-CLOSED. Ningún
+  // autor honesto escribe `typeof x !== \`${"undefined"}\`` (escribe el literal) → el over-flag
+  // es sobre código contrivado, dirección segura. El fold de sustitución se revirtió con el
+  // del eval-sink por coherencia (deepest final hunt #173).
+  it("guard con LITERAL se reconoce (no flaggea)", () => {
+    expect(flagged('/** @server-safe */\nexport function C() { if (typeof window !== "undefined") { return window.location.href; } return null; }')).toBe(false);
+    expect(flagged('/** @server-safe */\nexport function C() { if (typeof window !== `undefined`) { return window.location.href; } return null; }')).toBe(false);
+  });
+  it("guard con string ENSAMBLADO (sustitución) → over-flag fail-closed (no se reconoce)", () => {
+    expect(flagged('/** @server-safe */\nexport function C() { if (typeof window !== `${"undefined"}`) { return window.location.href; } return null; }')).toBe(true);
   });
   it("SOUNDNESS: template DINÁMICO en el guard NO se reconoce (sigue flaggeando)", () => {
     expect(flagged('/** @server-safe */\nexport function C(x: string) { if (typeof window !== `${x}`) { return window.location.href; } return null; }')).toBe(true);
