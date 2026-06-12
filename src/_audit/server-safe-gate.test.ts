@@ -1538,8 +1538,17 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     // El root `React` ∈ reactImports.namespaces file-global PERO sombreado localmente por FakeReact
     // (no-react) → el check debe ser scope-aware (root ∉ priorNonImport), no file-global.
     ["import-equals cadena con root sombreado (codex P1)", '/** @server-safe */\nimport * as React from "react";\nimport { useEffect } from "react";\nexport const _r = React;\nexport const _u = useEffect;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { import React = FakeReact; import useEffect = React.useEffect; useEffect(() => { document.title = "x"; }); }'],
+    // codex P1 round-10: función visitada ANTES de un `const useEffect = Sync.run` POSTERIOR
+    // en el mismo scope — léxicamente liga al const local síncrono, no al hook react file-global.
+    // Requiere PRE-CARGA de sombras léxicas (gatherNonReactLexicalShadows) al entrar el scope.
+    ["sombra léxica POSTERIOR (función antes del const, codex P1-r10)", '/** @server-safe */\nimport { useEffect } from "react";\nexport const real = useEffect;\nconst Sync = { run(cb: () => void) { cb(); } };\nnamespace N { export function C() { useEffect(() => { void window.location.href; }); } const useEffect = Sync.run; }\nexport const _n = N;'],
   ])("FLAGGEA import-equals no-react que sombrea un hook: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
+  });
+
+  // A — no-regresión: hook real de react diferido sigue exento (no afectado por la pre-carga)
+  it("0-FP: useEffect REAL de react (sin shadow) sigue EXENTO", () => {
+    expect(flagged('/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { useEffect(() => { void window.location.href; }); return null; }')).toBe(false);
   });
 
   // A — no-regresión: import-equals que SÍ aliasa react sigue exento (FP14/15), directo y en cadena

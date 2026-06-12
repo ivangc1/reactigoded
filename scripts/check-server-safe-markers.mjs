@@ -1031,6 +1031,56 @@ function gatherBlockLexicalNames(statements) {
   return out;
 }
 
+/**
+ * Nombres block-lexical de un scope que SOMBREAN un binding con un valor NO-react —
+ * para PRE-CARGARLOS en nonImportBindings al ENTRAR el scope. Sin esto, una función
+ * visitada ANTES de un `const useEffect = Sync.run` posterior resuelve `useEffect` al
+ * hook react file-global y se exime, aunque léxicamente el call liga al const local
+ * síncrono → BYPASS (codex P1 round-10, el gemelo del purge de guard-aliases). Igual
+ * que `gatherBlockLexicalNames` PERO excluye los import-equals que aliasan react (esos
+ * SÍ son hooks legítimos, FP14/15) — 2 pasadas: primero los no-import-equals (siempre
+ * no-react), luego los import-equals contra el set ya acumulado (cierra la cadena
+ * `import React = FakeReact; import useEffect = React.useEffect`).
+ */
+function gatherNonReactLexicalShadows(statements, reactImports, baseNonImport) {
+  const shadows = new Set();
+  for (const stmt of statements) {
+    if (ts.isVariableStatement(stmt)) {
+      if (isBlockScopedDeclList(stmt.declarationList.flags)) {
+        for (const d of stmt.declarationList.declarations) {
+          if (!isAmbientDeclaration(d)) addBindingNamesFromPattern(d.name, shadows);
+        }
+      }
+    } else if (
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      (ts.isClassDeclaration(stmt) ||
+        ts.isFunctionDeclaration(stmt) ||
+        ts.isEnumDeclaration(stmt) ||
+        ts.isModuleDeclaration(stmt)) &&
+      producesRuntimeValue(stmt)
+    ) {
+      shadows.add(stmt.name.text);
+    }
+  }
+  for (const stmt of statements) {
+    if (
+      ts.isImportEqualsDeclaration(stmt) &&
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      producesRuntimeValue(stmt)
+    ) {
+      const prior = baseNonImport
+        ? new Set([...baseNonImport, ...shadows])
+        : shadows;
+      if (!importEqualsAliasesReact(stmt, reactImports, prior)) {
+        shadows.add(stmt.name.text);
+      }
+    }
+  }
+  return shadows;
+}
+
 /** Devuelve un context con `guardAliases` purgado de `names` (sombras léxicas). */
 function purgeGuardAliasShadows(context, names) {
   if (!context.guardAliases || context.guardAliases.size === 0 || names.size === 0) {
@@ -3191,6 +3241,27 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
       }
       current = purgeGuardAliasShadows(current, caseLexical);
+      // PRE-CARGA de sombras léxicas no-react (codex P1 round-10) — todo el CaseBlock es
+      // UN scope léxico, así que un `const useEffect = Sync.run` en cualquier clause sombrea
+      // las funciones de cualquier otro.
+      {
+        const caseShadows = new Set();
+        for (const clause of node.clauses) {
+          for (const n of gatherNonReactLexicalShadows(
+            clause.statements,
+            current.reactImports,
+            current.nonImportBindings,
+          )) {
+            caseShadows.add(n);
+          }
+        }
+        if (caseShadows.size > 0) {
+          current = {
+            ...current,
+            nonImportBindings: new Set([...current.nonImportBindings, ...caseShadows]),
+          };
+        }
+      }
       let prevTerminates = true; // antes del 1er clause no hay fall-through entrante
       for (const clause of node.clauses) {
         if (ts.isCaseClause(clause) && clause.expression) {
@@ -3497,6 +3568,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // esos nombres al ENTRAR el bloque; el alias propio se re-añade posicionalmente tras
     // su `const X = <guard>`.
     current = purgeGuardAliasShadows(current, gatherBlockLexicalNames(statements));
+    // PRE-CARGA de sombras léxicas no-react en nonImportBindings: una función visitada
+    // ANTES de un `const useEffect = Sync.run` posterior debe ver el shadow para que el
+    // deferred-hook shadow-guard dispare (codex P1 round-10, scope-aware no posicional).
+    // Solo nonImportBindings (no localBindings, para no tocar el shadow-de-global/TDZ).
+    {
+      const lexShadows = gatherNonReactLexicalShadows(
+        statements,
+        current.reactImports,
+        current.nonImportBindings,
+      );
+      if (lexShadows.size > 0) {
+        current = {
+          ...current,
+          nonImportBindings: new Set([...current.nonImportBindings, ...lexShadows]),
+        };
+      }
+    }
     for (const stmt of statements) {
       visit(stmt, current);
       const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports, current.nonImportBindings);
