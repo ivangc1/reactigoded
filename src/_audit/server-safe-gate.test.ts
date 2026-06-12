@@ -401,7 +401,7 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     });
     const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
     expect(violations.length).toBeGreaterThan(0);
-    expect(violations.some((v) => /AMBIGUO/.test(v.reason ?? v.detail ?? ""))).toBe(true);
+    expect(violations.some((v) => /AMBIGUO/.test(v.detail))).toBe(true);
   });
 
   it("0-FP: sin hermano de mayor precedencia, el .ts resuelve normal (sin fallo espurio)", () => {
