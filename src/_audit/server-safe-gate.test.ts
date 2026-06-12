@@ -1512,6 +1512,57 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
 });
 
 /**
+ * DEEPEST FINAL HUNT #173 round-2 — 2 clases de bypass deferred-execution cerradas.
+ *
+ *  A) import-equals que SOMBREA un hook diferido con una función SÍNCRONA no-react:
+ *     `namespace App { import useEffect = Sync.run; useEffect(() => document.title) }`.
+ *     Round-8 excluyó TODO import-equals de nonImportBindings (para `import ue =
+ *     React.useEffect`, FP14/15) — demasiado amplio: el alias no-react no se registraba
+ *     como shadow → el check canónico file-global lo trataba como el hook react diferido
+ *     → eximía. Fix: import-equals va a nonImport SALVO que aliase react (RHS root ∈
+ *     reactImports.namespaces). Sync.run/FakeReact → shadow → flagea; React.* → exempt.
+ *  B) tag JSX `$Foo`/`_Foo` clasificado como intrínseco por `first === first.toLowerCase()`
+ *     (`$`/`_` no son ni mayúscula ni minúscula) → eximía su handler. React los emite como
+ *     COMPONENTES (`jsx($Foo,…)`), que pueden invocar `props.onClick()` SÍNCRONO en render.
+ *     Fix: intrínseco ⟺ `/^[a-z]/` (lowercase LETTER), la regla real de esbuild.
+ */
+describe("server-safe gate — deferred-execution: import-equals hook-shadow + JSX $/_ component tag (hunt final #173 r2)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "r2.fixture.tsx").length > 0;
+
+  // A — import-equals shadow de hook con función síncrona no-react → FLAGGEA
+  it.each([
+    ["import useEffect = Sync.run", '/** @server-safe */\nimport { useEffect } from "react";\nexport const realHook = useEffect;\nnamespace Sync { export function run(cb: () => void): void { cb(); } }\nexport namespace App { import useEffect = Sync.run; useEffect(() => { document.title = "x"; }); }'],
+    ["import React = FakeReact (namespace alias)", '/** @server-safe */\nimport * as React from "react";\nexport const r = React;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { import React = FakeReact; React.useEffect(() => { document.title = "x"; }); }'],
+  ])("FLAGGEA import-equals no-react que sombrea un hook: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  // A — no-regresión: import-equals que SÍ aliasa react sigue exento (FP14/15)
+  it("0-FP: import-equals a REACT (ue=React.useEffect, R=React) sigue EXENTO", () => {
+    expect(flagged('/** @server-safe */\nimport * as React from "react";\nimport R = React;\nimport ue = React.useEffect;\nexport function C() { ue(() => { document.title = "x"; }); R.useEffect(() => { window.scrollTo(0,0); }); return null; }')).toBe(false);
+  });
+
+  // B — tag JSX $/_-prefijo es COMPONENTE → handler NO exento → FLAGGEA
+  it.each([
+    ["$Panel onClick síncrono", '/** @server-safe */\nfunction $Panel(props: { onClick: () => void }) { props.onClick(); return null; }\nexport function C() { return <$Panel onClick={() => { window.alert(document.cookie); }} />; }'],
+    ["_Widget onMount síncrono", '/** @server-safe */\nfunction _Widget(props: { onMount: () => void }) { props.onMount(); return null; }\nexport function C() { return <_Widget onMount={() => { localStorage.setItem("k", screen.width + ""); }} />; }'],
+    ["Upper onShow", '/** @server-safe */\nfunction Box(props: { onShow: () => void }) { props.onShow(); return null; }\nexport function C() { return <Box onShow={() => { history.pushState(null, "", location.href); }} />; }'],
+  ])("FLAGGEA handler en COMPONENTE custom (corre síncrono en render): %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  // B — no-regresión: handler en INTRÍNSECO (lowercase letter) sigue exento
+  it.each([
+    ["<button onClick>", '/** @server-safe */\nexport function C() { return <button onClick={() => { window.alert(document.cookie); }}>x</button>; }'],
+    ["<div onMouseEnter>", '/** @server-safe */\nexport function C() { return <div onMouseEnter={() => { void localStorage.length; }} />; }'],
+    ["<x$ onClick> (lowercase-first intrínseco)", '/** @server-safe */\nexport function C() { return <x$ onClick={() => { void window.name; }} />; }'],
+  ])("0-FP: handler en intrínseco lowercase sigue EXENTO: %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+});
+
+/**
  * INVARIANTE DE CAPA — tsc bloquea el shadow TDZ (rebuttal PINEADO, beta.27).
  *
  * Codex (P2) señaló que el gate pasa `if (typeof window === "undefined") return;

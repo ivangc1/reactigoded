@@ -641,8 +641,15 @@ function isDeferredExecutionContext(fnNode, context) {
       ) {
         const tagName = jsxElement.tagName;
         if (ts.isIdentifier(tagName)) {
-          const first = tagName.text.charAt(0);
-          if (first && first === first.toLowerCase()) {
+          // Intrínseco (host string `<button>`) ⟺ el tag empieza por LETRA MINÚSCULA
+          // [a-z] — la regla REAL de React/esbuild (verificado): `<$Foo>`/`<_Foo>`/`<Upper>`
+          // son COMPONENTES (esbuild emite `jsx($Foo,…)`), no strings. El check viejo
+          // `first === first.toLowerCase()` tomaba `$`/`_` como "minúscula" → clasificaba
+          // `$Panel`/`_Widget` como intrínsecos → eximía su handler, pero un componente
+          // custom puede invocar `props.onClick()` SÍNCRONO en render → lee el global en SSR
+          // = BYPASS (hunt final #173, 4 confirmados $/_-prefijo). Solo el intrínseco real
+          // (lowercase letter) difiere el handler al evento del DOM post-render.
+          if (/^[a-z]/.test(tagName.text)) {
             return "client";
           }
         }
@@ -1218,7 +1225,7 @@ function gatherSourceFileFunctionDeclarations(sourceFile) {
  * los let/const se pre-cargaban a scope-entry, false-shadow-eando reads
  * anteriores.
  */
-function extractPostStatementBindings(stmt) {
+function extractPostStatementBindings(stmt, reactImports) {
   // `all`: todos los bindings (para localBindings — sombrean globals). `nonImport`:
   // SOLO los locales NO-import (para nonImportBindings, que distingue un shadow local
   // de un hook real). `import X = …` es IMPORT-LIKE → va a `all` pero NO a `nonImport`
@@ -1252,10 +1259,37 @@ function extractPostStatementBindings(stmt) {
     producesRuntimeValue(stmt)
   ) {
     all.add(stmt.name.text);
-    // import-equals es import-like → NO va a nonImport (no es un shadow local).
-    if (!ts.isImportEqualsDeclaration(stmt)) nonImport.add(stmt.name.text);
+    if (!ts.isImportEqualsDeclaration(stmt)) {
+      nonImport.add(stmt.name.text);
+    } else if (!importEqualsAliasesReact(stmt, reactImports)) {
+      // Un import-equals es import-like (exempt como hook) SOLO si aliasa REACT
+      // (`import ue = React.useEffect` → FP14/15). Un alias a un valor NO-react
+      // (`import useEffect = Sync.run`, `import React = FakeReact`) SOMBREA el nombre
+      // localmente —incluido un nombre de hook diferido— con una función que puede
+      // correr SÍNCRONA en render → debe ir a nonImport para que el shadow-guard de
+      // isDeferredExecutionContext (L700) dispare y lo flaggee. Sin esto, el check
+      // canónico file-global trataba `useEffect = Sync.run` como el hook react diferido
+      // y eximía el read del global = BYPASS (hunt final #173, deferred import-equals).
+      nonImport.add(stmt.name.text);
+    }
   }
   return { all, nonImport };
+}
+
+/**
+ * ¿Un `import X = Y(.Z…)` aliasa REACT? — i.e. su RHS root identifier es un namespace
+ * de react reconocido (`reactImports.namespaces`: `import React` / `import * as React`
+ * / un alias resuelto). `import ue = React.useEffect` → root `React` ∈ namespaces → SÍ
+ * (alias de hook legítimo, exempt). `import useEffect = Sync.run` → root `Sync` → NO
+ * (sombra local). File-global: si el root está sombreado por OTRO import-equals no-react,
+ * ese ya entró en nonImport por esta misma regla → su uso se flaggea aparte.
+ */
+function importEqualsAliasesReact(stmt, reactImports) {
+  if (!reactImports || !ts.isImportEqualsDeclaration(stmt)) return false;
+  let ref = stmt.moduleReference;
+  if (!ref || ts.isExternalModuleReference(ref)) return false; // import X = require(...)
+  while (ts.isQualifiedName(ref)) ref = ref.left;
+  return ts.isIdentifier(ref) && reactImports.namespaces.has(ref.text);
 }
 
 /**
@@ -3177,7 +3211,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
         for (const stmt of clause.statements) {
           visit(stmt, clauseCtx);
-          const { all, nonImport } = extractPostStatementBindings(stmt);
+          const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports);
           current = addToScope(current, all, nonImport);
           clauseCtx = addToScope(clauseCtx, all, nonImport);
           const negGuards = extractNegativeEarlyReturnGuards(stmt, clauseCtx.guardAliases);
@@ -3456,7 +3490,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     current = purgeGuardAliasShadows(current, gatherBlockLexicalNames(statements));
     for (const stmt of statements) {
       visit(stmt, current);
-      const { all, nonImport } = extractPostStatementBindings(stmt);
+      const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports);
       current = addToScope(current, all, nonImport);
       // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
       // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
