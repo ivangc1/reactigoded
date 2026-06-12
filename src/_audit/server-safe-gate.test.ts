@@ -1534,13 +1534,20 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
   it.each([
     ["import useEffect = Sync.run", '/** @server-safe */\nimport { useEffect } from "react";\nexport const realHook = useEffect;\nnamespace Sync { export function run(cb: () => void): void { cb(); } }\nexport namespace App { import useEffect = Sync.run; useEffect(() => { document.title = "x"; }); }'],
     ["import React = FakeReact (namespace alias)", '/** @server-safe */\nimport * as React from "react";\nexport const r = React;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { import React = FakeReact; React.useEffect(() => { document.title = "x"; }); }'],
+    // codex P1: cadena con RHS root SOMBREADO — `import React = FakeReact; import useEffect = React.useEffect`.
+    // El root `React` ∈ reactImports.namespaces file-global PERO sombreado localmente por FakeReact
+    // (no-react) → el check debe ser scope-aware (root ∉ priorNonImport), no file-global.
+    ["import-equals cadena con root sombreado (codex P1)", '/** @server-safe */\nimport * as React from "react";\nimport { useEffect } from "react";\nexport const _r = React;\nexport const _u = useEffect;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { import React = FakeReact; import useEffect = React.useEffect; useEffect(() => { document.title = "x"; }); }'],
   ])("FLAGGEA import-equals no-react que sombrea un hook: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
 
-  // A — no-regresión: import-equals que SÍ aliasa react sigue exento (FP14/15)
-  it("0-FP: import-equals a REACT (ue=React.useEffect, R=React) sigue EXENTO", () => {
-    expect(flagged('/** @server-safe */\nimport * as React from "react";\nimport R = React;\nimport ue = React.useEffect;\nexport function C() { ue(() => { document.title = "x"; }); R.useEffect(() => { window.scrollTo(0,0); }); return null; }')).toBe(false);
+  // A — no-regresión: import-equals que SÍ aliasa react sigue exento (FP14/15), directo y en cadena
+  it.each([
+    ["directo: ue=React.useEffect, R=React", '/** @server-safe */\nimport * as React from "react";\nimport R = React;\nimport ue = React.useEffect;\nexport function C() { ue(() => { document.title = "x"; }); R.useEffect(() => { window.scrollTo(0,0); }); return null; }'],
+    ["cadena react legítima: R=React; ue=R.useEffect", '/** @server-safe */\nimport * as React from "react";\nimport R = React;\nimport ue = R.useEffect;\nexport function C() { ue(() => { document.title = "x"; }); return null; }'],
+  ])("0-FP: import-equals a REACT sigue EXENTO (FP14/15): %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
   });
 
   // B — tag JSX $/_-prefijo es COMPONENTE → handler NO exento → FLAGGEA
