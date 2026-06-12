@@ -386,6 +386,36 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     ]);
   });
 
+  it("FALLA RUIDOSO si un hermano .mjs sombrea el .ts resuelto (gate-vs-Vite extension precedence, hunt final #173)", () => {
+    // El gate resolvería helper.ts (limpio) pero Vite envía helper.mjs (sucio): `.mjs` rankea
+    // antes que `.ts` en resolve.extensions. Sin guard = audita el archivo equivocado = bypass
+    // cross-módulo (latente: 0 .mjs en src hoy). Fail-closed: resolución ambigua → unresolved.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./helper";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/helper.ts": `export const v = 1;`,
+      "/repo/src/components/Probe/helper.mjs": `export const v = screen.width;`,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => /AMBIGUO/.test(v.reason ?? v.detail ?? ""))).toBe(true);
+  });
+
+  it("0-FP: sin hermano de mayor precedencia, el .ts resuelve normal (sin fallo espurio)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./helper";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/helper.ts": `export const v = 1;`,
+    });
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
+  });
+
   it("caza util sucio detrás de barrel re-export (`export * from`)", () => {
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `

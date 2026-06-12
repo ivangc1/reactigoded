@@ -2456,6 +2456,33 @@ function tryResolveFile(noExtAbsPath, fileExists) {
   return null;
 }
 
+// Orden REAL de `resolve.extensions` de Vite/esbuild (DEFAULT_EXTENSIONS, .json excluido
+// — no se audita). El gate resuelve `.ts` primero; Vite rankea `.mjs`/`.js`/`.mts` ANTES
+// que `.ts` (y `.jsx` antes que `.tsx`). Si para un import extensionless existe un hermano
+// que Vite preferiría, el BUNDLER ENVÍA ESE archivo y el gate auditaría OTRO → divergencia
+// silenciosa (hunt final: helper.ts limpio + helper.mjs `screen.width` → gate `[]`, Vite
+// envía el .mjs) = bypass cross-module. Hoy LATENTE (0 .mjs/.js en src) → fail-closed.
+const VITE_RESOLVE_EXTS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
+
+/**
+ * Si `resolvedAbsPath` (lo que el gate resolvió, `.ts`/`.tsx`) tiene un hermano de
+ * MAYOR precedencia en Vite, devuelve su path (= el archivo que el bundler REALMENTE
+ * envía, distinto del que el gate auditaría). null si no hay divergencia.
+ */
+function bundlerShadowSibling(resolvedAbsPath, fileExists) {
+  const m = resolvedAbsPath.match(/(\.[mc]?[jt]sx?)$/);
+  if (!m) return null;
+  const ext = m[1];
+  const rank = VITE_RESOLVE_EXTS.indexOf(ext);
+  if (rank <= 0) return null; // .mjs (rank 0) o ext no-Vite → nada gana precedencia
+  const base = resolvedAbsPath.slice(0, -ext.length);
+  for (let i = 0; i < rank; i++) {
+    const sib = `${base}${VITE_RESOLVE_EXTS[i]}`;
+    if (fileExists(sib)) return sib;
+  }
+  return null;
+}
+
 /**
  * Resuelve un module specifier a uno de tres resultados:
  *   - `{ kind: "internal", absPath }`: archivo dentro de `src/`. Sigue.
@@ -2497,6 +2524,13 @@ function resolveImportPath(
         const noExt = crossOsResolve(projectRoot, targetPrefix + tail);
         const resolved = tryResolveFile(noExt, fileExists);
         if (resolved) {
+          const shadow = bundlerShadowSibling(resolved, fileExists);
+          if (shadow) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita o elimina el hermano.`,
+            };
+          }
           return { kind: "internal", absPath: resolved };
         }
         return {
@@ -2517,7 +2551,16 @@ function resolveImportPath(
     // node_modules, no scripts/ ni fixtures/ ni dist/").
     const rel = crossOsRelative(srcRoot, resolved);
     const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
-    if (inSrc) return { kind: "internal", absPath: resolved };
+    if (inSrc) {
+      const shadow = bundlerShadowSibling(resolved, fileExists);
+      if (shadow) {
+        return {
+          kind: "unresolvable",
+          reason: `relativo \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita o elimina el hermano.`,
+        };
+      }
+      return { kind: "internal", absPath: resolved };
+    }
     return { kind: "external" };
   }
   return {
