@@ -2465,11 +2465,31 @@ function tryResolveFile(noExtAbsPath, fileExists) {
 const VITE_RESOLVE_EXTS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
 
 /**
- * Si `resolvedAbsPath` (lo que el gate resolvió, `.ts`/`.tsx`) tiene un hermano de
- * MAYOR precedencia en Vite, devuelve su path (= el archivo que el bundler REALMENTE
- * envía, distinto del que el gate auditaría). null si no hay divergencia.
+ * Si `resolvedAbsPath` (lo que el gate resolvió, `.ts`/`.tsx` o `…/index.ts`) tiene un
+ * hermano que Vite PREFERIRÍA, devuelve su path (= el archivo que el bundler REALMENTE
+ * envía, distinto del que el gate auditaría). null si no hay divergencia. DOS casos:
+ *
+ *   1. FILE `<base>.ts` resuelto → un `<base>.<extMayorPrecedencia>` (`.mjs`/`.js`/`.mts`)
+ *      lo sombrea (mismo basename, hunt final #173 — guard original).
+ *   2. DIRECTORY-INDEX `<dir>/index.ts` resuelto → un FILE `<dir>.<cualquierExtVite>` lo
+ *      sombrea ENTERO: Vite intenta `<dir>.<ext>` como ARCHIVO antes que `<dir>/index.<ext>`
+ *      como directorio (file beats directory). Mi guard original solo miraba el basename
+ *      del path resuelto (`<dir>/index`) → se le escapaba el `<dir>.mjs` padre = BYPASS
+ *      (hunt scope-aware: file-vs-directory + barrel anidado, 4 confirmados screen/location).
  */
 function bundlerShadowSibling(resolvedAbsPath, fileExists) {
+  // Caso 2: el gate resolvió un index de DIRECTORIO → un archivo hermano del NOMBRE DEL
+  // DIRECTORIO (cualquier ext Vite) lo sombrea, porque Vite prueba file antes que dir.
+  const idx = resolvedAbsPath.match(/[\\/]index(\.[mc]?[jt]sx?)$/);
+  if (idx) {
+    const dirBase = resolvedAbsPath.slice(0, resolvedAbsPath.length - idx[0].length);
+    for (const ext of VITE_RESOLVE_EXTS) {
+      const sib = `${dirBase}${ext}`;
+      if (fileExists(sib)) return sib; // `<dir>.<ext>` archivo gana al directorio
+    }
+    return null;
+  }
+  // Caso 1: file resuelto → hermano de mayor precedencia con el mismo basename.
   const m = resolvedAbsPath.match(/(\.[mc]?[jt]sx?)$/);
   if (!m) return null;
   const ext = m[1];

@@ -404,6 +404,48 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(violations.some((v) => /AMBIGUO/.test(v.detail))).toBe(true);
   });
 
+  it("FALLA RUIDOSO si un FILE .mjs sombrea un DIRECTORY index resuelto (file-vs-directory, hunt scope-aware #173)", () => {
+    // Vite prueba `helper.mjs` (archivo) ANTES que `helper/index.ts` (directorio) → file beats
+    // directory. El gate resuelve el index limpio; Vite envía el .mjs sucio. Guard extendido.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { fmt } from "./helper";
+        export function Probe() { return <span>{fmt()}</span>; }
+      `,
+      "/repo/src/components/Probe/helper/index.ts": `export const fmt = () => 1;`,
+      "/repo/src/components/Probe/helper.mjs": `export const fmt = () => screen.width;`,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations.some((v) => /AMBIGUO/.test(v.detail))).toBe(true);
+  });
+
+  it("FALLA RUIDOSO file-vs-directory anidado tras barrel (utils/inner/index.ts + utils/inner.mjs)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./utils";
+        export function Probe() { return <span>{String(v)}</span>; }
+      `,
+      "/repo/src/components/Probe/utils/index.ts": `export * from "./inner";`,
+      "/repo/src/components/Probe/utils/inner/index.ts": `export const v = "clean";`,
+      "/repo/src/components/Probe/utils/inner.mjs": `export const v = location.href;`,
+    });
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files).length).toBeGreaterThan(0);
+  });
+
+  it("0-FP: directory index limpio SIN file hermano resuelve normal (sin fallo espurio)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { fmt } from "./helper";
+        export function Probe() { return <span>{fmt()}</span>; }
+      `,
+      "/repo/src/components/Probe/helper/index.ts": `export const fmt = () => 1;`,
+    });
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
+  });
+
   it("0-FP: sin hermano de mayor precedencia, el .ts resuelve normal (sin fallo espurio)", () => {
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `
