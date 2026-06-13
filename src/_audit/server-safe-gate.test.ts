@@ -1632,12 +1632,27 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     ["rename const { useEffect: ue } = React", '/** @server-safe */\nimport React from "react";\nconst { useEffect: ue } = React;\nexport function W() { ue(() => { void window.innerWidth; }); return null; }'],
     ["cadena const R = React; const { useEffect } = R", '/** @server-safe */\nimport * as React from "react";\nconst R = React;\nconst { useEffect } = R;\nexport function W() { useEffect(() => { void window.innerWidth; }); return null; }'],
     ["const ue = React.useEffect (alias directo)", '/** @server-safe */\nimport * as React from "react";\nconst ue = React.useEffect;\nexport function W() { ue(() => { void window.innerWidth; }); return null; }'],
-    // NESTED (gatherReactImports recurre, no solo top-level — hunt scope-aware, 3 FP residuales):
-    ["NESTED: const { useEffect } = React DENTRO de función", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const { useEffect } = React; useEffect(() => { void window.innerWidth; }, []); return null; }'],
-    ["const useEffect = reactUseEffect (alias de NAMED import)", '/** @server-safe */\nimport { useEffect as reactUseEffect } from "react";\nexport function useTitle(t: string): void { const useEffect = reactUseEffect; useEffect(() => { document.title = t; }); }'],
-    ["NESTED: namespace P { import R = React; R.useEffect }", '/** @server-safe */\nimport * as React from "react";\nexport namespace Panel { import R = React; export function usePanel(): void { R.useEffect(() => { void window.scrollY; }); } }'],
-  ])("0-FP: destructure/alias de hook react EXENTO: %s", (_l, code) => {
+  ])("0-FP: destructure/alias de hook react TOP-LEVEL EXENTO: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
+  });
+
+  // BYPASS codex P1 (recursión file-global revertida): un alias react NESTED en `helper` NO
+  // debe reclasificar el `useEffect` de OTRO scope importado de un módulo no-react (`./sync`,
+  // que corre síncrono en render). La resolución de alias react es TOP-LEVEL only; un alias en
+  // scope hermano no aplica → este DEBE flaggear (bypass cerrado).
+  it("FLAGGEA codex P1: alias react nested NO filtra a un useEffect no-react de otro scope", () => {
+    expect(flagged('/** @server-safe */\nimport { useEffect } from "./sync";\nimport * as React from "react";\nfunction helper(): void { const { useEffect } = React; useEffect(() => {}); }\nexport function C() { useEffect(() => { void window.location.href; }); return null; }\nexport const _h = helper;')).toBe(true);
+  });
+
+  // RESIDUAL FAIL-CLOSED (over-flag, NO bypass): un destructure/alias react en scope NESTED
+  // (cuerpo de función/namespace) over-flaggea — la resolución react es top-level only para ser
+  // SOUND (codex P1). Patrón POCO común; un refactor scope-aware queda post-freeze.
+  it.each([
+    ["nested: const { useEffect } = React en función", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const { useEffect } = React; useEffect(() => { void window.innerWidth; }, []); return null; }'],
+    ["nested: const useEffect = reactUseEffect en función", '/** @server-safe */\nimport { useEffect as reactUseEffect } from "react";\nexport function useTitle(t: string): void { const useEffect = reactUseEffect; useEffect(() => { document.title = t; }); }'],
+    ["nested: namespace P { import R = React; R.useEffect }", '/** @server-safe */\nimport * as React from "react";\nexport namespace Panel { import R = React; export function usePanel(): void { R.useEffect(() => { void window.scrollY; }); } }'],
+  ])("RESIDUAL fail-closed: alias react NESTED over-flaggea (resolución top-level only, sound): %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
   });
 
   // SOUNDNESS: el control no-react (destructure de un objeto SYNC, o React sombreado por un no-react)

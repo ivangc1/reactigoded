@@ -1472,27 +1472,18 @@ function gatherReactImports(sourceFile) {
   // cadenas (`import R = React; import ue = R.useEffect`). Sound: solo resuelve contra
   // react YA reconocido; un alias-spoof `import ue = React.useState` mapea al canónico
   // "useState" (render-phase → NO deferred). deepest re-hunt #173 (import-alias).
-  // Recoge import-equals + var-statements de TODO el árbol (no solo top-level): un alias
-  // react en cuerpo de función/namespace (`function C(){ const {useEffect}=React }`,
-  // `namespace P { import R = React; R.useEffect(…) }`) también debe reconocerse — si no, el
-  // hook react se trata como render-phase = FP (hunt scope-aware, 3 FP residuales). File-global
-  // es SOUND para la EXENCIÓN: un shadow SYNC homónimo en otro scope (`const useEffect = Sync.run`)
-  // se flaggea igual porque el shadow-guard scope-aware de nonImportBindings (L707) corre ANTES
-  // que el check canónico react (L715), y ese local entra en nonImportBindings de SU scope.
-  const aliasStmts = [];
-  const collectAlias = (node) => {
-    node.forEachChild((child) => {
-      if (ts.isImportEqualsDeclaration(child) || ts.isVariableStatement(child)) {
-        aliasStmts.push(child);
-      }
-      collectAlias(child);
-    });
-  };
-  collectAlias(sourceFile);
+  // SOLO TOP-LEVEL (sourceFile.statements). La recursión a cuerpos de función/namespace era
+  // INSEGURA (codex P1): un `const { useEffect } = React` en `helper` registraría useEffect
+  // file-global, y un `useEffect` de OTRO scope —importado de un módulo no-react (`./sync`,
+  // que NO está en nonImportBindings → el shadow-guard NO dispara)— se eximiría como hook
+  // diferido aunque corra síncrono = BYPASS. La resolución de alias react NO puede ser
+  // file-global; un alias en scope hermano no aplica. El destructure/alias TOP-LEVEL (caso
+  // COMÚN) sí se reconoce aquí; el NESTED queda fail-closed (over-flag) por diseño hasta un
+  // refactor scope-aware de la resolución react.
   let changed = true;
   while (changed) {
     changed = false;
-    for (const stmt of aliasStmts) {
+    for (const stmt of sourceFile.statements) {
       if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) {
         const ref = stmt.moduleReference;
         const local = stmt.name.text;
