@@ -1632,6 +1632,10 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     ["rename const { useEffect: ue } = React", '/** @server-safe */\nimport React from "react";\nconst { useEffect: ue } = React;\nexport function W() { ue(() => { void window.innerWidth; }); return null; }'],
     ["cadena const R = React; const { useEffect } = R", '/** @server-safe */\nimport * as React from "react";\nconst R = React;\nconst { useEffect } = R;\nexport function W() { useEffect(() => { void window.innerWidth; }); return null; }'],
     ["const ue = React.useEffect (alias directo)", '/** @server-safe */\nimport * as React from "react";\nconst ue = React.useEffect;\nexport function W() { ue(() => { void window.innerWidth; }); return null; }'],
+    // NESTED (gatherReactImports recurre, no solo top-level — hunt scope-aware, 3 FP residuales):
+    ["NESTED: const { useEffect } = React DENTRO de función", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const { useEffect } = React; useEffect(() => { void window.innerWidth; }, []); return null; }'],
+    ["const useEffect = reactUseEffect (alias de NAMED import)", '/** @server-safe */\nimport { useEffect as reactUseEffect } from "react";\nexport function useTitle(t: string): void { const useEffect = reactUseEffect; useEffect(() => { document.title = t; }); }'],
+    ["NESTED: namespace P { import R = React; R.useEffect }", '/** @server-safe */\nimport * as React from "react";\nexport namespace Panel { import R = React; export function usePanel(): void { R.useEffect(() => { void window.scrollY; }); } }'],
   ])("0-FP: destructure/alias de hook react EXENTO: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
   });

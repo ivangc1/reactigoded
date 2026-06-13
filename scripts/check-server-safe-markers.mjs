@@ -1372,7 +1372,12 @@ function importEqualsAliasesReact(stmt, reactImports, priorNonImport) {
  */
 function variableInitAliasesReact(decl, reactImports, priorNonImport) {
   if (!reactImports || !ts.isVariableDeclaration(decl) || !decl.initializer) return false;
-  let root = unwrapErased(decl.initializer);
+  const init = unwrapErased(decl.initializer);
+  // `const useEffect = reactUseEffect` — alias de un NAMED react import (no namespace).
+  if (ts.isIdentifier(init) && reactImports.named.has(init.text)) {
+    return !(priorNonImport && priorNonImport.has(init.text));
+  }
+  let root = init;
   while (
     ts.isPropertyAccessExpression(root) ||
     ts.isElementAccessExpression(root)
@@ -1467,10 +1472,27 @@ function gatherReactImports(sourceFile) {
   // cadenas (`import R = React; import ue = R.useEffect`). Sound: solo resuelve contra
   // react YA reconocido; un alias-spoof `import ue = React.useState` mapea al canónico
   // "useState" (render-phase → NO deferred). deepest re-hunt #173 (import-alias).
+  // Recoge import-equals + var-statements de TODO el árbol (no solo top-level): un alias
+  // react en cuerpo de función/namespace (`function C(){ const {useEffect}=React }`,
+  // `namespace P { import R = React; R.useEffect(…) }`) también debe reconocerse — si no, el
+  // hook react se trata como render-phase = FP (hunt scope-aware, 3 FP residuales). File-global
+  // es SOUND para la EXENCIÓN: un shadow SYNC homónimo en otro scope (`const useEffect = Sync.run`)
+  // se flaggea igual porque el shadow-guard scope-aware de nonImportBindings (L707) corre ANTES
+  // que el check canónico react (L715), y ese local entra en nonImportBindings de SU scope.
+  const aliasStmts = [];
+  const collectAlias = (node) => {
+    node.forEachChild((child) => {
+      if (ts.isImportEqualsDeclaration(child) || ts.isVariableStatement(child)) {
+        aliasStmts.push(child);
+      }
+      collectAlias(child);
+    });
+  };
+  collectAlias(sourceFile);
   let changed = true;
   while (changed) {
     changed = false;
-    for (const stmt of sourceFile.statements) {
+    for (const stmt of aliasStmts) {
       if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) {
         const ref = stmt.moduleReference;
         const local = stmt.name.text;
@@ -1498,6 +1520,21 @@ function gatherReactImports(sourceFile) {
         for (const d of stmt.declarationList.declarations) {
           if (!d.initializer) continue;
           const init = unwrapErased(d.initializer);
+          // `const useEffect = reactUseEffect` — alias de un NAMED react import (no namespace):
+          // hereda el canónico. (`import { useEffect as reactUseEffect } from "react"; const
+          // useEffect = reactUseEffect; useEffect(cb)` — FP del hunt scope-aware.)
+          if (
+            ts.isIdentifier(d.name) &&
+            ts.isIdentifier(init) &&
+            named.has(init.text)
+          ) {
+            const canon = named.get(init.text);
+            if (named.get(d.name.text) !== canon) {
+              named.set(d.name.text, canon);
+              changed = true;
+            }
+            continue;
+          }
           let root = init;
           while (
             ts.isPropertyAccessExpression(root) ||
