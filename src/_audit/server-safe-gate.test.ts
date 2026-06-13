@@ -1644,23 +1644,35 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     expect(flagged('/** @server-safe */\nimport { useEffect } from "./sync";\nimport * as React from "react";\nfunction helper(): void { const { useEffect } = React; useEffect(() => {}); }\nexport function C() { useEffect(() => { void window.location.href; }); return null; }\nexport const _h = helper;')).toBe(true);
   });
 
-  // RESIDUAL FAIL-CLOSED (over-flag, NO bypass): un destructure/alias react en scope NESTED
-  // (cuerpo de función/namespace) over-flaggea — la resolución react es top-level only para ser
-  // SOUND (codex P1). Patrón POCO común; un refactor scope-aware queda post-freeze.
+  // 0-FP NESTED (resolución react SCOPE-AWARE, addReactAliases): un destructure/alias react en
+  // scope NESTED (cuerpo de función/namespace) AHORA se reconoce vía `scopeReactNs`/`scopeReactNamed`
+  // acumulados posicionalmente durante el walk — el read diferido EXIME. Antes era residual
+  // fail-closed (over-flag); el refactor scope-aware lo cierra SIN reabrir el bypass file-global
+  // que codex P1 rechazó (el alias vive solo en su scope, no filtra a hermanos — ver el test
+  // codex P1 arriba, que sigue FLAGGEANDO). Cierra [6]/[9]/[10] del hunt scope-aware.
   it.each([
     ["nested: const { useEffect } = React en función", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const { useEffect } = React; useEffect(() => { void window.innerWidth; }, []); return null; }'],
     ["nested: const useEffect = reactUseEffect en función", '/** @server-safe */\nimport { useEffect as reactUseEffect } from "react";\nexport function useTitle(t: string): void { const useEffect = reactUseEffect; useEffect(() => { document.title = t; }); }'],
     ["nested: namespace P { import R = React; R.useEffect }", '/** @server-safe */\nimport * as React from "react";\nexport namespace Panel { import R = React; export function usePanel(): void { R.useEffect(() => { void window.scrollY; }); } }'],
-  ])("RESIDUAL fail-closed: alias react NESTED over-flaggea (resolución top-level only, sound): %s", (_l, code) => {
-    expect(flagged(code)).toBe(true);
+    ["nested: const R = React; R.useEffect directo", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const R = React; R.useEffect(() => { void window.innerWidth; }); return null; }'],
+  ])("0-FP NESTED: alias react scope-aware en función/namespace EXENTO: %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
   });
 
   // SOUNDNESS: el control no-react (destructure de un objeto SYNC, o React sombreado por un no-react)
-  // SIGUE flaggeando — el fix no abre bypass.
+  // SIGUE flaggeando — el fix scope-aware no abre bypass. Cubre también: alias-spoof nested
+  // (`const { useState: useEffect } = React` → canónico useState, render-phase → FLAGGEA), alias de
+  // namespace NO-react nested (`import R = FakeReact; R.useEffect`), y la cadena nested
+  // `const R = React; const ue = R.useEffect` (root intermedio scope-local NO resuelto por el
+  // nonImport-exclusion file-global → ue ∈ nonImport → fail-closed FLAGGEA; residual SOUND, no bypass).
   it.each([
     ["const { useEffect } = Sync (objeto sync no-react)", '/** @server-safe */\nconst Sync = { useEffect(cb: () => void) { cb(); } };\nexport function W() { const { useEffect } = Sync; useEffect(() => { void window.innerWidth; }); return null; }'],
     ["React sombreado: const React2 = FakeReact; const { useEffect } = React2", '/** @server-safe */\nimport * as React from "react";\nexport const _r = React;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { const React2 = FakeReact; const { useEffect } = React2; useEffect(() => { void document.title; }); }'],
-  ])("SOUNDNESS: destructure NO-react sigue FLAGGEANDO: %s", (_l, code) => {
+    ["nested sync shadow: const useEffect = Sync.run", '/** @server-safe */\nimport * as Sync from "./sync";\nexport function Comp() { const useEffect = Sync.run; useEffect(() => { void window.location.href; }); return null; }'],
+    ["alias-spoof nested: const { useState: useEffect } = React (canónico useState)", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const { useState: useEffect } = React; useEffect(() => { void window.innerWidth; }); return null; }'],
+    ["namespace NO-react nested: import R = FakeReact; R.useEffect", '/** @server-safe */\nimport * as FakeReact from "./fake";\nexport namespace P { import R = FakeReact; export function go() { R.useEffect(() => { void window.scrollY; }); } }'],
+    ["cadena nested root scope-local: const R = React; const ue = R.useEffect (residual fail-closed)", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const R = React; const ue = R.useEffect; ue(() => { void window.innerWidth; }); return null; }'],
+  ])("SOUNDNESS: alias NO-react / spoof / cadena scope-local sigue FLAGGEANDO: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
 

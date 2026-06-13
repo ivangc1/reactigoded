@@ -717,13 +717,25 @@ function isDeferredExecutionContext(fnNode, context) {
       // `React.useEffect`: el miembro YA es canónico si `React` viene de react.
       // Codex round 17 P1.1: solo cuenta si viene de "react" (un `import { useEffect }
       // from "./fake"` con impl síncrona NO se exime).
+      // Aliases react SCOPE-AWARE (declarados dentro de la función/namespace
+      // actual: `const { useEffect } = React`, `const ue = React.useEffect`,
+      // `const useEffect = reactUseEffect`, `import R = React`). Viven solo en el
+      // context del scope donde se declararon — NO filtran a scopes hermanos, así
+      // que un alias react nested no exime un hook homónimo de OTRA función (el
+      // bypass file-global que codex P1 rechazó). Se consultan ANTES del mapa
+      // file-global de `gatherReactImports` (que solo cubre top-level).
       let canonicalCallee = null;
       if (ts.isIdentifier(callee)) {
-        const mapped = context.reactImports.named.get(calleeName);
+        const scoped = context.scopeReactNamed?.get(calleeName);
+        const mapped =
+          scoped !== undefined
+            ? scoped
+            : context.reactImports.named.get(calleeName);
         if (mapped !== undefined) canonicalCallee = mapped;
       } else if (
         rootIdent !== null &&
-        context.reactImports.namespaces.has(rootIdent)
+        (context.scopeReactNs?.has(rootIdent) ||
+          context.reactImports.namespaces.has(rootIdent))
       ) {
         canonicalCallee = calleeName;
       }
@@ -1390,6 +1402,123 @@ function variableInitAliasesReact(decl, reactImports, priorNonImport) {
 }
 
 /**
+ * Resuelve los aliases REACT declarados por UN statement y los devuelve en un
+ * context ACTUALIZADO (scope-aware). Espejo posicional de la resolución file-global
+ * de `gatherReactImports`, pero acumulada DURANTE el walk en los campos de scope
+ * `scopeReactNs` / `scopeReactNamed` del context — así un alias declarado dentro de
+ * una función/namespace vive SOLO en ese scope y NO filtra a scopes hermanos (el
+ * bypass file-global que codex P1 rechazó: `helper(){ const { useEffect } = React }`
+ * no puede eximir el `useEffect` de OTRA función importado de un módulo síncrono).
+ *
+ * Reconoce, resolviendo roots contra `scopeReactNs ∪ reactImports.namespaces` (y los
+ * named contra `scopeReactNamed ∪ reactImports.named`), excluyendo roots sombreados
+ * por un binding no-react (`nonImportBindings`):
+ *   - `import R = React`                  → R   ∈ scopeReactNs
+ *   - `import ue = React.useEffect`       → ue  → "useEffect" ∈ scopeReactNamed
+ *   - `const R = React`                   → R   ∈ scopeReactNs
+ *   - `const ue = React.useEffect`        → ue  → "useEffect"
+ *   - `const { useEffect, useState: us } = React` → useEffect→"useEffect", us→"useState"
+ *   - `const useEffect = reactUseEffect`  → useEffect → canónico del named import
+ *
+ * NESTED [6]/[9]/[10] del hunt scope-aware: el caso COMÚN top-level ya lo cubre
+ * `gatherReactImports` (file-global, sound porque top-level ES el scope externo);
+ * este helper extiende el reconocimiento al interior de funciones/namespaces sin
+ * abrir el bypass. Devuelve el mismo `context` si el statement no declara aliases.
+ */
+function addReactAliases(context, stmt) {
+  const reactImports = context.reactImports;
+  if (!reactImports) return context;
+  const nsSet = context.scopeReactNs;
+  const namedMap = context.scopeReactNamed;
+  const nonImport = context.nonImportBindings;
+  const isReactNs = (name) =>
+    !(nonImport && nonImport.has(name)) &&
+    ((nsSet && nsSet.has(name)) || reactImports.namespaces.has(name));
+  const canonicalNamed = (name) => {
+    if (nonImport && nonImport.has(name)) return undefined;
+    const scoped = namedMap && namedMap.get(name);
+    return scoped !== undefined ? scoped : reactImports.named.get(name);
+  };
+  const addNs = [];
+  const addNamed = [];
+
+  const handleVarInit = (name, initializer) => {
+    const init = unwrapErased(initializer);
+    // `const useEffect = reactUseEffect` — alias de un NAMED react import.
+    if (ts.isIdentifier(name) && ts.isIdentifier(init)) {
+      if (isReactNs(init.text)) {
+        addNs.push(name.text);
+        return;
+      }
+      const canon = canonicalNamed(init.text);
+      if (canon !== undefined) addNamed.push([name.text, canon]);
+      return;
+    }
+    let root = init;
+    while (
+      ts.isPropertyAccessExpression(root) ||
+      ts.isElementAccessExpression(root)
+    ) {
+      root = unwrapErased(root.expression);
+    }
+    if (!ts.isIdentifier(root) || !isReactNs(root.text)) return;
+    if (ts.isIdentifier(name) && init === root) {
+      addNs.push(name.text); // const R = React
+    } else if (
+      ts.isIdentifier(name) &&
+      ts.isPropertyAccessExpression(init) &&
+      ts.isIdentifier(init.name)
+    ) {
+      addNamed.push([name.text, init.name.text]); // const ue = React.useEffect
+    } else if (ts.isObjectBindingPattern(name) && init === root) {
+      for (const el of name.elements) {
+        if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
+        const local = el.name.text;
+        const prop =
+          el.propertyName && ts.isIdentifier(el.propertyName)
+            ? el.propertyName.text
+            : local;
+        addNamed.push([local, prop]); // const { useEffect } = React
+      }
+    }
+  };
+
+  if (ts.isVariableStatement(stmt)) {
+    for (const d of stmt.declarationList.declarations) {
+      if (d.initializer) handleVarInit(d.name, d.initializer);
+    }
+  } else if (
+    ts.isImportEqualsDeclaration(stmt) &&
+    !stmt.isTypeOnly &&
+    ts.isIdentifier(stmt.name)
+  ) {
+    const ref = stmt.moduleReference;
+    if (ref && !ts.isExternalModuleReference(ref)) {
+      let r = ref;
+      while (ts.isQualifiedName(r)) r = r.left;
+      if (ts.isIdentifier(r) && isReactNs(r.text)) {
+        if (ts.isIdentifier(ref)) {
+          addNs.push(stmt.name.text); // import R = React
+        } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.right)) {
+          addNamed.push([stmt.name.text, ref.right.text]); // import ue = React.useEffect
+        }
+      }
+    }
+  }
+
+  if (addNs.length === 0 && addNamed.length === 0) return context;
+  return {
+    ...context,
+    ...(addNs.length > 0
+      ? { scopeReactNs: new Set([...(nsSet ?? []), ...addNs]) }
+      : {}),
+    ...(addNamed.length > 0
+      ? { scopeReactNamed: new Map([...(namedMap ?? []), ...addNamed]) }
+      : {}),
+  };
+}
+
+/**
  * Set de nombres importados específicamente de `"react"`. Codex round
  * 17 P1.1: los DEFERRED_HOOKS (`useEffect`, `useLayoutEffect`,
  * `useInsertionEffect`) son hooks de React con semántica garantizada
@@ -1478,8 +1607,9 @@ function gatherReactImports(sourceFile) {
   // que NO está en nonImportBindings → el shadow-guard NO dispara)— se eximiría como hook
   // diferido aunque corra síncrono = BYPASS. La resolución de alias react NO puede ser
   // file-global; un alias en scope hermano no aplica. El destructure/alias TOP-LEVEL (caso
-  // COMÚN) sí se reconoce aquí; el NESTED queda fail-closed (over-flag) por diseño hasta un
-  // refactor scope-aware de la resolución react.
+  // COMÚN) se reconoce aquí (sound: top-level ES el scope externo). El NESTED lo cierra
+  // `addReactAliases` SCOPE-AWARE (acumulado posicionalmente en context.scopeReactNs/Named
+  // durante el walk, vive solo en su scope → no filtra a hermanos) — NO aquí.
   let changed = true;
   while (changed) {
     changed = false;
@@ -3466,6 +3596,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports, current.nonImportBindings);
           current = addToScope(current, all, nonImport);
           clauseCtx = addToScope(clauseCtx, all, nonImport);
+          // Aliases react scope-aware: el CaseBlock entero es UN scope léxico → se
+          // acumulan en `current` (compartido entre clauses) y en `clauseCtx` (el que
+          // visita). Mismo rol que addToScope para el deferred-hook canónico nested.
+          current = addReactAliases(current, stmt);
+          clauseCtx = addReactAliases(clauseCtx, stmt);
           const negGuards = extractNegativeEarlyReturnGuards(stmt, clauseCtx.guardAliases);
           if (negGuards.size > 0) {
             clauseCtx = {
@@ -3761,6 +3896,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       visit(stmt, current);
       const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports, current.nonImportBindings);
       current = addToScope(current, all, nonImport);
+      // Aliases react SCOPE-AWARE declarados por este statement (`const { useEffect } =
+      // React`, `import R = React`, …). Acumulados en el context del scope actual — no
+      // filtran a hermanos. DESPUÉS de addToScope para que el shadow check use el
+      // nonImportBindings ya actualizado. Resuelve los NESTED [6]/[9]/[10] sin reabrir
+      // el bypass file-global de codex P1.
+      current = addReactAliases(current, stmt);
       // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
       // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
       // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
@@ -3802,6 +3943,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     localBindings: moduleAll,
     nonImportBindings: moduleNonImports,
     reactImports,
+    // Aliases react SCOPE-AWARE acumulados posicionalmente durante el walk
+    // (NO file-global): `const { useEffect } = React`, `const ue = React.useEffect`,
+    // `const useEffect = reactUseEffect`, `import R = React`. Viven solo en el scope
+    // donde se declaran (function/namespace body) — un alias nested NO filtra a scopes
+    // hermanos, evitando el bypass file-global que codex P1 rechazó. Complementan
+    // `reactImports` (top-level file-global) para reconocer destructure/alias NESTED.
+    scopeReactNs: new Set(),
+    scopeReactNamed: new Map(),
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
