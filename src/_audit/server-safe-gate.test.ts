@@ -1623,6 +1623,28 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     expect(flagged('/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { useEffect(() => { void window.location.href; }); return null; }')).toBe(false);
   });
 
+  // A — FP destructure-de-react cerrado (hunt scope-aware, 7 FP_REGRESSION). Destructurar hooks
+  // reales del namespace React (`const { useEffect } = React`) es un alias react, NO un shadow
+  // sync → el read diferido dentro DEBE eximir. variableInitAliasesReact + gatherReactImports.
+  it.each([
+    ["const { useEffect } = React (default)", '/** @server-safe */\nimport React from "react";\nconst { useEffect, useState } = React;\nexport function W(): string { useEffect(() => { void window.innerWidth; }); return useState(0) ? "x" : "y"; }'],
+    ["const { useLayoutEffect } = React (import *)", '/** @server-safe */\nimport * as React from "react";\nconst { useLayoutEffect } = React;\nexport function W() { useLayoutEffect(() => { void document.body.clientHeight; }); return null; }'],
+    ["rename const { useEffect: ue } = React", '/** @server-safe */\nimport React from "react";\nconst { useEffect: ue } = React;\nexport function W() { ue(() => { void window.innerWidth; }); return null; }'],
+    ["cadena const R = React; const { useEffect } = R", '/** @server-safe */\nimport * as React from "react";\nconst R = React;\nconst { useEffect } = R;\nexport function W() { useEffect(() => { void window.innerWidth; }); return null; }'],
+    ["const ue = React.useEffect (alias directo)", '/** @server-safe */\nimport * as React from "react";\nconst ue = React.useEffect;\nexport function W() { ue(() => { void window.innerWidth; }); return null; }'],
+  ])("0-FP: destructure/alias de hook react EXENTO: %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+
+  // SOUNDNESS: el control no-react (destructure de un objeto SYNC, o React sombreado por un no-react)
+  // SIGUE flaggeando — el fix no abre bypass.
+  it.each([
+    ["const { useEffect } = Sync (objeto sync no-react)", '/** @server-safe */\nconst Sync = { useEffect(cb: () => void) { cb(); } };\nexport function W() { const { useEffect } = Sync; useEffect(() => { void window.innerWidth; }); return null; }'],
+    ["React sombreado: const React2 = FakeReact; const { useEffect } = React2", '/** @server-safe */\nimport * as React from "react";\nexport const _r = React;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { const React2 = FakeReact; const { useEffect } = React2; useEffect(() => { void document.title; }); }'],
+  ])("SOUNDNESS: destructure NO-react sigue FLAGGEANDO: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
   // A — no-regresión: import-equals que SÍ aliasa react sigue exento (FP14/15), directo y en cadena
   it.each([
     ["directo: ue=React.useEffect, R=React", '/** @server-safe */\nimport * as React from "react";\nimport R = React;\nimport ue = React.useEffect;\nexport function C() { ue(() => { document.title = "x"; }); R.useEffect(() => { window.scrollTo(0,0); }); return null; }'],

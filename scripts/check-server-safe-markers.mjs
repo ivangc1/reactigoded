@@ -1048,7 +1048,12 @@ function gatherNonReactLexicalShadows(statements, reactImports, baseNonImport) {
     if (ts.isVariableStatement(stmt)) {
       if (isBlockScopedDeclList(stmt.declarationList.flags)) {
         for (const d of stmt.declarationList.declarations) {
-          if (!isAmbientDeclaration(d)) addBindingNamesFromPattern(d.name, shadows);
+          if (isAmbientDeclaration(d)) continue;
+          // `const { useEffect } = React` aliasa hooks react → NO es shadow (mismo criterio
+          // que extractPostStatementBindings; si entrara, la pre-carga flaggearía el hook).
+          if (!variableInitAliasesReact(d, reactImports, baseNonImport)) {
+            addBindingNamesFromPattern(d.name, shadows);
+          }
         }
       }
     } else if (
@@ -1290,7 +1295,12 @@ function extractPostStatementBindings(stmt, reactImports, priorNonImport) {
       for (const decl of stmt.declarationList.declarations) {
         if (isAmbientDeclaration(decl)) continue; // declare const/let → erased
         addBindingNamesFromPattern(decl.name, all);
-        addBindingNamesFromPattern(decl.name, nonImport);
+        // `const { useEffect } = React` aliasa hooks react genuinos → NO es shadow local
+        // (si entrara en nonImport, el deferred-hook shadow-guard flaggearía el hook). El
+        // `const { useEffect } = Sync` (no-react) SÍ es shadow. Espejo de import-equals.
+        if (!variableInitAliasesReact(decl, reactImports, priorNonImport)) {
+          addBindingNamesFromPattern(decl.name, nonImport);
+        }
       }
     }
   } else if (
@@ -1349,6 +1359,29 @@ function importEqualsAliasesReact(stmt, reactImports, priorNonImport) {
   if (!ts.isIdentifier(ref)) return false;
   if (priorNonImport && priorNonImport.has(ref.text)) return false; // root sombreado no-react
   return reactImports.namespaces.has(ref.text);
+}
+
+/**
+ * ¿Una `VariableDeclaration` aliasa REACT? — `const { useEffect } = React`, `const R = React`,
+ * `const ue = React.useEffect`: el root del initializer es un namespace react reconocido Y no
+ * está sombreado localmente. Espejo de `importEqualsAliasesReact` para destructuring/alias por
+ * `const`/`let` — sin esto los nombres destructurados de hooks react genuinos entraban en
+ * nonImportBindings y el deferred-hook shadow-guard FLAGGEABA un hook diferido legítimo (hunt
+ * scope-aware: 7 FP_REGRESSION de `const { useEffect } = React`, over-flag fail-closed). El
+ * control `const { useEffect } = Sync` (root no-react) NO aliasa → sigue siendo shadow → flagea.
+ */
+function variableInitAliasesReact(decl, reactImports, priorNonImport) {
+  if (!reactImports || !ts.isVariableDeclaration(decl) || !decl.initializer) return false;
+  let root = unwrapErased(decl.initializer);
+  while (
+    ts.isPropertyAccessExpression(root) ||
+    ts.isElementAccessExpression(root)
+  ) {
+    root = unwrapErased(root.expression);
+  }
+  if (!ts.isIdentifier(root)) return false;
+  if (priorNonImport && priorNonImport.has(root.text)) return false; // root sombreado no-react
+  return reactImports.namespaces.has(root.text);
 }
 
 /**
@@ -1438,21 +1471,69 @@ function gatherReactImports(sourceFile) {
   while (changed) {
     changed = false;
     for (const stmt of sourceFile.statements) {
-      if (!ts.isImportEqualsDeclaration(stmt) || stmt.isTypeOnly) continue;
-      const ref = stmt.moduleReference;
-      const local = stmt.name.text;
-      if (ts.isIdentifier(ref)) {
-        if (namespaces.has(ref.text) && !namespaces.has(local)) {
-          namespaces.add(local);
-          changed = true;
+      if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) {
+        const ref = stmt.moduleReference;
+        const local = stmt.name.text;
+        if (ts.isIdentifier(ref)) {
+          if (namespaces.has(ref.text) && !namespaces.has(local)) {
+            namespaces.add(local);
+            changed = true;
+          }
+        } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.left)) {
+          if (
+            namespaces.has(ref.left.text) &&
+            named.get(local) !== ref.right.text
+          ) {
+            named.set(local, ref.right.text);
+            changed = true;
+          }
         }
-      } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.left)) {
-        if (
-          namespaces.has(ref.left.text) &&
-          named.get(local) !== ref.right.text
-        ) {
-          named.set(local, ref.right.text);
-          changed = true;
+      } else if (ts.isVariableStatement(stmt)) {
+        // Alias por `const`/`let` de un namespace react: `const R = React` (namespace),
+        // `const ue = React.useEffect` (named), `const { useEffect, useState: us } = React`
+        // (destructuring). Mismo rol que el import-equals para el deferred-hook canónico →
+        // un hook react destructurado NO se trata como render-phase (cierra 7 FP). Fixpoint
+        // resuelve cadenas (`const R = React; const { ue } = R`). Top-level: gatherReactImports
+        // solo procesa sourceFile.statements; un destructure react en namespace queda fail-closed.
+        for (const d of stmt.declarationList.declarations) {
+          if (!d.initializer) continue;
+          const init = unwrapErased(d.initializer);
+          let root = init;
+          while (
+            ts.isPropertyAccessExpression(root) ||
+            ts.isElementAccessExpression(root)
+          ) {
+            root = unwrapErased(root.expression);
+          }
+          if (!ts.isIdentifier(root) || !namespaces.has(root.text)) continue;
+          if (ts.isIdentifier(d.name) && init === root) {
+            if (!namespaces.has(d.name.text)) {
+              namespaces.add(d.name.text);
+              changed = true;
+            }
+          } else if (
+            ts.isIdentifier(d.name) &&
+            ts.isPropertyAccessExpression(init) &&
+            ts.isIdentifier(init.name)
+          ) {
+            if (named.get(d.name.text) !== init.name.text) {
+              named.set(d.name.text, init.name.text);
+              changed = true;
+            }
+          } else if (ts.isObjectBindingPattern(d.name) && init === root) {
+            for (const el of d.name.elements) {
+              if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
+              const localName = el.name.text;
+              const prop =
+                el.propertyName && ts.isIdentifier(el.propertyName)
+                  ? el.propertyName.text
+                  : localName;
+              if (named.get(localName) !== prop) {
+                named.set(localName, prop);
+                changed = true;
+              }
+            }
+          }
         }
       }
     }
