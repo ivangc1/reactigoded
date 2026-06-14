@@ -1054,17 +1054,22 @@ function gatherBlockLexicalNames(statements) {
  * no-react), luego los import-equals contra el set ya acumulado (cierra la cadena
  * `import React = FakeReact; import useEffect = React.useEffect`).
  */
-function gatherNonReactLexicalShadows(statements, reactImports, baseNonImport) {
+function gatherNonReactLexicalShadows(statements, scope) {
   const shadows = new Set();
   for (const stmt of statements) {
     if (ts.isVariableStatement(stmt)) {
       if (isBlockScopedDeclList(stmt.declarationList.flags)) {
+        // `const { useEffect } = React` aliasa hooks react → NO es shadow (mismo núcleo que
+        // extractPostStatementBindings). Una cadena scope-local del MISMO bloque (`const R =
+        // React; const { useEffect } = R`) NO se resuelve aquí (la pre-carga es un solo pase,
+        // R aún no está en scope) → la cierra el purge posicional `purgeNonImportReactAliases`.
+        const aliasNames = reactAliasNamesDeclaredBy(stmt, scope);
         for (const d of stmt.declarationList.declarations) {
           if (isAmbientDeclaration(d)) continue;
-          // `const { useEffect } = React` aliasa hooks react → NO es shadow (mismo criterio
-          // que extractPostStatementBindings; si entrara, la pre-carga flaggearía el hook).
-          if (!variableInitAliasesReact(d, reactImports, baseNonImport)) {
-            addBindingNamesFromPattern(d.name, shadows);
+          const names = new Set();
+          addBindingNamesFromPattern(d.name, names);
+          for (const n of names) {
+            if (!aliasNames.has(n)) shadows.add(n);
           }
         }
       }
@@ -1087,10 +1092,16 @@ function gatherNonReactLexicalShadows(statements, reactImports, baseNonImport) {
       ts.isIdentifier(stmt.name) &&
       producesRuntimeValue(stmt)
     ) {
-      const prior = baseNonImport
-        ? new Set([...baseNonImport, ...shadows])
-        : shadows;
-      if (!importEqualsAliasesReact(stmt, reactImports, prior)) {
+      // Resolver el import-equals contra el scope + los shadows ya acumulados (cierra la
+      // cadena `import React = FakeReact; import useEffect = React.useEffect`).
+      const localScope = {
+        ...scope,
+        nonImportBindings: new Set([
+          ...(scope.nonImportBindings ?? []),
+          ...shadows,
+        ]),
+      };
+      if (reactAliasNamesDeclaredBy(stmt, localScope).size === 0) {
         shadows.add(stmt.name.text);
       }
     }
@@ -1292,14 +1303,21 @@ function gatherSourceFileFunctionDeclarations(sourceFile) {
  * los let/const se pre-cargaban a scope-entry, false-shadow-eando reads
  * anteriores.
  */
-function extractPostStatementBindings(stmt, reactImports, priorNonImport) {
+function extractPostStatementBindings(stmt, scope) {
   // `all`: todos los bindings (para localBindings — sombrean globals). `nonImport`:
   // SOLO los locales NO-import (para nonImportBindings, que distingue un shadow local
   // de un hook real). `import X = …` es IMPORT-LIKE → va a `all` pero NO a `nonImport`
   // (si entrara, `import ue = React.useEffect; ue(cb)` se trataría como shadow local y
   // se flaggearía — regresión). Espejo de gatherModulePreloadedBindings.
+  //
+  // Los nombres que `stmt` declara como aliases REACT (`reactAliasNamesDeclaredBy`,
+  // scope-aware + const-only) se EXCLUYEN de `nonImport`: NO son shadows síncronos sino
+  // el hook react genuino, así que el deferred-hook shadow-guard no debe flaggearlos. El
+  // control no-react (`const { useEffect } = Sync`, `let ue = React.useEffect` reasignable)
+  // NO es alias → entra en nonImport → flagea. Núcleo único = sin divergencia file-global.
   const all = new Set();
   const nonImport = new Set();
+  const aliasNames = reactAliasNamesDeclaredBy(stmt, scope);
   if (ts.isVariableStatement(stmt)) {
     const flags = stmt.declarationList.flags;
     const blockScoped = isBlockScopedDeclList(flags);
@@ -1307,11 +1325,10 @@ function extractPostStatementBindings(stmt, reactImports, priorNonImport) {
       for (const decl of stmt.declarationList.declarations) {
         if (isAmbientDeclaration(decl)) continue; // declare const/let → erased
         addBindingNamesFromPattern(decl.name, all);
-        // `const { useEffect } = React` aliasa hooks react genuinos → NO es shadow local
-        // (si entrara en nonImport, el deferred-hook shadow-guard flaggearía el hook). El
-        // `const { useEffect } = Sync` (no-react) SÍ es shadow. Espejo de import-equals.
-        if (!variableInitAliasesReact(decl, reactImports, priorNonImport)) {
-          addBindingNamesFromPattern(decl.name, nonImport);
+        const declNames = new Set();
+        addBindingNamesFromPattern(decl.name, declNames);
+        for (const n of declNames) {
+          if (!aliasNames.has(n)) nonImport.add(n);
         }
       }
     }
@@ -1333,15 +1350,12 @@ function extractPostStatementBindings(stmt, reactImports, priorNonImport) {
     all.add(stmt.name.text);
     if (!ts.isImportEqualsDeclaration(stmt)) {
       nonImport.add(stmt.name.text);
-    } else if (!importEqualsAliasesReact(stmt, reactImports, priorNonImport)) {
+    } else if (!aliasNames.has(stmt.name.text)) {
       // Un import-equals es import-like (exempt como hook) SOLO si aliasa REACT
       // (`import ue = React.useEffect` → FP14/15). Un alias a un valor NO-react
       // (`import useEffect = Sync.run`, `import React = FakeReact`) SOMBREA el nombre
-      // localmente —incluido un nombre de hook diferido— con una función que puede
-      // correr SÍNCRONA en render → debe ir a nonImport para que el shadow-guard de
-      // isDeferredExecutionContext (L700) dispare y lo flaggee. Sin esto, el check
-      // canónico file-global trataba `useEffect = Sync.run` como el hook react diferido
-      // y eximía el read del global = BYPASS (hunt final #173, deferred import-equals).
+      // localmente → debe ir a nonImport para que el shadow-guard de
+      // isDeferredExecutionContext dispare y lo flaggee (hunt final #173, deferred import-equals).
       nonImport.add(stmt.name.text);
     }
   }
@@ -1349,88 +1363,40 @@ function extractPostStatementBindings(stmt, reactImports, priorNonImport) {
 }
 
 /**
- * ¿Un `import X = Y(.Z…)` aliasa REACT? — i.e. su RHS root identifier es un namespace
- * de react reconocido (`reactImports.namespaces`: `import React` / `import * as React`
- * / un alias resuelto) Y NO está SOMBREADO localmente por un binding no-react.
- * `import ue = React.useEffect` → root `React` ∈ namespaces, no sombreado → SÍ (hook
- * legítimo, exempt). `import useEffect = Sync.run` → root `Sync` ∉ namespaces → NO.
+ * NÚCLEO ÚNICO de resolución de aliases REACT declarados por UN statement, scope-aware.
+ * Reemplaza la lógica antes CUADRUPLICADA y divergente (`gatherReactImports` var-branch
+ * file-global; `variableInitAliasesReact`/`importEqualsAliasesReact` para la exclusión de
+ * `nonImportBindings`; y la computación interna de `addReactAliases`). La DIVERGENCIA entre
+ * esas copias era la fuente recurrente de bypasses/FPs (codex P1 let-reassign; hunt #173:
+ * root scope-local, element-access, computed-spoof). Una sola resolución la cierra de raíz.
  *
- * **El check de shadow es load-bearing (codex P1):** `reactImports.namespaces` es
- * FILE-GLOBAL. Dentro de un namespace, `import React = FakeReact` sombrea `React` con un
- * namespace no-react; un `import useEffect = React.useEffect` posterior tendría root
- * `React` ∈ namespaces file-global → SE clasificaría como alias react aunque `React.*`
- * sea ahora `FakeReact.*` (síncrono) = BYPASS. Por eso exigimos que el root NO esté en
- * `priorNonImport` (los shadows no-react acumulados ANTES de esta statement — el propio
- * `import React = FakeReact` ya entró ahí por esta misma regla). Scope-aware, no file-global.
- */
-function importEqualsAliasesReact(stmt, reactImports, priorNonImport) {
-  if (!reactImports || !ts.isImportEqualsDeclaration(stmt)) return false;
-  let ref = stmt.moduleReference;
-  if (!ref || ts.isExternalModuleReference(ref)) return false; // import X = require(...)
-  while (ts.isQualifiedName(ref)) ref = ref.left;
-  if (!ts.isIdentifier(ref)) return false;
-  if (priorNonImport && priorNonImport.has(ref.text)) return false; // root sombreado no-react
-  return reactImports.namespaces.has(ref.text);
-}
-
-/**
- * ¿Una `VariableDeclaration` aliasa REACT? — `const { useEffect } = React`, `const R = React`,
- * `const ue = React.useEffect`: el root del initializer es un namespace react reconocido Y no
- * está sombreado localmente. Espejo de `importEqualsAliasesReact` para destructuring/alias por
- * `const`/`let` — sin esto los nombres destructurados de hooks react genuinos entraban en
- * nonImportBindings y el deferred-hook shadow-guard FLAGGEABA un hook diferido legítimo (hunt
- * scope-aware: 7 FP_REGRESSION de `const { useEffect } = React`, over-flag fail-closed). El
- * control `const { useEffect } = Sync` (root no-react) NO aliasa → sigue siendo shadow → flagea.
- */
-function variableInitAliasesReact(decl, reactImports, priorNonImport) {
-  if (!reactImports || !ts.isVariableDeclaration(decl) || !decl.initializer) return false;
-  const init = unwrapErased(decl.initializer);
-  // `const useEffect = reactUseEffect` — alias de un NAMED react import (no namespace).
-  if (ts.isIdentifier(init) && reactImports.named.has(init.text)) {
-    return !(priorNonImport && priorNonImport.has(init.text));
-  }
-  let root = init;
-  while (
-    ts.isPropertyAccessExpression(root) ||
-    ts.isElementAccessExpression(root)
-  ) {
-    root = unwrapErased(root.expression);
-  }
-  if (!ts.isIdentifier(root)) return false;
-  if (priorNonImport && priorNonImport.has(root.text)) return false; // root sombreado no-react
-  return reactImports.namespaces.has(root.text);
-}
-
-/**
- * Resuelve los aliases REACT declarados por UN statement y los devuelve en un
- * context ACTUALIZADO (scope-aware). Espejo posicional de la resolución file-global
- * de `gatherReactImports`, pero acumulada DURANTE el walk en los campos de scope
- * `scopeReactNs` / `scopeReactNamed` del context — así un alias declarado dentro de
- * una función/namespace vive SOLO en ese scope y NO filtra a scopes hermanos (el
- * bypass file-global que codex P1 rechazó: `helper(){ const { useEffect } = React }`
- * no puede eximir el `useEffect` de OTRA función importado de un módulo síncrono).
+ * `scope` = `{ reactImports, scopeReactNs?, scopeReactNamed?, nonImportBindings? }`.
+ * Devuelve `{ ns: string[], named: Array<[local, canónico]> }`:
+ *   ns    → nombres que son un NAMESPACE react (React, o un alias `const` de él) en este scope.
+ *   named → `[localName, exportCanónico]` de hooks/miembros react (`ue`→"useEffect").
  *
- * Reconoce, resolviendo roots contra `scopeReactNs ∪ reactImports.namespaces` (y los
- * named contra `scopeReactNamed ∪ reactImports.named`), excluyendo roots sombreados
- * por un binding no-react (`nonImportBindings`):
- *   - `import R = React`                  → R   ∈ scopeReactNs
- *   - `import ue = React.useEffect`       → ue  → "useEffect" ∈ scopeReactNamed
- *   - `const R = React`                   → R   ∈ scopeReactNs
- *   - `const ue = React.useEffect`        → ue  → "useEffect"
- *   - `const { useEffect, useState: us } = React` → useEffect→"useEffect", us→"useState"
- *   - `const useEffect = reactUseEffect`  → useEffect → canónico del named import
+ * **SOLO `const` (codex P1, BYPASS fail-open):** un `let`/`var` puede REASIGNARSE a una función
+ * síncrona DESPUÉS del init (`let ue = React.useEffect; ue = sync; ue(cb)`) → confiar en el init
+ * es fail-OPEN (el cb corre síncrono en render y se eximía). Un alias por `const` es inmutable →
+ * seguro. Un alias `let`/`var` queda fail-closed (over-flag, residual aceptado, raro). `import X = …`
+ * es inmutable → exento del check `const`.
  *
- * NESTED [6]/[9]/[10] del hunt scope-aware: el caso COMÚN top-level ya lo cubre
- * `gatherReactImports` (file-global, sound porque top-level ES el scope externo);
- * este helper extiende el reconocimiento al interior de funciones/namespaces sin
- * abrir el bypass. Devuelve el mismo `context` si el statement no declara aliases.
+ * Resuelve roots contra `scopeReactNs ∪ reactImports.namespaces`; named contra
+ * `scopeReactNamed ∪ reactImports.named`; roots ∈ `nonImportBindings` (shadow no-react) excluidos
+ * (codex P1 root-shadow). Member-name de property-access (`React.useEffect`) Y element-access con
+ * STRING LITERAL (`React["useEffect"]`); un computed/element NO-literal NO se registra (fail-closed
+ * — cierra el spoof `const { ["useState"]: useEffect } = React`, donde el binding real es useState
+ * render-phase). Rest de un namespace react (`const { C, ...rest } = React`) → `rest ∈ ns` (sus
+ * miembros siguen siendo canónicos react).
  */
-function addReactAliases(context, stmt) {
-  const reactImports = context.reactImports;
-  if (!reactImports) return context;
-  const nsSet = context.scopeReactNs;
-  const namedMap = context.scopeReactNamed;
-  const nonImport = context.nonImportBindings;
+function reactAliasesDeclaredBy(stmt, scope) {
+  const reactImports = scope.reactImports;
+  const ns = [];
+  const named = [];
+  if (!reactImports) return { ns, named };
+  const nsSet = scope.scopeReactNs;
+  const namedMap = scope.scopeReactNamed;
+  const nonImport = scope.nonImportBindings;
   const isReactNs = (name) =>
     !(nonImport && nonImport.has(name)) &&
     ((nsSet && nsSet.has(name)) || reactImports.namespaces.has(name));
@@ -1439,19 +1405,40 @@ function addReactAliases(context, stmt) {
     const scoped = namedMap && namedMap.get(name);
     return scoped !== undefined ? scoped : reactImports.named.get(name);
   };
-  const addNs = [];
-  const addNamed = [];
+  // member string de `React.X` (property) o `React["X"]` (element-access string literal).
+  // Computed/element NO-literal → null (no resoluble → fail-closed).
+  const memberName = (node) => {
+    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.name)) {
+      return node.name.text;
+    }
+    if (ts.isElementAccessExpression(node)) {
+      const arg = node.argumentExpression;
+      if (arg && ts.isStringLiteralLike(arg)) return arg.text;
+    }
+    return null;
+  };
+  // propertyName de un BindingElement → string del miembro, o null si no-resoluble.
+  const bindingMember = (el) => {
+    const pn = el.propertyName;
+    if (!pn) return el.name.text; // shorthand `{ useEffect }`
+    if (ts.isIdentifier(pn)) return pn.text; // `{ useEffect: ue }`
+    if (ts.isStringLiteralLike(pn)) return pn.text; // `{ "useEffect": ue }`
+    if (ts.isComputedPropertyName(pn) && ts.isStringLiteralLike(pn.expression)) {
+      return pn.expression.text; // `{ ["useEffect"]: ue }` — literal computed
+    }
+    return null; // computed NO-literal `{ [k]: ue }` → no resoluble → fail-closed
+  };
 
   const handleVarInit = (name, initializer) => {
     const init = unwrapErased(initializer);
-    // `const useEffect = reactUseEffect` — alias de un NAMED react import.
+    // `const useEffect = reactUseEffect` — alias de un NAMED react (no namespace).
     if (ts.isIdentifier(name) && ts.isIdentifier(init)) {
       if (isReactNs(init.text)) {
-        addNs.push(name.text);
+        ns.push(name.text);
         return;
       }
       const canon = canonicalNamed(init.text);
-      if (canon !== undefined) addNamed.push([name.text, canon]);
+      if (canon !== undefined) named.push([name.text, canon]);
       return;
     }
     let root = init;
@@ -1463,29 +1450,31 @@ function addReactAliases(context, stmt) {
     }
     if (!ts.isIdentifier(root) || !isReactNs(root.text)) return;
     if (ts.isIdentifier(name) && init === root) {
-      addNs.push(name.text); // const R = React
-    } else if (
-      ts.isIdentifier(name) &&
-      ts.isPropertyAccessExpression(init) &&
-      ts.isIdentifier(init.name)
-    ) {
-      addNamed.push([name.text, init.name.text]); // const ue = React.useEffect
+      ns.push(name.text); // const R = React
+    } else if (ts.isIdentifier(name)) {
+      const member = memberName(init); // const ue = React.useEffect / React["useEffect"]
+      if (member !== null) named.push([name.text, member]);
     } else if (ts.isObjectBindingPattern(name) && init === root) {
       for (const el of name.elements) {
         if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
-        const local = el.name.text;
-        const prop =
-          el.propertyName && ts.isIdentifier(el.propertyName)
-            ? el.propertyName.text
-            : local;
-        addNamed.push([local, prop]); // const { useEffect } = React
+        if (el.dotDotDotToken) {
+          ns.push(el.name.text); // const { C, ...rest } = React → rest es ns-like
+          continue;
+        }
+        const member = bindingMember(el);
+        if (member !== null) named.push([el.name.text, member]);
       }
     }
   };
 
   if (ts.isVariableStatement(stmt)) {
+    if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) {
+      return { ns, named }; // const-only (codex P1) — let/var reasignable → no se confía
+    }
     for (const d of stmt.declarationList.declarations) {
-      if (d.initializer) handleVarInit(d.name, d.initializer);
+      if (d.initializer && !isAmbientDeclaration(d)) {
+        handleVarInit(d.name, d.initializer);
+      }
     }
   } else if (
     ts.isImportEqualsDeclaration(stmt) &&
@@ -1498,24 +1487,62 @@ function addReactAliases(context, stmt) {
       while (ts.isQualifiedName(r)) r = r.left;
       if (ts.isIdentifier(r) && isReactNs(r.text)) {
         if (ts.isIdentifier(ref)) {
-          addNs.push(stmt.name.text); // import R = React
+          ns.push(stmt.name.text); // import R = React
         } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.right)) {
-          addNamed.push([stmt.name.text, ref.right.text]); // import ue = React.useEffect
+          named.push([stmt.name.text, ref.right.text]); // import ue = React.useEffect
         }
       }
     }
   }
+  return { ns, named };
+}
 
-  if (addNs.length === 0 && addNamed.length === 0) return context;
+/** Conjunto de nombres locales que son aliases react (ns ∪ named) declarados por `stmt`. */
+function reactAliasNamesDeclaredBy(stmt, scope) {
+  const { ns, named } = reactAliasesDeclaredBy(stmt, scope);
+  const names = new Set(ns);
+  for (const [local] of named) names.add(local);
+  return names;
+}
+
+/**
+ * Acumula en el `context` (scope-aware) los aliases react declarados por `stmt`, vía el
+ * núcleo `reactAliasesDeclaredBy`. Los guarda en `scopeReactNs` / `scopeReactNamed` —
+ * campos que viven SOLO en el scope donde se declaran y NO filtran a hermanos (el bypass
+ * file-global que codex P1 rechazó). Devuelve el mismo `context` si no hay aliases.
+ */
+function addReactAliases(context, stmt) {
+  const { ns, named } = reactAliasesDeclaredBy(stmt, context);
+  if (ns.length === 0 && named.length === 0) return context;
   return {
     ...context,
-    ...(addNs.length > 0
-      ? { scopeReactNs: new Set([...(nsSet ?? []), ...addNs]) }
+    ...(ns.length > 0
+      ? { scopeReactNs: new Set([...(context.scopeReactNs ?? []), ...ns]) }
       : {}),
-    ...(addNamed.length > 0
-      ? { scopeReactNamed: new Map([...(namedMap ?? []), ...addNamed]) }
+    ...(named.length > 0
+      ? { scopeReactNamed: new Map([...(context.scopeReactNamed ?? []), ...named]) }
       : {}),
   };
+}
+
+/**
+ * Purga de `nonImportBindings` los nombres que `stmt` redeclara como aliases react. Un
+ * `const ue = React.useEffect` en un scope interno SOMBREA léxicamente un binding no-react
+ * homónimo del scope externo (`const ue = Sync.run` afuera) → ese nombre ya NO es un shadow
+ * síncrono aquí y debe salir del set para que el deferred-hook shadow-guard no lo flaggee.
+ * Gemelo de `purgeGuardAliasShadows`. Cierra FPs scope-shadow (react-alias sobre sync externo).
+ */
+function purgeNonImportReactAliases(context, stmt) {
+  const aliasNames = reactAliasNamesDeclaredBy(stmt, context);
+  if (aliasNames.size === 0 || context.nonImportBindings.size === 0) return context;
+  let purged = null;
+  for (const n of aliasNames) {
+    if (context.nonImportBindings.has(n)) {
+      if (!purged) purged = new Set(context.nonImportBindings);
+      purged.delete(n);
+    }
+  }
+  return purged ? { ...context, nonImportBindings: purged } : context;
 }
 
 /**
@@ -1610,88 +1637,28 @@ function gatherReactImports(sourceFile) {
   // COMÚN) se reconoce aquí (sound: top-level ES el scope externo). El NESTED lo cierra
   // `addReactAliases` SCOPE-AWARE (acumulado posicionalmente en context.scopeReactNs/Named
   // durante el walk, vive solo en su scope → no filtra a hermanos) — NO aquí.
+  // Fixpoint para cadenas (`const R = React; const { ue } = R`; `import R = React; import ue =
+  // R.useEffect`). Usa el MISMO núcleo `reactAliasesDeclaredBy` que el path scope-aware → const-only
+  // (un top-level `let ue = React.useEffect` reasignable NO se registra, codex P1), element-access,
+  // computed-literal y rest-de-namespace tratados idénticos aquí. SOLO TOP-LEVEL (sound: top-level ES
+  // el scope externo); el NESTED lo cierra `addReactAliases` scope-aware (no filtra a hermanos).
   let changed = true;
   while (changed) {
     changed = false;
     for (const stmt of sourceFile.statements) {
-      if (ts.isImportEqualsDeclaration(stmt) && !stmt.isTypeOnly) {
-        const ref = stmt.moduleReference;
-        const local = stmt.name.text;
-        if (ts.isIdentifier(ref)) {
-          if (namespaces.has(ref.text) && !namespaces.has(local)) {
-            namespaces.add(local);
-            changed = true;
-          }
-        } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.left)) {
-          if (
-            namespaces.has(ref.left.text) &&
-            named.get(local) !== ref.right.text
-          ) {
-            named.set(local, ref.right.text);
-            changed = true;
-          }
+      const { ns: aliasNs, named: aliasNamed } = reactAliasesDeclaredBy(stmt, {
+        reactImports: { named, namespaces },
+      });
+      for (const n of aliasNs) {
+        if (!namespaces.has(n)) {
+          namespaces.add(n);
+          changed = true;
         }
-      } else if (ts.isVariableStatement(stmt)) {
-        // Alias por `const`/`let` de un namespace react: `const R = React` (namespace),
-        // `const ue = React.useEffect` (named), `const { useEffect, useState: us } = React`
-        // (destructuring). Mismo rol que el import-equals para el deferred-hook canónico →
-        // un hook react destructurado NO se trata como render-phase (cierra 7 FP). Fixpoint
-        // resuelve cadenas (`const R = React; const { ue } = R`). Top-level: gatherReactImports
-        // solo procesa sourceFile.statements; un destructure react en namespace queda fail-closed.
-        for (const d of stmt.declarationList.declarations) {
-          if (!d.initializer) continue;
-          const init = unwrapErased(d.initializer);
-          // `const useEffect = reactUseEffect` — alias de un NAMED react import (no namespace):
-          // hereda el canónico. (`import { useEffect as reactUseEffect } from "react"; const
-          // useEffect = reactUseEffect; useEffect(cb)` — FP del hunt scope-aware.)
-          if (
-            ts.isIdentifier(d.name) &&
-            ts.isIdentifier(init) &&
-            named.has(init.text)
-          ) {
-            const canon = named.get(init.text);
-            if (named.get(d.name.text) !== canon) {
-              named.set(d.name.text, canon);
-              changed = true;
-            }
-            continue;
-          }
-          let root = init;
-          while (
-            ts.isPropertyAccessExpression(root) ||
-            ts.isElementAccessExpression(root)
-          ) {
-            root = unwrapErased(root.expression);
-          }
-          if (!ts.isIdentifier(root) || !namespaces.has(root.text)) continue;
-          if (ts.isIdentifier(d.name) && init === root) {
-            if (!namespaces.has(d.name.text)) {
-              namespaces.add(d.name.text);
-              changed = true;
-            }
-          } else if (
-            ts.isIdentifier(d.name) &&
-            ts.isPropertyAccessExpression(init) &&
-            ts.isIdentifier(init.name)
-          ) {
-            if (named.get(d.name.text) !== init.name.text) {
-              named.set(d.name.text, init.name.text);
-              changed = true;
-            }
-          } else if (ts.isObjectBindingPattern(d.name) && init === root) {
-            for (const el of d.name.elements) {
-              if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
-              const localName = el.name.text;
-              const prop =
-                el.propertyName && ts.isIdentifier(el.propertyName)
-                  ? el.propertyName.text
-                  : localName;
-              if (named.get(localName) !== prop) {
-                named.set(localName, prop);
-                changed = true;
-              }
-            }
-          }
+      }
+      for (const [local, canon] of aliasNamed) {
+        if (named.get(local) !== canon) {
+          named.set(local, canon);
+          changed = true;
         }
       }
     }
@@ -3551,8 +3518,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         for (const clause of node.clauses) {
           for (const n of gatherNonReactLexicalShadows(
             clause.statements,
-            current.reactImports,
-            current.nonImportBindings,
+            current,
           )) {
             caseShadows.add(n);
           }
@@ -3593,9 +3559,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
         for (const stmt of clause.statements) {
           visit(stmt, clauseCtx);
-          const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports, current.nonImportBindings);
+          const { all, nonImport } = extractPostStatementBindings(stmt, current);
           current = addToScope(current, all, nonImport);
           clauseCtx = addToScope(clauseCtx, all, nonImport);
+          // Purga de nonImportBindings los nombres que este stmt redeclara como alias react
+          // (sombra léxica de un sync homónimo del scope externo) → no se flaggean como shadow.
+          current = purgeNonImportReactAliases(current, stmt);
+          clauseCtx = purgeNonImportReactAliases(clauseCtx, stmt);
           // Aliases react scope-aware: el CaseBlock entero es UN scope léxico → se
           // acumulan en `current` (compartido entre clauses) y en `clauseCtx` (el que
           // visita). Mismo rol que addToScope para el deferred-hook canónico nested.
@@ -3880,11 +3850,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // deferred-hook shadow-guard dispare (codex P1 round-10, scope-aware no posicional).
     // Solo nonImportBindings (no localBindings, para no tocar el shadow-de-global/TDZ).
     {
-      const lexShadows = gatherNonReactLexicalShadows(
-        statements,
-        current.reactImports,
-        current.nonImportBindings,
-      );
+      const lexShadows = gatherNonReactLexicalShadows(statements, current);
       if (lexShadows.size > 0) {
         current = {
           ...current,
@@ -3894,8 +3860,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     }
     for (const stmt of statements) {
       visit(stmt, current);
-      const { all, nonImport } = extractPostStatementBindings(stmt, current.reactImports, current.nonImportBindings);
+      const { all, nonImport } = extractPostStatementBindings(stmt, current);
       current = addToScope(current, all, nonImport);
+      // Purga de nonImportBindings los nombres que este stmt redeclara como alias react
+      // (sombra léxica de un sync homónimo del scope externo) → no se flaggean como shadow.
+      current = purgeNonImportReactAliases(current, stmt);
       // Aliases react SCOPE-AWARE declarados por este statement (`const { useEffect } =
       // React`, `import R = React`, …). Acumulados en el context del scope actual — no
       // filtran a hermanos. DESPUÉS de addToScope para que el shadow check use el

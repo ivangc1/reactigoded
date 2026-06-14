@@ -1655,24 +1655,25 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     ["nested: const useEffect = reactUseEffect en función", '/** @server-safe */\nimport { useEffect as reactUseEffect } from "react";\nexport function useTitle(t: string): void { const useEffect = reactUseEffect; useEffect(() => { document.title = t; }); }'],
     ["nested: namespace P { import R = React; R.useEffect }", '/** @server-safe */\nimport * as React from "react";\nexport namespace Panel { import R = React; export function usePanel(): void { R.useEffect(() => { void window.scrollY; }); } }'],
     ["nested: const R = React; R.useEffect directo", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const R = React; R.useEffect(() => { void window.innerWidth; }); return null; }'],
+    // Cadena scope-local de DOS hops — antes residual fail-closed; el núcleo único
+    // `reactAliasesDeclaredBy` (scope-aware en AMBOS paths: registro Y exclusión nonImport)
+    // resuelve el root intermedio `R` → ue = useEffect real → EXENTO.
+    ["nested cadena: const R = React; const ue = R.useEffect", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const R = React; const ue = R.useEffect; ue(() => { void window.innerWidth; }); return null; }'],
   ])("0-FP NESTED: alias react scope-aware en función/namespace EXENTO: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
   });
 
   // SOUNDNESS: el control no-react (destructure de un objeto SYNC, o React sombreado por un no-react)
   // SIGUE flaggeando — el fix scope-aware no abre bypass. Cubre también: alias-spoof nested
-  // (`const { useState: useEffect } = React` → canónico useState, render-phase → FLAGGEA), alias de
-  // namespace NO-react nested (`import R = FakeReact; R.useEffect`), y la cadena nested
-  // `const R = React; const ue = R.useEffect` (root intermedio scope-local NO resuelto por el
-  // nonImport-exclusion file-global → ue ∈ nonImport → fail-closed FLAGGEA; residual SOUND, no bypass).
+  // (`const { useState: useEffect } = React` → canónico useState, render-phase → FLAGGEA) y alias de
+  // namespace NO-react nested (`import R = FakeReact; R.useEffect`).
   it.each([
     ["const { useEffect } = Sync (objeto sync no-react)", '/** @server-safe */\nconst Sync = { useEffect(cb: () => void) { cb(); } };\nexport function W() { const { useEffect } = Sync; useEffect(() => { void window.innerWidth; }); return null; }'],
     ["React sombreado: const React2 = FakeReact; const { useEffect } = React2", '/** @server-safe */\nimport * as React from "react";\nexport const _r = React;\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport namespace App { const React2 = FakeReact; const { useEffect } = React2; useEffect(() => { void document.title; }); }'],
     ["nested sync shadow: const useEffect = Sync.run", '/** @server-safe */\nimport * as Sync from "./sync";\nexport function Comp() { const useEffect = Sync.run; useEffect(() => { void window.location.href; }); return null; }'],
     ["alias-spoof nested: const { useState: useEffect } = React (canónico useState)", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const { useState: useEffect } = React; useEffect(() => { void window.innerWidth; }); return null; }'],
     ["namespace NO-react nested: import R = FakeReact; R.useEffect", '/** @server-safe */\nimport * as FakeReact from "./fake";\nexport namespace P { import R = FakeReact; export function go() { R.useEffect(() => { void window.scrollY; }); } }'],
-    ["cadena nested root scope-local: const R = React; const ue = R.useEffect (residual fail-closed)", '/** @server-safe */\nimport * as React from "react";\nexport function Comp() { const R = React; const ue = R.useEffect; ue(() => { void window.innerWidth; }); return null; }'],
-  ])("SOUNDNESS: alias NO-react / spoof / cadena scope-local sigue FLAGGEANDO: %s", (_l, code) => {
+  ])("SOUNDNESS: alias NO-react / spoof sigue FLAGGEANDO: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
 
@@ -1700,6 +1701,72 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     ["<x$ onClick> (lowercase-first intrínseco)", '/** @server-safe */\nexport function C() { return <x$ onClick={() => { void window.name; }} />; }'],
   ])("0-FP: handler en intrínseco lowercase sigue EXENTO: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
+  });
+});
+
+/**
+ * NÚCLEO ÚNICO de react-alias (`reactAliasesDeclaredBy`) — codex P1 (BYPASS let-reassign) +
+ * hunt adversarial #173 (31 hallazgos: 7 bypasses + 13 FPs + 11 residuales). La lógica antes
+ * estaba CUADRUPLICADA y divergente (gatherReactImports file-global, variableInitAliasesReact/
+ * importEqualsAliasesReact para exclusión nonImport, addReactAliases scope-aware); codex explotó
+ * el eje const-vs-let, el hunt el eje file-global-vs-scope-aware y property-vs-element. Unificado.
+ */
+describe("server-safe gate — react-alias núcleo único (codex P1 const-only + hunt #173 scope-aware)", () => {
+  const H = '/** @server-safe */\nimport * as React from "react";\n';
+  const HD = '/** @server-safe */\nimport React from "react";\n';
+  const flagged = (code: string) => checkSourceFile(code, "core.fixture.tsx").length > 0;
+
+  // BYPASSES (fail-OPEN) cerrados — const-only mata el let/var reasignable; el computed-spoof
+  // resuelve el miembro real (useState → render-phase). TODOS deben FLAGGEAR.
+  it.each([
+    ["computed-spoof const {['useState']:useEffect}=React", H + `export function C(){ const {["useState"]:useEffect}=React; useEffect(()=>{ void window.innerWidth; }); return null; }`],
+    ["let {useEffect}=React reasignado a sync", HD + `let { useEffect } = React;\nuseEffect = ((cb:()=>void)=>cb()) as unknown as typeof useEffect;\nexport function C(){ useEffect(()=>{ void window.innerWidth; }); return null; }`],
+    ["let ue=React.useEffect; ue=runSync (nested)", H + `function runSync(cb:()=>void){cb();}\nexport function C(){ let ue=React.useEffect; ue=runSync; ue(()=>{ void window.innerWidth; }); return null; }`],
+    ["let ue=React.useEffect; ue=runSync (top-level)", H + `function runSync(cb:()=>void){cb();}\nlet ue=React.useEffect; ue=runSync;\nexport function C(){ ue(()=>{ void window.innerWidth; }); return null; }`],
+    ["let ue=React.useEffect; ue=obj.run", H + `const obj={run(cb:()=>void){cb();}};\nexport function C(){ let ue:(cb:()=>void)=>void=React.useEffect; ue=obj.run; ue(()=>{ void window.innerWidth; }); return null; }`],
+    ["chain const ue; let ue2=ue; ue2=runSync", H + `function runSync(cb:()=>void){cb();}\nconst ue=React.useEffect; let ue2=ue; ue2=runSync;\nexport function C(){ ue2(()=>{ void window.innerWidth; }); return null; }`],
+    ["let ue=React.useEffect; if(flag) ue=runSync", H + `function runSync(cb:()=>void){cb();}\nexport function C(flag:boolean){ let ue=React.useEffect; if(flag){ue=runSync;} ue(()=>{ void window.innerWidth; }); return null; }`],
+  ])("BYPASS CERRADO (const-only / computed-spoof) — FLAGGEA: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  // FPs (fail-closed over-flag) cerrados por el núcleo scope-aware + element-access + computed-literal
+  // + rest-de-namespace + purge scope-shadow. TODOS deben EXIMIR (el callee ES un hook react diferido).
+  it.each([
+    ["scope-local chain nested const R=React; {useEffect}=R", H + `export function Outer(){ const R=React; function Mid(){ const {useEffect}=R; function Leaf(){ useEffect(()=>{ void localStorage.getItem("k"); },[]); return null;} return Leaf;} return Mid; }`],
+    ["scope-local chain same-block const R=React; {useEffect}=R", H + `export function C(){ const R=React; const {useEffect}=R; useEffect(()=>{ void localStorage.getItem("k"); },[]); return null; }`],
+    ["two-hop ident const e=React.useEffect; const ue=e", H + `export function C(){ const e=React.useEffect; const ue=e; ue(()=>{ void window.innerWidth; }); return null; }`],
+    ["element-access const ue=React['useEffect']", H + `export function C(){ const ue=React["useEffect"]; ue(()=>{ void window.innerWidth; }); return null; }`],
+    ["computed-literal binding {['useEffect']:ue}=React", H + `export function C(){ const {["useEffect"]:ue}=React; ue(()=>{ void window.innerWidth; },[]); return null; }`],
+    ["import-equals nested namespace R/ue", H + `namespace P{ import R=React; import ue=R.useEffect; export function go(){ ue(()=>{ void location.href; }); } }\nexport const _p=P;`],
+    ["rest-de-namespace const {Component:_,...rest}=React", HD + `const { Component:_C, ...rest }=React; void _C;\nexport function C(){ rest.useEffect(()=>{ void window.innerWidth; }); return null; }`],
+    ["inner-block react-alias sombrea outer sync", H + `function runSync(cb:()=>void){cb();}\nexport function C(){ const ue=runSync; ue(()=>{}); { const ue=React.useEffect; ue(()=>{ void window.innerWidth; }); } return null; }`],
+    ["nested react-alias bajo top-level sync shadow", HD + `const Sync={run:(cb:()=>void)=>cb()};\nconst useEffect=Sync.run;\nexport function Widget(){ function helper(){ const useEffect=React.useEffect; useEffect(()=>{ document.title=window.location.href; },[]); } helper(); return null; }`],
+  ])("FP CERRADO (scope-aware/element-access/rest/purge) — EXIME: %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+
+  // RESIDUALES fail-closed ACEPTADOS (SOUND, no bypass) — cerrarlos exige data-flow (reassign-tracking)
+  // o modelar el binder (miembros de namespace, .bind/.call). Documentados; deben seguir FLAGGEANDO.
+  it.each([
+    ["var ue=React.useEffect (sin reassign, const-only)", H + `export function C(){ var ue=React.useEffect; ue(()=>{ void window.innerWidth; }); return null; }`],
+    ["assignment-form let ue; ue=React.useEffect", H + `export function C13({mode}:{mode:number}){ let ue:typeof React.useEffect; switch(mode){ case 0: ue=React.useEffect; ue(()=>{ void window.innerWidth; },[]); break; } return null; }`],
+    ["let s=runSync; s=React.useEffect (reassign sync→react)", H + `function runSync(cb:()=>void){cb();}\nexport function C(){ let s=runSync; s=React.useEffect; s(()=>{ void window.innerWidth; }); return null; }`],
+    ["namespace member export P.useEffect2", `/** @server-safe */\nimport { useEffect } from "react";\nnamespace P{ export const useEffect2=useEffect; }\nexport const realUE=P.useEffect2;\nexport function C(){ realUE(()=>{ void window.innerWidth; }); return null; }`],
+    ["ternary (cond?React:React2).useEffect", H + `import * as React2 from "react";\nexport function C(cond:boolean){ (cond?React:React2).useEffect(()=>{ void window.innerWidth; }); return null; }`],
+    ["useEffect.bind(null)(cb)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function C(){ useEffect.bind(null)(()=>{ void window.innerWidth; }); return null; }`],
+    ["useEffect(...[cb]) spread", `/** @server-safe */\nimport { useEffect } from "react";\nexport function C(){ useEffect(...[()=>{ void window.innerWidth; }]); return null; }`],
+  ])("RESIDUAL fail-closed ACEPTADO (data-flow/binder) — FLAGGEA: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  // SOUNDNESS: el fix scope-aware (que EXIME más) NO abre bypass — los controles sync/spoof/sibling FLAGGEAN.
+  it.each([
+    ["sibling-leak helper react-alias NO filtra a C sync", `/** @server-safe */\nimport { useEffect } from "./sync";\nimport * as React from "react";\nfunction helper(){ const {useEffect}=React; useEffect(()=>{}); }\nexport function C(){ useEffect(()=>{ void window.location.href; }); return null; }\nexport const _h=helper;`],
+    ["sibling helperB usa el top-level sync useEffect", HD + `const Sync={run:(cb:()=>void)=>cb()};\nconst useEffect=Sync.run;\nexport function Widget(){ function helperB(){ useEffect(()=>{ document.title=window.location.href; }); } helperB(); return null; }`],
+    ["rest-de-sync NO exime const {...rest}=Sync", `/** @server-safe */\nimport * as Sync from "./sync";\nexport function C(){ const {...rest}=Sync; rest.useEffect(()=>{ void window.innerWidth; }); return null; }`],
+  ])("SOUNDNESS: control sync/sibling sigue FLAGGEANDO: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
   });
 });
 
