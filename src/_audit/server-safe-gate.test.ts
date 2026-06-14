@@ -1614,6 +1614,12 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     // en el mismo scope — léxicamente liga al const local síncrono, no al hook react file-global.
     // Requiere PRE-CARGA de sombras léxicas (gatherNonReactLexicalShadows) al entrar el scope.
     ["sombra léxica POSTERIOR (función antes del const, codex P1-r10)", '/** @server-safe */\nimport { useEffect } from "react";\nexport const real = useEffect;\nconst Sync = { run(cb: () => void) { cb(); } };\nnamespace N { export function C() { useEffect(() => { void window.location.href; }); } const useEffect = Sync.run; }\nexport const _n = N;'],
+    // codex P1 (review genérico): cadena de sombra react del MISMO bloque ANTES de una función hoisted
+    // que la usa. `const React = FakeReact; const useEffect = React.useEffect` → useEffect es síncrono
+    // (FakeReact). El pre-load DEBE resolver la cadena same-block (TDZ → React∈shadows antes de useEffect)
+    // para que la función hoisted `f` vea useEffect como sombra. El purge posicional NO alcanza a `f`.
+    ["same-block FakeReact shadow chain + hoisted fn", '/** @server-safe */\nimport * as React from "react";\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport function C() { function f() { useEffect(() => { void window.location.href; }); } const React = FakeReact; const useEffect = React.useEffect; f(); return null; }\nexport const _r = React;'],
+    ["same-block FakeReact shadow chain (uso directo)", '/** @server-safe */\nimport * as React from "react";\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport function C() { const React = FakeReact; const useEffect = React.useEffect; useEffect(() => { void window.location.href; }); return null; }\nexport const _r = React;'],
   ])("FLAGGEA import-equals no-react que sombrea un hook: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });

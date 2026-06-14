@@ -1065,25 +1065,15 @@ function gatherBlockLexicalNames(statements) {
  * `import React = FakeReact; import useEffect = React.useEffect`).
  */
 function gatherNonReactLexicalShadows(statements, scope) {
+  const reactImports = scope.reactImports;
+  const baseNonImport = scope.nonImportBindings ?? new Set();
   const shadows = new Set();
+  // Pase 1 — nombres block-lexical de function/class/enum/module: SIEMPRE shadow no-react (un
+  // class/function no es un alias react). Hoisted (función) o no, se pre-cargan antes del pase 2
+  // para que una `const useEffect = React.useEffect` donde `React` es una `function React(){}`
+  // hoisted LATER lo vea como sombra.
   for (const stmt of statements) {
-    if (ts.isVariableStatement(stmt)) {
-      if (isBlockScopedDeclList(stmt.declarationList.flags)) {
-        // `const { useEffect } = React` aliasa hooks react → NO es shadow (mismo núcleo que
-        // extractPostStatementBindings). Una cadena scope-local del MISMO bloque (`const R =
-        // React; const { useEffect } = R`) NO se resuelve aquí (la pre-carga es un solo pase,
-        // R aún no está en scope) → la cierra el purge posicional `purgeNonImportReactAliases`.
-        const aliasNames = reactAliasNamesDeclaredBy(stmt, scope);
-        for (const d of stmt.declarationList.declarations) {
-          if (isAmbientDeclaration(d)) continue;
-          const names = new Set();
-          addBindingNamesFromPattern(d.name, names);
-          for (const n of names) {
-            if (!aliasNames.has(n)) shadows.add(n);
-          }
-        }
-      }
-    } else if (
+    if (
       stmt.name &&
       ts.isIdentifier(stmt.name) &&
       (ts.isClassDeclaration(stmt) ||
@@ -1095,23 +1085,51 @@ function gatherNonReactLexicalShadows(statements, scope) {
       shadows.add(stmt.name.text);
     }
   }
+  // Pase 2 — var block-scoped + import-equals en ORDEN TEXTUAL, ACUMULANDO los react-aliases del
+  // MISMO bloque (nsSet/namedMap) y las sombras no-react. El TDZ de const/let garantiza root-
+  // declarado-antes-de-uso, así que un único pase resuelve las cadenas del bloque:
+  //   `const React = FakeReact; const useEffect = React.useEffect` → React∈shadows → useEffect
+  //     es sombra SÍNCRONA (codex P1: el pre-load lo perdía con solo el scope externo → una
+  //     función hoisted antes de la cadena se eximía = BYPASS).
+  //   `const R = React; const useEffect = R.useEffect` → R∈nsSet → useEffect es hook react (no sombra).
+  // Antes esto se delegaba al purge posicional, que NO alcanza a una función hoisted visitada
+  // ANTES de la cadena (el purge corre al llegar a la declaración, demasiado tarde).
+  const nsSet = new Set(scope.scopeReactNs ?? []);
+  const namedMap = new Map(scope.scopeReactNamed ?? []);
   for (const stmt of statements) {
+    const scopeNow = {
+      reactImports,
+      scopeReactNs: nsSet,
+      scopeReactNamed: namedMap,
+      nonImportBindings: new Set([...baseNonImport, ...shadows]),
+    };
     if (
+      ts.isVariableStatement(stmt) &&
+      isBlockScopedDeclList(stmt.declarationList.flags)
+    ) {
+      const { ns, named } = reactAliasesDeclaredBy(stmt, scopeNow);
+      for (const n of ns) nsSet.add(n);
+      for (const [l, c] of named) namedMap.set(l, c);
+      const aliasNames = new Set(ns);
+      for (const [l] of named) aliasNames.add(l);
+      for (const d of stmt.declarationList.declarations) {
+        if (isAmbientDeclaration(d)) continue;
+        const names = new Set();
+        addBindingNamesFromPattern(d.name, names);
+        for (const n of names) {
+          if (!aliasNames.has(n)) shadows.add(n);
+        }
+      }
+    } else if (
       ts.isImportEqualsDeclaration(stmt) &&
       stmt.name &&
       ts.isIdentifier(stmt.name) &&
       producesRuntimeValue(stmt)
     ) {
-      // Resolver el import-equals contra el scope + los shadows ya acumulados (cierra la
-      // cadena `import React = FakeReact; import useEffect = React.useEffect`).
-      const localScope = {
-        ...scope,
-        nonImportBindings: new Set([
-          ...(scope.nonImportBindings ?? []),
-          ...shadows,
-        ]),
-      };
-      if (reactAliasNamesDeclaredBy(stmt, localScope).size === 0) {
+      const { ns, named } = reactAliasesDeclaredBy(stmt, scopeNow);
+      for (const n of ns) nsSet.add(n);
+      for (const [l, c] of named) namedMap.set(l, c);
+      if (ns.length === 0 && named.length === 0) {
         shadows.add(stmt.name.text);
       }
     }
