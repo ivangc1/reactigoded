@@ -1819,6 +1819,14 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["named hook + Object.assign(React,…)", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ Object.assign(React as any,{useEffect:(cb:()=>void)=>cb()}); useEffect(()=>{ void window.location.href; }); return null; }`],
     ["named hook + alias mutado A=React; A.useEffect=sync", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ const A=React; (A as any).useEffect=((cb:()=>void)=>cb()); useEffect(()=>{ void window.location.href; }); return null; }`],
     ["scope-local named alias bajo mutación const ue=useEffect", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ (React as any).useEffect=((cb:()=>void)=>cb()); const ue=useEffect; ue(()=>{ void window.location.href; }); return null; }`],
+    // codex P1 #9: destructuring-assignment member-write — el target member ESTÁ en el archivo
+    // (token-en-su-sitio) aunque el LHS sea un object/array literal.
+    ["object-destr ({useEffect: React.useEffect} = …)", HD + `export function C(){ ({ useEffect: (React as any).useEffect } = { useEffect:(cb:()=>void)=>cb() }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["array-destr [React.useEffect] = [sync]", HD + `export function C(){ [(React as any).useEffect] = [(cb:()=>void)=>cb()]; React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["nested object-destr ({a:{b: React.useEffect}} = …)", HD + `export function C(){ ({ a:{ b:(React as any).useEffect } } = { a:{ b:(cb:()=>void)=>cb() } }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["destr default ({x: React.useEffect = d} = …)", HD + `export function C(){ const d=(cb:()=>void)=>cb(); ({ x:(React as any).useEffect = d } = {} as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["destr taintea NAMED ({useEffect: React.useEffect} = …)", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ ({ useEffect: (React as any).useEffect } = { useEffect:(cb:()=>void)=>cb() }); useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["for-of destr pattern member-write", HD + `export function C(){ for ({ x: (React as any).useEffect } of [{ x:(cb:()=>void)=>cb() }]) {} React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -1853,6 +1861,8 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["named import directo no afectado", `/** @server-safe */\nimport { useEffect } from "react";\nexport function C(){ useEffect(()=>{ void window.location.href; }); return null; }`],
     ["default + named SIN mutación (patrón común)", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ useEffect(()=>{ void window.location.href; }); return null; }`],
     ["member-write a otro objeto no taintea el named", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ const o:any={}; o.foo=1; useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["destructuring a identifiers (no member-write) no taintea", HD + `export function C(){ let a:any,b:any; ({ a, b } = { a:1, b:2 }); void a; void b; React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["destructuring-write a OTRO objeto no taintea react", HD + `export function C(){ const o:any={}; ({ a: o.foo } = { a:1 }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("0-FP: sin mutación del namespace react sigue EXENTO: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
   });

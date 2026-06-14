@@ -1639,6 +1639,35 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       if (r) roots.add(r);
     }
   };
+  // Recorre un TARGET de asignación (LHS de `=` / patrón de for-of/for-in) recogiendo los
+  // roots de los member-access target. Un destructuring-assignment `({ x: React.useEffect } =
+  // …)` o `[React.useEffect] = …` muta React aunque el LHS sea un object/array literal (no un
+  // member-access directo) — el target member ESTÁ sintácticamente presente (codex P1, token-en-
+  // su-sitio). Recursa en object/array patterns, defaults (`{ x: T = d }`) y rest (`{ ...T }`).
+  const collectWriteTargets = (target) => {
+    const t = unwrapErased(target);
+    if (ts.isPropertyAccessExpression(t) || ts.isElementAccessExpression(t)) {
+      const r = rootOf(t);
+      if (r) roots.add(r);
+    } else if (ts.isObjectLiteralExpression(t)) {
+      for (const prop of t.properties) {
+        if (ts.isPropertyAssignment(prop)) collectWriteTargets(prop.initializer);
+        else if (ts.isSpreadAssignment(prop)) collectWriteTargets(prop.expression);
+        // ShorthandPropertyAssignment `{ x }` → x es identifier target, no member.
+      }
+    } else if (ts.isArrayLiteralExpression(t)) {
+      for (const el of t.elements) {
+        if (ts.isOmittedExpression(el)) continue;
+        if (ts.isSpreadElement(el)) collectWriteTargets(el.expression);
+        else collectWriteTargets(el);
+      }
+    } else if (
+      ts.isBinaryExpression(t) &&
+      t.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      collectWriteTargets(t.left); // default en destructuring: `{ x: T = d }` → T es t.left
+    }
+  };
   // `[obj, member]` de un callee `Obj.m(…)` (dot) o `Obj["m"](…)` (bracket string literal) — misma
   // normalización dot/bracket que el resto del gate (codex P1: el bracket-form se colaba).
   const calleeObjMember = (callee) => {
@@ -1675,7 +1704,12 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
       node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
     ) {
-      addIfMemberAccess(node.left); // X.m = … / X[m] += …
+      collectWriteTargets(node.left); // X.m=… / X[m]+=… / ({x:X.m}=…) / [X.m]=…
+    } else if (
+      (ts.isForOfStatement(node) || ts.isForInStatement(node)) &&
+      !ts.isVariableDeclarationList(node.initializer)
+    ) {
+      collectWriteTargets(node.initializer); // for ({x: React.m} of …) — patrón sin const/let
     } else if (
       (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
       (node.operator === ts.SyntaxKind.PlusPlusToken ||
