@@ -1775,6 +1775,41 @@ describe("server-safe gate — react-alias núcleo único (codex P1 const-only +
 });
 
 /**
+ * Invalidación de namespace react por MEMBER-WRITE (codex P1 sobre b35a87c). Un `import React
+ * from "react"` (default) es el objeto export MUTABLE (interop CJS), NO el Module Namespace
+ * read-only de `import * as React`. `React.useEffect = sync; React.useEffect(()=>window)` corre
+ * síncrono → BYPASS. Fix: si el root de un namespace tiene un member-write en el archivo
+ * (`gatherMutatedNamespaceRoots`), NO se exime su `.useEffect`. File-wide (el objeto es compartido).
+ * Clave: NO se sobre-flaggea el caso COMÚN sin mutación (`import React from "react"; React.useEffect(cb)`).
+ */
+describe("server-safe gate — invalidación de namespace por member-write (codex P1 b35a87c)", () => {
+  const flagged = (code: string) => checkSourceFile(code, "mut.fixture.tsx").length > 0;
+  const HD = '/** @server-safe */\nimport React from "react";\n';
+  const HN = '/** @server-safe */\nimport * as React from "react";\n';
+
+  // BYPASS cerrado — un member-write al namespace lo invalida → FLAGGEA.
+  it.each([
+    ["default React.useEffect=sync", HD + `export function C(){ (React as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["default React['useEffect']=sync (element-access write)", HD + `export function C(){ (React as any)["useEffect"]=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["alias R mutado const R=React; R.useEffect=sync", HD + `export function C(){ const R=React; (R as any).useEffect=((cb:()=>void)=>cb()); R.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["React mutado, usado vía alias R", HD + `export function C(){ const R=React; (React as any).useEffect=((cb:()=>void)=>cb()); R.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Object.assign(React,{useEffect})", HD + `export function C(){ Object.assign(React as any,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+  ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  // 0-FP — el caso COMÚN sin mutación sigue exento; un member-write a OTRO objeto NO taintea React.
+  it.each([
+    ["default React.useEffect(cb) sin mutación (patrón ubicuo)", HD + `export function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["namespace import * as React (read-only)", HN + `export function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["member-write a OTRO objeto no taintea React", HD + `export function C(){ const o:any={}; o.foo=1; React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["named import directo no afectado", `/** @server-safe */\nimport { useEffect } from "react";\nexport function C(){ useEffect(()=>{ void window.location.href; }); return null; }`],
+  ])("0-FP: sin mutación del namespace react sigue EXENTO: %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+});
+
+/**
  * INVARIANTE DE CAPA — tsc bloquea el shadow TDZ (rebuttal PINEADO, beta.27).
  *
  * Codex (P2) señaló que el gate pasa `if (typeof window === "undefined") return;

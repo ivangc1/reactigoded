@@ -734,6 +734,7 @@ function isDeferredExecutionContext(fnNode, context) {
         if (mapped !== undefined) canonicalCallee = mapped;
       } else if (
         rootIdent !== null &&
+        !context.mutatedNamespaceRoots?.has(rootIdent) && // root mutado por member-write → no inmutable
         (context.scopeReactNs?.has(rootIdent) ||
           context.reactImports.namespaces.has(rootIdent))
       ) {
@@ -1397,8 +1398,10 @@ function reactAliasesDeclaredBy(stmt, scope) {
   const nsSet = scope.scopeReactNs;
   const namedMap = scope.scopeReactNamed;
   const nonImport = scope.nonImportBindings;
+  const mutated = scope.mutatedNamespaceRoots;
   const isReactNs = (name) =>
     !(nonImport && nonImport.has(name)) &&
+    !(mutated && mutated.has(name)) && // namespace mutado por member-write → no inmutable (codex P1)
     ((nsSet && nsSet.has(name)) || reactImports.namespaces.has(name));
   const canonicalNamed = (name) => {
     if (nonImport && nonImport.has(name)) return undefined;
@@ -1589,6 +1592,80 @@ function addRuntimeImportBindings(importClause, names) {
 }
 
 /**
+ * Roots identifier de cualquier MEMBER-WRITE en el archivo: `X.m = …`, `X[m] = …` (incl.
+ * compuesto `+=`/`??=`/…), `++X.m`/`X.m--`, `delete X.m`, y `Object.assign/defineProperty/
+ * defineProperties(X, …)`. Un namespace react cuyo root aparezca aquí está MUTADO → NO se
+ * puede tratar `X.useEffect` como el hook diferido inmutable (codex P1 sobre b35a87c).
+ *
+ * **Por qué importa el default import:** `import * as React` es un Module Namespace Object
+ * READ-ONLY (`React.useEffect = sync` lanza TypeError en ESM strict → inmutable, sound). Pero
+ * `import React from "react"` / `import { default as React }` es el objeto export MUTABLE bajo
+ * interop CJS/bundler → `React.useEffect = sync; React.useEffect(()=>window)` corre síncrono y se
+ * eximía = BYPASS. En vez de dejar de eximir TODO default-import (FP masivo: `React.useEffect(cb)`
+ * es el patrón ubicuo), se INVALIDA solo si hay un member-write en el archivo (la opción "invalidate
+ * on member writes" que codex sugirió). File-wide y conservador: el objeto React es COMPARTIDO, así
+ * que una mutación en cualquier punto puede alcanzar cualquier llamada (independiente del orden
+ * textual). Residual de diseño: mutación CROSS-MÓDULO o vía `Reflect.set`/aliasing indirecto (fuera
+ * del scope single-file del gate).
+ */
+function gatherMutatedNamespaceRoots(sourceFile) {
+  const roots = new Set();
+  const rootOf = (node) => {
+    let n = unwrapErased(node);
+    while (
+      ts.isPropertyAccessExpression(n) ||
+      ts.isElementAccessExpression(n)
+    ) {
+      n = unwrapErased(n.expression);
+    }
+    return ts.isIdentifier(n) ? n.text : null;
+  };
+  const addIfMemberAccess = (node) => {
+    const n = unwrapErased(node);
+    if (ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) {
+      const r = rootOf(n);
+      if (r) roots.add(r);
+    }
+  };
+  const visit = (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    ) {
+      addIfMemberAccess(node.left); // X.m = … / X[m] += …
+    } else if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken)
+    ) {
+      addIfMemberAccess(node.operand); // ++X.m / X.m--
+    } else if (ts.isDeleteExpression(node)) {
+      addIfMemberAccess(node.expression); // delete X.m
+    } else if (ts.isCallExpression(node)) {
+      const callee = unwrapErased(node.expression);
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        callee.expression.text === "Object" &&
+        ts.isIdentifier(callee.name) &&
+        (callee.name.text === "assign" ||
+          callee.name.text === "defineProperty" ||
+          callee.name.text === "defineProperties") &&
+        node.arguments.length > 0
+      ) {
+        const target = unwrapErased(node.arguments[0]); // Object.assign(X, …)
+        if (ts.isIdentifier(target)) roots.add(target.text);
+        else addIfMemberAccess(target);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return roots;
+}
+
+/**
  * Imports de "react", resueltos por su EXPORT CANÓNICO (no el binding local). Un
  * deferred-hook se reconoce por el nombre que EXPORTA react, no por el alias local:
  * `import { useState as useEffect }` tiene binding local "useEffect" ∈ DEFERRED_HOOKS
@@ -1598,8 +1675,11 @@ function addRuntimeImportBindings(importClause, names) {
  *          `useEffect`(alias de useState)→`useState`).
  *   namespaces: Set<localName> de default (`import React`) + `import * as React`,
  *          cuyos miembros `React.useEffect` YA son el nombre canónico.
+ *
+ * `mutatedRoots` (de `gatherMutatedNamespaceRoots`): un namespace cuyo root está mutado por
+ * member-write NO se reconoce como react (su `.useEffect` puede ser síncrono).
  */
-function gatherReactImports(sourceFile) {
+function gatherReactImports(sourceFile, mutatedRoots) {
   const named = new Map();
   const namespaces = new Set();
   for (const stmt of sourceFile.statements) {
@@ -1653,6 +1733,7 @@ function gatherReactImports(sourceFile) {
     for (const stmt of sourceFile.statements) {
       const { ns: aliasNs, named: aliasNamed } = reactAliasesDeclaredBy(stmt, {
         reactImports: { named, namespaces },
+        mutatedNamespaceRoots: mutatedRoots,
       });
       for (const n of aliasNs) {
         if (!namespaces.has(n)) {
@@ -3906,7 +3987,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const { all: moduleAll, nonImports: moduleNonImports } =
     gatherModulePreloadedBindings(sourceFile);
   const sourceFileFns = gatherSourceFileFunctionDeclarations(sourceFile);
-  const reactImports = gatherReactImports(sourceFile);
+  // Roots de namespace MUTADOS por member-write (`React.useEffect = sync`): un default
+  // import es el objeto export MUTABLE, no el Module Namespace read-only → si se muta, su
+  // `.useEffect` puede ser síncrono y no se exime (codex P1 sobre b35a87c). File-wide.
+  const mutatedNamespaceRoots = gatherMutatedNamespaceRoots(sourceFile);
+  const reactImports = gatherReactImports(sourceFile, mutatedNamespaceRoots);
   const baseContext = {
     activeGuards: new Set(),
     blockEntryGuards: new Set(),
@@ -3925,6 +4010,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // `reactImports` (top-level file-global) para reconocer destructure/alias NESTED.
     scopeReactNs: new Set(),
     scopeReactNamed: new Map(),
+    mutatedNamespaceRoots,
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
