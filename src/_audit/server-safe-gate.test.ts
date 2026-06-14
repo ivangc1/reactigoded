@@ -1726,12 +1726,16 @@ describe("server-safe gate — react-alias núcleo único (codex P1 const-only +
     ["let ue=React.useEffect; ue=obj.run", H + `const obj={run(cb:()=>void){cb();}};\nexport function C(){ let ue:(cb:()=>void)=>void=React.useEffect; ue=obj.run; ue(()=>{ void window.innerWidth; }); return null; }`],
     ["chain const ue; let ue2=ue; ue2=runSync", H + `function runSync(cb:()=>void){cb();}\nconst ue=React.useEffect; let ue2=ue; ue2=runSync;\nexport function C(){ ue2(()=>{ void window.innerWidth; }); return null; }`],
     ["let ue=React.useEffect; if(flag) ue=runSync", H + `function runSync(cb:()=>void){cb();}\nexport function C(flag:boolean){ let ue=React.useEffect; if(flag){ue=runSync;} ue(()=>{ void window.innerWidth; }); return null; }`],
-  ])("BYPASS CERRADO (const-only / computed-spoof) — FLAGGEA: %s", (_l, code) => {
+    // codex P1 sobre 1defc39: rest-de-namespace es un objeto MUTABLE → reasignar el miembro lo
+    // vuelve síncrono. NO se registra rest como namespace → FLAGGEA.
+    ["rest mutado const {...rest}=React; rest.useEffect=sync", HD + `export function C(){ const {...rest}=React; (rest as any).useEffect=((cb:()=>void)=>cb()); (rest as any).useEffect(()=>{ void window.innerWidth; }); return null; }`],
+  ])("BYPASS CERRADO (const-only / computed-spoof / rest-mutable) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
 
   // FPs (fail-closed over-flag) cerrados por el núcleo scope-aware + element-access + computed-literal
-  // + rest-de-namespace + purge scope-shadow. TODOS deben EXIMIR (el callee ES un hook react diferido).
+  // + purge scope-shadow. TODOS deben EXIMIR (el callee ES un hook react diferido). (El rest-de-namespace
+  // NO se cierra: el rest es un objeto mutable → registrarlo como ns sería fail-OPEN, codex P1 — residual.)
   it.each([
     ["scope-local chain nested const R=React; {useEffect}=R", H + `export function Outer(){ const R=React; function Mid(){ const {useEffect}=R; function Leaf(){ useEffect(()=>{ void localStorage.getItem("k"); },[]); return null;} return Leaf;} return Mid; }`],
     ["scope-local chain same-block const R=React; {useEffect}=R", H + `export function C(){ const R=React; const {useEffect}=R; useEffect(()=>{ void localStorage.getItem("k"); },[]); return null; }`],
@@ -1739,7 +1743,6 @@ describe("server-safe gate — react-alias núcleo único (codex P1 const-only +
     ["element-access const ue=React['useEffect']", H + `export function C(){ const ue=React["useEffect"]; ue(()=>{ void window.innerWidth; }); return null; }`],
     ["computed-literal binding {['useEffect']:ue}=React", H + `export function C(){ const {["useEffect"]:ue}=React; ue(()=>{ void window.innerWidth; },[]); return null; }`],
     ["import-equals nested namespace R/ue", H + `namespace P{ import R=React; import ue=R.useEffect; export function go(){ ue(()=>{ void location.href; }); } }\nexport const _p=P;`],
-    ["rest-de-namespace const {Component:_,...rest}=React", HD + `const { Component:_C, ...rest }=React; void _C;\nexport function C(){ rest.useEffect(()=>{ void window.innerWidth; }); return null; }`],
     ["inner-block react-alias sombrea outer sync", H + `function runSync(cb:()=>void){cb();}\nexport function C(){ const ue=runSync; ue(()=>{}); { const ue=React.useEffect; ue(()=>{ void window.innerWidth; }); } return null; }`],
     ["nested react-alias bajo top-level sync shadow", HD + `const Sync={run:(cb:()=>void)=>cb()};\nconst useEffect=Sync.run;\nexport function Widget(){ function helper(){ const useEffect=React.useEffect; useEffect(()=>{ document.title=window.location.href; },[]); } helper(); return null; }`],
   ])("FP CERRADO (scope-aware/element-access/rest/purge) — EXIME: %s", (_l, code) => {
@@ -1753,6 +1756,7 @@ describe("server-safe gate — react-alias núcleo único (codex P1 const-only +
     ["assignment-form let ue; ue=React.useEffect", H + `export function C13({mode}:{mode:number}){ let ue:typeof React.useEffect; switch(mode){ case 0: ue=React.useEffect; ue(()=>{ void window.innerWidth; },[]); break; } return null; }`],
     ["let s=runSync; s=React.useEffect (reassign sync→react)", H + `function runSync(cb:()=>void){cb();}\nexport function C(){ let s=runSync; s=React.useEffect; s(()=>{ void window.innerWidth; }); return null; }`],
     ["namespace member export P.useEffect2", `/** @server-safe */\nimport { useEffect } from "react";\nnamespace P{ export const useEffect2=useEffect; }\nexport const realUE=P.useEffect2;\nexport function C(){ realUE(()=>{ void window.innerWidth; }); return null; }`],
+    ["rest-de-namespace const {...rest}=React; rest.useEffect (objeto mutable, fail-closed)", HD + `const { Component:_C, ...rest }=React; void _C;\nexport function C(){ rest.useEffect(()=>{ void window.innerWidth; }); return null; }`],
     ["ternary (cond?React:React2).useEffect", H + `import * as React2 from "react";\nexport function C(cond:boolean){ (cond?React:React2).useEffect(()=>{ void window.innerWidth; }); return null; }`],
     ["useEffect.bind(null)(cb)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function C(){ useEffect.bind(null)(()=>{ void window.innerWidth; }); return null; }`],
     ["useEffect(...[cb]) spread", `/** @server-safe */\nimport { useEffect } from "react";\nexport function C(){ useEffect(...[()=>{ void window.innerWidth; }]); return null; }`],

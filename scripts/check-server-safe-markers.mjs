@@ -1458,7 +1458,12 @@ function reactAliasesDeclaredBy(stmt, scope) {
       for (const el of name.elements) {
         if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
         if (el.dotDotDotToken) {
-          ns.push(el.name.text); // const { C, ...rest } = React → rest es ns-like
+          // `const { C, ...rest } = React` — el rest crea un OBJETO PLANO MUTABLE (copia de
+          // props enumerables), NO el namespace read-only de react. `rest.useEffect = sync`
+          // reasigna el miembro y el cb corre síncrono en render → tratar rest como namespace
+          // react es fail-OPEN (codex P1 sobre 1defc39). NO se registra → `rest.useEffect`
+          // queda fail-closed (flagea, residual SOUND). Distinto de `const R = React`: R apunta
+          // al Module Namespace Object, cuyos miembros son read-only (no reasignables).
           continue;
         }
         const member = bindingMember(el);
