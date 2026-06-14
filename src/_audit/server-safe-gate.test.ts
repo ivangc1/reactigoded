@@ -1685,6 +1685,13 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     // para que la función hoisted `f` vea useEffect como sombra. El purge posicional NO alcanza a `f`.
     ["same-block FakeReact shadow chain + hoisted fn", '/** @server-safe */\nimport * as React from "react";\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport function C() { function f() { useEffect(() => { void window.location.href; }); } const React = FakeReact; const useEffect = React.useEffect; f(); return null; }\nexport const _r = React;'],
     ["same-block FakeReact shadow chain (uso directo)", '/** @server-safe */\nimport * as React from "react";\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport function C() { const React = FakeReact; const useEffect = React.useEffect; useEffect(() => { void window.location.href; }); return null; }\nexport const _r = React;'],
+    // codex P1 (review genérico): MULTI-declarador en UN statement — `const React = FakeReact, useEffect
+    // = React.useEffect`. JS resuelve el 2º `React` al declarador LOCAL del 1º (FakeReact, sync), pero
+    // reactAliasesDeclaredBy clasificaba todos los declaradores contra el scope de ANTES del statement
+    // (React = el import) → useEffect tratado como hook diferido = BYPASS. Fix: avanzar izq-a-der dentro
+    // de la lista de declaradores. Flaggea el window read síncrono.
+    ["multi-declarador const React=FakeReact, useEffect=React.useEffect", '/** @server-safe */\nimport * as React from "react";\nnamespace FakeReact { export function useEffect(cb: () => void): void { cb(); } }\nexport function C() { const React = FakeReact, useEffect = React.useEffect; useEffect(() => { void window.location.href; }); return null; }\nexport const _r = React;'],
+    ["multi-declarador const Sync={...}, useEffect=Sync.run", '/** @server-safe */\nexport function C() { const Sync = { run(cb: () => void) { cb(); } }, useEffect = Sync.run; useEffect(() => { void window.location.href; }); return null; }'],
   ])("FLAGGEA import-equals no-react que sombrea un hook: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });

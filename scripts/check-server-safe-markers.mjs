@@ -1427,12 +1427,25 @@ function reactAliasesDeclaredBy(stmt, scope) {
   const namedMap = scope.scopeReactNamed;
   const nonImport = scope.nonImportBindings;
   const mutated = scope.mutatedNamespaceRoots;
+  // Acumuladores LOCALES al statement — avanzan declarador-a-declarador izquierda-a-derecha. JS
+  // resuelve `React` en el 2º initializer de `const React = FakeReact, useEffect = React.useEffect`
+  // al `const React` LOCAL del 1º declarador, no al import file-global. Sin avanzar, el 2º se
+  // clasificaba contra el scope de ANTES del statement = BYPASS (codex P1). Tienen PRECEDENCIA sobre
+  // el scope externo (sombra léxica más cercana).
+  const localNs = new Set();
+  const localNamed = new Map();
+  const localShadow = new Set();
   const isReactNs = (name) =>
+    !localShadow.has(name) &&
     !(nonImport && nonImport.has(name)) &&
     !(mutated && mutated.has(name)) && // namespace mutado por member-write → no inmutable (codex P1)
-    ((nsSet && nsSet.has(name)) || reactImports.namespaces.has(name));
+    (localNs.has(name) ||
+      (nsSet && nsSet.has(name)) ||
+      reactImports.namespaces.has(name));
   const canonicalNamed = (name) => {
+    if (localShadow.has(name)) return undefined;
     if (nonImport && nonImport.has(name)) return undefined;
+    if (localNamed.has(name)) return localNamed.get(name);
     const scoped = namedMap && namedMap.get(name);
     return scoped !== undefined ? scoped : reactImports.named.get(name);
   };
@@ -1511,8 +1524,29 @@ function reactAliasesDeclaredBy(stmt, scope) {
       return { ns, named }; // const-only (codex P1) — let/var reasignable → no se confía
     }
     for (const d of stmt.declarationList.declarations) {
+      const nsBefore = ns.length;
+      const namedBefore = named.length;
       if (d.initializer && !isAmbientDeclaration(d)) {
         handleVarInit(d.name, d.initializer);
+      }
+      // Avanzar los acumuladores locales con lo que ESTE declarador aportó, para que el SIGUIENTE
+      // declarador del mismo statement lo vea (orden léxico izquierda-a-derecha). Los nombres que
+      // son alias react → localNs/localNamed; el resto de los bindings del declarador → localShadow.
+      const aliasNames = new Set();
+      for (let i = nsBefore; i < ns.length; i++) {
+        localNs.add(ns[i]);
+        aliasNames.add(ns[i]);
+      }
+      for (let i = namedBefore; i < named.length; i++) {
+        localNamed.set(named[i][0], named[i][1]);
+        aliasNames.add(named[i][0]);
+      }
+      if (!isAmbientDeclaration(d)) {
+        const declNames = new Set();
+        addBindingNamesFromPattern(d.name, declNames);
+        for (const n of declNames) {
+          if (!aliasNames.has(n)) localShadow.add(n);
+        }
       }
     }
   } else if (
