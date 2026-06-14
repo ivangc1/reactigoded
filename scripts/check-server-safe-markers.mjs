@@ -1666,6 +1666,80 @@ function gatherMutatedNamespaceRoots(sourceFile) {
 }
 
 /**
+ * FAMILIA de aliases del OBJETO de un import react — todos los nombres que apuntan al MISMO
+ * objeto (file-wide, cualquier scope, `const`/`let`/`var`/import-equals identifier-alias). Para
+ * PROPAGAR el taint por member-write (codex P1 #4): el objeto default-export es COMPARTIDO, así
+ * que `const A = React; A.useEffect = sync` muta el mismo objeto que `React` → si CUALQUIER miembro
+ * de la familia tiene un member-write, NINGUNO es de fiar. Incluye `let`/`var` (un alias mutable
+ * sigue apuntando al objeto al momento de la escritura → su mutación también lo contamina).
+ *
+ * Scope-blind (file-wide) por diseño: el taint es file-wide y debe alcanzar cualquier llamada sin
+ * importar el orden. Over-aproxima en el caso raro de colisión de nombre entre scopes (`const A =
+ * React` en uno, `const A = otro` mutado en otro) → over-taint fail-closed (acepta). Sólo se usa
+ * si la familia ESTÁ mutada; sin member-write a la familia, no taintea nada (0-FP del caso común).
+ */
+function gatherReactNamespaceFamily(sourceFile) {
+  const family = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) {
+      continue;
+    }
+    if (stmt.moduleSpecifier.text !== "react") continue;
+    const clause = stmt.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    if (clause.name) family.add(clause.name.text); // import React (default)
+    const nb = clause.namedBindings;
+    if (nb && ts.isNamespaceImport(nb)) family.add(nb.name.text); // import * as React
+    if (nb && ts.isNamedImports(nb)) {
+      for (const spec of nb.elements) {
+        if (spec.isTypeOnly) continue;
+        const exp = spec.propertyName ? spec.propertyName.text : spec.name.text;
+        if (exp === "default") family.add(spec.name.text); // import { default as React }
+      }
+    }
+  }
+  if (family.size === 0) return family;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const visit = (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer
+      ) {
+        const init = unwrapErased(node.initializer);
+        if (
+          ts.isIdentifier(init) &&
+          family.has(init.text) &&
+          !family.has(node.name.text)
+        ) {
+          family.add(node.name.text); // X = Y (Y ∈ familia)
+          changed = true;
+        }
+      } else if (
+        ts.isImportEqualsDeclaration(node) &&
+        ts.isIdentifier(node.name)
+      ) {
+        const ref = node.moduleReference;
+        if (
+          ref &&
+          ts.isIdentifier(ref) &&
+          family.has(ref.text) &&
+          !family.has(node.name.text)
+        ) {
+          family.add(node.name.text); // import X = Y (Y ∈ familia)
+          changed = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return family;
+}
+
+/**
  * Imports de "react", resueltos por su EXPORT CANÓNICO (no el binding local). Un
  * deferred-hook se reconoce por el nombre que EXPORTA react, no por el alias local:
  * `import { useState as useEffect }` tiene binding local "useEffect" ∈ DEFERRED_HOOKS
@@ -1676,8 +1750,8 @@ function gatherMutatedNamespaceRoots(sourceFile) {
  *   namespaces: Set<localName> de default (`import React`) + `import * as React`,
  *          cuyos miembros `React.useEffect` YA son el nombre canónico.
  *
- * `mutatedRoots` (de `gatherMutatedNamespaceRoots`): un namespace cuyo root está mutado por
- * member-write NO se reconoce como react (su `.useEffect` puede ser síncrono).
+ * `mutatedRoots`: la familia react tainteada (si hubo member-write a cualquier alias) → esos
+ * namespaces NO se reconocen como react (su `.useEffect` puede ser síncrono).
  */
 function gatherReactImports(sourceFile, mutatedRoots) {
   const named = new Map();
@@ -3987,10 +4061,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const { all: moduleAll, nonImports: moduleNonImports } =
     gatherModulePreloadedBindings(sourceFile);
   const sourceFileFns = gatherSourceFileFunctionDeclarations(sourceFile);
-  // Roots de namespace MUTADOS por member-write (`React.useEffect = sync`): un default
-  // import es el objeto export MUTABLE, no el Module Namespace read-only → si se muta, su
-  // `.useEffect` puede ser síncrono y no se exime (codex P1 sobre b35a87c). File-wide.
-  const mutatedNamespaceRoots = gatherMutatedNamespaceRoots(sourceFile);
+  // Taint de namespace react por MEMBER-WRITE (codex P1 b35a87c + #4). Un default import es el
+  // objeto export MUTABLE (no el Module Namespace read-only) → `React.useEffect = sync` lo vuelve
+  // síncrono = BYPASS. El objeto es COMPARTIDO entre todos sus aliases (`const A = React`), así que
+  // un write a CUALQUIER miembro de la familia contamina a TODA (codex P1 #4: taint debe propagar
+  // por aliases, no solo el root sintáctico del write). Si la familia está mutada, se taintea
+  // entera; sin write, no se taintea nada (0-FP del caso común `React.useEffect(cb)`).
+  const memberWriteRoots = gatherMutatedNamespaceRoots(sourceFile);
+  const reactNsFamily = gatherReactNamespaceFamily(sourceFile);
+  const familyMutated = [...reactNsFamily].some((n) => memberWriteRoots.has(n));
+  const mutatedNamespaceRoots = familyMutated ? reactNsFamily : new Set();
   const reactImports = gatherReactImports(sourceFile, mutatedNamespaceRoots);
   const baseContext = {
     activeGuards: new Set(),

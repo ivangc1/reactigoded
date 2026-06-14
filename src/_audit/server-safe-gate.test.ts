@@ -1794,6 +1794,13 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["alias R mutado const R=React; R.useEffect=sync", HD + `export function C(){ const R=React; (R as any).useEffect=((cb:()=>void)=>cb()); R.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["React mutado, usado vía alias R", HD + `export function C(){ const R=React; (React as any).useEffect=((cb:()=>void)=>cb()); R.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["Object.assign(React,{useEffect})", HD + `export function C(){ Object.assign(React as any,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P1 #4: el objeto es COMPARTIDO → mutar CUALQUIER alias contamina a TODA la familia.
+    // Mutación vía alias A, llamada vía React (el root sintáctico del write NO basta).
+    ["alias-de-alias: const A=React; A.useEffect=sync; React.useEffect()", HD + `export function C(){ const A=React; (A as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["cadena: const A=React; const B=A; B.useEffect=sync; React.useEffect()", HD + `export function C(){ const A=React; const B=A; (B as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["let alias: let B=React; B.useEffect=sync; React.useEffect()", HD + `export function C(){ let B=React; (B as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["nested alias mutation contamina top-level React", HD + `function f(){ const A=React; (A as any).useEffect=((cb:()=>void)=>cb()); }\nexport function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }\nexport const _f=f;`],
+    ["import-equals alias mutado: import A=React; A.useEffect=sync", HD + `import A=React;\n(A as any).useEffect=((cb:()=>void)=>cb());\nexport function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
