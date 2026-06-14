@@ -438,6 +438,21 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(violations.some((v) => /no auditable/i.test(v.detail))).toBe(true);
   });
 
+  it("FALLA RUIDOSO si el @server-safe importa un `.d.ts` (type-only, sin runtime que auditar, codex P2)", () => {
+    // `.d.ts` termina en `.ts` pero es una DECLARACIÓN borrada — auditarla "pasaría" sin chequear
+    // ningún runtime (falsa sensación de enforcement). Fail-closed: no auditable.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./types.d.ts";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/types.d.ts": `export declare const v: number;`,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations.some((v) => /no auditable/i.test(v.detail))).toBe(true);
+  });
+
   it("0-FP: extensión explícita `.ts`/`.tsx` (formato auditable) resuelve exacto sin fallo espurio (codex P2)", () => {
     // Seguir el consejo del gate con una extensión AUDITABLE explícita resuelve el archivo exacto
     // (Vite envía ese archivo; resolve.extensions solo aplica a imports SIN extensión).

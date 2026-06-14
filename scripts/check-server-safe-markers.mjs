@@ -2937,7 +2937,10 @@ function hasExplicitSourceExt(p) {
 // unresolvable RUIDOSO (no se audita JS, no se asume safe). El DS usa `.ts`/`.tsx`.
 const AUDITABLE_EXTS = [".ts", ".tsx"];
 function isAuditableExt(p) {
-  return AUDITABLE_EXTS.some((e) => p.endsWith(e));
+  // `.d.ts`/`.d.mts`/`.d.cts` terminan en `.ts` pero son DECLARACIONES type-only (sin runtime que
+  // auditar) → NO auditables: un `Foo.d.ts` marcado @server-safe debe fallar ruidoso, no "pasar"
+  // auditando declaraciones borradas (falsa sensación de enforcement; codex P2). Marca la implementación.
+  return !/\.d\.[mc]?ts$/.test(p) && AUDITABLE_EXTS.some((e) => p.endsWith(e));
 }
 
 // ScriptKind por extensión — determina si el parser de TS habilita JSX. `ScriptKind.TS` trata
@@ -4449,7 +4452,7 @@ if (isCliEntry) {
       allViolations.push({
         rule: "server-safe-marker",
         file: relPath,
-        detail: `marca @server-safe en un archivo JS NO auditable: el gate solo audita .ts/.tsx (los edges require()/CJS y el parser JS no se modelan). Mueve el componente/hook a .ts/.tsx.`,
+        detail: `marca @server-safe en un archivo NO auditable: el gate solo audita .ts/.tsx con runtime (un .d.ts es type-only sin runtime; JS-family no se modela: require()/CJS y parser JS). Marca la implementación .ts/.tsx.`,
       });
       continue;
     }
