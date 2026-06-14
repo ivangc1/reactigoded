@@ -790,11 +790,12 @@ function listSourceFiles(dir) {
     if (st.isDirectory()) {
       result.push(...listSourceFiles(p));
     } else if (
-      (p.endsWith(".tsx") || p.endsWith(".ts")) &&
-      !p.endsWith(".test.tsx") &&
-      !p.endsWith(".test.ts") &&
-      !p.endsWith(".stories.tsx")
+      hasExplicitSourceExt(p) && // .ts/.tsx + JS-family (.js/.jsx/.mjs/.cjs/.mts/.cts)
+      !/\.(test|stories)\.[mc]?[jt]sx?$/.test(p)
     ) {
+      // JS-family se descubre para DETECTAR un marcador @server-safe mal-colocado (el gate no
+      // audita JS → fail-loud en el CLI), no para auditarlo. codex P2: un `Foo.jsx` con marcador
+      // se ignoraba en silencio porque el discovery solo miraba .ts/.tsx.
       result.push(p);
     }
   }
@@ -2928,6 +2929,17 @@ function hasExplicitSourceExt(p) {
   return EXPLICIT_SOURCE_EXTS.some((e) => p.endsWith(e));
 }
 
+// El gate AUDITA solo `.ts`/`.tsx` (el formato de autoría del DS; 0 archivos JS en src). Auditar
+// JS-family (`.js/.jsx/.mjs/.cjs/.mts/.cts`) requeriría seguir edges `require()` de CJS (data-flow),
+// descubrir entries JS y modelar su parser — un subsistema que el gate no necesita. codex P1: incluir
+// `.cjs` como interno reabría el smuggling cross-módulo (el walker solo extrae imports ESM, no
+// `require()`). Frontera fail-closed: un import del grafo @server-safe a un archivo JS-family →
+// unresolvable RUIDOSO (no se audita JS, no se asume safe). El DS usa `.ts`/`.tsx`.
+const AUDITABLE_EXTS = [".ts", ".tsx"];
+function isAuditableExt(p) {
+  return AUDITABLE_EXTS.some((e) => p.endsWith(e));
+}
+
 // ScriptKind por extensión — determina si el parser de TS habilita JSX. `ScriptKind.TS` trata
 // `<X>` como TYPE ASSERTION (Standard), así que parsear un `.jsx`/`.js` con JSX como TS lo mal-parsea
 // y se PIERDE el read de global del componente JSX (`<HTMLElement/>`) = BYPASS. JSX/TSX/JS habilitan
@@ -3025,11 +3037,17 @@ function resolveImportPath(
           hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
         const resolved = exact ?? tryResolveFile(noExt, fileExists);
         if (resolved) {
+          if (exact && !isAuditableExt(exact)) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` resuelve a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, exact)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+            };
+          }
           const shadow = exact ? null : bundlerShadowSibling(resolved, fileExists);
           if (shadow) {
             return {
               kind: "unresolvable",
-              reason: `alias \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita o elimina el hermano.`,
+              reason: `alias \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita \`.ts\`/\`.tsx\` o elimina el hermano JS.`,
             };
           }
           return { kind: "internal", absPath: resolved };
@@ -3055,11 +3073,18 @@ function resolveImportPath(
     const rel = crossOsRelative(srcRoot, resolved);
     const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
     if (inSrc) {
+      if (exact && !isAuditableExt(exact)) {
+        // JS-family dentro de src importado desde el grafo @server-safe → fail-closed (no auditable).
+        return {
+          kind: "unresolvable",
+          reason: `relativo \`${specifier}\` resuelve a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, exact)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+        };
+      }
       const shadow = exact ? null : bundlerShadowSibling(resolved, fileExists);
       if (shadow) {
         return {
           kind: "unresolvable",
-          reason: `relativo \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita o elimina el hermano.`,
+          reason: `relativo \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita \`.ts\`/\`.tsx\` o elimina el hermano JS.`,
         };
       }
       return { kind: "internal", absPath: resolved };
@@ -4417,6 +4442,17 @@ if (isCliEntry) {
   // completo desde sí mismo). Lo que SÍ se comparte es el parseCache.
   const allViolations = [];
   for (const file of markedFiles) {
+    const relPath = relative(repoRoot, file).split(pathSep).join("/");
+    if (!isAuditableExt(file)) {
+      // @server-safe en un archivo JS no auditable → fail-loud (el gate solo audita .ts/.tsx).
+      // codex P2: antes el discovery ni lo veía; ahora se descubre y se reporta en vez de ignorar.
+      allViolations.push({
+        rule: "server-safe-marker",
+        file: relPath,
+        detail: `marca @server-safe en un archivo JS NO auditable: el gate solo audita .ts/.tsx (los edges require()/CJS y el parser JS no se modelan). Mueve el componente/hook a .ts/.tsx.`,
+      });
+      continue;
+    }
     const visited = new Set();
     allViolations.push(
       ...checkFileWithImports(file, { parseCache, visited }),

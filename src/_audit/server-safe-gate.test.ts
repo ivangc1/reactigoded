@@ -404,67 +404,53 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(violations.some((v) => /AMBIGUO/.test(v.detail))).toBe(true);
   });
 
-  it("SEGUIR el consejo (extensión explícita `./helper.mjs`) RESUELVE exacto y audita ESE archivo (codex P2)", () => {
-    // El gate aconseja "usa una extensión explícita". Si el autor lo hace, el resolver DEBE
-    // resolver el archivo exacto (resolve.extensions de Vite solo aplica a imports SIN extensión)
-    // — antes caía a la cascada `helper.mjs.ts` y reportaba unresolved aunque Vite lo envía.
+  it("FALLA RUIDOSO si el @server-safe importa un archivo JS no auditable (`.mjs`/`.cjs`/`.jsx`, codex P1)", () => {
+    // El gate audita SOLO .ts/.tsx. Seguir un .cjs reabriría el smuggling (el walker extrae imports
+    // ESM, NO `require()`), y un .jsx/.mjs requeriría modelar su parser/edges → fail-closed: importar
+    // JS-family desde el grafo @server-safe es unresolvable RUIDOSO (no se audita JS, no se asume safe).
+    const dirty = `export const v = screen.width;`;
+    for (const ext of ["mjs", "cjs", "js", "jsx", "cts", "mts"]) {
+      const files = vfs({
+        "/repo/src/components/Probe/Probe.tsx": `
+          /** @server-safe */
+          import { v } from "./helper.${ext}";
+          export function Probe() { return <span>{v}</span>; }
+        `,
+        [`/repo/src/components/Probe/helper.${ext}`]: dirty,
+      });
+      const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+      expect(violations.length).toBeGreaterThan(0);
+      expect(violations.some((v) => /no auditable/i.test(v.detail))).toBe(true);
+    }
+  });
+
+  it("FALLA RUIDOSO aunque el JS no auditable sea LIMPIO (no se sigue ni se asume safe, codex P1)", () => {
+    // Un .cjs limpio podría hacer `require("./dirty.cjs")` que el gate NO sigue → no se asume safe.
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `
         /** @server-safe */
-        import { v } from "./helper.mjs";
+        import { v } from "./helper.cjs";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/helper.cjs": `module.exports = { v: 1 };`,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations.some((v) => /no auditable/i.test(v.detail))).toBe(true);
+  });
+
+  it("0-FP: extensión explícita `.ts`/`.tsx` (formato auditable) resuelve exacto sin fallo espurio (codex P2)", () => {
+    // Seguir el consejo del gate con una extensión AUDITABLE explícita resuelve el archivo exacto
+    // (Vite envía ese archivo; resolve.extensions solo aplica a imports SIN extensión).
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./helper.ts";
         export function Probe() { return <span>{v}</span>; }
       `,
       "/repo/src/components/Probe/helper.ts": `export const v = 1;`,
       "/repo/src/components/Probe/helper.mjs": `export const v = screen.width;`,
     });
-    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
-    // Resuelve helper.mjs (el archivo explícito, que Vite envía) y lo audita → flagea screen.width.
-    expect(violations.length).toBeGreaterThan(0);
-    expect(violations.some((v) => /AMBIGUO|no resolvió|unresolved/i.test(v.detail))).toBe(false);
-  });
-
-  it("0-FP: extensión explícita `./helper.mjs` a un archivo LIMPIO resuelve sin fallo espurio (codex P2)", () => {
-    const files = vfs({
-      "/repo/src/components/Probe/Probe.tsx": `
-        /** @server-safe */
-        import { v } from "./helper.mjs";
-        export function Probe() { return <span>{v}</span>; }
-      `,
-      "/repo/src/components/Probe/helper.ts": `export const v = screen.width;`,
-      "/repo/src/components/Probe/helper.mjs": `export const v = 1;`,
-    });
-    // Resuelve helper.mjs (limpio) — NO el helper.ts sucio — y NO reporta unresolved.
-    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
-  });
-
-  it("un `.jsx` seguido se PARSEA como JSX (no TS) y caza el read de global (codex P2)", () => {
-    // Al resolver `.jsx` como interno (exact-file), el gate lo SIGUE; debe parsearlo con ScriptKind
-    // JSX, no TS — si no, `<HTMLElement/>` se mal-parsea como type-assertion y el read se pierde.
-    const files = vfs({
-      "/repo/src/components/Probe/Probe.tsx": `
-        /** @server-safe */
-        import { Widget } from "./helper.jsx";
-        export function Probe() { return <Widget />; }
-      `,
-      "/repo/src/components/Probe/helper.jsx": `
-        export const Widget = () => <div>{window.location.href}</div>;
-      `,
-    });
-    // helper.jsx parsed as JSX → el window.location.href dentro del componente se flagea.
-    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files).length).toBeGreaterThan(0);
-  });
-
-  it("0-FP: un `.jsx` seguido LIMPIO no genera fallo espurio (codex P2)", () => {
-    const files = vfs({
-      "/repo/src/components/Probe/Probe.tsx": `
-        /** @server-safe */
-        import { Widget } from "./helper.jsx";
-        export function Probe() { return <Widget />; }
-      `,
-      "/repo/src/components/Probe/helper.jsx": `
-        export const Widget = () => <div>ok</div>;
-      `,
-    });
+    // Resuelve helper.ts (explícito) — NO el .mjs hermano — y no reporta nada.
     expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
   });
 
