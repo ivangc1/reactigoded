@@ -724,8 +724,18 @@ function isDeferredExecutionContext(fnNode, context) {
       // que un alias react nested no exime un hook homónimo de OTRA función (el
       // bypass file-global que codex P1 rechazó). Se consultan ANTES del mapa
       // file-global de `gatherReactImports` (que solo cubre top-level).
+      // Si el OBJETO react de la familia fue mutado por un member-write en el archivo
+      // (`mutatedNamespaceRoots` no-vacío ⟺ familia mutada), NINGÚN binding derivado de react
+      // es de fiar — ni el namespace (`React.useEffect`) ni el NAMED (`import { useEffect } from
+      // "react"`), porque bajo interop CJS/bundler el named se lee del MISMO objeto mutable
+      // (`Object.assign(React,…)` o `React.useEffect = sync` lo vuelve síncrono). Se desactiva
+      // toda la exención react del archivo (fail-closed; el caso común SIN mutación no se toca).
+      // codex P1 (named-hook taint sobre 8b08896).
+      const reactFamilyMutated = (context.mutatedNamespaceRoots?.size ?? 0) > 0;
       let canonicalCallee = null;
-      if (ts.isIdentifier(callee)) {
+      if (reactFamilyMutated) {
+        canonicalCallee = null; // objeto react mutado → nada derivado de él es deferred
+      } else if (ts.isIdentifier(callee)) {
         const scoped = context.scopeReactNamed?.get(calleeName);
         const mapped =
           scoped !== undefined
@@ -734,7 +744,6 @@ function isDeferredExecutionContext(fnNode, context) {
         if (mapped !== undefined) canonicalCallee = mapped;
       } else if (
         rootIdent !== null &&
-        !context.mutatedNamespaceRoots?.has(rootIdent) && // root mutado por member-write → no inmutable
         (context.scopeReactNs?.has(rootIdent) ||
           context.reactImports.namespaces.has(rootIdent))
       ) {
