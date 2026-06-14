@@ -2915,6 +2915,19 @@ function tryResolveFile(noExtAbsPath, fileExists) {
 // envía el .mjs) = bypass cross-module. Hoy LATENTE (0 .mjs/.js en src) → fail-closed.
 const VITE_RESOLVE_EXTS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
 
+// Extensiones de SOURCE que TS/Vite resuelven (sin .json — no se audita). Un specifier que YA las
+// trae (`./helper.mjs`, `@/x/helper.ts`) es EXPLÍCITO: Vite lo resuelve EXACTAMENTE (resolve.extensions
+// solo aplica a imports SIN extensión), así que se chequea el archivo exacto ANTES de la cascada y NO
+// se corre el shadow-check de precedencia (no hay ambigüedad: la extensión está fijada). codex P2: sin
+// esto, seguir el consejo del propio gate ("usa extensión explícita") rompía el resolver — `./helper.mjs`
+// caía a la cascada `helper.mjs.ts`/`helper.mjs.tsx` y se reportaba unresolved aunque Vite sí lo envía.
+const EXPLICIT_SOURCE_EXTS = [
+  ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
+];
+function hasExplicitSourceExt(p) {
+  return EXPLICIT_SOURCE_EXTS.some((e) => p.endsWith(e));
+}
+
 /**
  * Si `resolvedAbsPath` (lo que el gate resolvió, `.ts`/`.tsx` o `…/index.ts`) tiene un
  * hermano que Vite PREFERIRÍA, devuelve su path (= el archivo que el bundler REALMENTE
@@ -2993,9 +3006,12 @@ function resolveImportPath(
       if (specifier.startsWith(prefix)) {
         const tail = specifier.slice(prefix.length);
         const noExt = crossOsResolve(projectRoot, targetPrefix + tail);
-        const resolved = tryResolveFile(noExt, fileExists);
+        // Extensión explícita (`@/x/helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
+        const exact =
+          hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
+        const resolved = exact ?? tryResolveFile(noExt, fileExists);
         if (resolved) {
-          const shadow = bundlerShadowSibling(resolved, fileExists);
+          const shadow = exact ? null : bundlerShadowSibling(resolved, fileExists);
           if (shadow) {
             return {
               kind: "unresolvable",
@@ -3016,14 +3032,16 @@ function resolveImportPath(
   // Relative.
   const importerDir = crossOsDirname(importerAbsPath);
   const noExt = crossOsResolve(importerDir, specifier);
-  const resolved = tryResolveFile(noExt, fileExists);
+  // Extensión explícita (`./helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
+  const exact = hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
+  const resolved = exact ?? tryResolveFile(noExt, fileExists);
   if (resolved) {
     // Solo seguimos dentro de src/ (proxy para "archivo del DS, no
     // node_modules, no scripts/ ni fixtures/ ni dist/").
     const rel = crossOsRelative(srcRoot, resolved);
     const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
     if (inSrc) {
-      const shadow = bundlerShadowSibling(resolved, fileExists);
+      const shadow = exact ? null : bundlerShadowSibling(resolved, fileExists);
       if (shadow) {
         return {
           kind: "unresolvable",

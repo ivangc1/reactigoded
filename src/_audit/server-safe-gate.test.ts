@@ -404,6 +404,39 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(violations.some((v) => /AMBIGUO/.test(v.detail))).toBe(true);
   });
 
+  it("SEGUIR el consejo (extensión explícita `./helper.mjs`) RESUELVE exacto y audita ESE archivo (codex P2)", () => {
+    // El gate aconseja "usa una extensión explícita". Si el autor lo hace, el resolver DEBE
+    // resolver el archivo exacto (resolve.extensions de Vite solo aplica a imports SIN extensión)
+    // — antes caía a la cascada `helper.mjs.ts` y reportaba unresolved aunque Vite lo envía.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./helper.mjs";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/helper.ts": `export const v = 1;`,
+      "/repo/src/components/Probe/helper.mjs": `export const v = screen.width;`,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    // Resuelve helper.mjs (el archivo explícito, que Vite envía) y lo audita → flagea screen.width.
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => /AMBIGUO|no resolvió|unresolved/i.test(v.detail))).toBe(false);
+  });
+
+  it("0-FP: extensión explícita `./helper.mjs` a un archivo LIMPIO resuelve sin fallo espurio (codex P2)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./helper.mjs";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/helper.ts": `export const v = screen.width;`,
+      "/repo/src/components/Probe/helper.mjs": `export const v = 1;`,
+    });
+    // Resuelve helper.mjs (limpio) — NO el helper.ts sucio — y NO reporta unresolved.
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
+  });
+
   it("FALLA RUIDOSO si un FILE .mjs sombrea un DIRECTORY index resuelto (file-vs-directory, hunt scope-aware #173)", () => {
     // Vite prueba `helper.mjs` (archivo) ANTES que `helper/index.ts` (directorio) → file beats
     // directory. El gate resuelve el index limpio; Vite envía el .mjs sucio. Guard extendido.
