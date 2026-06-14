@@ -2928,6 +2928,20 @@ function hasExplicitSourceExt(p) {
   return EXPLICIT_SOURCE_EXTS.some((e) => p.endsWith(e));
 }
 
+// ScriptKind por extensión — determina si el parser de TS habilita JSX. `ScriptKind.TS` trata
+// `<X>` como TYPE ASSERTION (Standard), así que parsear un `.jsx`/`.js` con JSX como TS lo mal-parsea
+// y se PIERDE el read de global del componente JSX (`<HTMLElement/>`) = BYPASS. JSX/TSX/JS habilitan
+// JSX (LanguageVariant.JSX); TS no. codex P2: al resolver `.jsx` como interno (exact-file), el gate
+// ahora los SIGUE → hay que parsearlos con el ScriptKind correcto.
+function scriptKindForPath(p) {
+  if (p.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (p.endsWith(".jsx")) return ts.ScriptKind.JSX;
+  if (p.endsWith(".js") || p.endsWith(".mjs") || p.endsWith(".cjs")) {
+    return ts.ScriptKind.JS; // .js/.mjs/.cjs → JSX habilitado (LanguageVariant.JSX)
+  }
+  return ts.ScriptKind.TS; // .ts/.mts/.cts
+}
+
 /**
  * Si `resolvedAbsPath` (lo que el gate resolvió, `.ts`/`.tsx` o `…/index.ts`) tiene un
  * hermano que Vite PREFERIRÍA, devuelve su path (= el archivo que el bundler REALMENTE
@@ -3225,7 +3239,7 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       content,
       ts.ScriptTarget.Latest,
       /* setParentNodes */ true,
-      relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      scriptKindForPath(relPath),
     );
     cached = { sourceFile, content };
     parseCache.set(entryAbsPath, cached);
@@ -3301,7 +3315,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       content,
       ts.ScriptTarget.Latest,
       /* setParentNodes */ true,
-      relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      scriptKindForPath(relPath),
     );
 
   // Nombres declarados a nivel de módulo — para eximir tags JSX uppercase
@@ -4357,7 +4371,7 @@ export function isContentServerSafeMarked(content, relPath) {
     content,
     ts.ScriptTarget.Latest,
     /* setParentNodes */ true,
-    relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    scriptKindForPath(relPath),
   );
   return detectServerSafeMarker(sourceFile, relPath);
 }
@@ -4386,7 +4400,7 @@ if (isCliEntry) {
         content,
         ts.ScriptTarget.Latest,
         /* setParentNodes */ true,
-        relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+        scriptKindForPath(relPath),
       );
       cached = { sourceFile, content };
       parseCache.set(filePath, cached);

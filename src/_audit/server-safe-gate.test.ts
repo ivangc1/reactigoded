@@ -437,6 +437,37 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
   });
 
+  it("un `.jsx` seguido se PARSEA como JSX (no TS) y caza el read de global (codex P2)", () => {
+    // Al resolver `.jsx` como interno (exact-file), el gate lo SIGUE; debe parsearlo con ScriptKind
+    // JSX, no TS — si no, `<HTMLElement/>` se mal-parsea como type-assertion y el read se pierde.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { Widget } from "./helper.jsx";
+        export function Probe() { return <Widget />; }
+      `,
+      "/repo/src/components/Probe/helper.jsx": `
+        export const Widget = () => <div>{window.location.href}</div>;
+      `,
+    });
+    // helper.jsx parsed as JSX → el window.location.href dentro del componente se flagea.
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files).length).toBeGreaterThan(0);
+  });
+
+  it("0-FP: un `.jsx` seguido LIMPIO no genera fallo espurio (codex P2)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { Widget } from "./helper.jsx";
+        export function Probe() { return <Widget />; }
+      `,
+      "/repo/src/components/Probe/helper.jsx": `
+        export const Widget = () => <div>ok</div>;
+      `,
+    });
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files)).toEqual([]);
+  });
+
   it("FALLA RUIDOSO si un FILE .mjs sombrea un DIRECTORY index resuelto (file-vs-directory, hunt scope-aware #173)", () => {
     // Vite prueba `helper.mjs` (archivo) ANTES que `helper/index.ts` (directorio) → file beats
     // directory. El gate resuelve el index limpio; Vite envía el .mjs sucio. Guard extendido.
