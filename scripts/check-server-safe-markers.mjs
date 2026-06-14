@@ -1415,7 +1415,9 @@ function reactAliasesDeclaredBy(stmt, scope) {
       return node.name.text;
     }
     if (ts.isElementAccessExpression(node)) {
-      const arg = node.argumentExpression;
+      const arg = node.argumentExpression
+        ? unwrapErased(node.argumentExpression)
+        : null;
       if (arg && ts.isStringLiteralLike(arg)) return arg.text;
     }
     return null;
@@ -1426,8 +1428,9 @@ function reactAliasesDeclaredBy(stmt, scope) {
     if (!pn) return el.name.text; // shorthand `{ useEffect }`
     if (ts.isIdentifier(pn)) return pn.text; // `{ useEffect: ue }`
     if (ts.isStringLiteralLike(pn)) return pn.text; // `{ "useEffect": ue }`
-    if (ts.isComputedPropertyName(pn) && ts.isStringLiteralLike(pn.expression)) {
-      return pn.expression.text; // `{ ["useEffect"]: ue }` — literal computed
+    if (ts.isComputedPropertyName(pn)) {
+      const e = unwrapErased(pn.expression); // `{ [("useEffect")]: ue }`, `{ ["useEffect" as const]: ue }`
+      if (ts.isStringLiteralLike(e)) return e.text; // literal computed
     }
     return null; // computed NO-literal `{ [k]: ue }` → no resoluble → fail-closed
   };
@@ -1638,12 +1641,14 @@ function gatherMutatedNamespaceRoots(sourceFile) {
     }
     if (ts.isElementAccessExpression(callee)) {
       const obj = unwrapErased(callee.expression);
-      if (
-        ts.isIdentifier(obj) &&
-        callee.argumentExpression &&
-        ts.isStringLiteralLike(callee.argumentExpression)
-      ) {
-        return [obj.text, callee.argumentExpression.text];
+      // Desenvolver la KEY: `Object[("assign")]` (paréntesis), `Object["assign" as const]`
+      // (as) — nodos erased en runtime → misma normalización que los otros member-name paths
+      // (codex P1: la key envuelta se colaba). NO se foldean concat/template (§141 frontera).
+      const key = callee.argumentExpression
+        ? unwrapErased(callee.argumentExpression)
+        : null;
+      if (ts.isIdentifier(obj) && key && ts.isStringLiteralLike(key)) {
+        return [obj.text, key.text];
       }
     }
     return null;

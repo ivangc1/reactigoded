@@ -1808,6 +1808,11 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["Reflect.set(React,…)", HD + `export function C(){ Reflect.set(React,"useEffect",(cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["Reflect.defineProperty(React,…)", HD + `export function C(){ Reflect.defineProperty(React,"useEffect",{value:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["Reflect['set'](React,…) bracket-form", HD + `export function C(){ (Reflect as any)["set"](React,"useEffect",(cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P1 #6: key bracket envuelta en nodo runtime-erased (paréntesis, `as const`) — mismo
+    // unwrap que los otros member-name paths.
+    ["Object[('assign')](React,…) key con paréntesis", HD + `export function C(){ (Object as any)[("assign")](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Object['assign' as const](React,…) key con as", HD + `export function C(){ (Object as any)["assign" as const](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["React[('useEffect')]=sync write con key envuelta", HD + `export function C(){ (React as any)[("useEffect")]=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -1818,6 +1823,19 @@ describe("server-safe gate — invalidación de namespace por member-write (code
   it("RESIDUAL fail-open declarado: React pasado a una función que lo muta (data-flow)", () => {
     const code = HD + `function patch(r:any){ r.useEffect=((cb:()=>void)=>cb()); }\nexport function C(){ patch(React); React.useEffect(()=>{ void window.location.href; }); return null; }\nexport const _p=patch;`;
     // Documenta el residual: el gate NO lo caza a propósito (exige análisis inter-procedural).
+    expect(flagged(code)).toBe(false);
+  });
+
+  // FRONTERA (codex P1 #7 → ratificado residual): alcanzar un mutador a través de
+  // `Function.prototype.call`/`.apply`/`.bind`, aliasing del callee, comma-operator o
+  // qualified-access (`globalThis.Object.assign`) exige modelar la semántica de invocación /
+  // value-flow del callee = el subsistema que el gate renuncia (misma clase que eval-sink §141
+  // ensamblaje/indirección y cross-módulo). El mutador DIRECTO (`Object.assign(React,…)`) SÍ se
+  // caza; el indirecto NO. Tests pinean el residual single-file (NO bug, frontera por diseño).
+  it.each([
+    ["Object.assign.call(Object, React, …)", HD + `export function C(){ Object.assign.call(Object,React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Reflect.set.call(Reflect, React, …)", HD + `export function C(){ Reflect.set.call(Reflect,React,"useEffect",(cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+  ])("RESIDUAL frontera data-flow: mutador vía invocación indirecta NO se caza: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
   });
 
