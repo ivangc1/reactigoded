@@ -1801,8 +1801,24 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["let alias: let B=React; B.useEffect=sync; React.useEffect()", HD + `export function C(){ let B=React; (B as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["nested alias mutation contamina top-level React", HD + `function f(){ const A=React; (A as any).useEffect=((cb:()=>void)=>cb()); }\nexport function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }\nexport const _f=f;`],
     ["import-equals alias mutado: import A=React; A.useEffect=sync", HD + `import A=React;\n(A as any).useEffect=((cb:()=>void)=>cb());\nexport function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P1 #5: mutadores Object.*/Reflect.* en forma BRACKET (element-access) — misma
+    // normalización dot/bracket; el bracket-form se colaba.
+    ["Object['assign'](React,…) bracket-form", HD + `export function C(){ (Object as any)["assign"](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Object['defineProperty'](React,…) bracket-form", HD + `export function C(){ (Object as any)["defineProperty"](React,"useEffect",{value:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Reflect.set(React,…)", HD + `export function C(){ Reflect.set(React,"useEffect",(cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Reflect.defineProperty(React,…)", HD + `export function C(){ Reflect.defineProperty(React,"useEffect",{value:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Reflect['set'](React,…) bracket-form", HD + `export function C(){ (Reflect as any)["set"](React,"useEffect",(cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
+  });
+
+  // FRONTERA: pasar React a una función ARBITRARIA que lo muta es data-flow inter-procedural
+  // (residual single-file, como toda indirección del gate). El mutador token-en-su-sitio
+  // (Object/Reflect con X de primer arg) SÍ se caza; el paso-por-función NO.
+  it("RESIDUAL fail-open declarado: React pasado a una función que lo muta (data-flow)", () => {
+    const code = HD + `function patch(r:any){ r.useEffect=((cb:()=>void)=>cb()); }\nexport function C(){ patch(React); React.useEffect(()=>{ void window.location.href; }); return null; }\nexport const _p=patch;`;
+    // Documenta el residual: el gate NO lo caza a propósito (exige análisis inter-procedural).
+    expect(flagged(code)).toBe(false);
   });
 
   // 0-FP — el caso COMÚN sin mutación sigue exento; un member-write a OTRO objeto NO taintea React.

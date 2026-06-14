@@ -1627,6 +1627,34 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       if (r) roots.add(r);
     }
   };
+  // `[obj, member]` de un callee `Obj.m(…)` (dot) o `Obj["m"](…)` (bracket string literal) — misma
+  // normalización dot/bracket que el resto del gate (codex P1: el bracket-form se colaba).
+  const calleeObjMember = (callee) => {
+    if (ts.isPropertyAccessExpression(callee)) {
+      const obj = unwrapErased(callee.expression);
+      if (ts.isIdentifier(obj) && ts.isIdentifier(callee.name)) {
+        return [obj.text, callee.name.text];
+      }
+    }
+    if (ts.isElementAccessExpression(callee)) {
+      const obj = unwrapErased(callee.expression);
+      if (
+        ts.isIdentifier(obj) &&
+        callee.argumentExpression &&
+        ts.isStringLiteralLike(callee.argumentExpression)
+      ) {
+        return [obj.text, callee.argumentExpression.text];
+      }
+    }
+    return null;
+  };
+  // Mutadores cuyo PRIMER argumento es el objeto target: `Object.assign/defineProperty/
+  // defineProperties(X, …)`, `Reflect.set/defineProperty/deleteProperty(X, …)`. Token-en-su-sitio
+  // (el mutador está a la vista). Pasar X a una función arbitraria que lo muta = data-flow → residual.
+  const MUTATORS = {
+    Object: new Set(["assign", "defineProperty", "defineProperties"]),
+    Reflect: new Set(["set", "defineProperty", "deleteProperty"]),
+  };
   const visit = (node) => {
     if (
       ts.isBinaryExpression(node) &&
@@ -1643,18 +1671,9 @@ function gatherMutatedNamespaceRoots(sourceFile) {
     } else if (ts.isDeleteExpression(node)) {
       addIfMemberAccess(node.expression); // delete X.m
     } else if (ts.isCallExpression(node)) {
-      const callee = unwrapErased(node.expression);
-      if (
-        ts.isPropertyAccessExpression(callee) &&
-        ts.isIdentifier(callee.expression) &&
-        callee.expression.text === "Object" &&
-        ts.isIdentifier(callee.name) &&
-        (callee.name.text === "assign" ||
-          callee.name.text === "defineProperty" ||
-          callee.name.text === "defineProperties") &&
-        node.arguments.length > 0
-      ) {
-        const target = unwrapErased(node.arguments[0]); // Object.assign(X, …)
+      const om = calleeObjMember(unwrapErased(node.expression));
+      if (om && MUTATORS[om[0]]?.has(om[1]) && node.arguments.length > 0) {
+        const target = unwrapErased(node.arguments[0]); // Object.assign(X,…) / Reflect.set(X,…)
         if (ts.isIdentifier(target)) roots.add(target.text);
         else addIfMemberAccess(target);
       }
