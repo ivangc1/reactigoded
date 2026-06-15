@@ -2669,6 +2669,35 @@ function isWeaponizedConstructorAccess(node) {
     const m = accessedMemberName(parent);
     if (m === "call" || m === "apply" || m === "bind") return true;
   }
+  // (e) `Reflect.construct(x.constructor, [...])` / `Reflect.apply(x.constructor, …)` — el
+  //     `.constructor` (acceso DIRECTO contiguo) se INVOCA vía un builtin Reflect nombrado
+  //     directamente, con el `.constructor` como 1er arg TOKEN-EN-SU-SITIO (análogo a
+  //     `Object.assign(React,…)`/`Reflect.set(React,…)` del member-write taint). `Reflect.
+  //     construct(F,a) ≡ new F(...a)`, `Reflect.apply(F,t,a) ≡ F.apply(t,a)` → si F = Function,
+  //     es eval. El guard de receiver (arriba) ya descartó `Reflect.construct(({}).constructor,…)`
+  //     (= new Object, no eval). DISTINTO del residual `Reflect.get(x,"constructor")` (ACCESO
+  //     indirecto, sin nodo `.constructor` a la vista). dot O bracket-string. codex P1.
+  if (
+    ts.isCallExpression(parent) &&
+    parent.arguments.length > 0 &&
+    parent.arguments[0] === child
+  ) {
+    const callee = unwrapErased(parent.expression);
+    if (
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) {
+      const obj = unwrapErased(callee.expression);
+      const member = accessedMemberName(callee);
+      if (
+        ts.isIdentifier(obj) &&
+        obj.text === "Reflect" &&
+        (member === "construct" || member === "apply")
+      ) {
+        return true;
+      }
+    }
+  }
   return false;
 }
 
@@ -3204,10 +3233,25 @@ function bundlerShadowSibling(resolvedAbsPath, fileExists) {
   // DIRECTORIO (cualquier ext Vite) lo sombrea, porque Vite prueba file antes que dir.
   const idx = resolvedAbsPath.match(/[\\/]index(\.[mc]?[jt]sx?)$/);
   if (idx) {
+    // (2a) `<dir>.<ext>` ARCHIVO gana al directorio ENTERO (Vite prueba file antes que dir).
     const dirBase = resolvedAbsPath.slice(0, resolvedAbsPath.length - idx[0].length);
     for (const ext of VITE_RESOLVE_EXTS) {
       const sib = `${dirBase}${ext}`;
       if (fileExists(sib)) return sib; // `<dir>.<ext>` archivo gana al directorio
+    }
+    // (2b) MISMO index-dir, extensión de MAYOR precedencia: `<dir>/index.mjs` gana a
+    // `<dir>/index.ts` (Vite rankea por VITE_RESOLVE_EXTS dentro del index también). Antes
+    // solo se probaba `<dir>.<ext>` → un `helper/index.mjs` sucio junto a `helper/index.ts`
+    // limpio se auditaba mal = BYPASS (codex P1). El index resuelto tiene ext `idx[1]`; un
+    // index hermano con rank menor lo sombrea. (`.cjs`/`.cts` no están en VITE_RESOLVE_EXTS
+    // → idxRank -1 → se salta; el index auditable es `.ts`/`.tsx`.)
+    const idxRank = VITE_RESOLVE_EXTS.indexOf(idx[1]);
+    if (idxRank > 0) {
+      const indexBase = resolvedAbsPath.slice(0, -idx[1].length); // `<dir>/index`
+      for (let i = 0; i < idxRank; i++) {
+        const sib = `${indexBase}${VITE_RESOLVE_EXTS[i]}`;
+        if (fileExists(sib)) return sib; // `<dir>/index.<extMayorPrecedencia>`
+      }
     }
     return null;
   }
@@ -4293,7 +4337,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     //   1. cadena partida en vars:  const c = x.constructor; c.constructor("x")()
     //   2. destructuring:           const { constructor: F } = x.constructor; F("x")()
     //   3. computed key vía variable: const k = "constructor"; x[k][k]("x")()
-    //   4. reflexión: `Reflect.apply/construct/get(x,"constructor")`, getter
+    //   4. reflexión por ACCESO indirecto: `Reflect.get(x,"constructor")` (la key es un
+    //      string, no hay nodo `.constructor` a la vista), getter. NOTA: `Reflect.construct/
+    //      apply(x.constructor, …)` —acceso DIRECTO + invocación vía Reflect nombrado— SÍ se
+    //      caza (rama (e) de isWeaponizedConstructorAccess, codex P1); solo el acceso
+    //      indirecto vía Reflect.get queda residual.
     //   5. `new x.constructor("code")` (colisiona con el clon legítimo — no
     //      separable sin type-info)
     // El caso 3 es la CLASE de indirección, no "la forma const-literal": el

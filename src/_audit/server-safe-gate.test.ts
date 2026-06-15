@@ -485,6 +485,22 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(violations.some((v) => /AMBIGUO/.test(v.detail))).toBe(true);
   });
 
+  it("FALLA RUIDOSO si un INDEX hermano de mayor precedencia sombrea el index resuelto (helper/index.mjs vs helper/index.ts, codex P1)", () => {
+    // Vite rankea por extensión TAMBIÉN dentro del directorio: `helper/index.mjs` gana a
+    // `helper/index.ts`. El guard solo probaba `helper.<ext>` (file-vs-dir), no el index
+    // hermano → el gate auditaba index.ts limpio mientras Vite envía index.mjs sucio = BYPASS.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { fmt } from "./helper";
+        export function Probe() { return <span>{fmt()}</span>; }
+      `,
+      "/repo/src/components/Probe/helper/index.ts": `export const fmt = () => 1;`,
+      "/repo/src/components/Probe/helper/index.mjs": `export const fmt = () => navigator.geolocation;`,
+    });
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files).length).toBeGreaterThan(0);
+  });
+
   it("FALLA RUIDOSO file-vs-directory anidado tras barrel (utils/inner/index.ts + utils/inner.mjs)", () => {
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `
@@ -1172,6 +1188,13 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     ["object literal con [\"constructor\"] computado", `const w = ({ ["constructor"]: (() => {}).constructor }).constructor("return 1")();`],
     ["object literal con spread", `const w = ({ ...({} as Record<string, unknown>) }).constructor("return 1")();`],
     ["object literal con getter constructor", `const w = ({ get constructor() { return (() => {}).constructor; } }).constructor("return 1")();`],
+    // codex P1 (915925f): Reflect.construct/apply INVOCAN el .constructor (acceso directo) →
+    // Reflect.construct(F,a) ≡ new F(...a); Reflect.apply(F,t,a) ≡ F.apply(t,a) → si F = Function,
+    // eval. Token-en-su-sitio (Reflect nombrado + .constructor 1er arg directo). dot Y bracket.
+    ["Reflect.construct((()=>{}).constructor, [...])", `const w = Reflect.construct((() => {}).constructor, ["return 1"])(); void w;`],
+    ["Reflect.apply((()=>{}).constructor, null, [...])", `const w = Reflect.apply((() => {}).constructor, null, ["return 1"]); void w;`],
+    ["Reflect['construct']((fn).constructor, [...]) bracket", `const w = (Reflect as any)["construct"]((function () {}).constructor, ["return 1"])(); void w;`],
+    ["Reflect.construct((0,(()=>{}).constructor), [...]) VT arg", `const w = Reflect.construct((0, (() => {}).constructor), ["return 1"])(); void w;`],
   ])("caza el Function constructor escape: %s", (_label, body) => {
     const v = probe(body);
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -1200,6 +1223,11 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     // codex P1 (d1ccce0): un object literal con propiedades SEGURAS (no constructor/
     // __proto__, sin spread/computed) sigue tomando el fast-path → `.constructor` = Object.
     ["`({ a: 1, b: 2 }).constructor()` → Object", `const w = ({ a: 1, b: 2 }).constructor(); void w;`],
+    // codex P1 (915925f): Reflect.construct/apply de un receiver PROVABLEMENTE no-función =
+    // new Object / Object.apply, no eval → el guard de receiver lo deja exento. Y Reflect.has
+    // (no es construct/apply) no invoca → no es eval.
+    ["Reflect.construct(({}).constructor, []) → new Object", `const w = Reflect.construct(({}).constructor, []); void w;`],
+    ["Reflect.has((()=>{}).constructor, 'x') NO invoca", `const b = Reflect.has((() => {}).constructor, "x"); void b;`],
   ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
@@ -1220,7 +1248,10 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
   it.each([
     ["cadena partida en variables (data-flow)", `const c1 = [].constructor; const c2 = c1.constructor; const w = c2("return 1")();`],
     ["destructuring del nombre constructor", `const { constructor: C } = []; const { constructor: F } = C; const w = F("return 1")();`],
-    ["reflexión Reflect.apply sobre .constructor", `const w = Reflect.apply((() => {}).constructor, null, ["return 1"])();`],
+    // codex P1 (915925f): `Reflect.get(x,"constructor")` es ACCESO indirecto del .constructor
+    // (no hay nodo `.constructor` a la vista; la key es un string) → residual, distinto de
+    // `Reflect.construct(x.constructor,…)` (acceso DIRECTO + invocación) que SÍ se caza arriba.
+    ["Reflect.get(x,'constructor') acceso indirecto", `const F = Reflect.get((() => {}) as object, "constructor") as (s: string) => () => unknown; const w = F("return 1")(); void w;`],
   ])("residual fuera de alcance POR DISEÑO (ofuscado, no es amenaza): %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
