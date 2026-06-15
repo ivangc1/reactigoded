@@ -1129,9 +1129,12 @@ describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)
  * Dynamic eval sink vía Function constructor alcanzable por `.constructor`
  * (beta.27 BLOCKER-1, cruce A+B FN-hunt). El gate cazaba el escape solo
  * cuando la base era un identificador denegado (`globalThis.constructor.*`);
- * con base literal/SAFE pasaba. Ahora se flaggea toda invocación de
- * `.constructor` independientemente de la base, preservando los usos
- * legítimos (reflexión / comparación / clon `new`).
+ * con base literal/SAFE pasaba. Se flaggea la invocación de `.constructor`
+ * salvo cuando la base es un literal PROVABLEMENTE no-función (`({}).constructor()`
+ * = Object, `[].constructor(3)` = Array — NO Function/eval; codex P2 sobre 27c5d18,
+ * era FP que bloqueaba server-safe legítimo). El DOBLE `.constructor` (siempre Function,
+ * incl. base literal) y la base función/identifier/`this`/class-expr siguen flaggeando
+ * (fail-closed). Se preservan los usos legítimos (reflexión / comparación / clon `new`).
  */
 describe("server-safe gate — Function constructor vía `.constructor` (beta.27 BLOCKER-1)", () => {
   const probe = (body: string) =>
@@ -1173,6 +1176,18 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     [".bind/.call legítimo NO sobre constructor", `const fn = [].slice.bind([]); void fn;`],
     ["método `.call` propio (no Function.prototype)", `const o = { call() { return 1; } }; const r = o.call(); void r;`],
     ["`this.constructor.name`", `class C { m() { return this.constructor.name; } } void C;`],
+    // codex P2 (27c5d18): single `.constructor` INVOCADO sobre un literal no-función —
+    // `({}).constructor` = Object, `[].constructor` = Array, etc. ≠ Function → NO es eval.
+    // Era FP (la regla "toda invocación independientemente de la base" sobre-flaggeaba).
+    ["`({}).constructor()` → Object()", `const w = ({}).constructor(); void w;`],
+    ["`[].constructor(3)` → Array(3)", `const w = [].constructor(3); void w;`],
+    ['`"".constructor()` → String()', `const w = "".constructor(); void w;`],
+    ["`(0).constructor()` → Number()", `const w = (0).constructor(); void w;`],
+    ["`(true).constructor()` → Boolean()", `const w = (true).constructor(); void w;`],
+    ["`(/x/).constructor()` → RegExp()", `const w = (/x/).constructor(); void w;`],
+    ["`` (`t`).constructor() `` → String()", "const w = (`t`).constructor(); void w;"],
+    ["`({}).constructor.call(null)` → Object.call", `const w = ({}).constructor.call(null); void w;`],
+    ["`` ({}).constructor`x` `` → tagged Object", "const w = ({}).constructor`x`; void w;"],
   ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
@@ -2268,7 +2283,7 @@ describe("server-safe gate — eval-sink por bracket notation del .constructor",
     ['constructor["call"]', `/** @server-safe */\nexport const t = (() => {}).constructor["call"](null, "return window")();`],
     ['constructor["apply"]', `/** @server-safe */\nexport const t = (() => {}).constructor["apply"](null, ["return window"])();`],
     ['constructor["bind"]', `/** @server-safe */\nexport const t = (() => {}).constructor["bind"](null, "x")();`],
-    ['paren + bracket combinado', `/** @server-safe */\nexport const t = (({}).constructor)["call"](null, "x")();`],
+    ['paren + bracket combinado (base función)', `/** @server-safe */\nexport const t = ((() => {}).constructor)["call"](null, "x")();`],
     ['doble bracket constructor["constructor"]', `/** @server-safe */\nexport const t = ({})["constructor"]["constructor"]("x")();`],
     // Key envuelta en wrappers erased (paréntesis/cast) — runtime-equivalente al
     // string literal. codex P2.
@@ -2284,6 +2299,10 @@ describe("server-safe gate — eval-sink por bracket notation del .constructor",
     ['a["slice"](0) — bracket no-constructor', `/** @server-safe */\nexport const f = (a: any[]) => a["slice"](0);`],
     ['fn["bind"](null) sobre no-constructor', `/** @server-safe */\nexport const b = (fn: any) => fn["bind"](null);`],
     ['x["constructor"].name — lectura legítima', `/** @server-safe */\nexport const n = (x: any) => x["constructor"].name;`],
+    // codex P2 (27c5d18): bracket `.call` sobre el `.constructor` de un literal no-función
+    // = `Object.call` (no Function) → no es eval. El DOBLE bracket (`({})["constructor"]
+    // ["constructor"]`) SÍ flaggea (arriba) porque es Function; este single no.
+    ['(({}).constructor)["call"]() — Object.call, no eval', `/** @server-safe */\nexport const t = (({}).constructor)["call"](null, "x");`],
   ])("NO genera falso positivo en bracket legítimo: %s", (_label, code) => {
     expect(checkSourceFile(code, "bracket-ok.fixture.tsx")).toEqual([]);
   });

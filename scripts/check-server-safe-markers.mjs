@@ -2511,6 +2511,37 @@ function reachesConstructorAccess(node) {
 }
 
 /**
+ * ¿El receiver de un `.constructor` tiene un valor PROVABLEMENTE no-función? — i.e. TODAS
+ * sus hojas value-transparentes son literales cuyo `.constructor` es un builtin conocido
+ * ≠ `Function`: `{}`→Object, `[]`→Array, string/template→String, number→Number,
+ * bigint→BigInt, `true`/`false`→Boolean, regex→RegExp. Entonces `recv.constructor` NUNCA
+ * es `Function` → invocarlo (`({}).constructor()`, `[].constructor(3)`, `.call/.apply/.bind`,
+ * tagged) NO es eval, solo construye Object/Array/… → flaggearlo es FP (codex P2 sobre
+ * 27c5d18: bloqueaba server-safe legítimo). El escape al eval-sink exige un receiver FUNCIÓN
+ * (class/function expr, identifier, call, `this`…) o un SEGUNDO `.constructor` (rama (a),
+ * que SÍ dispara con base literal: `({}).constructor.constructor()` = Function). Cualquier
+ * hoja NO-literal → no se excluye → FAIL-CLOSED. **NO** incluye class/function expressions
+ * (su `.constructor` ES Function → eval) ni null/undefined (lanzan TypeError, no instancian).
+ * beta.27 BLOCKER-1.
+ */
+function constructorReceiverIsProvablyNonFunction(receiver) {
+  const leaves = valueTransparentLeaves(receiver);
+  if (leaves.length === 0) return false;
+  return leaves.every(
+    (leaf) =>
+      ts.isObjectLiteralExpression(leaf) ||
+      ts.isArrayLiteralExpression(leaf) ||
+      ts.isStringLiteralLike(leaf) ||
+      ts.isTemplateExpression(leaf) ||
+      ts.isNumericLiteral(leaf) ||
+      ts.isBigIntLiteral(leaf) ||
+      ts.isRegularExpressionLiteral(leaf) ||
+      leaf.kind === ts.SyntaxKind.TrueKeyword ||
+      leaf.kind === ts.SyntaxKind.FalseKeyword,
+  );
+}
+
+/**
  * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
  * `Function` constructor). Salta los constructos VALUE-TRANSPARENTES a AMBOS lados
  * (wrappers erased + coma/lógico/ternario/asignación, sin calls): son contiguos y
@@ -2522,6 +2553,11 @@ function isWeaponizedConstructorAccess(node) {
   // (a) doble `x.constructor.constructor` (ES Function, se llame o no) — la base
   //     puede venir envuelta en value-transparentes: `(0, x.constructor).constructor`.
   if (reachesConstructorAccess(node.expression)) return true;
+  // (codex P2) Receiver PROVABLEMENTE no-función (`({}).constructor()` = Object(),
+  // `[].constructor(3)` = Array(3)) → su `.constructor` ≠ Function → NO es eval. Tras (a)
+  // (que ya cazó el doble-constructor con base literal), un single `.constructor` de un
+  // literal no-función no es weaponizable. Base variable/no-literal → fail-closed.
+  if (constructorReceiverIsProvablyNonFunction(node.expression)) return false;
   // Ancestro efectivo saltando value-transparentes hacia ARRIBA; `child` es el nodo
   // (quizá envuelto) que es hijo directo de ese ancestro.
   let child = node;
