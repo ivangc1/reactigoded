@@ -2098,7 +2098,25 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["((0, React) as any).useEffect=sync (coma en target)", HD + `export function C(){ ((0, React) as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["Object.assign((0, React),…) (coma en 1er arg)", HD + `export function C(){ Object.assign((0, React) as any,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["(true && React).useEffect=sync (&& en target)", HD + `export function C(){ ((true && React) as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P1 (5318d34): la FAMILIA de aliases también debe reconocer un alias VALUE-
+    // TRANSPARENTE. `const A = (0, React)` → A ES React; antes el family-builder solo hacía
+    // unwrapErased+Identifier → A no entraba en la familia → un member-write a A no tainteaba
+    // React. Mismo `valueTransparentLeaves` que el target-resolution (clase, no instancia).
+    ["familia: const A=(0,React); A.useEffect=sync", HD + `export function C(){ const A=(0,React); (A as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: const A=(c?React:x); A.useEffect=sync (ternario)", HD + `export function C(){ const A=(Math.random()>0.5?React:({} as any)); (A as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: cadena const A=(0,React); const B=A; B.useEffect=sync", HD + `export function C(){ const A=(0,React); const B=A; (B as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  // ASIMETRÍA taint-vs-recognition (clase narrow-unwrap, dirección OPUESTA): el lado de
+  // RECONOCIMIENTO de hook (reactAliasesDeclaredBy) se queda en unwrapErased a propósito —
+  // reconocer `const R=(0,React)` como react EXIMIRÍA más (fail-OPEN). Así que `const R=
+  // (0,React); R.useEffect(()=>window)` OVER-FLAGEA (trata el hook real como sync) = residual
+  // FAIL-CLOSED, seguro. El TAINT sí cruza value-transparent (arriba), porque ahí narrow
+  // = fail-OPEN. Misma sintaxis, resolución opuesta según la dirección de seguridad.
+  it("RESIDUAL fail-closed: const R=(0,React); R.useEffect(()=>window) over-flagea (recognition narrow a propósito)", () => {
+    const code = HD + `export function C(){ const R=(0,React); return R.useEffect(()=>{ void window.location.href; }); }`;
     expect(flagged(code)).toBe(true);
   });
 

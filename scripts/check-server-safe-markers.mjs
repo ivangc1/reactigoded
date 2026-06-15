@@ -1930,13 +1930,19 @@ function gatherReactNamespaceFamily(sourceFile) {
         ts.isIdentifier(node.name) &&
         node.initializer
       ) {
-        const init = unwrapErased(node.initializer);
+        // Alias VALUE-TRANSPARENTE: `const A = (0, React)`, `(React as any)`, `cond ? React
+        // : x` — A puede SER el objeto React (su valor cruza coma/&&/||/??/ternario). Antes
+        // solo `unwrapErased`+Identifier → `(0, React)` no se reconocía como alias → la familia
+        // no incluía A → un member-write a A no tainteaba React = BYPASS (codex P1). Si ALGUNA
+        // hoja value-transparente del init ∈ familia → A ∈ familia (fail-closed; mismo
+        // `valueTransparentLeaves` que el target-resolution de gatherMutatedNamespaceRoots).
         if (
-          ts.isIdentifier(init) &&
-          family.has(init.text) &&
-          !family.has(node.name.text)
+          !family.has(node.name.text) &&
+          valueTransparentLeaves(node.initializer).some(
+            (leaf) => ts.isIdentifier(leaf) && family.has(leaf.text),
+          )
         ) {
-          family.add(node.name.text); // X = Y (Y ∈ familia)
+          family.add(node.name.text); // X = Y / (0, Y) / (Y as any) … (Y ∈ familia)
           changed = true;
         }
       } else if (
