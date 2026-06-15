@@ -850,6 +850,66 @@ function caseClauseTerminates(statements) {
 }
 
 /**
+ * ¿El nombre de un `namespace` COLISIONA con una declaración AMBIENT del MISMO nombre
+ * en su MISMO scope (sibling)? — p.ej. `declare var window: any; namespace window {…}`.
+ *
+ * Bajo declaration-merging de TypeScript, un `declare var/let/const/function/class N`
+ * ambient HERMANO del `namespace N` hace que el BUNDLER (rolldown 1.0.2 — el de vite 8,
+ * **NO** esbuild; ver nota de oráculo abajo) trate `N` como binding EXTERNO y ELIDA el
+ * `var N` que el namespace emitiría en solitario. Resultado: el shell `N || (N = {})` y
+ * los reads `N.x` quedan contra el GLOBAL LIBRE → en Edge/SSR `ReferenceError: N is not
+ * defined` en MODULE-LOAD. Si el gate tratara `N` como shadow runtime (lo añade a
+ * localBindings vía `namespaceIsInstantiated`→`producesRuntimeValue`), eximiría ese read
+ * = BYPASS FAIL-OPEN. beta.27 BLOCKER-1, workflow adversarial `verify-export-declare-ns-p1`.
+ *
+ * ORÁCULO = el BUILD REAL (vite 8 → **rolldown** + transform OXC), medido data-driven, NO
+ * `esbuild.transformSync`: transformSync emite `var window` para AMBOS (merge y no-merge) y
+ * ENMASCARABA la divergencia — solo el bundle completo de rolldown elide el local. Verificado
+ * detrás del gate: gate-exime + build→`ReferenceError` para `declare var/let/const/function/
+ * class window` + `namespace window`; gate-exime + build→`undefined` (sound) para el caso
+ * PLANO (sin declare hermano), value-member, y `declare global { var window }`.
+ *
+ * EXCLUIDO `declare global { var N }`: es augmentation del global, NO un sibling del mismo
+ * nombre (el bloque se llama `global`; `N` vive ANIDADO dentro) → no colisiona a nivel de
+ * statement → el build MANTIENE el local → sound (medido). Fail-closed e INDEPENDIENTE del
+ * ORDEN (rolldown solo elide si el `declare` va ANTES, pero ese detalle de impl no se asume:
+ * cualquier colisión mismo-scope → no-instanciado). Solo puede AÑADIR flagging (nunca quitar)
+ * → no puede introducir bypass; el único riesgo es over-flag de un constructo contrivado.
+ */
+function namespaceCollidesWithAmbientSibling(moduleDecl) {
+  if (!moduleDecl.name || !ts.isIdentifier(moduleDecl.name)) return false;
+  const name = moduleDecl.name.text;
+  const parent = moduleDecl.parent;
+  const siblings =
+    parent && ts.isSourceFile(parent)
+      ? parent.statements
+      : parent && ts.isModuleBlock(parent)
+        ? parent.statements
+        : null;
+  if (!siblings) return false;
+  for (const s of siblings) {
+    if (s === moduleDecl || !isAmbientDeclaration(s)) continue;
+    if (ts.isVariableStatement(s)) {
+      for (const d of s.declarationList.declarations) {
+        const declNames = new Set();
+        addBindingNamesFromPattern(d.name, declNames);
+        if (declNames.has(name)) return true;
+      }
+    } else if (
+      (ts.isFunctionDeclaration(s) ||
+        ts.isClassDeclaration(s) ||
+        ts.isEnumDeclaration(s)) &&
+      s.name &&
+      ts.isIdentifier(s.name) &&
+      s.name.text === name
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿el emit de RUNTIME produce
  * `var N;(IIFE)`? Si lo está, su nombre ES una sombra runtime legítima; si se
  * elide, una ref bare a `N` (= global ausente en Edge) resuelve al global real →
@@ -876,6 +936,11 @@ function caseClauseTerminates(statements) {
  * (over-flag seguro, nunca bypass). beta.27 BLOCKER-1.
  */
 function namespaceIsInstantiated(moduleDecl) {
+  // Colisión ambient-merge mismo-scope (`declare var window` + `namespace window`): el
+  // bundler (rolldown/vite 8) ELIDE el `var N` local → `N` NO es shadow runtime, el read
+  // `N.x` filtra al global → debe flaggearse. Ver `namespaceCollidesWithAmbientSibling`.
+  // FAIL-CLOSED (solo añade flagging). beta.27 BLOCKER-1 (workflow adversarial).
+  if (namespaceCollidesWithAmbientSibling(moduleDecl)) return false;
   const body = moduleDecl.body;
   if (!body) return false;
   // `namespace X.Y { … }`: el body es otro ModuleDeclaration (forma dotted).

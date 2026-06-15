@@ -1697,6 +1697,71 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
 });
 
 /**
+ * beta.27 BLOCKER-1 — codex P1 (commit 9ffc9c7) re-examinado + workflow adversarial
+ * `verify-export-declare-ns-p1`: BYPASS REAL por DECLARATION-MERGING namespace+ambient.
+ *
+ * Codex alegó (citando evanw/esbuild#1158) que `namespace window { export declare const z }`
+ * se ERASE y el read filtra al global. FALSO para el caso PLANO en el toolchain del DS
+ * (vite 8 → rolldown 1.0.2 + transform OXC): el plano INSTANCIA un `var window` LOCAL →
+ * `window.x` = undefined, NO crash (lo cubren los pins SOUNDNESS de arriba). PERO un caso
+ * DISTINTO —que el modelo del gate NO modelaba— SÍ es bypass: cuando el namespace MERGEA
+ * con un `declare var|let|const|function|class <mismo-nombre>` ambient HERMANO, rolldown
+ * trata el nombre como EXTERNO y ELIDE el `var` local → el shell `window || (window = {})`
+ * y el read quedan contra el GLOBAL LIBRE → `ReferenceError: window is not defined` en
+ * MODULE-LOAD (Edge/SSR). El gate eximía el read (namespace = shadow) = FAIL-OPEN.
+ *
+ * ORÁCULO MEDIDO = el BUILD REAL (vite/rolldown) + ejecución en node SIN global window,
+ * NO `esbuild.transformSync` (emite `var window` para AMBOS y enmascara la divergencia —
+ * solo el bundle completo de rolldown elide el local). Tabla medida (gate-exime + build→):
+ *   ReferenceError (AHORA cazado): declare var|let|const|function|class window + namespace window
+ *   undefined / sound (NO tocar):  plano (sin declare hermano), value-member, `declare global { var window }`
+ * Fix: `namespaceCollidesWithAmbientSibling` → namespace con colisión ambient mismo-scope
+ * NO instancia → no es shadow → read flaggeado. Fail-closed (solo añade flagging); `declare
+ * global` EXCLUIDO (el bloque no es sibling del mismo nombre). Lección: el oráculo de emit
+ * del gate es el BUNDLER del build (rolldown en vite 8), no esbuild transform aislado.
+ */
+describe("server-safe gate — declaration-merge namespace+ambient (codex P1 9ffc9c7 / beta.27 BLOCKER-1)", () => {
+  const violations = (code: string) =>
+    checkSourceFile("/** @server-safe */\n" + code, "merge.fixture.tsx").length;
+  const READ_W = "\nexport function read(): number { return window.innerWidth; }\n";
+  const READ_D = "\nexport function read(): string { return document.title; }\n";
+
+  // BYPASS class — el nombre del namespace MERGEA con un ambient sibling del mismo nombre →
+  // rolldown elide el local → read filtra al global → DEBE flaggear (≥1 violación).
+  it.each([
+    ["declare var window", "declare var window: any;\nnamespace window { export declare const z: number; }"],
+    ["declare let window", "declare let window: any;\nnamespace window { export declare const z: number; }"],
+    ["declare const window", "declare const window: any;\nnamespace window { export declare const z: number; }"],
+    ["declare function window + ns value", "declare function window(): void;\nnamespace window { export const z = 1; }"],
+    ["declare class window + ns value", "declare class window {}\nnamespace window { export const z = 1; }"],
+    // INDEPENDIENTE DEL ORDEN: rolldown solo elide si el `declare` va ANTES, pero el gate
+    // fail-closea ambos órdenes (el detalle de impl del bundler no se asume).
+    ["ns ANTES de declare var (fail-closed)", "namespace window { export declare const z: number; }\ndeclare var window: any;"],
+  ])("FLAGea bypass declaration-merge: %s", (_label, body) => {
+    expect(violations(body + READ_W)).toBeGreaterThan(0);
+  });
+
+  it("FLAGea el merge también para `document`", () => {
+    expect(
+      violations(
+        "declare var document: any;\nnamespace document { export declare const z: number; }" + READ_D,
+      ),
+    ).toBeGreaterThan(0);
+  });
+
+  // SOUND — DEBEN seguir exentos (el build MANTIENE el local → undefined, no crash). Que el
+  // fix NO los rompa es lo que evita un FP masivo y preserva el caso codex PLANO como FP.
+  it.each([
+    ["plano export-declare (caso codex)", "namespace window { export declare const z: number; }"],
+    ["plano value-member", "namespace window { export const z = 1; }"],
+    ["declare global { var window } (augmentation)", "export {};\ndeclare global { var window: any; }\nnamespace window { export declare const z: number; }"],
+    ["declare var de OTRO nombre (no colisiona)", "declare var somethingElse: any;\nnamespace window { export declare const z: number; }"],
+  ])("NO rompe el caso sound: %s", (_label, body) => {
+    expect(violations(body + READ_W)).toBe(0);
+  });
+});
+
+/**
  * DEEPEST FINAL HUNT #173 round-2 — 2 clases de bypass deferred-execution cerradas.
  *
  *  A) import-equals que SOMBREA un hook diferido con una función SÍNCRONA no-react:
