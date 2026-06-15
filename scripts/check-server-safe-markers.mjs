@@ -3829,8 +3829,15 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // que ambos quedan en scope en el cuerpo de B (codex P2). El acceso EXTERNO a
     // un namespace elidido lo siguen flaggeando los colectores del shadow-set.
     if (ts.isModuleDeclaration(node) && node.body) {
+      // El NOMBRE del namespace es un binding runtime DENTRO de su cuerpo SOLO si el
+      // namespace INSTANCIA un local limpio (`namespaceIsInstantiated`, que ya incluye el
+      // guard de colisión ambient-merge). Si NO instancia —colisión `declare var N` hermano
+      // que rolldown elide, o type-only—, el nombre NO es local: un read `N.x` en el cuerpo
+      // (`namespace window { export const z = window.innerWidth }`) filtra al GLOBAL en el
+      // build → debe flaggearse. Mismo criterio de instanciación que el shadow EXTERNO
+      // (consistencia inner/outer). Codex P1 (d007dd6, body-internal del merge). FAIL-CLOSED.
       const nsCtx =
-        node.name && ts.isIdentifier(node.name)
+        node.name && ts.isIdentifier(node.name) && namespaceIsInstantiated(node)
           ? addToScope(context, new Set([node.name.text]))
           : context;
       if (ts.isModuleBlock(node.body)) {

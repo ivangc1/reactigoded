@@ -1759,6 +1759,29 @@ describe("server-safe gate — declaration-merge namespace+ambient (codex P1 9ff
   ])("NO rompe el caso sound: %s", (_label, body) => {
     expect(violations(body + READ_W)).toBe(0);
   });
+
+  // BODY-INTERNAL (codex P1 sobre d007dd6): el read del global vive DENTRO del cuerpo del
+  // namespace (`namespace window { export const z = window.innerWidth }`, evaluado en
+  // module-load). El walk del cuerpo añadía el NOMBRE del namespace a localBindings (nsCtx)
+  // SIN consultar la instanciación → con la colisión ambient (rolldown elide el local) el
+  // read filtraba al GLOBAL pero el gate lo suprimía como self-ref = BYPASS. Fix: el nsCtx
+  // solo añade el self-name si `namespaceIsInstantiated` (incl. guard de colisión) → mismo
+  // criterio inner/outer. Medido behavioral: con declare hermano → ReferenceError en load.
+  it.each([
+    ["declare var window + body read", "declare var window: any;\nnamespace window { export const z = window.innerWidth; }"],
+    ["declare let window + body read", "declare let window: any;\nnamespace window { export const z = window.innerWidth; }"],
+    ["declare function window + body read", "declare function window(): void;\nnamespace window { export const z = window.innerWidth; }"],
+    ["declare var document + body read", "declare var document: any;\nnamespace document { export const z = document.title; }"],
+  ])("FLAGea bypass body-internal del merge: %s", (_label, src) => {
+    expect(violations(src)).toBeGreaterThan(0);
+  });
+
+  // SOUND body-internal — SIN declare hermano el namespace instancia un `var window` local
+  // → `window.innerWidth` lee el objeto del namespace (undefined), no crash (medido). El
+  // self-ref se suprime correctamente. Que el fix NO lo rompa preserva el caso legítimo.
+  it("NO rompe el body-internal self-ref sound (sin declare hermano)", () => {
+    expect(violations("namespace window { export const z = window.innerWidth; }")).toBe(0);
+  });
 });
 
 /**
