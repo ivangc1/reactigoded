@@ -3803,8 +3803,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       //          (3) gatherNonReactLexicalShadows pre-load.
       //   PER-STMT: (4) visit; (5) extractPostStatementBindings→addToScope; (6) purgeNonImportReactAliases;
       //          (7) addReactAliases; (8) extractConstGuardAlias; (9) extractNegativeEarlyReturnGuards.
-      // El CaseBlock acumula bindings/aliases en `current` (compartido entre clauses) Y `clauseCtx` (el
-      // que visita); los GUARDS de narrowing (negative-early-return + typeof) son POR-CLAUSE (solo clauseCtx).
+      // El CaseBlock acumula bindings + react-aliases (pasos 5-7) en `current` (compartido entre
+      // clauses) Y `clauseCtx` (el que visita); los GUARDS de narrowing (paso 8 const-guard-alias +
+      // paso 9 negative-early-return + el typeof del switch) son POR-CLAUSE (SOLO clauseCtx): un switch
+      // puede saltar directo a un case posterior sin ejecutar el `const`/`if` del anterior → compartir
+      // un guard sería fail-OPEN (codex P2). Binding compartido ≠ guard compartido.
       const blockFns = new Set();
       for (const clause of node.clauses) {
         for (const stmt of clause.statements) {
@@ -3928,17 +3931,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // visita). Mismo rol que addToScope para el deferred-hook canónico nested.
           current = addReactAliases(current, stmt);
           clauseCtx = addReactAliases(clauseCtx, stmt);
-          // Guard alias `const has = typeof X !== "undefined"` — mismo threading que
-          // visitOrderedStatements (codex P2: faltaba en el CaseBlock → un guard-alias case-local
-          // no narrowing y el read posterior se sobre-flaggeaba). El binding const es compartido
-          // por el CaseBlock → el alias se acumula en current Y clauseCtx (el que resuelve los
-          // guards). Resuelto contra clauseCtx.guardAliases (cadenas de alias por-clause).
+          // Guard alias `const has = typeof X !== "undefined"` — es NARROWING, por-clause (solo
+          // clauseCtx), NO current. El BINDING const `has` SÍ es compartido por el CaseBlock (vía
+          // addToScope arriba), pero el GUARD que implica es por-clause: un switch puede saltar
+          // DIRECTO a un case posterior sin ejecutar el `const` del anterior, así que `case 1: const
+          // has = …; break; case 2: if (has) return window.x` NO debe eximir en case 2 (el guard
+          // nunca corrió ahí) = fail-OPEN si se compartiera (codex P2 — mi fix anterior lo metía en
+          // current). Mismo scope que negative-early-return + typeof (todos clauseCtx). Resuelto
+          // contra clauseCtx.guardAliases (cadenas de alias por-clause). Cubre el caso same-clause.
           const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
           if (guardAlias) {
-            current = {
-              ...current,
-              guardAliases: new Map([...current.guardAliases, guardAlias]),
-            };
             clauseCtx = {
               ...clauseCtx,
               guardAliases: new Map([...clauseCtx.guardAliases, guardAlias]),

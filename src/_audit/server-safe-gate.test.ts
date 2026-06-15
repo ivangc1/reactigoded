@@ -1303,6 +1303,14 @@ describe("server-safe gate — guard typeof bajo fail-closed", () => {
     expect(checkSourceFile(code, "g.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
+  it("SOUNDNESS: un guard-alias de un case NO se hereda en otro case (codex P2: per-clause, no shared)", () => {
+    // `case 1: const has = typeof window !== "undefined"; break; case 2: if (has) return window.x` —
+    // entrar DIRECTO a case 2 NO ejecuta el const de case 1, así que el guard no corrió ahí →
+    // compartir el alias en `current` sería fail-OPEN. Debe FLAGGEAR en case 2.
+    const code = `/** @server-safe */\nexport function C(x: number){ switch(x){ case 1: { const hasWindow = typeof window !== "undefined"; break; } case 2: { if (hasWindow) return window.location.href; } } return ""; }`;
+    expect(checkSourceFile(code, "g.fixture.tsx").some((v) => v.rule === "no-bare-dom-access")).toBe(true);
+  });
+
   it("guard de ENTRADA preservado para funciones hoisted en un case (codex P2: blockEntryGuards en CaseBlock)", () => {
     // `if (typeof window !== "undefined") switch(x){ case 1: function read(){ window } }` — la función
     // hoisted resetea a blockEntryGuards (no a vacío); el CaseBlock debe heredar el guard de entrada.
