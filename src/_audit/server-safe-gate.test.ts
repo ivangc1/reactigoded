@@ -2542,13 +2542,34 @@ describe("server-safe gate — eval-sink en timer deferido NO se exime", () => {
     ["bare global en setInterval", `/** @server-safe */\nexport function W() { setInterval(() => { const g = global; void g; }, 0); return <div />; }`],
     ["bare globalThis en queueMicrotask", `/** @server-safe */\nexport function W() { queueMicrotask(() => { const g = globalThis; void g; }); return <div />; }`],
     ["setImmediate en setTimeout (stub que lanza)", `/** @server-safe */\nexport function W() { setTimeout(() => { setImmediate(() => {}); }, 0); return <div />; }`],
+    // codex P2 (5f7aa4d): navigator es present-PARCIAL (root sí, geolocation/mediaDevices
+    // no) → mismo perfil que setImmediate, NON_ABSENCE_DENIALS. Timer fire en Edge → flag.
+    ["navigator.geolocation en setTimeout (shape parcial)", `/** @server-safe */\nexport function W() { setTimeout(() => { navigator.geolocation.getCurrentPosition(() => {}); }, 0); return <div />; }`],
   ])("FLAGGEA la raíz de escape en un timer: %s", (_label, code) => {
     expect(checkSourceFile(code, "timer-escape.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  // codex P2 (5f7aa4d): un presence-guard `typeof navigator !== "undefined"` da FALSA
+  // confianza — el root está presente en Node 22+/edge pero `navigator.geolocation` falta
+  // → revienta en SSR. NON_ABSENCE_DENIALS hace que el typeof-guard NO exima (igual que
+  // setImmediate). El `window` (ausencia real) SÍ se protege con typeof (contraste).
+  it.each([
+    ["presence-guard navigator.geolocation", `/** @server-safe */\nexport function W() { if (typeof navigator !== "undefined") navigator.geolocation.getCurrentPosition(() => {}); return <div />; }`],
+    ["presence-guard navigator.mediaDevices", `/** @server-safe */\nexport function W() { if (typeof navigator !== "undefined") void navigator.mediaDevices.getUserMedia({}); return <div />; }`],
+  ])("FLAGGEA navigator bajo presence-guard (shape parcial, no ausencia): %s", (_label, code) => {
+    expect(checkSourceFile(code, "nav-guard.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("NO flaggea window bajo presence-guard (ausencia real → typeof protege)", () => {
+    const code = `/** @server-safe */\nexport function W() { if (typeof window !== "undefined") return window.innerWidth; return 0; }`;
+    expect(checkSourceFile(code, "win-guard.fixture.tsx")).toEqual([]);
   });
 
   it.each([
     // Las MISMAS raíces de escape en client-only deferred (useEffect) SÍ se eximen.
     ["globalThis en useEffect (client-only)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { const g = globalThis; void g; }, []); return <div />; }`],
+    // navigator en client-only deferred (browser-only, donde es completo) → exento.
+    ["navigator.geolocation en useEffect (client-only)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { navigator.geolocation.getCurrentPosition(() => {}); }, []); return <div />; }`],
   ])("NO flaggea raíz de escape en client-only deferred: %s", (_label, code) => {
     expect(checkSourceFile(code, "escape-client-ok.fixture.tsx")).toEqual([]);
   });

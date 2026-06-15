@@ -345,8 +345,11 @@ const SRC_ROOT = resolve(repoRoot, "src");
 //     Los otros deferred-timers (`setTimeout`/`setInterval`/`queueMicrotask`)
 //     SÍ son Web-standard y se quedan en SAFE.
 //   - `navigator`: provisto como SUBSET inestable (sí `userAgent`/`language`;
-//     no `geolocation`/`mediaDevices`) — semántica divergente entre runtimes →
-//     gate fuerza guard explícito.
+//     no `geolocation`/`mediaDevices`) — el ROOT está presente (Node 22+/edge) pero
+//     PARCIAL, así que `typeof navigator !== "undefined"` da falsa confianza y
+//     `navigator.geolocation.x` revienta en SSR. Por eso va TAMBIÉN en
+//     NON_ABSENCE_DENIALS (como setImmediate): presence-guard/timer NO eximen, solo
+//     deferred client-only. codex P2.
 //   - `localStorage` / `sessionStorage`: webstorage no disponible en el edge
 //     baseline ni estable en Node (experimental) → crashean o son semántica-
 //     mente erróneos en SSR/RSC.
@@ -498,6 +501,16 @@ const NON_ABSENCE_DENIALS = new Set([
   "self",
   "setImmediate",
   "clearImmediate",
+  // `navigator`: el ROOT está PRESENTE en Node 22+ y en el edge baseline (Workers/
+  // Vercel: `navigator.userAgent` definido), pero como SUBSET PARCIAL — `geolocation`/
+  // `mediaDevices`/`clipboard` faltan → `typeof navigator !== "undefined"` pasa pero
+  // `navigator.geolocation.getCurrentPosition(...)` revienta en SSR (TypeError: undefined).
+  // El hazard NO es ausencia-del-root sino shape-parcial → el presence-guard da falsa
+  // confianza, igual que setImmediate (stub que lanza). Solo se exime en deferred CLIENT-
+  // ONLY (handler/useEffect, browser-only donde navigator es completo), NUNCA en timers ni
+  // bajo typeof-guard. Coherencia con el comentario de INTENTIONAL_DENY ("subset inestable").
+  // codex P2 sobre 5f7aa4d.
+  "navigator",
 ]);
 
 /**
