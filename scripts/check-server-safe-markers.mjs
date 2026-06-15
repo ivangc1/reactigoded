@@ -514,24 +514,27 @@ const NON_ABSENCE_DENIALS = new Set([
 ]);
 
 /**
- * Política ÚNICA de exención en body diferido (ramas (c) y (d)). Las
- * `NON_ABSENCE_DENIALS` (sinks de eval + raíces de escape + stubs que lanzan)
- * disparan en Edge SIEMPRE → solo se eximen en deferred CLIENT-ONLY (useEffect/
- * handler, que NO corren en SSR), NUNCA en timers (setTimeout/setInterval/
- * queueMicrotask, que SÍ disparan en el isolate Edge durante SSR). El resto, cuyo
- * hazard es la AUSENCIA (window/document…), se exime en CUALQUIER deferred.
+ * Política ÚNICA de exención en body diferido (ramas (c) y (d)). Un global de CLIENTE
+ * (window/document/navigator, eval-sink, escape-root, stub-que-lanza — CUALQUIERA) solo es
+ * seguro de leer en un body que NO corre en el isolate del SERVIDOR: i.e. CLIENT-ONLY
+ * deferred — handler de evento (onClick…) o effect (useEffect/useLayoutEffect), que React/el
+ * navegador garantizan que NO se ejecutan durante SSR/Edge.
  *
- * Centralización (re-hunt B3): antes cada rama llaveaba esto por DYNAMIC_EVAL_SINKS
- * ({eval,Function}), un subconjunto ESTRICTO de NON_ABSENCE_DENIALS → globalThis/
- * global/self/setImmediate/clearImmediate quedaban exentos en timers y escapaban
- * (`setTimeout(() => globalThis.window.location.href)` → TypeError real en Edge).
- * Render-vs-timer eran paths paralelos con set de exención distinto; ahora ambos
- * llaman a ESTE. beta.27 BLOCKER-1.
+ * Los TIMERS (setTimeout/setInterval/queueMicrotask…) SÍ disparan en el isolate Edge/SSR
+ * (queueMicrotask casi inmediato; setTimeout en el event-loop de Node tras render) → su
+ * callback corre en el SERVIDOR → un read de global de cliente ahí LANZA (window/document
+ * ausentes; navigator/stub parciales). Por eso TODOS requieren client-only, NO solo las
+ * NON_ABSENCE_DENIALS.
+ *
+ * codex P1: antes los absence-hazard (window/document) se eximían en CUALQUIER deferred
+ * (cualquier deferred, incluido timer) → `setTimeout(() => window.scrollTo(0,0))` en
+ * render se eximía pero el timer corre en el server y lanza = BYPASS. Coincide con el
+ * comentario que ya tenía el walker ("los timers SÍ disparan en Edge durante SSR"), que solo
+ * se aplicaba a los eval-sinks; ahora la política es ÚNICA: client-only para TODO global.
+ * El `api` ya no diferencia (se conserva por firma/legibilidad). beta.27 BLOCKER-1.
  */
-function isExemptInDeferredBody(api, context) {
-  return NON_ABSENCE_DENIALS.has(api)
-    ? context.isInClientOnlyDeferredBody
-    : context.isInDeferredBody;
+function isExemptInDeferredBody(_api, context) {
+  return context.isInClientOnlyDeferredBody;
 }
 
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
@@ -3690,10 +3693,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
 
   // Walk AST con contexto:
   //   activeGuards: Set<api> guards activos por scope de typeof.
-  //   isInDeferredBody: estamos dentro de un body que NO corre durante
-  //                     render — body de handler JSX (onClick, onChange…),
-  //                     useEffect / useLayoutEffect / useCallback, timer
-  //                     (setTimeout, requestAnimationFrame…), etc.
+  //   isInClientOnlyDeferredBody: estamos dentro de un body que solo corre
+  //                     en el CLIENTE (no en SSR/Edge) — handler JSX (onClick,
+  //                     onChange…), useEffect / useLayoutEffect / useCallback.
+  //                     Un TIMER (setTimeout/queueMicrotask) NO cuenta: dispara
+  //                     en el isolate del server → no exime globals de cliente.
   //
   // Razón: codex round 10 mostró que el heurístico depth-based del
   // round 8 era demasiado grueso — `function readEnv() { return
@@ -3804,9 +3808,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       }
     }
 
-    // (b) Entrar en función/arrow/method: encender isInDeferredBody
-    // SI esta function expr es argumento de un sink diferido reconocido.
-    // Si ya estamos en deferred body, los bodies anidados heredan
+    // (b) Entrar en función/arrow/method: encender isInClientOnlyDeferredBody
+    // SI esta function expr es argumento de un sink diferido CLIENT-ONLY reconocido
+    // (handler/effect; un timer NO). Si ya estamos en client-only, los bodies anidados heredan
     // el flag (un helper dentro de useEffect sigue siendo no-render).
     if (
       ts.isArrowFunction(node) ||
@@ -3818,7 +3822,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ts.isConstructorDeclaration(node)
     ) {
       const deferredKind = isDeferredExecutionContext(node, context);
-      const isDeferred = deferredKind !== "none";
       const fnScopeBindings = gatherFunctionVarHoisted(node);
       // `arguments` es un binding implícito en funciones NO-arrow (no existe
       // en arrows). Inyectarlo evita un falso positivo bajo fail-closed:
@@ -3848,12 +3851,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         // orden textual (F4: `function P(){ return X } const X = …`). Render-path
         // directo (fuera de función) sí mantiene el orden TDZ.
         isInFunctionBody: true,
-        isInDeferredBody: context.isInDeferredBody || isDeferred,
         // CLIENT-ONLY deferred (hook/handler) vs TIMER (setTimeout/setInterval/
         // queueMicrotask). Sticky: una vez en client-only, los timers anidados
-        // también corren en cliente. Los eval-sinks (Function/eval/.constructor)
-        // throw en Edge SIEMPRE que se ejecuten, y los timers SÍ disparan en Edge
-        // durante SSR → solo se eximen en client-only, NO en timer (deep re-hunt).
+        // también corren en cliente. CUALQUIER global de cliente (window/document,
+        // eval-sink, …) solo se exime en client-only, NO en timer: los timers disparan
+        // en el isolate Edge/SSR → su callback corre en el server → el read lanza (codex
+        // P1). Por eso solo se trackea el subset client-only (`isExemptInDeferredBody`).
         isInClientOnlyDeferredBody:
           context.isInClientOnlyDeferredBody || deferredKind === "client",
         // ¿El cuerpo hereda los guards activos en SU posición de definición?
@@ -4544,7 +4547,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     activeGuards: new Set(),
     blockEntryGuards: new Set(),
     guardAliases: new Map(),
-    isInDeferredBody: false,
     isInClientOnlyDeferredBody: false,
     isInFunctionBody: false,
     localBindings: moduleAll,

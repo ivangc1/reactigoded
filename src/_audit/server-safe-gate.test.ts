@@ -2596,14 +2596,15 @@ describe("server-safe gate — typeof guard por expresión (&&/||/ternario)", ()
 });
 
 /**
- * Eval-sink en deferred TIMER vs CLIENT-ONLY (deep re-hunt). Un eval-sink
- * (Function/eval/.constructor) throw en el isolate Edge SIEMPRE que se ejecute, y
- * setTimeout/setInterval/queueMicrotask PUEDEN disparar en Edge durante SSR → su
- * callback NO exime eval-sinks. useEffect/event-handler NO corren en SSR (corren
- * tras hidratación, donde eval funciona) → siguen exentos. El read de un global
- * AUSENTE (window) sí sigue exento en cualquier deferred (comportamiento previo).
+ * Deferred TIMER vs CLIENT-ONLY (deep re-hunt + codex P1). UN GLOBAL DE CLIENTE
+ * (window/document/navigator, eval-sink, escape-root) solo es seguro en deferred CLIENT-ONLY
+ * (useEffect/event-handler, que NO corren en SSR — corren tras hidratación en el navegador).
+ * Los TIMERS (setTimeout/setInterval/queueMicrotask) SÍ disparan en el isolate Edge/SSR → su
+ * callback corre en el SERVIDOR → CUALQUIER read de global de cliente ahí LANZA → se flaggea.
+ * Antes solo los eval-sinks requerían client-only; window/document se eximían en timer =
+ * BYPASS (codex P1: `setTimeout(() => window.scrollTo(0,0))` corre en el server y revienta).
  */
-describe("server-safe gate — eval-sink en timer deferido NO se exime", () => {
+describe("server-safe gate — global de cliente en timer deferido NO se exime", () => {
   it.each([
     ["queueMicrotask + Function()", `/** @server-safe */\nexport function W() { queueMicrotask(() => { const g = Function("return window")(); void g; }); return <div />; }`],
     ["setTimeout + eval()", `/** @server-safe */\nexport function W() { setTimeout(() => { eval("x"); }, 0); return <div />; }`],
@@ -2613,12 +2614,24 @@ describe("server-safe gate — eval-sink en timer deferido NO se exime", () => {
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
   });
 
+  // codex P1: el read de un global de cliente (window/document/screen) en un timer también
+  // se flaggea — el timer corre en el server isolate y window/document están ausentes ahí.
+  it.each([
+    ["window.scrollTo en setTimeout", `/** @server-safe */\nexport function W() { setTimeout(() => { window.scrollTo(0, 0); }, 0); return <div />; }`],
+    ["document.title en queueMicrotask", `/** @server-safe */\nexport function W() { queueMicrotask(() => { void document.title; }); return <div />; }`],
+    ["screen.width en setInterval", `/** @server-safe */\nexport function W() { setInterval(() => { void screen.width; }, 100); return <div />; }`],
+  ])("FLAGGEA el read de global de cliente en un timer: %s", (_label, code) => {
+    const v = checkSourceFile(code, "timer-glob.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
   it.each([
     ["useEffect + Function (client-only)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { const g = Function("return 1")(); void g; }, []); return <div />; }`],
     ["onClick + eval (client-only)", `/** @server-safe */\nexport function W() { return <button onClick={() => { eval("x"); }}>x</button>; }`],
     ["timer ANIDADO en useEffect (sticky client)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { setTimeout(() => { eval("x"); }, 0); }, []); return <div />; }`],
-    ["window read en setTimeout (global ausente, exento)", `/** @server-safe */\nexport function W() { setTimeout(() => { window.scrollTo(0, 0); }, 0); return <div />; }`],
-  ])("NO flaggea (client-only deferred / window-absence): %s", (_label, code) => {
+    ["window en useEffect (client-only, exento)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { window.scrollTo(0, 0); }, []); return <div />; }`],
+    ["window en setTimeout DENTRO de useEffect (sticky)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { setTimeout(() => { window.scrollTo(0, 0); }, 0); }, []); return <div />; }`],
+  ])("NO flaggea (client-only deferred): %s", (_label, code) => {
     expect(checkSourceFile(code, "deferred-ok.fixture.tsx")).toEqual([]);
   });
 
@@ -3098,10 +3111,13 @@ describe("server-safe gate — setImmediate/clearImmediate (edge-baseline)", () 
     expect(checkSourceFile(code, "setimmediate.fixture.tsx").length).toBeGreaterThan(0);
   });
 
+  // El timer web-standard EN SÍ no se deniega (a diferencia de setImmediate); un callback sin
+  // global de cliente queda limpio. (Un read de window/document DENTRO del timer SÍ flaggea —
+  // el timer corre en el server isolate; ver describe "global de cliente en timer".)
   it.each([
-    ["setTimeout callback diferido", Comp(`setTimeout(() => { void window.innerWidth; }, 0); return null;`)],
-    ["queueMicrotask callback diferido", Comp(`queueMicrotask(() => { void document.title; }); return null;`)],
-  ])("web-standard timer sigue safe + deferred → clean: %s", (_label, code) => {
+    ["setTimeout callback sin global", Comp(`setTimeout(() => { let n = 0; n += 1; void n; }, 0); return null;`)],
+    ["queueMicrotask callback sin global", Comp(`queueMicrotask(() => { let s = ""; s += "x"; void s; }); return null;`)],
+  ])("web-standard timer EN SÍ no se deniega → clean: %s", (_label, code) => {
     expect(checkSourceFile(code, "webtimer.fixture.tsx")).toEqual([]);
   });
 });
@@ -3145,9 +3161,12 @@ describe("server-safe gate — DEEPEST: callee diferido envuelto en wrapper eras
     expect(checkSourceFile(bracket, "chain-paren-bracket.fixture.tsx")).toEqual([]);
   });
 
-  it("(setTimeout)(cb,0) — timer global envuelto, sin FP", () => {
+  it("SOUNDNESS: (setTimeout)(cb,0) con window read SIGUE flaggeando (timer corre en server, codex P1)", () => {
+    // El callee envuelto se reconoce como setTimeout, pero un timer NO exime un global de
+    // cliente (corre en el isolate del server). Distinto de (useEffect)(cb) (client-only).
     const code = `/** @server-safe */\nexport function C() { (setTimeout)(() => { window.location.href; }, 0); return null; }`;
-    expect(checkSourceFile(code, "callee-timer.fixture.tsx")).toEqual([]);
+    const v = checkSourceFile(code, "callee-timer.fixture.tsx");
+    expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
   it("SOUNDNESS: (React).useState(lazy) render-phase envuelto SIGUE flaggeando", () => {
