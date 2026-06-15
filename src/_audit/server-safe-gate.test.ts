@@ -1303,6 +1303,22 @@ describe("server-safe gate — guard typeof bajo fail-closed", () => {
     expect(checkSourceFile(code, "g.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
+  it("SOUNDNESS: un value-binding (shadow de global) de un case NO suprime checks en otro case (codex P2)", () => {
+    // `case "object": const window = {}; break; case "undefined": return window.location` — entrar
+    // DIRECTO a case "undefined" NO ejecuta el `const window` de case "object" (TDZ) → el shadow no
+    // está disponible → `window.location` debe FLAGGEAR como global. Modelo PER-CLAUSE: cada clause
+    // empieza desde entryCtx (un case labeled siempre es jump target → fall-through nunca es el único path).
+    const code = `/** @server-safe */\nexport function C(x: string){ switch(x){ case "object": { const window:any = {}; break; } case "undefined": { return window.location; } } return ""; }`;
+    expect(checkSourceFile(code, "g.fixture.tsx").some((v) => v.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("SOUNDNESS: un react-alias de un case NO se hereda en otro case (per-clause)", () => {
+    // case "a" declara `const { useEffect } = React`; case "b" usa un useEffect importado de un módulo
+    // SÍNCRONO → entrar directo a "b" no ejecuta "a" → el alias react de "a" no aplica → FLAGGEA.
+    const code = `/** @server-safe */\nimport * as React from "react";\nimport { useEffect } from "./sync";\nexport function C(x: string){ switch(x){ case "a": { const { useEffect } = React; useEffect(() => {}); break; } case "b": { useEffect(() => { void window.location.href; }); break; } } return null; }`;
+    expect(checkSourceFile(code, "g.fixture.tsx").length).toBeGreaterThan(0);
+  });
+
   it("SOUNDNESS: un guard-alias de un case NO se hereda en otro case (codex P2: per-clause, no shared)", () => {
     // `case 1: const has = typeof window !== "undefined"; break; case 2: if (has) return window.x` —
     // entrar DIRECTO a case 2 NO ejecuta el const de case 1, así que el guard no corrió ahí →

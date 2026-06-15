@@ -3803,11 +3803,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       //          (3) gatherNonReactLexicalShadows pre-load.
       //   PER-STMT: (4) visit; (5) extractPostStatementBindings→addToScope; (6) purgeNonImportReactAliases;
       //          (7) addReactAliases; (8) extractConstGuardAlias; (9) extractNegativeEarlyReturnGuards.
-      // El CaseBlock acumula bindings + react-aliases (pasos 5-7) en `current` (compartido entre
-      // clauses) Y `clauseCtx` (el que visita); los GUARDS de narrowing (paso 8 const-guard-alias +
-      // paso 9 negative-early-return + el typeof del switch) son POR-CLAUSE (SOLO clauseCtx): un switch
-      // puede saltar directo a un case posterior sin ejecutar el `const`/`if` del anterior → compartir
-      // un guard sería fail-OPEN (codex P2). Binding compartido ≠ guard compartido.
+      // El CaseBlock usa el MODELO FALL-THROUGH (ver abajo): un solo `clauseCtx` por clause que
+      // acumula los pasos 5-9; al cerrar, propaga TODO al siguiente clause solo con fall-through (no
+      // termina). Entrada directa a un clause posterior empieza desde `entryCtx`. NO hay un `current`
+      // compartido sin fall-through (eso era fail-OPEN: 3 P2 — guard-alias, value-binding, react-alias).
       const blockFns = new Set();
       for (const clause of node.clauses) {
         for (const stmt of clause.statements) {
@@ -3890,18 +3889,25 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           };
         }
       }
+      // MODELO PER-CLAUSE (codex P2 ×3 — guard-alias, value-binding `const window={}`, react-alias).
+      // CADA clause empieza desde `entryCtx` (outer + pre-load de sombras + blockEntryGuards). Un
+      // case/default labeled SIEMPRE puede entrarse DIRECTO (jump al label / no-match para default),
+      // SIN ejecutar los clauses anteriores → sus const/let están en TDZ y sus guards/aliases no
+      // corrieron. El gate debe ser safe en TODOS los paths de entrada → el estado al entrar un clause
+      // es la INTERSECCIÓN = entryCtx (lo único cierto en entrada directa). El fall-through NUNCA es el
+      // ÚNICO path (el siguiente case también es jump target), así que NINGÚN estado clause-local
+      // (bindings/aliases/guards) propaga entre clauses — compartirlo era fail-OPEN (un binding/alias/
+      // guard de un clause suprimía checks en hermanos). Dentro de UN clause sí acumula posicionalmente.
+      // Sustituye el modelo dual current/clauseCtx (cada divergencia salía como P2). El typeof-
+      // discriminant del switch sigue siendo per-clause según el label (con prevTerminates para el
+      // fall-through entrante desde un case ausente).
+      const entryCtx = current;
       let prevTerminates = true; // antes del 1er clause no hay fall-through entrante
       for (const clause of node.clauses) {
         if (ts.isCaseClause(clause) && clause.expression) {
-          visit(clause.expression, current);
+          visit(clause.expression, entryCtx);
         }
-        // Los guards por early-return son POR-CLAUSE: entrar directamente en
-        // otra clause NO ejecuta el `if` guard, así que el narrowing NO debe
-        // cruzar el boundary (si lo hiciera, sería un FN). Por eso van en un
-        // `clauseCtx` que resetea en cada clause. Los bindings let/const SÍ se
-        // comparten (scope léxico del switch) → se acumulan en `current`.
-        // beta.27 BLOCKER-1 (codex P2 round 5: guard no propagado en switch).
-        let clauseCtx = current;
+        let clauseCtx = entryCtx;
         if (typeofName) {
           const present = ts.isCaseClause(clause)
             ? prevTerminates &&
@@ -3919,26 +3925,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
         for (const stmt of clause.statements) {
           visit(stmt, clauseCtx);
-          const { all, nonImport } = extractPostStatementBindings(stmt, current);
-          current = addToScope(current, all, nonImport);
+          const { all, nonImport } = extractPostStatementBindings(stmt, clauseCtx);
           clauseCtx = addToScope(clauseCtx, all, nonImport);
-          // Purga de nonImportBindings los nombres que este stmt redeclara como alias react
-          // (sombra léxica de un sync homónimo del scope externo) → no se flaggean como shadow.
-          current = purgeNonImportReactAliases(current, stmt);
+          // Purga de nonImportBindings los nombres que este stmt redeclara como alias react.
           clauseCtx = purgeNonImportReactAliases(clauseCtx, stmt);
-          // Aliases react scope-aware: el CaseBlock entero es UN scope léxico → se
-          // acumulan en `current` (compartido entre clauses) y en `clauseCtx` (el que
-          // visita). Mismo rol que addToScope para el deferred-hook canónico nested.
-          current = addReactAliases(current, stmt);
+          // Aliases react scope-aware declarados por este statement.
           clauseCtx = addReactAliases(clauseCtx, stmt);
-          // Guard alias `const has = typeof X !== "undefined"` — es NARROWING, por-clause (solo
-          // clauseCtx), NO current. El BINDING const `has` SÍ es compartido por el CaseBlock (vía
-          // addToScope arriba), pero el GUARD que implica es por-clause: un switch puede saltar
-          // DIRECTO a un case posterior sin ejecutar el `const` del anterior, así que `case 1: const
-          // has = …; break; case 2: if (has) return window.x` NO debe eximir en case 2 (el guard
-          // nunca corrió ahí) = fail-OPEN si se compartiera (codex P2 — mi fix anterior lo metía en
-          // current). Mismo scope que negative-early-return + typeof (todos clauseCtx). Resuelto
-          // contra clauseCtx.guardAliases (cadenas de alias por-clause). Cubre el caso same-clause.
+          // Guard alias `const has = typeof X !== "undefined"` (narrowing — se resuelve contra
+          // clauseCtx.guardAliases; propaga al siguiente clause solo con fall-through).
           const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
           if (guardAlias) {
             clauseCtx = {
@@ -3954,6 +3948,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             };
           }
         }
+        // NO se propaga estado al siguiente clause (per-clause; ver arriba). Solo `prevTerminates`
+        // para el typeof-discriminant (¿puede entrarse el siguiente case por fall-through desde uno
+        // ausente?).
         prevTerminates = caseClauseTerminates(clause.statements);
       }
       return;
