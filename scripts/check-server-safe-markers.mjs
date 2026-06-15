@@ -3910,6 +3910,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // visita). Mismo rol que addToScope para el deferred-hook canónico nested.
           current = addReactAliases(current, stmt);
           clauseCtx = addReactAliases(clauseCtx, stmt);
+          // Guard alias `const has = typeof X !== "undefined"` — mismo threading que
+          // visitOrderedStatements (codex P2: faltaba en el CaseBlock → un guard-alias case-local
+          // no narrowing y el read posterior se sobre-flaggeaba). El binding const es compartido
+          // por el CaseBlock → el alias se acumula en current Y clauseCtx (el que resuelve los
+          // guards). Resuelto contra clauseCtx.guardAliases (cadenas de alias por-clause).
+          const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
+          if (guardAlias) {
+            current = {
+              ...current,
+              guardAliases: new Map([...current.guardAliases, guardAlias]),
+            };
+            clauseCtx = {
+              ...clauseCtx,
+              guardAliases: new Map([...clauseCtx.guardAliases, guardAlias]),
+            };
+          }
           const negGuards = extractNegativeEarlyReturnGuards(stmt, clauseCtx.guardAliases);
           if (negGuards.size > 0) {
             clauseCtx = {

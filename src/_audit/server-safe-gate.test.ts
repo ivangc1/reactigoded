@@ -1288,6 +1288,20 @@ describe("server-safe gate — guard typeof bajo fail-closed", () => {
     const v = checkSourceFile(code, "noguard.fixture.tsx");
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
+
+  it("guard-ALIAS case-local en switch narrowing (codex P2: faltaba extractConstGuardAlias en CaseBlock)", () => {
+    // `const noWin = typeof window === "undefined"; if (noWin) return null; return window.innerWidth`
+    // dentro de un `case` — el alias debe narrowing igual que en un bloque normal.
+    const withBlock = `/** @server-safe */\nexport function C(x: string){ switch(x){ case "x": { const noWin = typeof window === "undefined"; if (noWin) return null; return window.innerWidth; } } return null; }`;
+    const noBlock = `/** @server-safe */\nexport function C(x: string){ switch(x){ case "x": const noWin = typeof window === "undefined"; if (noWin) return null; return window.innerWidth; } return null; }`;
+    expect(checkSourceFile(withBlock, "g.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(noBlock, "g.fixture.tsx")).toEqual([]);
+  });
+
+  it("CONTROL: case sin guard sigue flaggeando", () => {
+    const code = `/** @server-safe */\nexport function C(x: string){ switch(x){ case "x": return window.innerWidth; } return null; }`;
+    expect(checkSourceFile(code, "g.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
 });
 
 /**
