@@ -1979,6 +1979,26 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     expect(flagged(code)).toBe(false);
   });
 
+  // RESIDUAL §141 (codex P2 sobre 9c97cdd): una KEY de mutador COMPUTADA por un operador
+  // (`Object[1 && "assign"]`, `Object[(0,"assign")]`, `Object["as"+"sign"]`) exige constant-folding
+  // → frontera §141 (token-unidad literal en su sitio se caza; operador-computed = residual). Misma
+  // clase que la invocación indirecta. NO se caza (fail-open por diseño). El literal SÍ (probado abajo).
+  it.each([
+    ["Object[1 && 'assign'](React,…)", HD + `export function C(){ (Object as any)[1 && "assign"](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Object[(0,'assign')](React,…)", HD + `export function C(){ (Object as any)[(0,"assign")](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Object['as'+'sign'](React,…) concat", HD + `export function C(){ (Object as any)["as"+"sign"](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+  ])("RESIDUAL §141: key de mutador COMPUTADA por operador NO se caza: %s", (_l, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+
+  // FRONTERA: el literal (incl. erased-wrapped) SÍ se caza — confirma que la frontera es token-unidad.
+  it("CONTROL: key de mutador LITERAL (incl. paréntesis) SÍ taintea", () => {
+    const lit = HD + `export function C(){ (Object as any)["assign"](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`;
+    const paren = HD + `export function C(){ (Object as any)[("assign")](React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`;
+    expect(flagged(lit)).toBe(true);
+    expect(flagged(paren)).toBe(true);
+  });
+
   // 0-FP — el caso COMÚN sin mutación sigue exento; un member-write a OTRO objeto NO taintea React.
   it.each([
     ["default React.useEffect(cb) sin mutación (patrón ubicuo)", HD + `export function C(){ React.useEffect(()=>{ void window.location.href; }); return null; }`],

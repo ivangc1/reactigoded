@@ -1733,8 +1733,15 @@ function gatherMutatedNamespaceRoots(sourceFile) {
     if (ts.isElementAccessExpression(callee)) {
       const obj = unwrapErased(callee.expression);
       // Desenvolver la KEY: `Object[("assign")]` (paréntesis), `Object["assign" as const]`
-      // (as) — nodos erased en runtime → misma normalización que los otros member-name paths
-      // (codex P1: la key envuelta se colaba). NO se foldean concat/template (§141 frontera).
+      // (as) — nodos ERASED en runtime → misma normalización que los otros member-name paths
+      // (codex P1: la key envuelta se colaba). NO se foldea una key COMPUTADA por un OPERADOR
+      // (`Object[1 && "assign"]`, `Object[(0, "assign")]`, `Object["as"+"sign"]`, ternario): exige
+      // constant-folding del operador → es la frontera §141 ratificada (token-UNIDAD literal en su
+      // sitio se caza; ENSAMBLAJE/operador-computed = RESIDUAL). Aquí el residual es FAIL-OPEN (la key
+      // no resuelve → el mutador no se detecta → React no se taintea → su hook sigue exento), MISMA
+      // clase que la invocación indirecta del mutador (`.call`/`.bind`/alias del callee) ya residual.
+      // Cerrarlo = reimplementar el evaluador de constantes (whack-a-mole: &&, ||, comma, ?:, concat,
+      // array-access, method-call…), justo lo que §141 renuncia por diseño (codex P2 sobre 9c97cdd).
       const key = callee.argumentExpression
         ? unwrapErased(callee.argumentExpression)
         : null;
