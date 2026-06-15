@@ -3795,6 +3795,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // siguientes cases (TDZ-aware). Function declarations pre-cargadas
     // del CaseBlock entero. Codex round 14 P2.2.
     if (ts.isCaseBlock(node)) {
+      // ⚠️ PARIDAD con `visitOrderedStatements` — el CaseBlock es un walker PARALELO que replica su
+      // lógica a mano (deuda estructural; unificar post-freeze). DEBE espejear sus 9 pasos o sale FP/
+      // bypass (2 P2 ya cazados: guard-alias + blockEntryGuards). Auditados step-by-step (codex 8º
+      // genérico) — completos a `2e61d5c`. Si tocas uno de los dos walkers, replica en el otro:
+      //   SETUP: (1) blockEntryGuards = context.activeGuards; (2) purgeGuardAliasShadows(block-lexical);
+      //          (3) gatherNonReactLexicalShadows pre-load.
+      //   PER-STMT: (4) visit; (5) extractPostStatementBindings→addToScope; (6) purgeNonImportReactAliases;
+      //          (7) addReactAliases; (8) extractConstGuardAlias; (9) extractNegativeEarlyReturnGuards.
+      // El CaseBlock acumula bindings/aliases en `current` (compartido entre clauses) Y `clauseCtx` (el
+      // que visita); los GUARDS de narrowing (negative-early-return + typeof) son POR-CLAUSE (solo clauseCtx).
       const blockFns = new Set();
       for (const clause of node.clauses) {
         for (const stmt of clause.statements) {
@@ -3835,7 +3845,15 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
-      let current = addToScope(context, blockFns);
+      // `blockEntryGuards: context.activeGuards` — paridad con visitOrderedStatements (codex P2):
+      // un `if (typeof window !== "undefined") switch (x) { case 1: function read(){ window } }`
+      // entra el switch BAJO el guard activo; una función HOISTED en un case resetea a
+      // blockEntryGuards (no a vacío), así que sin este snapshot se trataría como NO-guardada y se
+      // sobre-flaggearía (FP). El CaseBlock es UN scope léxico → hereda los guards de entrada.
+      let current = {
+        ...addToScope(context, blockFns),
+        blockEntryGuards: context.activeGuards,
+      };
       // El CaseBlock es UN scope léxico compartido por TODAS las clauses → purgar
       // guardAliases de los nombres block-lexical (const/let/class/function de cualquier
       // clause) al ENTRAR, igual que visitOrderedStatements. Sin esto, `const has = ...;

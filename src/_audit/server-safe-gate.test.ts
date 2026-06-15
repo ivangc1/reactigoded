@@ -1302,6 +1302,16 @@ describe("server-safe gate — guard typeof bajo fail-closed", () => {
     const code = `/** @server-safe */\nexport function C(x: string){ switch(x){ case "x": return window.innerWidth; } return null; }`;
     expect(checkSourceFile(code, "g.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
+
+  it("guard de ENTRADA preservado para funciones hoisted en un case (codex P2: blockEntryGuards en CaseBlock)", () => {
+    // `if (typeof window !== "undefined") switch(x){ case 1: function read(){ window } }` — la función
+    // hoisted resetea a blockEntryGuards (no a vacío); el CaseBlock debe heredar el guard de entrada.
+    const guarded = `/** @server-safe */\nexport function C(x: number){ if (typeof window !== "undefined") switch(x){ case 1: function read(){ return window.innerWidth; } return read(); } return 0; }`;
+    expect(checkSourceFile(guarded, "g.fixture.tsx")).toEqual([]);
+    // CONTROL sin guard → la misma función hoisted en el case flaggea.
+    const unguarded = `/** @server-safe */\nexport function C(x: number){ switch(x){ case 1: function read(){ return window.innerWidth; } return read(); } return 0; }`;
+    expect(checkSourceFile(unguarded, "g.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
 });
 
 /**
