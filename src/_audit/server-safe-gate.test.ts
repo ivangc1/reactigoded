@@ -1225,6 +1225,22 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     expect(probe(body)).toEqual([]);
   });
 
+  // codex P2 (2e468c6): `await` es transparente SOLO para no-thenables. Un object literal
+  // THENABLE (`{ then(r){ r(fn) } }`) corre su `.then` y resuelve a una función → su
+  // `.constructor` ES Function = eval, pero el fast-path veía el object-literal operando y
+  // lo eximía. Fix: la EXENCIÓN rechaza cualquier receiver que cruce await (parser-puro no
+  // prueba no-thenable). El FLAGGING sí cruza await (cazar `(await fn.constructor)(...)`).
+  const aprobe = (body: string) =>
+    checkSourceFile(`/** @server-safe */\nexport async function P(fn: any) { ${body} return null; }`, "await-ctor.fixture.tsx");
+  it.each([
+    ["await thenable → .constructor()", `const w = (await { then(r: (v: unknown) => void) { r(function f() {}); } }).constructor("return 1")(); void w;`],
+    ["await plain object → .constructor() (fail-closed)", `const w = (await ({} as Record<string, unknown>)).constructor(); void w;`],
+    ["(await fn.constructor)(code) preservado", `const w = (await fn.constructor)("return 1")(); void w;`],
+    ["await thenable .constructor.constructor (doble)", `const w = (await { then(r: (v: unknown) => void) { r({}); } }).constructor.constructor("return 1")(); void w;`],
+  ])("caza el escape vía await (thenable resuelve a Function): %s", (_label, body) => {
+    expect(aprobe(body).some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
   // PIN de la CLASE computed-key: las 5 escrituras del MISMO ataque PASAN. Un
   // "Nivel 1" cazaría solo la #1 → falsa completitud (documentar "manejamos
   // computed-key" sería mentir; let/concat/alias/prop entran). Contra un

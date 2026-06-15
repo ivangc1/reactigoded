@@ -2445,8 +2445,11 @@ function unwrapErased(node) {
 /**
  * Mapeo ÚNICO del set ACOTADO de constructos VALUE-TRANSPARENTES → las sub-expresiones
  * cuyo valor ES (sintácticamente) el de la expresión, sin evaluar nada: wrappers erased
- * (`()`,`!`,`as`,`satisfies`,`<T>`) + `await` de un no-thenable (operando — un constructor
- * NO es thenable, devuelve el operando sin cambiarlo) + coma (→right) + `&&`/`&&=` (→right:
+ * (`()`,`!`,`as`,`satisfies`,`<T>`) + `await` (→operando — transparente para no-thenables,
+ * cuyo `await` es identidad; un THENABLE corre `.then` y NO es transparente, por eso este
+ * cruce SOLO vale para FLAGGING fail-closed —cazar `(await fn.constructor)(...)`—; la
+ * EXENCIÓN rechaza receivers que cruzan await vía `valueTransparentPathCrossesAwait`, codex
+ * P2) + coma (→right) + `&&`/`&&=` (→right:
  * una base truthy como un constructor pasa a la derecha) + `||`/`??`/`||=`/`??=` (→left|right)
  * + asignación `=` (→right) + ternario (→ambas ramas). `[]` si `node` es una HOJA.
  *
@@ -2544,7 +2547,26 @@ function reachesConstructorAccess(node) {
  * (su `.constructor` ES Function → eval) ni null/undefined (lanzan TypeError, no instancian).
  * beta.27 BLOCKER-1.
  */
+/**
+ * ¿El valor del receiver pasa por un `await` en su estructura value-transparente? — codex
+ * P2 (fail-open): `await` es transparente SOLO para no-thenables; un objeto THENABLE corre
+ * su `.then` y resuelve a un valor ARBITRARIO, incluida una función → `(await { then(r){
+ * r(function f(){}) } }).constructor("...")` alcanza `Function`. Como parser-puro NO puede
+ * probar que el operando es no-thenable, la EXENCIÓN (provably-non-function) debe rechazar
+ * cualquier receiver que cruce un await. (El FLAGGING sí cruza await en `valueTransparent
+ * Children` —fail-closed— para cazar `(await fn.constructor)(...)`; la asimetría es a
+ * propósito: cruzar await flagea de más, jamás exime de más.)
+ */
+function valueTransparentPathCrossesAwait(node) {
+  if (!node) return false;
+  if (ts.isAwaitExpression(node)) return true;
+  return valueTransparentChildren(node).some(valueTransparentPathCrossesAwait);
+}
+
 function constructorReceiverIsProvablyNonFunction(receiver) {
+  // Un receiver tras `await` puede ser un thenable que resuelve a Function → NO es
+  // provably-non-function (codex P2). Fail-closed: no eximir.
+  if (valueTransparentPathCrossesAwait(receiver)) return false;
   const leaves = valueTransparentLeaves(receiver);
   if (leaves.length === 0) return false;
   return leaves.every(
