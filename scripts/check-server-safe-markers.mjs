@@ -2810,6 +2810,12 @@ function isNonReferencePosition(node, declaredNames) {
       ts.isExportSpecifier(parent) ||
       ts.isNamespaceImport(parent) ||
       ts.isNamespaceExportDeclaration(parent) ||
+      // `export * as Icons from "./icons"` (y `export type * as …`): el alias es un
+      // NamespaceExport (NO un NamespaceExportDeclaration, que es el `export as namespace
+      // Foo` de UMD). El nombre es metadata del re-export, sin read runtime; el módulo
+      // target lo sigue extractModuleReferences aparte. Antes caía al fail-closed y FP-eaba
+      // un barrel con alias homónimo de un global (`export * as location from …`). codex P2.
+      ts.isNamespaceExport(parent) ||
       // Nombre de campo de clase: `class C { count = 0 }` — `count` es el
       // nombre de un PropertyDeclaration, no un read del binding global.
       // beta.27 BLOCKER-1 (cruce A+B, FP-hunt).

@@ -1482,6 +1482,10 @@ describe("server-safe gate — isNonReferencePosition: read vs non-read (fail-cl
     ["class field name", `/** @server-safe */\nexport class C { window = 1; }`],
     ["destructure source {window:w}", Comp(`const o: any = {}; const { window: w } = o; void w;`)],
     ["label + break", Comp(`outer: for (let i = 0; i < 2; i++) { if (i) break outer; }`)],
+    // codex P2: `export * as <global> from "..."` (NamespaceExport) — el alias es metadata
+    // del re-export, no un read. Antes FP-eaba un barrel con alias homónimo de un global.
+    ["export * as window from barrel (NamespaceExport)", `/** @server-safe */\nexport * as window from "./icons";`],
+    ["export type * as location from barrel", `/** @server-safe */\nexport type * as location from "./icons";`],
   ])("NON-READ queda clean: %s", (_label, code) => {
     expect(checkSourceFile(code, "nonread.fixture.tsx")).toEqual([]);
   });
