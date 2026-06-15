@@ -1632,7 +1632,7 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     expect(checkSourceFile(code, "deepest-hunt.fixture.tsx").length).toBeGreaterThan(0);
   });
 
-  // 0-FP: instanciación GENUINA (la regla real de esbuild) sigue eximiendo.
+  // 0-FP: instanciación GENUINA (la regla de emit del build OXC/rolldown) sigue eximiendo.
   it.each([
     ["export declare const (ambient exportado instancia)", "/** @server-safe */\nnamespace document { export declare const slot: number; }\nexport function P() { return document.slot; }"],
     ["export declare function", "/** @server-safe */\nnamespace navigator { export declare function probe(): void; }\nexport function P() { navigator.probe(); return null; }"],
@@ -1643,16 +1643,24 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     expect(checkSourceFile(code, "ns-inst.fixture.tsx")).toEqual([]);
   });
 
+  // ORÁCULO (corrección beta.27): el emisor de runtime del DS es **OXC (transform) +
+  // rolldown 1.0.2 (bundle)** vía `vite build` — esbuild 0.27.7 es SOLO minify. Este pin
+  // corre `esbuild.transformSync` como **PROXY rápido per-statement**, NO como el oráculo
+  // load-bearing. El workflow `audit-esbuild-vs-rolldown-premise` RE-VERIFICÓ behavioralmente
+  // contra el build real OXC/rolldown: coinciden en TODAS las formas de abajo (la divergencia
+  // bundle-level —declaration-merge— se cierra aparte; en los 2 casos donde rolldown mantiene
+  // un shell vacío que esbuild elide, el gate over-flagea = fail-closed, sigue SOUND).
+  //
   // PIN DE SOUNDNESS (no bypass) — la invariante que importa para el freeze:
-  // **gate-EXIME ⟹ esbuild-INSTANCIA** (un read exento ⟹ existe shadow runtime real).
-  // `esbuildInstantiatesViaStatement` es una UNDER-APPROXIMATION CONSERVADORA de la
-  // instanciación de esbuild: whitelist de productores de valor decidibles. El REVERSO
-  // NO se exige — el gate PUEDE over-flaggear (un namespace instanciado SOLO por un
-  // statement runtime-only —expression-statement `Q.z;`, control-flow— no se reconoce →
-  // FP FAIL-CLOSED, seguro). Codex P2 (round-9): el gate NO coincide EXACTO con esbuild
-  // (esos casos divergen), pero la divergencia es 100% fail-closed → 0 bypasses. Over-
-  // aproximar para cerrar ese FP es la dirección FAIL-OPEN que abrió los 17 (rechazada,
-  // §184). Lo que pinea esto: si una forma EXIME pero esbuild ELIDE → bypass → revienta.
+  // **gate-EXIME ⟹ build-INSTANCIA** (un read exento ⟹ existe shadow runtime real).
+  // `buildInstantiatesViaStatement` es una UNDER-APPROXIMATION CONSERVADORA del emit:
+  // whitelist de productores de valor decidibles. El REVERSO NO se exige — el gate PUEDE
+  // over-flaggear (un namespace instanciado SOLO por un statement runtime-only —expression-
+  // statement `Q.z;`, control-flow— no se reconoce → FP FAIL-CLOSED, seguro). Codex P2
+  // (round-9): el gate NO coincide EXACTO con el emit (esos casos divergen), pero la
+  // divergencia es 100% fail-closed → 0 bypasses. Over-aproximar para cerrar ese FP es la
+  // dirección FAIL-OPEN que abrió los 17 (rechazada, §184). Lo que pinea esto: si una forma
+  // EXIME pero el build ELIDE → bypass → revienta (el proxy esbuild lo cataría per-statement).
   it.each([
     ["declare var", "declare var v: number;"],
     ["export declare const", "export declare const v: number;"],
@@ -1677,7 +1685,7 @@ describe("server-safe gate — DEEPEST final hunt #173: 17 bypasses (namespace e
     ["import + expression-statement", "import Q = Other; Q.z;"],
     ["bare expression-statement", "Other.z;"],
     ["control-flow", "if (Other.z) { }"],
-  ])("SOUNDNESS gate-exime⟹esbuild-instancia (no bypass): namespace { %s }", (_label, member) => {
+  ])("SOUNDNESS gate-exime⟹build-instancia (proxy esbuild.transformSync): namespace { %s }", (_label, member) => {
     const code =
       "/** @server-safe */\nnamespace Other { export const z = 1; }\nnamespace window { " +
       member +
@@ -1812,7 +1820,8 @@ describe("server-safe gate — declaration-merge namespace+ambient (codex P1 9ff
  *  B) tag JSX `$Foo`/`_Foo` clasificado como intrínseco por `first === first.toLowerCase()`
  *     (`$`/`_` no son ni mayúscula ni minúscula) → eximía su handler. React los emite como
  *     COMPONENTES (`jsx($Foo,…)`), que pueden invocar `props.onClick()` SÍNCRONO en render.
- *     Fix: intrínseco ⟺ `/^[a-z]/` (lowercase LETTER), la regla real de esbuild.
+ *     Fix: intrínseco ⟺ `/^[a-z]/` (lowercase LETTER), la regla real del jsx-runtime de
+ *     React (emitida por OXC en vite 8).
  */
 describe("server-safe gate — deferred-execution: import-equals hook-shadow + JSX $/_ component tag (hunt final #173 r2)", () => {
   const flagged = (code: string) =>
@@ -3058,7 +3067,7 @@ describe("server-safe gate — DEEPEST: const-enum namespace instancia (preserve
     expect(v.some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
-  it("ANCLA BUILD-EMIT: esbuild (el transformer REAL de Vite) instancia el const-enum-namespace — sostiene isInstantiatedModule(_, true)", () => {
+  it("ANCLA BUILD-EMIT: el build (OXC/rolldown, vite 8) instancia el const-enum-namespace — verificado behavioral; esbuild.transformSync coincide como proxy", () => {
     // FP-B asume que `namespace N { export const enum E {} }` SOMBREA el global porque
     // el build lo INSTANCIA. El emisor de RUNTIME NO es tsc: `tsconfig.build.json` es
     // `emitDeclarationOnly` (solo .d.ts); el JS de runtime lo emite Vite vía esbuild
@@ -3140,8 +3149,9 @@ describe("server-safe gate — DEEPEST: typeof-guard envuelto en cast top-level 
   });
 });
 
-describe("server-safe gate — DEEPEST re-hunt #173: namespaceIsInstantiated = oráculo ESBUILD (BYPASS-2)", () => {
-  // El gate debe coincidir con el emit REAL de esbuild (el transformer de Vite), NO con
+describe("server-safe gate — DEEPEST re-hunt #173: namespaceIsInstantiated = oráculo BUILD OXC/rolldown (BYPASS-2)", () => {
+  // El gate debe coincidir con el emit REAL del build (OXC transform + rolldown bundle, vite
+  // 8; esbuild.transformSync es proxy per-statement que coincide aquí), NO con
   // ts.isInstantiatedModule, que divergía en namespaces ambient-anidados → bypass. Ancla
   // data-driven: para cada forma, gate-flaggea ⟺ esbuild ELIDE. Ver feedback_esbuild_emit_oracle.
   const FORMS: ReadonlyArray<readonly [string, string]> = [

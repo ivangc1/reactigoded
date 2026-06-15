@@ -642,8 +642,9 @@ function isDeferredExecutionContext(fnNode, context) {
         const tagName = jsxElement.tagName;
         if (ts.isIdentifier(tagName)) {
           // Intrínseco (host string `<button>`) ⟺ el tag empieza por LETRA MINÚSCULA
-          // [a-z] — la regla REAL de React/esbuild (verificado): `<$Foo>`/`<_Foo>`/`<Upper>`
-          // son COMPONENTES (esbuild emite `jsx($Foo,…)`), no strings. El check viejo
+          // [a-z] — la regla REAL del jsx-runtime de React (verificado bajo OXC, el transform
+          // de vite 8): `<$Foo>`/`<_Foo>`/`<Upper>` son COMPONENTES (OXC emite `jsx($Foo,…)`),
+          // no strings (`<x-custom>` con guion sí es host string). El check viejo
           // `first === first.toLowerCase()` tomaba `$`/`_` como "minúscula" → clasificaba
           // `$Panel`/`_Widget` como intrínsecos → eximía su handler, pero un componente
           // custom puede invocar `props.onClick()` SÍNCRONO en render → lee el global en SSR
@@ -915,25 +916,29 @@ function namespaceCollidesWithAmbientSibling(moduleDecl) {
  * elide, una ref bare a `N` (= global ausente en Edge) resuelve al global real →
  * debe flaggearse.
  *
- * ORÁCULO = ESBUILD (el transformer de Vite), **NO** `ts.isInstantiatedModule`.
- * tsc NO emite el JS de runtime (`tsconfig.build.json` es `emitDeclarationOnly`);
- * el bundler es esbuild, que DIVERGE de `ts.isInstantiatedModule` en un caso REAL:
- * un namespace cuyo único miembro instanciante vive en un `namespace` AMBIENT
- * ANIDADO. `ts.isInstantiatedModule(_, true)` lo cuenta instanciado → el nombre
- * entra en localBindings → ref bare al global NO se flaggea, pero esbuild ELIDE
- * todo lo `declare` anidado → la ref filtra al global = **BYPASS** (deepest
- * re-hunt #173: `namespace document { export declare namespace I { const enum E } }`).
- * Ver `feedback_esbuild_emit_oracle`. Regla de esbuild VERIFICADA empíricamente
- * sobre 10 formas (test `esbuild-namespace-instantiation`):
+ * ORÁCULO = el EMISOR DE RUNTIME DEL BUILD, **NO** `ts.isInstantiatedModule`. tsc NO
+ * emite el JS (`tsconfig.build.json` es `emitDeclarationOnly`); el build es `vite build`,
+ * cuyo emisor en **vite 8 es OXC (transform) + rolldown 1.0.2 (bundle)** — esbuild 0.27.7
+ * es SOLO minify (`transformWithEsbuild` está deprecado; `transformWithOxc` es el activo).
+ * El emisor DIVERGE de `ts.isInstantiatedModule`, que cuenta instanciado un namespace cuyo
+ * único value-member vive en un `namespace` AMBIENT anidado → el nombre entraría en
+ * localBindings → ref bare al global NO se flaggearía. La regla de instanciación se calibró
+ * data-driven contra `esbuild.transformSync` (PROXY rápido per-statement) y se RE-VERIFICÓ
+ * behavioralmente contra el build real OXC/rolldown (workflow `audit-esbuild-vs-rolldown-
+ * premise`): coinciden en TODAS las formas per-statement salvo dos casos donde rolldown es
+ * MÁS conservador (mantiene un shell vacío donde esbuild elide) → el over-flag fail-closed
+ * sigue siendo SOUND. La ÚNICA divergencia que importaba (rolldown ELIDE donde esbuild
+ * mantiene) es el declaration-merge, cerrado aparte (`namespaceCollidesWithAmbientSibling`).
+ * Ver `feedback_esbuild_emit_oracle`. Regla del emit (medida sobre ~10 formas):
  *
  *   INSTANCIA: miembro DIRECTO var/let/const/function/class/enum (declare o no),
  *              o `namespace` anidado NO-ambient que a su vez instancia.
  *   ELIDE:     `namespace` anidado AMBIENT (declare), interface/type/import-type, vacío.
  *
- * Nota clave: esbuild SÍ instancia por un value-member ambient TOP-LEVEL (`export
- * declare const z` → `var N`), pero NO por uno ambient ANIDADO — esa es la única
- * divergencia. Fail-closed: ante un statement no reconocido devolvemos `false`
- * (over-flag seguro, nunca bypass). beta.27 BLOCKER-1.
+ * Nota clave: el build SÍ instancia por un value-member ambient TOP-LEVEL (`export declare
+ * const z` → `var N`), pero el predicado NO cuenta el ambient ANIDADO → fail-closed: ante
+ * un statement no reconocido devolvemos `false` (over-flag seguro, nunca bypass). beta.27
+ * BLOCKER-1.
  */
 function namespaceIsInstantiated(moduleDecl) {
   // Colisión ambient-merge mismo-scope (`declare var window` + `namespace window`): el
@@ -948,7 +953,7 @@ function namespaceIsInstantiated(moduleDecl) {
     return isAmbientDeclaration(body) ? false : namespaceIsInstantiated(body);
   }
   if (!ts.isModuleBlock(body)) return false;
-  return body.statements.some(esbuildInstantiatesViaStatement);
+  return body.statements.some(buildInstantiatesViaStatement);
 }
 
 /** ¿El statement lleva el modificador `export`? (robusto a la API nueva/vieja de TS). */
@@ -961,42 +966,44 @@ function hasExportModifier(stmt) {
 }
 
 /**
- * Un statement de cuerpo de namespace que hace que esbuild EMITA el shell `var N`.
+ * Un statement de cuerpo de namespace que hace que el BUILD (OXC/rolldown) EMITA el shell
+ * `var N`. (Oráculo = el emisor real del build; `esbuild.transformSync` es PROXY rápido y
+ * coincide salvo bundle-level — ver `namespaceIsInstantiated` + `feedback_esbuild_emit_oracle`.)
  *
- * **UNDER-APPROXIMATION CONSERVADORA (fail-closed) — NO igualdad exacta con esbuild.**
- * La invariante de soundness es `true ⟹ esbuild-instancia` (si decimos instanciado, lo
+ * **UNDER-APPROXIMATION CONSERVADORA (fail-closed) — NO igualdad exacta con el emit.**
+ * La invariante de soundness es `true ⟹ el-build-instancia` (si decimos instanciado, lo
  * está → el nombre es shadow runtime → eximir el read es seguro). El REVERSO no se cumple:
  * esto es un WHITELIST de productores de valor DECIDIBLES; un namespace instanciado SOLO
  * por un statement runtime-only (expression-statement `Q.z;`, control-flow `if(){}`) NO se
  * reconoce → devolvemos `false` → over-flag FAIL-CLOSED (codex P2 round-9, verificado: esos
- * casos divergen de esbuild pero 100% en la dirección segura). Cerrar ese FP exigiría
+ * casos divergen del emit pero 100% en la dirección segura). Cerrar ese FP exigiría
  * RECONOCER MÁS instanciación (default-true / blacklist) = la dirección FAIL-OPEN que abrió
- * los 17 bypasses (§184): un statement que añadiéramos y que esbuild ELIDA sería bypass. Se
+ * los 17 bypasses (§184): un statement que añadiéramos y que el build ELIDA sería bypass. Se
  * mantiene el whitelist; el FP es contrivado (`namespace window { Q.z; }`, 0 en source real).
  *
- * REGLA REAL DE ESBUILD para el whitelist (medida empíricamente, deepest final hunt #173 —
+ * REGLA DE EMIT DEL BUILD para el whitelist (medida empíricamente, deepest final hunt #173 —
  * NO la que asumía el código anterior). El error previo: tratar TODO value-producer (incl.
- * `declare` no-exportado y `import Q = N` value-dead) como instanciante. esbuild NO los emite
+ * `declare` no-exportado y `import Q = N` value-dead) como instanciante. El build NO los emite
  * → un `namespace document { declare var x }` se ELIDE entero y `document.title` leía el
  * GLOBAL real con el gate exento = BYPASS (17 confirmados: window/document/navigator/…).
  *
  *   INSTANCIA: const/let/var/function/class/enum NO-ambient; o `declare` (ambient)
  *              PERO SOLO si va `export` (`export declare const z` re-exporta una
  *              propiedad → `var N`; un `declare const z` pelado es ambient puro →
- *              ELIDE); o `import Y = Z` que esbuild emite = value-USED o `export
+ *              ELIDE); o `import Y = Z` que el build emite = value-USED o `export
  *              import`; o `namespace` anidado NO-ambient que a su vez instancia.
  *   ELIDE:     `declare …` no-exportado, `import Y = Z` value-dead no-exportado,
  *              `namespace` anidado ambient, interface/type/import-type, vacío.
  *
  * Para import-equals la value-use es binder-territory (parser-puro no la prueba
- * barato) → fail-closed: solo cuenta `export import` (la forma que esbuild SIEMPRE
+ * barato) → fail-closed: solo cuenta `export import` (la forma que el build SIEMPRE
  * emite). Un `import Q = N` no-exportado value-USED igual instancia el namespace
  * por SU statement de uso (`export const y = Q.z`), no por el import → no se pierde
  * ningún caso legítimo. Fail-closed: statement no reconocido → false (over-flag).
  */
-function esbuildInstantiatesViaStatement(stmt) {
+function buildInstantiatesViaStatement(stmt) {
   // Productores de valor: const/let/var/function/class/enum. NO-ambient siempre
-  // instancia; `declare` (ambient) solo si `export` (verificado contra esbuild).
+  // instancia; `declare` (ambient) solo si `export` (verificado contra el build OXC/rolldown).
   if (
     ts.isVariableStatement(stmt) ||
     ts.isFunctionDeclaration(stmt) ||
@@ -1005,14 +1012,14 @@ function esbuildInstantiatesViaStatement(stmt) {
   ) {
     return isAmbientDeclaration(stmt) ? hasExportModifier(stmt) : true;
   }
-  // `import Y = Z`: esbuild instancia si la value-use ocurre, o si es `export import`
+  // `import Y = Z`: el build instancia si la value-use ocurre, o si es `export import`
   // (re-export, siempre emitido). El `import` pelado value-dead se ELIDE (raíz de 5
   // bypasses) → fail-closed: solo `export import` de valor cuenta.
   if (ts.isImportEqualsDeclaration(stmt)) {
     return hasExportModifier(stmt) && !stmt.isTypeOnly;
   }
   // Namespace anidado: instancia SOLO si NO es ambient Y a su vez instancia. El
-  // ambient anidado (`export declare namespace I { … }`) esbuild lo BORRA entero →
+  // ambient anidado (`export declare namespace I { … }`) el build lo BORRA entero →
   // NO cuenta. El no-ambient anidado recurre.
   if (ts.isModuleDeclaration(stmt)) {
     return isAmbientDeclaration(stmt) ? false : namespaceIsInstantiated(stmt);
@@ -3050,7 +3057,7 @@ function tryResolveFile(noExtAbsPath, fileExists) {
   return null;
 }
 
-// Orden REAL de `resolve.extensions` de Vite/esbuild (DEFAULT_EXTENSIONS, .json excluido
+// Orden REAL de `resolve.extensions` de Vite (DEFAULT_EXTENSIONS, .json excluido
 // — no se audita). El gate resuelve `.ts` primero; Vite rankea `.mjs`/`.js`/`.mts` ANTES
 // que `.ts` (y `.jsx` antes que `.tsx`). Si para un import extensionless existe un hermano
 // que Vite preferiría, el BUNDLER ENVÍA ESE archivo y el gate auditaría OTRO → divergencia
@@ -3770,7 +3777,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // Computed key de método/accessor (`{ [window.x]() {} }`): se EVALÚA al crear
           // el objeto/clase (render path, scope EXTERNO) → si lee un global FLAGGEA aunque
           // un param lo sombree (codex P1). EXCEPCIÓN: un miembro de clase SIN cuerpo
-          // (abstract o overload-signature) se BORRA al emit — esbuild emite solo la
+          // (abstract o overload-signature) se BORRA al emit — el build emite solo la
           // implementación con cuerpo, su key nunca se evalúa. Saltarla evita el FP
           // (deepest re-hunt #173: abstract/overload computed-key). La implementación
           // (con cuerpo) SÍ visita la key y flaggea un read real.
@@ -3802,7 +3809,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     }
 
     // (b.0-ambient) Una clase AMBIENT (`declare class K {…}`) es type-space pura: se
-    // borra ENTERA al emit (esbuild no emite nada). NO recursar — su computed-key,
+    // borra ENTERA al emit (el build no emite nada). NO recursar — su computed-key,
     // tipos de miembro y heritage no leen nada en runtime. Espejo del guard de
     // ModuleDeclaration ambient (b.0a-ns). deepest re-hunt #173: declare-class computed-key.
     if (
