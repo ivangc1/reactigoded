@@ -1760,21 +1760,31 @@ function addRuntimeImportBindings(importClause, names) {
  */
 function gatherMutatedNamespaceRoots(sourceFile) {
   const roots = new Set();
-  const rootOf = (node) => {
-    let n = unwrapErased(node);
-    while (
-      ts.isPropertyAccessExpression(n) ||
-      ts.isElementAccessExpression(n)
-    ) {
-      n = unwrapErased(n.expression);
+  // Roots identifier a los que el RECEIVER (objeto mutado) puede evaluar, atravesando
+  // wrappers VALUE-TRANSPARENTES (no solo erased): `(0, React)` (coma), `(a && React)`,
+  // `(cond ? React : b)`, etc. — el valor ES React, sintácticamente visible = token-en-su-
+  // sitio. Antes solo `unwrapErased` (paréntesis/as/!) → `((0, React) as any).useEffect = sync`
+  // escapaba (codex P2). Multi-hoja (||/??/ternario) → taintea TODAS las ramas (fail-closed).
+  // NOTA DE FRONTERA: esto resuelve el TARGET; el CALLEE (`calleeObjMember`) sigue en
+  // `unwrapErased`, así que `(0, Object.assign)(React,…)` (coma en el callee = invocación
+  // indirecta) sigue siendo el RESIDUAL ratificado (codex P1 #7) — modelar qué función se
+  // invoca es el subsistema que §141 renuncia. La coma en el TARGET sí se caza.
+  const addReceiverRoots = (node) => {
+    for (const leaf of valueTransparentLeaves(node)) {
+      if (
+        ts.isPropertyAccessExpression(leaf) ||
+        ts.isElementAccessExpression(leaf)
+      ) {
+        addReceiverRoots(leaf.expression); // root del chain = root(es) de la base
+      } else if (ts.isIdentifier(leaf)) {
+        roots.add(leaf.text);
+      }
     }
-    return ts.isIdentifier(n) ? n.text : null;
   };
   const addIfMemberAccess = (node) => {
     const n = unwrapErased(node);
     if (ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) {
-      const r = rootOf(n);
-      if (r) roots.add(r);
+      addReceiverRoots(n.expression);
     }
   };
   // Recorre un TARGET de asignación (LHS de `=` / patrón de for-of/for-in) recogiendo los
@@ -1785,8 +1795,7 @@ function gatherMutatedNamespaceRoots(sourceFile) {
   const collectWriteTargets = (target) => {
     const t = unwrapErased(target);
     if (ts.isPropertyAccessExpression(t) || ts.isElementAccessExpression(t)) {
-      const r = rootOf(t);
-      if (r) roots.add(r);
+      addReceiverRoots(t.expression);
     } else if (ts.isObjectLiteralExpression(t)) {
       for (const prop of t.properties) {
         if (ts.isPropertyAssignment(prop)) collectWriteTargets(prop.initializer);
@@ -1866,9 +1875,10 @@ function gatherMutatedNamespaceRoots(sourceFile) {
     } else if (ts.isCallExpression(node)) {
       const om = calleeObjMember(unwrapErased(node.expression));
       if (om && MUTATORS[om[0]]?.has(om[1]) && node.arguments.length > 0) {
-        const target = unwrapErased(node.arguments[0]); // Object.assign(X,…) / Reflect.set(X,…)
-        if (ts.isIdentifier(target)) roots.add(target.text);
-        else addIfMemberAccess(target);
+        // Object.assign(X,…) / Reflect.set(X,…) — X (1er arg) es el target. Value-transparent
+        // (`Object.assign((0, React), …)` → React). El CALLEE (Object.assign) se resolvió
+        // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT.
+        addReceiverRoots(node.arguments[0]);
       }
     }
     ts.forEachChild(node, visit);

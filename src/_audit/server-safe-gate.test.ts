@@ -2093,6 +2093,11 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["destr default ({x: React.useEffect = d} = …)", HD + `export function C(){ const d=(cb:()=>void)=>cb(); ({ x:(React as any).useEffect = d } = {} as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["destr taintea NAMED ({useEffect: React.useEffect} = …)", `/** @server-safe */\nimport React, { useEffect } from "react";\nexport function C(){ ({ useEffect: (React as any).useEffect } = { useEffect:(cb:()=>void)=>cb() }); useEffect(()=>{ void window.location.href; }); return null; }`],
     ["for-of destr pattern member-write", HD + `export function C(){ for ({ x: (React as any).useEffect } of [{ x:(cb:()=>void)=>cb() }]) {} React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (e248193): receiver VALUE-TRANSPARENTE (coma/&&/ternario) → token-en-su-sitio,
+    // el target ES React. Antes rootOf solo hacía unwrapErased → (0, React) escapaba.
+    ["((0, React) as any).useEffect=sync (coma en target)", HD + `export function C(){ ((0, React) as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["Object.assign((0, React),…) (coma en 1er arg)", HD + `export function C(){ Object.assign((0, React) as any,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["(true && React).useEffect=sync (&& en target)", HD + `export function C(){ ((true && React) as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -2115,6 +2120,10 @@ describe("server-safe gate — invalidación de namespace por member-write (code
   it.each([
     ["Object.assign.call(Object, React, …)", HD + `export function C(){ Object.assign.call(Object,React,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["Reflect.set.call(Reflect, React, …)", HD + `export function C(){ Reflect.set.call(Reflect,React,"useEffect",(cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (e248193): coma en el CALLEE (`(0, Object.assign)(React,…)`) sigue residual —
+    // resolverlo exige modelar QUÉ función se invoca (callee value-flow), distinto del TARGET
+    // value-transparent que SÍ se caza arriba (`Object.assign((0, React),…)`). Frontera coherente.
+    ["(0, Object.assign)(React, …) — coma en CALLEE", HD + `export function C(){ (0, Object.assign)(React as any,{useEffect:(cb:()=>void)=>cb()}); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("RESIDUAL frontera data-flow: mutador vía invocación indirecta NO se caza: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
   });
