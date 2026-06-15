@@ -2549,7 +2549,11 @@ function constructorReceiverIsProvablyNonFunction(receiver) {
   if (leaves.length === 0) return false;
   return leaves.every(
     (leaf) =>
-      ts.isObjectLiteralExpression(leaf) ||
+      (ts.isObjectLiteralExpression(leaf) &&
+        objectLiteralCannotOverrideConstructor(leaf)) ||
+      // Los demás literales NO pueden definir un `constructor` propio (sintaxis
+      // imposible): array/string/template/number/bigint/regex/boolean → su
+      // `.constructor` ES SIEMPRE el builtin heredado (Array/String/…).
       ts.isArrayLiteralExpression(leaf) ||
       ts.isStringLiteralLike(leaf) ||
       ts.isTemplateExpression(leaf) ||
@@ -2559,6 +2563,31 @@ function constructorReceiverIsProvablyNonFunction(receiver) {
       leaf.kind === ts.SyntaxKind.TrueKeyword ||
       leaf.kind === ts.SyntaxKind.FalseKeyword,
   );
+}
+
+/**
+ * ¿Un OBJECT LITERAL tiene `.constructor` PROVABLEMENTE = `Object` (heredado), o
+ * podría OVERRIDEarlo? — codex P1 (fail-open que abrió el fast-path de literales):
+ * `({ constructor: (()=>{}).constructor }).constructor("return window")()` define un
+ * `constructor` PROPIO = `Function` → alcanza eval sin nombrar `Function`. También vía
+ * `__proto__` (cadena de prototipo → `Function.prototype.constructor`), spread (puede
+ * traer `constructor`/`__proto__`), o key computada (podría ser "constructor").
+ * FAIL-CLOSED: el fast-path solo aplica si NINGUNA propiedad puede afectar la resolución
+ * de `.constructor` — sin spread, sin key computada, y ningún nombre (id/string)
+ * `constructor` ni `__proto__` (cualquier kind: assignment/shorthand/método/get/set).
+ */
+function objectLiteralCannotOverrideConstructor(objLit) {
+  for (const prop of objLit.properties) {
+    if (ts.isSpreadAssignment(prop)) return false; // `...x` puede traer constructor/__proto__
+    const name = prop.name;
+    if (!name || ts.isComputedPropertyName(name)) return false; // computed → podría ser "constructor"
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
+      if (name.text === "constructor" || name.text === "__proto__") return false;
+    } else if (!ts.isNumericLiteral(name)) {
+      return false; // forma de nombre desconocida → fail-closed
+    }
+  }
+  return true;
 }
 
 /**

@@ -1163,6 +1163,15 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     [".apply sobre single constructor", `const w = (function () {}).constructor.apply(null, ["return 1"])();`],
     [".bind sobre single constructor", `const F = (() => {}).constructor.bind(null); const w = F("return 1")();`],
     ["tagged template sobre constructor", "const w = (() => {}).constructor`return 1`();"],
+    // codex P1 (d1ccce0): un OBJECT LITERAL puede OVERRIDEar su `constructor` propio →
+    // el fast-path de "literal no-función" (12c1041) NO debe eximirlo. `{ constructor:
+    // (()=>{}).constructor }` define constructor = Function → alcanza eval. También vía
+    // __proto__ (cadena → Function), spread, key computada, getter.
+    ["object literal con constructor: Function", `const w = ({ constructor: (() => {}).constructor }).constructor("return 1")();`],
+    ["object literal con __proto__ función", `const w = ({ __proto__: () => {} }).constructor("return 1")();`],
+    ["object literal con [\"constructor\"] computado", `const w = ({ ["constructor"]: (() => {}).constructor }).constructor("return 1")();`],
+    ["object literal con spread", `const w = ({ ...({} as Record<string, unknown>) }).constructor("return 1")();`],
+    ["object literal con getter constructor", `const w = ({ get constructor() { return (() => {}).constructor; } }).constructor("return 1")();`],
   ])("caza el Function constructor escape: %s", (_label, body) => {
     const v = probe(body);
     expect(v.some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -1188,6 +1197,9 @@ describe("server-safe gate — Function constructor vía `.constructor` (beta.27
     ["`` (`t`).constructor() `` → String()", "const w = (`t`).constructor(); void w;"],
     ["`({}).constructor.call(null)` → Object.call", `const w = ({}).constructor.call(null); void w;`],
     ["`` ({}).constructor`x` `` → tagged Object", "const w = ({}).constructor`x`; void w;"],
+    // codex P1 (d1ccce0): un object literal con propiedades SEGURAS (no constructor/
+    // __proto__, sin spread/computed) sigue tomando el fast-path → `.constructor` = Object.
+    ["`({ a: 1, b: 2 }).constructor()` → Object", `const w = ({ a: 1, b: 2 }).constructor(); void w;`],
   ])("NO genera falso positivo en uso legítimo de `.constructor`: %s", (_label, body) => {
     expect(probe(body)).toEqual([]);
   });
