@@ -285,6 +285,24 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
   });
 
+  // deepest re-hunt: el string-handler de los timers es eval implícito del navegador; en
+  // Node lanza TypeError (no soportado) → crash SSR. El gate cazaba eval/Function pero no el
+  // string-timer (timer en SAFE_GLOBALS, 1er-arg no inspeccionado).
+  it.each([
+    ['setTimeout("código", 0)', `setTimeout("window.scrollTo(0,0)", 0);`],
+    ['setInterval("código", n)', `setInterval("window.x = 1", 100);`],
+    ['globalThis.setTimeout("código")', `globalThis.setTimeout("eval me", 0);`],
+    ["setTimeout(`template`, 0)", "setTimeout(`window.x`, 0);"],
+  ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
+    const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
+    expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it("NO flaggea setTimeout con callback función (no string)", () => {
+    const v = checkSourceFile(fixture(`setTimeout(() => { let n = 0; n += 1; void n; }, 0);`), "fn-timer.fixture.tsx");
+    expect(v).toEqual([]);
+  });
+
   it("caza `Reflect.construct(Function, [...])` (vía Function como arg)", () => {
     const v = checkSourceFile(
       fixture(
@@ -1567,13 +1585,16 @@ describe("server-safe gate — typeof guard NO suprime eval/escape sinks (codex 
     // `typeof self !== "undefined"` es vacuo ahí y self.eval/self.Function LANZAN.
     ["typeof self + self.Function", `/** @server-safe */\nexport function A() { if (typeof self !== "undefined") { return self.Function("return 1")(); } return null; }`],
     ["typeof self + self.eval", `/** @server-safe */\nexport function B() { if (typeof self !== "undefined") { return self.eval("1"); } return null; }`],
+    // deepest re-hunt: `process` es present-but-partial en Node (`process.permission` solo con
+    // --experimental-permission) → el typeof-guard del ROOT da falsa confianza, como navigator.
+    ["typeof process + process.permission (partial)", `/** @server-safe */\nexport function P() { if (typeof process !== "undefined") { return process.permission.has("x"); } return false; }`],
   ])("FLAGGEA pese al guard typeof: %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-evalsink.fixture.tsx").length).toBeGreaterThan(0);
   });
 
   it.each([
     ["typeof window (hazard = ausencia)", `/** @server-safe */\nexport const C = () => { if (typeof window !== "undefined") { return window.innerWidth; } return 0; };`],
-    ["typeof process (portabilidad)", `/** @server-safe */\nexport const C = () => { if (typeof process !== "undefined") { return process.env.X; } return null; };`],
+    ["typeof document (hazard = ausencia)", `/** @server-safe */\nexport const C = () => { if (typeof document !== "undefined") { return document.title; } return ""; };`],
   ])("el guard SÍ es válido (clean): %s", (_label, code) => {
     expect(checkSourceFile(code, "guard-valid.fixture.tsx")).toEqual([]);
   });
@@ -1823,8 +1844,18 @@ describe("server-safe gate — declaration-merge namespace+ambient (codex P1 9ff
     // INDEPENDIENTE DEL ORDEN: rolldown solo elide si el `declare` va ANTES, pero el gate
     // fail-closea ambos órdenes (el detalle de impl del bundler no se asume).
     ["ns ANTES de declare var (fail-closed)", "namespace window { export declare const z: number; }\ndeclare var window: any;"],
+    // deepest re-hunt: el sibling ambient puede ser un `declare namespace` (ambient
+    // ModuleDeclaration), no solo var/function/class — misma rolldown var-elision. 10
+    // instancias deduped (window/document/location, ambos órdenes, plano/anidado/self-read).
+    ["declare namespace window (declare first)", "declare namespace window { const tx: number; }\nnamespace window { export const z = 42; }"],
+    ["declare namespace window (value first)", "namespace window { export const z = 42; }\ndeclare namespace window { const tx: number; }"],
   ])("FLAGea bypass declaration-merge: %s", (_label, body) => {
     expect(violations(body + READ_W)).toBeGreaterThan(0);
+  });
+
+  it("FLAGea el declare-namespace sibling con read BODY-INTERNAL (document)", () => {
+    const code = "/** @server-safe */\ndeclare namespace document { const t: string; }\nnamespace document { export const cached = document.title; }\nexport function r(){ return document.cached; }";
+    expect(checkSourceFile(code, "declns.fixture.tsx").length).toBeGreaterThan(0);
   });
 
   it("FLAGea el merge también para `document`", () => {

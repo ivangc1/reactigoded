@@ -491,8 +491,8 @@ const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 //     stub que LANZA al llamarse → `typeof setImmediate !== "undefined"` pasa
 //     pero la llamada revienta. El guard da falsa confianza; por eso se trata
 //     como los eval-sinks. (Workflow honest-construct / edge-baseline.)
-// Difieren de `window`/`process`, cuyo hazard SÍ es la ausencia (no están
-// definidos en el baseline) y donde el guard typeof SÍ protege.
+// Difiere de `window`/`document`, cuyo hazard SÍ es la ausencia (no están definidos en el
+// baseline) y donde el guard typeof SÍ protege.
 const NON_ABSENCE_DENIALS = new Set([
   "eval",
   "Function",
@@ -511,6 +511,14 @@ const NON_ABSENCE_DENIALS = new Set([
   // bajo typeof-guard. Coherencia con el comentario de INTENTIONAL_DENY ("subset inestable").
   // codex P2 sobre 5f7aa4d.
   "navigator",
+  // `process`: en el edge baseline (Vercel sin nodejs_compat) está AUSENTE → el typeof-guard
+  // protegería; pero en Node está PRESENTE y PARCIAL — `process.permission` solo existe con
+  // `--experimental-permission`, así que `if (typeof process !== "undefined") process.permission
+  // .has(...)` pasa el guard y revienta (TypeError) en un Node sin el flag. Mismo perfil
+  // present-but-partial que navigator → el presence-guard del ROOT da falsa confianza. (process
+  // ya está denegado en INTENTIONAL_DENY; aquí se asegura que ningún typeof-guard lo exima.)
+  // deepest re-hunt #173.
+  "process",
 ]);
 
 /**
@@ -915,7 +923,12 @@ function namespaceCollidesWithAmbientSibling(moduleDecl) {
     } else if (
       (ts.isFunctionDeclaration(s) ||
         ts.isClassDeclaration(s) ||
-        ts.isEnumDeclaration(s)) &&
+        ts.isEnumDeclaration(s) ||
+        // Ambient `declare namespace N` HERMANO de un `namespace N` de valor: la MISMA
+        // merge-elision que `declare var N` — rolldown borra el `var N` local → el read
+        // filtra al global (deepest re-hunt: 10 instancias window/document/location, ambos
+        // órdenes, plano/anidado/self-read). `declare global` no entra: su name es "global".
+        ts.isModuleDeclaration(s)) &&
       s.name &&
       ts.isIdentifier(s.name) &&
       s.name.text === name
@@ -4391,6 +4404,53 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         line: line + 1,
         detail: `acceso a \`.constructor.constructor\` / invocación de \`.constructor\` (Function constructor alcanzable desde cualquier base — dynamic eval sink que bypassea el AST gate): ${lineText}`,
       });
+    }
+
+    // (c.3) STRING-HANDLER timer = eval IMPLÍCITO. `setTimeout("código", …)` /
+    // `setInterval`/`setImmediate` con 1er arg STRING (literal o template): el navegador lo
+    // EVALÚA (lee window etc.); Node NO soporta el string-handler → lanza TypeError SÍNCRONO
+    // en la llamada → crashea en SSR/Edge. El gate caza eval()/Function()/new Function() pero
+    // el string-timer escapaba (el timer está en SAFE_GLOBALS y su 1er-arg no se inspeccionaba).
+    // Token-en-su-sitio (el string a la vista; un string-VARIABLE = data-flow residual). Como
+    // los otros eval-sinks: exento solo en client-only deferred (browser, donde sí evalúa).
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      const callee = unwrapErased(node.expression);
+      let timerName = null;
+      if (ts.isIdentifier(callee)) {
+        timerName = callee.text;
+      } else if (
+        ts.isPropertyAccessExpression(callee) ||
+        ts.isElementAccessExpression(callee)
+      ) {
+        const root = unwrapErased(callee.expression);
+        if (
+          ts.isIdentifier(root) &&
+          (root.text === "globalThis" ||
+            root.text === "window" ||
+            root.text === "self" ||
+            root.text === "global")
+        ) {
+          timerName = accessedMemberName(callee);
+        }
+      }
+      const arg0 = node.arguments.length > 0 ? unwrapErased(node.arguments[0]) : null;
+      if (
+        (timerName === "setTimeout" ||
+          timerName === "setInterval" ||
+          timerName === "setImmediate") &&
+        arg0 &&
+        (ts.isStringLiteralLike(arg0) || ts.isTemplateExpression(arg0))
+      ) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-dynamic-eval-sink",
+          line: line + 1,
+          detail: `\`${timerName}(<string>, …)\` — el 1er-arg string es eval implícito del navegador; en Node/Edge lanza TypeError (string-handler no soportado) → crash SSR: ${lineText}`,
+        });
+      }
     }
 
     // (d) Detectar bare identifier reference a client global. Cubre:
