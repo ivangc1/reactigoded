@@ -3542,8 +3542,14 @@ function isImportPurelyTypeOnly(importDecl) {
   if (!nb) return false;
   if (ts.isNamespaceImport(nb)) return false;
   if (ts.isNamedImports(nb)) {
-    if (nb.elements.length === 0) return false; // `import {} from "x"` = side-effect
-    return nb.elements.every((spec) => spec.isTypeOnly === true);
+    // Bajo verbatimModuleSyntax (ACTIVO en este repo, tsconfig.json), un named-imports clause
+    // —AUNQUE todos los specifiers sean inline-type (`import { type A, type B } from "./m"`)—
+    // se PRESERVA como side-effect import `import "./m"` → el módulo SE EJECUTA en SSR (sus
+    // reads top-level de window crashean). Solo el CLAUSE-level `import type { … }`
+    // (ic.isTypeOnly, arriba) se borra entero. Así que cualquier named-imports → SEGUIRLO.
+    // codex P1: el chequeo inline-specifier (pre-verbatim) asumía elisión y colaba un módulo
+    // sucio importado solo por su tipo = BYPASS cross-módulo.
+    return false;
   }
   return false;
 }
@@ -3567,8 +3573,10 @@ function isExportPurelyTypeOnly(exportDecl) {
   if (!ec) return false; // export * from "./m"
   if (ts.isNamespaceExport(ec)) return false;
   if (ts.isNamedExports(ec)) {
-    if (ec.elements.length === 0) return false;
-    return ec.elements.every((spec) => spec.isTypeOnly === true);
+    // Igual que los imports: bajo verbatimModuleSyntax `export { type A } from "./m"` preserva
+    // el re-export → "./m" se carga/ejecuta. Solo `export type { … }` (clause-level) se borra.
+    // Cualquier named re-export → SEGUIRLO. codex P1.
+    return false;
   }
   return false;
 }
@@ -4459,8 +4467,24 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           ts.isIdentifier(leaf) &&
           PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text]?.has(partialMember),
       );
+      // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
+      // (`typeof performance.x` → "undefined", no lee); (2) short-circuit opcional (`x?.()`,
+      // `x?.foo`, `x?.[i]` → undefined si el miembro falta). Reading el miembro ausente da
+      // undefined; solo CRASHEA si se INVOCA/derefencia sin guardia. (El if-guard a nivel de
+      // miembro `if (typeof X.y === "function") X.y()` queda residual fail-closed — el gate no
+      // trackea guards de member-path.)
+      const p = node.parent;
+      const safelyProbed =
+        (p && ts.isTypeOfExpression(p) && p.expression === node) ||
+        (p &&
+          (ts.isCallExpression(p) ||
+            ts.isPropertyAccessExpression(p) ||
+            ts.isElementAccessExpression(p)) &&
+          p.expression === node &&
+          p.questionDotToken !== undefined);
       if (
         partialRoot &&
+        !safelyProbed &&
         !context.localBindings.has(partialRoot.text) &&
         !context.isInClientOnlyDeferredBody &&
         !(context.isInFunctionBody && moduleDeclaredNames.has(partialRoot.text))

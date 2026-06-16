@@ -632,11 +632,11 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     ]);
   });
 
-  it("inline `import { type X }` puro NO sigue (codex P2 round 1 sobre #106)", () => {
-    // verbatimModuleSyntax (en este repo) emite el JS preservando el
-    // `type` modifier. TS elide la import completa si TODOS los
-    // specifiers son `type`. Sin chequear specifier-level, mi código
-    // anterior traversaba el módulo.
+  it("inline `import { type X }` SÍ sigue bajo verbatimModuleSyntax (side-effect preservado, codex P1)", () => {
+    // verbatimModuleSyntax (ACTIVO en este repo) PRESERVA `import { type A, type B } from "./m"`
+    // como side-effect import `import "./m"` → el módulo SE EJECUTA en SSR (su `window.innerWidth`
+    // top-level crashea). El check inline-specifier anterior asumía elisión (pre-verbatim) y NO
+    // lo seguía = BYPASS cross-módulo. Solo `import type { … }` (clause-level) se borra entero.
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `
         /** @server-safe */
@@ -651,7 +651,47 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     });
     const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
     const leak = v.find((x) => x.file.endsWith("Probe/dirty-types.ts"));
-    expect(leak).toBeUndefined();
+    expect(leak).toBeDefined();
+  });
+
+  it("CLAUSE-level `import type { X }` SÍ se borra entero (no sigue, sound)", () => {
+    // El clause-level `import type { … }` (a diferencia del inline) SÍ se elide bajo verbatim
+    // → el módulo NO se carga → no se audita (sound, no FP).
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import type { DirtyA } from "./dirty-types";
+        export function Probe(_a: DirtyA) { return null; }
+      `,
+      "/repo/src/components/Probe/dirty-types.ts": `
+        export type DirtyA = { w: number };
+        const _side = window.innerWidth;
+      `,
+    });
+    const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(v.find((x) => x.file.endsWith("Probe/dirty-types.ts"))).toBeUndefined();
+  });
+
+  it("inline `export { type X } from` en un barrel CARGADO SÍ sigue (side-effect, codex P1)", () => {
+    // Un barrel cargado por un value-import que re-exporta `export { type Re } from "./dirty"`
+    // PRESERVA la carga de "./dirty" bajo verbatim → su side-effect corre → debe seguirse.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { realVal } from "./barrel";
+        export function Probe() { return <span>{String(realVal)}</span>; }
+      `,
+      "/repo/src/components/Probe/barrel.ts": `
+        export const realVal = 1;
+        export { type Re } from "./dirty";
+      `,
+      "/repo/src/components/Probe/dirty.ts": `
+        export type Re = { id: number };
+        const _side = document.title;
+      `,
+    });
+    const v = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(v.find((x) => x.file.endsWith("Probe/dirty.ts"))).toBeDefined();
   });
 
   it("mixed `import { Value, type X }` SÍ sigue (algún specifier runtime)", () => {
@@ -2727,6 +2767,15 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
 
   it("NO flaggea performance.now() (presente en Node)", () => {
     expect(checkSourceFile(`/** @server-safe */\nexport function f() { return performance.now(); }`, "perf-now.fixture.tsx")).toEqual([]);
+  });
+
+  // codex P2: un PROBE SEGURO del miembro parcial no crashea → no se flaggea (feature-detection).
+  it.each([
+    ["optional call ?.()", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.(); }`],
+    ["typeof operand", `/** @server-safe */\nexport function f() { return typeof performance.measureUserAgentSpecificMemory === "function"; }`],
+    ["optional access ?.name", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.name; }`],
+  ])("NO flaggea un probe seguro del miembro parcial: %s", (_l, code) => {
+    expect(checkSourceFile(code, "perf-probe.fixture.tsx")).toEqual([]);
   });
 
   // B3 (re-hunt): las NON_ABSENCE_DENIALS (raíces de escape / stubs que lanzan:
