@@ -519,6 +519,22 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files).length).toBeGreaterThan(0);
   });
 
+  it("FALLA RUIDOSO si el dir resuelto tiene package.json (main/exports redirige Vite — deepest re-hunt)", () => {
+    // El gate resuelve `./sub` → sub/index.ts (limpio), pero un sub/package.json con `main`/
+    // `exports` redirige a Vite a OTRO archivo (clientside.ts sucio) que el gate no audita. El
+    // resolver no lee package.json → fail-noisy si existe uno en el dir resuelto.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./sub";
+        export function Probe() { return <span>{String(v)}</span>; }
+      `,
+      "/repo/src/components/Probe/sub/index.ts": `export const v = 1;`,
+      "/repo/src/components/Probe/sub/package.json": `{ "main": "./clientside.ts" }`,
+    });
+    expect(runWithVfs("/repo/src/components/Probe/Probe.tsx", files).length).toBeGreaterThan(0);
+  });
+
   it("FALLA RUIDOSO file-vs-directory anidado tras barrel (utils/inner/index.ts + utils/inner.mjs)", () => {
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `
@@ -2678,6 +2694,33 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["window en setTimeout DENTRO de useEffect (sticky)", `/** @server-safe */\nimport { useEffect } from "react";\nexport function W() { useEffect(() => { setTimeout(() => { window.scrollTo(0, 0); }, 0); }, []); return <div />; }`],
   ])("NO flaggea (client-only deferred): %s", (_label, code) => {
     expect(checkSourceFile(code, "deferred-ok.fixture.tsx")).toEqual([]);
+  });
+
+  // deepest re-hunt #3: el deferred-sink exime SOLO el 1er arg (callback), NO los args 2+.
+  // El 2º arg de un effect-hook son las DEPS (array) — una arrow ahí que lee window y se
+  // captura+invoca en render escapaba como deferred = BYPASS.
+  it("FLAGGEA una arrow en la posición DEPS (2º arg) de useEffect que lee window", () => {
+    const code = `/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { let leaked: any; useEffect(() => {}, (leaked = () => window.innerWidth) as any); return leaked(); }`;
+    expect(checkSourceFile(code, "deps-arg.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("NO flaggea un useEffect normal con deps array", () => {
+    const code = `/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { const x = 1; useEffect(() => { void x; }, [x]); return null; }`;
+    expect(checkSourceFile(code, "deps-ok.fixture.tsx")).toEqual([]);
+  });
+
+  // deepest re-hunt #7: miembro browser-only de un SAFE global (performance.measureUserAgent
+  // SpecificMemory) — el root existe pero el método falta en Node → la llamada lanza. typeof-
+  // guard del root no protege; solo exento en client-only.
+  it.each([
+    ["render", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory(); }`],
+    ["bajo typeof guard", `/** @server-safe */\nexport function f() { if (typeof performance !== "undefined") return performance.measureUserAgentSpecificMemory(); return null; }`],
+  ])("FLAGGEA performance.measureUserAgentSpecificMemory (partial SAFE-global member): %s", (_l, code) => {
+    expect(checkSourceFile(code, "perf-partial.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("NO flaggea performance.now() (presente en Node)", () => {
+    expect(checkSourceFile(`/** @server-safe */\nexport function f() { return performance.now(); }`, "perf-now.fixture.tsx")).toEqual([]);
   });
 
   // B3 (re-hunt): las NON_ABSENCE_DENIALS (raíces de escape / stubs que lanzan:

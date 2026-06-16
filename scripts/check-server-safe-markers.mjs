@@ -453,6 +453,16 @@ const SAFE_GLOBALS = new Set(
   ),
 );
 
+// MIEMBROS browser-only de un global que SÍ es SAFE en su ROOT (existe en Node/edge) pero
+// cuyo MÉTODO/propiedad falta en el floor → llamarlo lanza (TypeError: undefined no es función).
+// El typeof-guard del root NO protege (el root existe) → como NON_ABSENCE_DENIALS pero a nivel
+// de propiedad. Solo exento en client-only deferred (browser, donde el miembro existe). Tabla
+// MÍNIMA + verificada (deepest re-hunt: performance.measureUserAgentSpecificMemory revienta en
+// Node); extensible al auditar más browser-only de performance/Intl/crypto. beta.27 BLOCKER-1.
+const PARTIAL_SAFE_GLOBAL_MEMBERS = {
+  performance: new Set(["measureUserAgentSpecificMemory"]),
+};
+
 // Sinks de evaluación dinámica. NO son "browser globals" — existen
 // también en Node — pero PERMITEN bypassear el análisis estático del
 // gate evaluando código arbitrario desde un string en runtime. Usados
@@ -685,8 +695,12 @@ function isDeferredExecutionContext(fnNode, context) {
   // (2) Argumento de CallExpression a sink reconocido.
   if (ts.isCallExpression(parent)) {
     if (parent.expression === current) return "none";
-    const isArg = parent.arguments.some((a) => a === current);
-    if (!isArg) return "none";
+    // SOLO el 1er argumento (el CALLBACK) de un sink se difiere; los args 2+ corren en RENDER.
+    // El 2º arg de un effect-hook son las DEPS (un array, NO un callback que React invoque): una
+    // arrow colocada en deps que lee window y se captura+invoca en render escapaba como deferred
+    // = BYPASS (deepest re-hunt). Todos los sinks reconocidos (useEffect/useLayoutEffect/
+    // useInsertionEffect + setTimeout/setInterval/queueMicrotask) llevan el callback en posición 0.
+    if (parent.arguments.indexOf(current) !== 0) return "none";
     // El callee puede venir envuelto en wrappers RUNTIME-TRANSPARENTES igual que el
     // callback (L613): `(useEffect)(cb)`, `(useEffect as typeof useEffect)(cb)`,
     // `(setTimeout)(cb,0)`. Sin desenvolver, `ts.isIdentifier`/`isPropertyAccess`
@@ -3365,6 +3379,14 @@ function bundlerShadowSibling(resolvedAbsPath, fileExists) {
         if (fileExists(sib)) return sib; // `<dir>/index.<extMayorPrecedencia>`
       }
     }
+    // (2c) `<dir>/package.json`: su `main`/`module`/`exports`(browser/import/default) puede
+    // REDIRIGIR a Vite a otro archivo que el gate NO audita (el resolver parser-puro no lee
+    // package.json — es el subsistema de resolución de paquetes) → el gate auditaría index.ts
+    // mientras Vite envía el archivo del redirect = BYPASS. Fail-NOISY: devolver el package.json
+    // como shadow → import unresolvable/AMBIGUO. (0 package.json en src del DS; contrivado y
+    // fail-closed.) deepest re-hunt #173.
+    const pkg = `${dirBase}/package.json`;
+    if (fileExists(pkg)) return pkg;
     return null;
   }
   // Caso 1: file resuelto → hermano de mayor precedencia con el mismo basename.
@@ -4419,6 +4441,35 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+    }
+
+    // (c.1b) MIEMBRO browser-only de un global SAFE en su root (performance.measureUserAgent
+    // SpecificMemory): `performance` existe en Node/edge pero el método falta → la llamada
+    // lanza TypeError en SSR. El typeof-guard del root NO protege (el root existe); solo
+    // exento en client-only deferred (browser, donde el miembro existe). deepest re-hunt #173.
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)) &&
+      ts.isIdentifier(node.expression) &&
+      PARTIAL_SAFE_GLOBAL_MEMBERS[node.expression.text]?.has(
+        accessedMemberName(node),
+      ) &&
+      !context.localBindings.has(node.expression.text) &&
+      !context.isInClientOnlyDeferredBody &&
+      !(
+        context.isInFunctionBody &&
+        moduleDeclaredNames.has(node.expression.text)
+      )
+    ) {
+      const start = node.getStart(sourceFile);
+      const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+      const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+      violations.push({
+        file: relPath,
+        rule: "no-bare-dom-access",
+        line: line + 1,
+        detail: `\`${node.expression.text}.${accessedMemberName(node)}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
+      });
     }
 
     // (c.2) Dynamic eval sink vía Function constructor alcanzable por
