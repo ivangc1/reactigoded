@@ -1938,29 +1938,102 @@ function gatherReactNamespaceFamily(sourceFile) {
   }
   if (family.size === 0) return family;
   let changed = true;
+  // ¿El VALOR de `expr` es (value-transparente) un miembro de la familia react? Incluye la
+  // proyección array-literal-index `[React][0]` (token-en-su-sitio: el elemento está a la vista).
+  const exprIsFamilyValue = (expr) => {
+    if (!expr) return false;
+    for (const leaf of valueTransparentLeaves(expr)) {
+      if (ts.isIdentifier(leaf) && family.has(leaf.text)) return true;
+      if (ts.isElementAccessExpression(leaf)) {
+        const base = unwrapErased(leaf.expression);
+        const idx = leaf.argumentExpression
+          ? unwrapErased(leaf.argumentExpression)
+          : null;
+        if (ts.isArrayLiteralExpression(base) && idx && ts.isNumericLiteral(idx)) {
+          const el = base.elements[Number(idx.text)];
+          if (el && exprIsFamilyValue(el)) return true;
+        }
+      }
+    }
+    return false;
+  };
+  // La única hoja value-transparente de `expr` SI es un literal object/array (para matchear
+  // patrones de destructuring contra `{a: React}` / `[React]`).
+  const literalInit = (expr) => {
+    if (!expr) return null;
+    const leaves = valueTransparentLeaves(expr);
+    if (leaves.length !== 1) return null;
+    const l = leaves[0];
+    return ts.isObjectLiteralExpression(l) || ts.isArrayLiteralExpression(l) ? l : null;
+  };
+  // Enrola los identifiers de `target` ligados a un valor react de `init`. Cubre: identifier
+  // (`A = React`), object/array binding-pattern (decl `const {a:A}=…`) y object/array literal
+  // como target de assignment (`({a:A}={a:React})`, `[A]=[React]`). Match ESTRUCTURAL para no
+  // over-taintear hermanos no-react (`const {a:A,b:B}={a:React,b:x}` enrola solo A). deepest re-hunt.
+  const enrollBinding = (target, init) => {
+    if (!target) return;
+    const t = unwrapErased(target);
+    if (ts.isIdentifier(t)) {
+      if (!family.has(t.text) && exprIsFamilyValue(init)) {
+        family.add(t.text);
+        changed = true;
+      }
+      return;
+    }
+    const lit = literalInit(init);
+    if (
+      (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
+      lit &&
+      ts.isObjectLiteralExpression(lit)
+    ) {
+      const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
+      for (const e of elems) {
+        let keyNode, sub;
+        if (ts.isBindingElement(e)) {
+          keyNode = e.propertyName || e.name;
+          sub = e.name;
+        } else if (ts.isPropertyAssignment(e)) {
+          keyNode = e.name;
+          sub = e.initializer;
+        } else if (ts.isShorthandPropertyAssignment(e)) {
+          keyNode = e.name;
+          sub = e.name;
+        } else continue;
+        const key =
+          keyNode && (ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode))
+            ? keyNode.text
+            : null;
+        if (!key) continue;
+        const ip = lit.properties.find(
+          (p) =>
+            ts.isPropertyAssignment(p) &&
+            p.name &&
+            (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
+            p.name.text === key,
+        );
+        if (ip) enrollBinding(sub, ip.initializer);
+      }
+      return;
+    }
+    if (
+      (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
+      lit &&
+      ts.isArrayLiteralExpression(lit)
+    ) {
+      const elems = t.elements;
+      elems.forEach((e, i) => {
+        if (ts.isOmittedExpression(e)) return;
+        const sub = ts.isBindingElement(e) ? e.name : e;
+        enrollBinding(sub, lit.elements[i]);
+      });
+    }
+  };
   while (changed) {
     changed = false;
     const visit = (node) => {
-      if (
-        ts.isVariableDeclaration(node) &&
-        ts.isIdentifier(node.name) &&
-        node.initializer
-      ) {
-        // Alias VALUE-TRANSPARENTE: `const A = (0, React)`, `(React as any)`, `cond ? React
-        // : x` — A puede SER el objeto React (su valor cruza coma/&&/||/??/ternario). Antes
-        // solo `unwrapErased`+Identifier → `(0, React)` no se reconocía como alias → la familia
-        // no incluía A → un member-write a A no tainteaba React = BYPASS (codex P1). Si ALGUNA
-        // hoja value-transparente del init ∈ familia → A ∈ familia (fail-closed; mismo
-        // `valueTransparentLeaves` que el target-resolution de gatherMutatedNamespaceRoots).
-        if (
-          !family.has(node.name.text) &&
-          valueTransparentLeaves(node.initializer).some(
-            (leaf) => ts.isIdentifier(leaf) && family.has(leaf.text),
-          )
-        ) {
-          family.add(node.name.text); // X = Y / (0, Y) / (Y as any) … (Y ∈ familia)
-          changed = true;
-        }
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        // `const A = (0, React)` / binding-pattern `const {a:A}=…` / `const [A]=[React]`.
+        enrollBinding(node.name, node.initializer);
       } else if (
         ts.isImportEqualsDeclaration(node) &&
         ts.isIdentifier(node.name)
@@ -1973,6 +2046,23 @@ function gatherReactNamespaceFamily(sourceFile) {
           !family.has(node.name.text)
         ) {
           family.add(node.name.text); // import X = Y (Y ∈ familia)
+          changed = true;
+        }
+      } else if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        // ASSIGNMENT-alias: `A = React`, `[A] = [React]`, `({a:A} = {a:React})`. El target
+        // member-path (`box.r = React`) NO se enrola (alias de miembro = data-flow, residual).
+        enrollBinding(node.left, node.right);
+      } else if (
+        ts.isParameter(node) &&
+        node.initializer &&
+        ts.isIdentifier(node.name)
+      ) {
+        // PARAM-default: `function go(A = React) { A.useEffect = sync }`.
+        if (!family.has(node.name.text) && exprIsFamilyValue(node.initializer)) {
+          family.add(node.name.text);
           changed = true;
         }
       }

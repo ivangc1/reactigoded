@@ -2171,8 +2171,22 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: const A=(0,React); A.useEffect=sync", HD + `export function C(){ const A=(0,React); (A as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: const A=(c?React:x); A.useEffect=sync (ternario)", HD + `export function C(){ const A=(Math.random()>0.5?React:({} as any)); (A as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: cadena const A=(0,React); const B=A; B.useEffect=sync", HD + `export function C(){ const A=(0,React); const B=A; (B as any).useEffect=((cb:()=>void)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // deepest re-hunt: formas de alias que NO son `const X = React` — assignment, destructuring
+    // (decl+assign), param-default, array-index. El family-builder solo enrollaba VariableDecl-
+    // identifier + import-equals → estas escapaban = bypass (8 instancias).
+    ["familia: assignment A=React", HD + `export function C(){ let A: any; A = React; A.useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: array-destr-assign [A]=[React]", HD + `export function C(){ let A: any; [A] = [React]; A.useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: obj-destr-decl {a:A}={a:React}", HD + `export function C(){ const { a: A } = { a: React }; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: array-destr-decl [A]=[React]", HD + `export function C(){ const [A] = [React]; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: array-index A=[React][0]", HD + `export function C(){ const A = [React][0]; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: param-default go(A=React)", HD + `export function C(){ function go(A: any = React){ A.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
+  });
+
+  it("NO over-taintea un hermano NO-react del destructuring ({a:A,b:B}={a:React,b:x}; B mutado)", () => {
+    const code = HD + `export function C(){ const other: any = {}; const { a: A, b: B } = { a: React, b: other }; (B as any).useEffect=(cb:any)=>cb(); void A; React.useEffect(()=>{ void window.location.href; }); return null; }`;
+    expect(flagged(code)).toBe(false);
   });
 
   // ASIMETRÍA taint-vs-recognition (clase narrow-unwrap, dirección OPUESTA): el lado de
