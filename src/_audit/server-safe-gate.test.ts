@@ -293,6 +293,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['setInterval("código", n)', `setInterval("window.x = 1", 100);`],
     ['globalThis.setTimeout("código")', `globalThis.setTimeout("eval me", 0);`],
     ["setTimeout(`template`, 0)", "setTimeout(`window.x`, 0);"],
+    // codex P2: el callee se desenvuelve value-transparente (coma/erased).
+    ['(0, setTimeout)("código", 0)', `(0, setTimeout)("window.x", 0);`],
+    ['(setTimeout as any)("código", 0)', `(setTimeout as any)("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -2715,6 +2718,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
   it.each([
     ["render", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory(); }`],
     ["bajo typeof guard", `/** @server-safe */\nexport function f() { if (typeof performance !== "undefined") return performance.measureUserAgentSpecificMemory(); return null; }`],
+    // codex P1: el receiver se desenvuelve value-transparente (el cast a `any` es probable).
+    ["(performance as any).measure...", `/** @server-safe */\nexport function f() { return (performance as any).measureUserAgentSpecificMemory(); }`],
+    ["(0, performance).measure...", `/** @server-safe */\nexport function f() { return (0, performance).measureUserAgentSpecificMemory(); }`],
   ])("FLAGGEA performance.measureUserAgentSpecificMemory (partial SAFE-global member): %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-partial.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

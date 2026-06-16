@@ -4448,28 +4448,33 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // lanza TypeError en SSR. El typeof-guard del root NO protege (el root existe); solo
     // exento en client-only deferred (browser, donde el miembro existe). deepest re-hunt #173.
     if (
-      (ts.isPropertyAccessExpression(node) ||
-        ts.isElementAccessExpression(node)) &&
-      ts.isIdentifier(node.expression) &&
-      PARTIAL_SAFE_GLOBAL_MEMBERS[node.expression.text]?.has(
-        accessedMemberName(node),
-      ) &&
-      !context.localBindings.has(node.expression.text) &&
-      !context.isInClientOnlyDeferredBody &&
-      !(
-        context.isInFunctionBody &&
-        moduleDeclaredNames.has(node.expression.text)
-      )
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)
     ) {
-      const start = node.getStart(sourceFile);
-      const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-      const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-      violations.push({
-        file: relPath,
-        rule: "no-bare-dom-access",
-        line: line + 1,
-        detail: `\`${node.expression.text}.${accessedMemberName(node)}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
-      });
+      // El RECEIVER se desenvuelve VALUE-TRANSPARENTE: `(performance as any).x`, `(0,
+      // performance).x` — el cast a `any` es PROBABLE para un método no-estándar (codex P1).
+      const partialMember = accessedMemberName(node);
+      const partialRoot = valueTransparentLeaves(node.expression).find(
+        (leaf) =>
+          ts.isIdentifier(leaf) &&
+          PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text]?.has(partialMember),
+      );
+      if (
+        partialRoot &&
+        !context.localBindings.has(partialRoot.text) &&
+        !context.isInClientOnlyDeferredBody &&
+        !(context.isInFunctionBody && moduleDeclaredNames.has(partialRoot.text))
+      ) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail: `\`${partialRoot.text}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
+        });
+      }
     }
 
     // (c.2) Dynamic eval sink vía Function constructor alcanzable por
@@ -4555,32 +4560,54 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // Token-en-su-sitio (el string a la vista; un string-VARIABLE = data-flow residual). Como
     // los otros eval-sinks: exento solo en client-only deferred (browser, donde sí evalúa).
     if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
-      const callee = unwrapErased(node.expression);
+      // El callee se desenvuelve VALUE-TRANSPARENTE: `(0, setTimeout)("x",0)`, `(setTimeout as
+      // any)("x")` — coma/erased igual que el resto de sinks del gate (codex P2). Cualquier hoja
+      // que sea el timer (identifier o `<global>.setTimeout`) lo reconoce.
       let timerName = null;
-      if (ts.isIdentifier(callee)) {
-        timerName = callee.text;
-      } else if (
-        ts.isPropertyAccessExpression(callee) ||
-        ts.isElementAccessExpression(callee)
-      ) {
-        const root = unwrapErased(callee.expression);
-        if (
-          ts.isIdentifier(root) &&
-          (root.text === "globalThis" ||
-            root.text === "window" ||
-            root.text === "self" ||
-            root.text === "global")
+      for (const leaf of valueTransparentLeaves(node.expression)) {
+        if (ts.isIdentifier(leaf)) {
+          if (
+            leaf.text === "setTimeout" ||
+            leaf.text === "setInterval" ||
+            leaf.text === "setImmediate"
+          ) {
+            timerName = leaf.text;
+            break;
+          }
+        } else if (
+          ts.isPropertyAccessExpression(leaf) ||
+          ts.isElementAccessExpression(leaf)
         ) {
-          timerName = accessedMemberName(callee);
+          const root = unwrapErased(leaf.expression);
+          if (
+            ts.isIdentifier(root) &&
+            (root.text === "globalThis" ||
+              root.text === "window" ||
+              root.text === "self" ||
+              root.text === "global")
+          ) {
+            const mn = accessedMemberName(leaf);
+            if (
+              mn === "setTimeout" ||
+              mn === "setInterval" ||
+              mn === "setImmediate"
+            ) {
+              timerName = mn;
+              break;
+            }
+          }
         }
       }
-      const arg0 = node.arguments.length > 0 ? unwrapErased(node.arguments[0]) : null;
+      const isStringArg =
+        node.arguments.length > 0 &&
+        valueTransparentLeaves(node.arguments[0]).some(
+          (a) => ts.isStringLiteralLike(a) || ts.isTemplateExpression(a),
+        );
       if (
         (timerName === "setTimeout" ||
           timerName === "setInterval" ||
           timerName === "setImmediate") &&
-        arg0 &&
-        (ts.isStringLiteralLike(arg0) || ts.isTemplateExpression(arg0))
+        isStringArg
       ) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
