@@ -4485,14 +4485,46 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         probe = p;
         p = p.parent;
       }
-      const safelyProbed =
-        (p && ts.isTypeOfExpression(p) && p.expression === probe) ||
-        (p &&
-          (ts.isCallExpression(p) ||
-            ts.isPropertyAccessExpression(p) ||
-            ts.isElementAccessExpression(p)) &&
-          p.expression === probe &&
-          p.questionDotToken !== undefined);
+      const isTypeofProbe =
+        p && ts.isTypeOfExpression(p) && p.expression === probe;
+      // Optional probe (`x?.()`, `x?.foo`, `x?.[i]`): el resultado es undefined si el miembro
+      // falta. SEGURO salvo que se DEREFERENCIE rompiendo la cadena con PARÉNTESIS — `(x?.()).foo`
+      // ejecuta `undefined.foo` y crashea; SIN paréntesis `x?.().foo` corta la cadena entera =
+      // seguro (codex P2). El paren ROMPE el optional-chain (semántica JS): un deref no-opcional
+      // tras paren = unsafe.
+      let isSafeOptionalProbe =
+        p &&
+        (ts.isCallExpression(p) ||
+          ts.isPropertyAccessExpression(p) ||
+          ts.isElementAccessExpression(p)) &&
+        p.expression === probe &&
+        p.questionDotToken !== undefined;
+      if (isSafeOptionalProbe) {
+        // Solo el PARÉNTESIS rompe la cadena opcional en runtime; `as`/`!`/`satisfies` son
+        // transparentes y NO la rompen (`a?.b!.c` corta entero = seguro). Ascender por TODOS los
+        // erased-wrappers, pero exigir que se haya cruzado ≥1 paréntesis antes del deref.
+        let r = p;
+        let crossedParen = false;
+        while (r.parent && isErasedOuterExpr(r.parent)) {
+          if (ts.isParenthesizedExpression(r.parent)) crossedParen = true;
+          r = r.parent;
+        }
+        if (crossedParen) {
+          const consumer = r.parent;
+          if (
+            consumer &&
+            (ts.isPropertyAccessExpression(consumer) ||
+              ts.isElementAccessExpression(consumer) ||
+              ts.isCallExpression(consumer) ||
+              ts.isTaggedTemplateExpression(consumer)) &&
+            consumer.expression === r &&
+            consumer.questionDotToken === undefined
+          ) {
+            isSafeOptionalProbe = false; // `(x?.()).foo` → undefined deref'd → unsafe
+          }
+        }
+      }
+      const safelyProbed = isTypeofProbe || isSafeOptionalProbe;
       if (
         partialRoot &&
         !safelyProbed &&
@@ -4545,8 +4577,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           const keyTextOf = (kn) => {
             if (!kn) return null;
             if (ts.isComputedPropertyName(kn)) {
-              const e = unwrapErased(kn.expression);
-              return ts.isStringLiteralLike(e) ? e.text : null;
+              // Key computada VALUE-TRANSPARENTE: `[1 && "M"]`, `[(0,"M")]`, `["M" as const]`
+              // → "M". Mismo fold que el property-access path (accessedMemberName), para no
+              // dejar un hueco que la rama (c.1b) ya normaliza (codex P2). Operador no-value-
+              // transparente (concat `"a"+"b"`) = §141 residual, igual que el eval-sink.
+              const leaves = valueTransparentLeaves(kn.expression);
+              const lit =
+                leaves.length === 1 && ts.isStringLiteralLike(leaves[0])
+                  ? leaves[0]
+                  : null;
+              return lit ? lit.text : null;
             }
             return ts.isIdentifier(kn) || ts.isStringLiteralLike(kn)
               ? kn.text

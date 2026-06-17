@@ -2761,6 +2761,13 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P1: el receiver se desenvuelve value-transparente (el cast a `any` es probable).
     ["(performance as any).measure...", `/** @server-safe */\nexport function f() { return (performance as any).measureUserAgentSpecificMemory(); }`],
     ["(0, performance).measure...", `/** @server-safe */\nexport function f() { return (0, performance).measureUserAgentSpecificMemory(); }`],
+    // codex P2 (e3418ee): el PARÉNTESIS rompe la cadena opcional → el undefined se derefencia y
+    // crashea. `(x?.()).foo` NO es un probe seguro (a diferencia de `x?.().foo` sin paréntesis).
+    ["grouped optional deref (M?.()).foo", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any).foo; }`],
+    ["grouped optional deref (M?.())[0]", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)[0]; }`],
+    ["grouped optional call (M?.())()", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)(); }`],
+    ["grouped optional access (M?.name).x", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.name) as any).x; }`],
+    ["grouped optional + non-null (M?.())!.foo", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory?.())!.foo; }`],
   ])("FLAGGEA performance.measureUserAgentSpecificMemory (partial SAFE-global member): %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-partial.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
@@ -2777,6 +2784,11 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2: el probe envuelto en parens/cast también es seguro (ascenso value-transparent).
     ["typeof (parenthesized)", `/** @server-safe */\nexport function f() { return typeof (performance.measureUserAgentSpecificMemory) === "function"; }`],
     ["(cast as any)?.()", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory as any)?.(); }`],
+    // codex P2 (e3418ee): SIN paréntesis la cadena opcional corta entera → seguro. Contraste
+    // con el caso `(x?.()).foo` agrupado (que SÍ flaggea, arriba).
+    ["optional chain M?.().foo (sin paréntesis)", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.().foo; }`],
+    ["optional chain M?.()!.foo (non-null, sin paréntesis)", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.()!.foo; }`],
+    ["optional consumer (M?.())?.foo (consumer opcional)", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory?.())?.foo; }`],
   ])("NO flaggea un probe seguro del miembro parcial: %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-probe.fixture.tsx")).toEqual([]);
   });
@@ -2787,6 +2799,10 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["destr renombrado", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory: m } = performance as any; return m(); }`],
     ["destr shorthand", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory } = performance as any; return measureUserAgentSpecificMemory; }`],
     ["destr computed string", `/** @server-safe */\nexport function f() { const { ["measureUserAgentSpecificMemory"]: m } = performance as any; return m; }`],
+    // codex P2 (e3418ee): key computada VALUE-TRANSPARENTE — el property-access path ya la
+    // normaliza (`performance[1 && "M"]` flaggea), el destructuring debe ser consistente.
+    ["destr computed [1 && M]", `/** @server-safe */\nexport function f() { const { [1 && "measureUserAgentSpecificMemory"]: m } = performance as any; return m(); }`],
+    ["destr computed [(0, M)]", `/** @server-safe */\nexport function f() { const { [(0, "measureUserAgentSpecificMemory")]: m } = performance as any; return m(); }`],
     ["assignment-destr", `/** @server-safe */\nexport function f() { let m: any; ({ measureUserAgentSpecificMemory: m } = performance as any); return m; }`],
   ])("FLAGGEA el destructuring de un miembro parcial: %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-destr.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
