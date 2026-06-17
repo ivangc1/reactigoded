@@ -2768,6 +2768,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["grouped optional call (M?.())()", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)(); }`],
     ["grouped optional access (M?.name).x", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.name) as any).x; }`],
     ["grouped optional + non-null (M?.())!.foo", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory?.())!.foo; }`],
+    // codex P2 (058b1f6): TaggedTemplate guarda el callee en \`.tag\`, no \`.expression\` →
+    // \`(M?.())\\\`x\\\`\` ejecuta \`undefined\\\`x\\\`\` (TypeError). Antes escapaba el branch.
+    ["grouped optional tagged-template (M?.())`x`", "/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)`x`; }"],
   ])("FLAGGEA performance.measureUserAgentSpecificMemory (partial SAFE-global member): %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-partial.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

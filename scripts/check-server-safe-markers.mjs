@@ -4511,14 +4511,20 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         }
         if (crossedParen) {
           const consumer = r.parent;
+          // El TaggedTemplate guarda el callee en `.tag` (no `.expression`); un tagged-template
+          // nunca es opcional (`a?.\`x\`` es error de sintaxis) → siempre rompe sobre undefined.
+          const consumerRefersToR = consumer
+            ? ts.isTaggedTemplateExpression(consumer)
+              ? consumer.tag === r
+              : consumer.expression === r && consumer.questionDotToken === undefined
+            : false;
           if (
             consumer &&
             (ts.isPropertyAccessExpression(consumer) ||
               ts.isElementAccessExpression(consumer) ||
               ts.isCallExpression(consumer) ||
               ts.isTaggedTemplateExpression(consumer)) &&
-            consumer.expression === r &&
-            consumer.questionDotToken === undefined
+            consumerRefersToR
           ) {
             isSafeOptionalProbe = false; // `(x?.()).foo` → undefined deref'd → unsafe
           }
