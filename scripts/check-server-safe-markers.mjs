@@ -4473,14 +4473,25 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // undefined; solo CRASHEA si se INVOCA/derefencia sin guardia. (El if-guard a nivel de
       // miembro `if (typeof X.y === "function") X.y()` queda residual fail-closed — el gate no
       // trackea guards de member-path.)
-      const p = node.parent;
+      // Ascenso saltando wrappers RUNTIME-TRANSPARENTES (erased + value-transparent) para hallar
+      // el contexto efectivo del probe: `typeof (performance.x)`, `(performance.x as any)?.()` —
+      // el nodo va envuelto en parens/cast/coma (codex P2). Mismo ascenso que el eval-sink.
+      let probe = node;
+      let p = node.parent;
+      while (
+        p &&
+        (isErasedOuterExpr(p) || valueTransparentChildren(p).includes(probe))
+      ) {
+        probe = p;
+        p = p.parent;
+      }
       const safelyProbed =
-        (p && ts.isTypeOfExpression(p) && p.expression === node) ||
+        (p && ts.isTypeOfExpression(p) && p.expression === probe) ||
         (p &&
           (ts.isCallExpression(p) ||
             ts.isPropertyAccessExpression(p) ||
             ts.isElementAccessExpression(p)) &&
-          p.expression === node &&
+          p.expression === probe &&
           p.questionDotToken !== undefined);
       if (
         partialRoot &&

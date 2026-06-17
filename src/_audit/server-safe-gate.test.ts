@@ -2774,6 +2774,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["optional call ?.()", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.(); }`],
     ["typeof operand", `/** @server-safe */\nexport function f() { return typeof performance.measureUserAgentSpecificMemory === "function"; }`],
     ["optional access ?.name", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.name; }`],
+    // codex P2: el probe envuelto en parens/cast también es seguro (ascenso value-transparent).
+    ["typeof (parenthesized)", `/** @server-safe */\nexport function f() { return typeof (performance.measureUserAgentSpecificMemory) === "function"; }`],
+    ["(cast as any)?.()", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory as any)?.(); }`],
   ])("NO flaggea un probe seguro del miembro parcial: %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-probe.fixture.tsx")).toEqual([]);
   });
