@@ -4501,6 +4501,72 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       }
     }
 
+    // (c.1c) DESTRUCTURING de un miembro browser-only de un SAFE global: `const {
+    // measureUserAgentSpecificMemory: m } = performance` copia el método (undefined en Node) a
+    // un local → `m()` crashea sin atarse al miembro (escapa al check de property-access). Fail-
+    // closed: flaggear la EXTRACCIÓN del miembro parcial desde un root partial (token-en-su-
+    // sitio: key + root visibles en el patrón). Cubre decl `const {…}=` y assignment `({…}=…)`.
+    // codex P2.
+    {
+      let pattern = null;
+      let initExpr = null;
+      if (ts.isObjectBindingPattern(node) && ts.isVariableDeclaration(node.parent)) {
+        pattern = node;
+        initExpr = node.parent.initializer;
+      } else if (
+        ts.isObjectLiteralExpression(node) &&
+        ts.isBinaryExpression(node.parent) &&
+        node.parent.left === node &&
+        node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        pattern = node;
+        initExpr = node.parent.right;
+      }
+      if (pattern && initExpr && !context.isInClientOnlyDeferredBody) {
+        const partialRoot = valueTransparentLeaves(initExpr).find(
+          (leaf) =>
+            ts.isIdentifier(leaf) &&
+            PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
+            !context.localBindings.has(leaf.text),
+        );
+        if (partialRoot) {
+          const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRoot.text];
+          const keyTextOf = (kn) => {
+            if (!kn) return null;
+            if (ts.isComputedPropertyName(kn)) {
+              const e = unwrapErased(kn.expression);
+              return ts.isStringLiteralLike(e) ? e.text : null;
+            }
+            return ts.isIdentifier(kn) || ts.isStringLiteralLike(kn)
+              ? kn.text
+              : null;
+          };
+          const elems = ts.isObjectBindingPattern(pattern)
+            ? pattern.elements
+            : pattern.properties;
+          for (const el of elems) {
+            const kn = ts.isBindingElement(el)
+              ? el.propertyName || el.name
+              : ts.isPropertyAssignment(el) || ts.isShorthandPropertyAssignment(el)
+                ? el.name
+                : null;
+            const key = keyTextOf(kn);
+            if (key && set.has(key)) {
+              const start = el.getStart(sourceFile);
+              const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+              const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+              violations.push({
+                file: relPath,
+                rule: "no-bare-dom-access",
+                line: line + 1,
+                detail: `destructuring de \`${partialRoot.text}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+              });
+            }
+          }
+        }
+      }
+    }
+
     // (c.2) Dynamic eval sink vía Function constructor alcanzable por
     // `.constructor` SIN nombrar `Function`. El constructor del constructor
     // de CUALQUIER valor ES `Function` (`[].constructor` → Array;

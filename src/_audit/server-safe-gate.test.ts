@@ -2778,6 +2778,21 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     expect(checkSourceFile(code, "perf-probe.fixture.tsx")).toEqual([]);
   });
 
+  // codex P2: el miembro parcial extraído por DESTRUCTURING (`const { measure...: m } =
+  // performance; m()`) escapaba al check de property-access. Fail-closed: flaggear la extracción.
+  it.each([
+    ["destr renombrado", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory: m } = performance as any; return m(); }`],
+    ["destr shorthand", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory } = performance as any; return measureUserAgentSpecificMemory; }`],
+    ["destr computed string", `/** @server-safe */\nexport function f() { const { ["measureUserAgentSpecificMemory"]: m } = performance as any; return m; }`],
+    ["assignment-destr", `/** @server-safe */\nexport function f() { let m: any; ({ measureUserAgentSpecificMemory: m } = performance as any); return m; }`],
+  ])("FLAGGEA el destructuring de un miembro parcial: %s", (_l, code) => {
+    expect(checkSourceFile(code, "perf-destr.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it("NO flaggea destructuring de un miembro PRESENTE (now)", () => {
+    expect(checkSourceFile(`/** @server-safe */\nexport function f() { const { now } = performance; return now; }`, "perf-now-destr.fixture.tsx")).toEqual([]);
+  });
+
   // B3 (re-hunt): las NON_ABSENCE_DENIALS (raíces de escape / stubs que lanzan:
   // globalThis/global/self/setImmediate/clearImmediate) NO son hazards de ausencia
   // — disparan en Edge SIEMPRE, así que un timer (que SÍ corre en SSR) NO las exime
