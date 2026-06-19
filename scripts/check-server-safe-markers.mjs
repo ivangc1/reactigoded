@@ -2000,8 +2000,15 @@ function gatherReactNamespaceFamily(sourceFile) {
     // = x` (codex P2). Se compone con el match estructural contra el object/array literal de abajo.
     if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
       for (const e of t.elements) {
-        if (ts.isBindingElement(e) && e.initializer) {
-          enrollBinding(e.name, e.initializer);
+        if (!ts.isBindingElement(e)) continue;
+        if (e.initializer) enrollBinding(e.name, e.initializer); // default de ESTE elemento
+        if (
+          ts.isObjectBindingPattern(e.name) ||
+          ts.isArrayBindingPattern(e.name)
+        ) {
+          // Pattern ANIDADO (`{ opts: { R = React } }`): recurre por sus propios defaults,
+          // independiente del match estructural contra el init (codex P2).
+          enrollBinding(e.name, undefined);
         }
       }
     }
@@ -2122,12 +2129,43 @@ const TIMER_GLOBAL_NAMES = new Set([
  */
 function gatherTimerAliasNames(sourceFile) {
   const aliases = new Set();
+  // Nombres de timer SOMBREADOS por una declaración LOCAL en cualquier parte del archivo
+  // (función/var/param/binding-element/clase/import homónimo): ese `setTimeout` NO es el global →
+  // NO seedear un alias desde él (el wrapper local con string-arg es FP, no eval del navegador;
+  // codex P2). Aproximación file-level conservadora: si el nombre se declara en alguna parte se
+  // excluye; coherente con el respeto al shadow de la rama directa (que ya exime el wrapper).
+  const shadowedTimerNames = new Set();
+  const collectShadow = (node) => {
+    let nm = null;
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+      node.name
+    ) {
+      nm = node.name.text;
+    } else if (
+      (ts.isVariableDeclaration(node) ||
+        ts.isParameter(node) ||
+        ts.isBindingElement(node) ||
+        ts.isImportSpecifier(node) ||
+        ts.isImportClause(node) ||
+        ts.isNamespaceImport(node)) &&
+      node.name &&
+      ts.isIdentifier(node.name)
+    ) {
+      nm = node.name.text;
+    }
+    if (nm && TIMER_GLOBAL_NAMES.has(nm)) shadowedTimerNames.add(nm);
+    ts.forEachChild(node, collectShadow);
+  };
+  collectShadow(sourceFile);
   const exprIsTimerValued = (expr) => {
     if (!expr) return false;
     for (const leaf of valueTransparentLeaves(expr)) {
       if (
         ts.isIdentifier(leaf) &&
-        (TIMER_GLOBAL_NAMES.has(leaf.text) || aliases.has(leaf.text))
+        ((TIMER_GLOBAL_NAMES.has(leaf.text) &&
+          !shadowedTimerNames.has(leaf.text)) ||
+          aliases.has(leaf.text))
       ) {
         return true;
       }

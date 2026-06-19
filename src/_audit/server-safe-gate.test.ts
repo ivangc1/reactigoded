@@ -329,6 +329,10 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it.each([
     ["alias con callback función (no string)", `/** @server-safe */\nexport function f() { const later = setTimeout; return later(() => {}, 0); }`],
     ["binding homónimo NO-timer con string", `/** @server-safe */\nexport function f() { const later = (s: string) => s; return later("x"); }`],
+    // codex P2 (50630d8): alias DERIVADO de un wrapper LOCAL homónimo — `function setTimeout(){}`
+    // sombrea el global; `const later = setTimeout` aliasa el wrapper, no el global → no es eval.
+    ["alias de wrapper-función shadowed (no global)", `/** @server-safe */\nfunction setTimeout(cb: string) { return cb; }\nexport function f() { const later = setTimeout; return later("x"); }`],
+    ["alias de wrapper-const shadowed (no global)", `/** @server-safe */\nconst setTimeout = (s: string) => s;\nexport function f() { const later = setTimeout; return later("x"); }`],
   ])("NO flaggea: %s", (_l, code) => {
     expect(checkSourceFile(code, "timer-alias-neg.fixture.tsx")).toEqual([]);
   });
@@ -2306,6 +2310,11 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: param binding-default go({R=React})", HD + `export function C(){ function go({ R = React as any } = {} as any){ R.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: array param binding-default go([R=React])", HD + `export function C(){ function go([ R = React as any ] = [] as any){ R.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: var binding-default const {R=React}", HD + `export function C(){ const { R = React as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (50630d8): default ANIDADO en un binding-pattern — el loop solo miraba elementos
+    // inmediatos; `{ opts: { R = React } }` escapaba.
+    ["familia: param nested-default go({opts:{R=React}})", HD + `export function C(){ function go({ opts: { R = React as any } = {} as any } = {} as any){ R.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: var nested-default const {opts:{R=React}}", HD + `export function C(){ const { opts: { R = React as any } = {} as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: deep nested-default {a:{b:{R=React}}}", HD + `export function C(){ const { a: { b: { R = React as any } = {} as any } = {} as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
