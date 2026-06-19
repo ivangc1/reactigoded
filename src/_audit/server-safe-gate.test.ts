@@ -296,6 +296,13 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2: el callee se desenvuelve value-transparente (coma/erased).
     ['(0, setTimeout)("código", 0)', `(0, setTimeout)("window.x", 0);`],
     ['(setTimeout as any)("código", 0)', `(setTimeout as any)("window.x", 0);`],
+    // codex P2 (2561d6b): ALIAS sintáctico del timer global. El timer está en SAFE_GLOBALS → su
+    // read no flaggea aguas arriba (≠ eval) → sin resolver el alias sería fail-open.
+    ['alias const later=setTimeout; later("código")', `const later = setTimeout; later("window.x", 0);`],
+    ['alias cadena a=setTimeout,b=a; b("código")', `const a = setTimeout; const b = a; b("window.x", 0);`],
+    ['alias later=globalThis.setInterval; later("código")', `const later = globalThis.setInterval; later("window.x", 0);`],
+    ['alias por assignment later=setTimeout; later("código")', `let later: any; later = setTimeout; later("window.x", 0);`],
+    ['alias comma-wrapped (0,later)("código")', `const later = setTimeout; (0, later)("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -315,6 +322,15 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ["param shadows setInterval", `/** @server-safe */\nexport function f(setInterval: (s: string) => void) { return setInterval("x"); }`],
   ])("NO flaggea un timer LOCAL shadowed con string-arg: %s", (_l, code) => {
     expect(checkSourceFile(code, "shadow-timer.fixture.tsx")).toEqual([]);
+  });
+
+  // codex P2 (2561d6b): el alias resuelto NO debe sobre-flaggear el caso seguro (callback función)
+  // ni una variable homónima NO ligada a un timer.
+  it.each([
+    ["alias con callback función (no string)", `/** @server-safe */\nexport function f() { const later = setTimeout; return later(() => {}, 0); }`],
+    ["binding homónimo NO-timer con string", `/** @server-safe */\nexport function f() { const later = (s: string) => s; return later("x"); }`],
+  ])("NO flaggea: %s", (_l, code) => {
+    expect(checkSourceFile(code, "timer-alias-neg.fixture.tsx")).toEqual([]);
   });
 
   it("caza `Reflect.construct(Function, [...])` (vía Function como arg)", () => {
@@ -2250,6 +2266,12 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: array-destr-decl [A]=[React]", HD + `export function C(){ const [A] = [React]; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: array-index A=[React][0]", HD + `export function C(){ const A = [React][0]; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: param-default go(A=React)", HD + `export function C(){ function go(A: any = React){ A.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (2561d6b): default de un binding-ELEMENT (param destructurado o `const`) — el
+    // family-builder solo enrollaba param-default cuando node.name era identifier; el binding
+    // pattern escapaba (`{ R = React }`).
+    ["familia: param binding-default go({R=React})", HD + `export function C(){ function go({ R = React as any } = {} as any){ R.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: array param binding-default go([R=React])", HD + `export function C(){ function go([ R = React as any ] = [] as any){ R.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: var binding-default const {R=React}", HD + `export function C(){ const { R = React as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });

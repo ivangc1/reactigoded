@@ -1994,6 +1994,17 @@ function gatherReactNamespaceFamily(sourceFile) {
       }
       return;
     }
+    // Element DEFAULTS de un binding-pattern (`{ R = React }`, `[R = React]`) son aliases
+    // INTRÍNSECOS al pattern, independientes del init: el elemento puede resolver a su default →
+    // taint fail-closed. Cubre param destructurado `f({ R = React } = {})` Y `const { R = React }
+    // = x` (codex P2). Se compone con el match estructural contra el object/array literal de abajo.
+    if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
+      for (const e of t.elements) {
+        if (ts.isBindingElement(e) && e.initializer) {
+          enrollBinding(e.name, e.initializer);
+        }
+      }
+    }
     const lit = literalInit(init);
     if (
       (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
@@ -2069,15 +2080,21 @@ function gatherReactNamespaceFamily(sourceFile) {
         // ASSIGNMENT-alias: `A = React`, `[A] = [React]`, `({a:A} = {a:React})`. El target
         // member-path (`box.r = React`) NO se enrola (alias de miembro = data-flow, residual).
         enrollBinding(node.left, node.right);
-      } else if (
-        ts.isParameter(node) &&
-        node.initializer &&
-        ts.isIdentifier(node.name)
-      ) {
-        // PARAM-default: `function go(A = React) { A.useEffect = sync }`.
-        if (!family.has(node.name.text) && exprIsFamilyValue(node.initializer)) {
-          family.add(node.name.text);
-          changed = true;
+      } else if (ts.isParameter(node)) {
+        if (ts.isIdentifier(node.name)) {
+          // PARAM-default identifier: `function go(A = React) { A.useEffect = sync }`.
+          if (
+            node.initializer &&
+            !family.has(node.name.text) &&
+            exprIsFamilyValue(node.initializer)
+          ) {
+            family.add(node.name.text);
+            changed = true;
+          }
+        } else {
+          // PARAM binding-pattern: `function go({ R = React } = {})` — defaults intrínsecos +
+          // match estructural contra el param-default literal (codex P2).
+          enrollBinding(node.name, node.initializer);
         }
       }
       ts.forEachChild(node, visit);
@@ -2085,6 +2102,85 @@ function gatherReactNamespaceFamily(sourceFile) {
     visit(sourceFile);
   }
   return family;
+}
+
+const TIMER_GLOBAL_NAMES = new Set([
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+]);
+
+/**
+ * Nombres de bindings LOCALES que son alias SINTÁCTICOS (one-hop+, fixpoint) de un timer global:
+ * `const later = setTimeout`, `const f = later`, `g = globalThis.setInterval`. Los timers están
+ * en SAFE_GLOBALS → su read NO se flaggea aguas arriba (a diferencia de `eval`, que es sink y SÍ
+ * se caza al leerse), así que un alias dejaría pasar `later("código")` = fail-open (codex P2). El
+ * nombre del timer aparece LITERAL en la declaración del alias → token-en-su-sitio, dentro de la
+ * frontera (no es data-flow runtime). Aproximación file-level fail-closed: un re-shadow del alias
+ * en un scope anidado podría sobre-flaggear (igual que la familia react file-level), dirección
+ * segura. NO incluye los globales en sí (la rama literal del check ya los cubre, shadow-aware).
+ */
+function gatherTimerAliasNames(sourceFile) {
+  const aliases = new Set();
+  const exprIsTimerValued = (expr) => {
+    if (!expr) return false;
+    for (const leaf of valueTransparentLeaves(expr)) {
+      if (
+        ts.isIdentifier(leaf) &&
+        (TIMER_GLOBAL_NAMES.has(leaf.text) || aliases.has(leaf.text))
+      ) {
+        return true;
+      }
+      if (
+        ts.isPropertyAccessExpression(leaf) ||
+        ts.isElementAccessExpression(leaf)
+      ) {
+        const root = unwrapErased(leaf.expression);
+        if (
+          ts.isIdentifier(root) &&
+          (root.text === "globalThis" ||
+            root.text === "window" ||
+            root.text === "self" ||
+            root.text === "global")
+        ) {
+          const mn = accessedMemberName(leaf);
+          if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
+        }
+      }
+    }
+    return false;
+  };
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const visit = (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        node.initializer &&
+        ts.isIdentifier(node.name)
+      ) {
+        if (
+          !aliases.has(node.name.text) &&
+          exprIsTimerValued(node.initializer)
+        ) {
+          aliases.add(node.name.text);
+          changed = true;
+        }
+      } else if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isIdentifier(node.left)
+      ) {
+        if (!aliases.has(node.left.text) && exprIsTimerValued(node.right)) {
+          aliases.add(node.left.text);
+          changed = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return aliases;
 }
 
 /**
@@ -4726,6 +4822,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             timerName = leaf.text;
             break;
           }
+          // Alias SINTÁCTICO de un timer global (`const later = setTimeout; later("código")`): el
+          // read del timer está en SAFE_GLOBALS → invisible aguas arriba (≠ eval, que es sink), así
+          // que sin esto el alias sería fail-open (codex P2). gatherTimerAliasNames lo precomputa.
+          if (context.timerAliases.has(leaf.text)) {
+            timerName = leaf.text;
+            break;
+          }
         } else if (
           ts.isPropertyAccessExpression(leaf) ||
           ts.isElementAccessExpression(leaf)
@@ -4757,12 +4860,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         valueTransparentLeaves(node.arguments[0]).some(
           (a) => ts.isStringLiteralLike(a) || ts.isTemplateExpression(a),
         );
-      if (
-        (timerName === "setTimeout" ||
-          timerName === "setInterval" ||
-          timerName === "setImmediate") &&
-        isStringArg
-      ) {
+      if (timerName !== null && isStringArg) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
         const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -4925,6 +5023,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const familyMutated = [...reactNsFamily].some((n) => memberWriteRoots.has(n));
   const mutatedNamespaceRoots = familyMutated ? reactNsFamily : new Set();
   const reactImports = gatherReactImports(sourceFile, mutatedNamespaceRoots);
+  const timerAliases = gatherTimerAliasNames(sourceFile);
   const baseContext = {
     activeGuards: new Set(),
     blockEntryGuards: new Set(),
@@ -4943,6 +5042,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     scopeReactNs: new Set(),
     scopeReactNamed: new Map(),
     mutatedNamespaceRoots,
+    timerAliases,
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
