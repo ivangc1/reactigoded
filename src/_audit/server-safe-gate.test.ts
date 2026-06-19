@@ -306,6 +306,17 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(v).toEqual([]);
   });
 
+  // codex P3 (f669bce): un binding LOCAL homónimo (import/función/const/param) NO es el timer
+  // global → su string-arg no es eval del navegador. Respeto al shadow como la rama bare-id.
+  it.each([
+    ["función local setTimeout", `/** @server-safe */\nfunction setTimeout(s: string) { return s; }\nexport function f() { return setTimeout("x"); }`],
+    ["const local setTimeout", `/** @server-safe */\nconst setTimeout = (s: string) => s;\nexport function f() { return setTimeout("x"); }`],
+    ["import setTimeout wrapper", `/** @server-safe */\nimport { setTimeout } from "./timers";\nexport function f() { return setTimeout("x"); }`],
+    ["param shadows setInterval", `/** @server-safe */\nexport function f(setInterval: (s: string) => void) { return setInterval("x"); }`],
+  ])("NO flaggea un timer LOCAL shadowed con string-arg: %s", (_l, code) => {
+    expect(checkSourceFile(code, "shadow-timer.fixture.tsx")).toEqual([]);
+  });
+
   it("caza `Reflect.construct(Function, [...])` (vía Function como arg)", () => {
     const v = checkSourceFile(
       fixture(

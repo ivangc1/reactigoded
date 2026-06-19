@@ -4714,9 +4714,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       for (const leaf of valueTransparentLeaves(node.expression)) {
         if (ts.isIdentifier(leaf)) {
           if (
-            leaf.text === "setTimeout" ||
-            leaf.text === "setInterval" ||
-            leaf.text === "setImmediate"
+            (leaf.text === "setTimeout" ||
+              leaf.text === "setInterval" ||
+              leaf.text === "setImmediate") &&
+            // Un binding LOCAL homónimo (import/función/const wrapper) NO es el timer global →
+            // su string-arg no es eval del navegador. Mismo respeto al shadow que la rama (d)
+            // bare-identifier (codex P3). El alias del global real exige leer el global = flaggea
+            // aguas arriba, así que skipear el shadow no abre bypass.
+            !context.localBindings.has(leaf.text)
           ) {
             timerName = leaf.text;
             break;
@@ -4731,7 +4736,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             (root.text === "globalThis" ||
               root.text === "window" ||
               root.text === "self" ||
-              root.text === "global")
+              root.text === "global") &&
+            // Mismo respeto al shadow: un `globalThis`/`window` LOCAL no es el objeto global real.
+            !context.localBindings.has(root.text)
           ) {
             const mn = accessedMemberName(leaf);
             if (
