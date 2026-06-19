@@ -3388,6 +3388,30 @@ function tryResolveFile(noExtAbsPath, fileExists) {
   return null;
 }
 
+// Vite resuelve un import SIN extensión a estas exts NO-auditables (JS-family + `.mts` ESM-TS)
+// — están en `resolve.extensions` ANTES o junto a `.ts`/`.tsx` (VITE_RESOLVE_EXTS). Si la cascada
+// auditable falla pero existe uno de estos, el import SÍ resuelve en el bundler, a un archivo que
+// el gate no audita → debe reportar el error PRECISO "JS no auditable" (fail-closed), no el genérico
+// "no resolvió" — que MIENTE (el archivo existe; el `.mts` modelado en VITE_RESOLVE_EXTS exigía un
+// resolver coherente). `.cjs`/`.cts` NO están: Vite no los resuelve extensionless. codex P3.
+const RESOLUTION_NONAUDITABLE_CASCADE = [
+  ".mjs",
+  ".js",
+  ".mts",
+  ".jsx",
+  "/index.mjs",
+  "/index.js",
+  "/index.mts",
+  "/index.jsx",
+];
+function tryResolveNonAuditable(noExtAbsPath, fileExists) {
+  for (const ext of RESOLUTION_NONAUDITABLE_CASCADE) {
+    const candidate = `${noExtAbsPath}${ext}`;
+    if (fileExists(candidate)) return candidate;
+  }
+  return null;
+}
+
 // Orden REAL de `resolve.extensions` de Vite (DEFAULT_EXTENSIONS, .json excluido
 // — no se audita). El gate resuelve `.ts` primero; Vite rankea `.mjs`/`.js`/`.mts` ANTES
 // que `.ts` (y `.jsx` antes que `.tsx`). Si para un import extensionless existe un hermano
@@ -3558,6 +3582,13 @@ function resolveImportPath(
           }
           return { kind: "internal", absPath: resolved };
         }
+        const nonAuditable = tryResolveNonAuditable(noExt, fileExists);
+        if (nonAuditable) {
+          return {
+            kind: "unresolvable",
+            reason: `alias \`${specifier}\` resuelve (extensionless) a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, nonAuditable)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+          };
+        }
         return {
           kind: "unresolvable",
           reason: `alias \`${specifier}\` no resolvió en ${crossOsRelative(projectRoot, noExt) || noExt}{.ts,.tsx,/index.ts,/index.tsx}`,
@@ -3594,6 +3625,19 @@ function resolveImportPath(
         };
       }
       return { kind: "internal", absPath: resolved };
+    }
+    return { kind: "external" };
+  }
+  const nonAuditable = tryResolveNonAuditable(noExt, fileExists);
+  if (nonAuditable) {
+    const relNA = crossOsRelative(srcRoot, nonAuditable);
+    const naInSrc = !relNA.startsWith("..") && !relNA.startsWith("/");
+    // Fuera de src (node_modules/peer) → external; dentro → JS-family no auditable (fail-closed).
+    if (naInSrc) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` resuelve (extensionless) a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, nonAuditable)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+      };
     }
     return { kind: "external" };
   }

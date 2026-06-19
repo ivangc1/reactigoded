@@ -472,6 +472,40 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     }
   });
 
+  it("FALLA RUIDOSO 'no auditable' (no genérico 'no resolvió') si un import EXTENSIONLESS resuelve a JS-family Vite-resoluble (`.mjs`/`.js`/`.mts`/`.jsx`, codex P3)", () => {
+    // Vite resuelve `./helper` → `helper.mts` (está en resolve.extensions). La cascada auditable
+    // (.ts/.tsx) falla, pero el archivo EXISTE → el error genérico "no resolvió" MIENTE. Debe ser
+    // el "JS no auditable" preciso (fail-closed), coherente con VITE_RESOLVE_EXTS que ya modela .mts.
+    const dirty = `export const v = screen.width;`;
+    for (const ext of ["mjs", "js", "mts", "jsx"]) {
+      const files = vfs({
+        "/repo/src/components/Probe/Probe.tsx": `
+          /** @server-safe */
+          import { v } from "./helper";
+          export function Probe() { return <span>{v}</span>; }
+        `,
+        [`/repo/src/components/Probe/helper.${ext}`]: dirty,
+      });
+      const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+      expect(violations.some((v) => /no auditable/i.test(v.detail))).toBe(true);
+      expect(violations.some((v) => /no resolvió/i.test(v.detail))).toBe(false);
+    }
+  });
+
+  it("extensionless que resuelve a `.ts` LIMPIO sigue auditando (no se desvía al non-auditable), aun con .ts presente", () => {
+    // El .ts auditable gana la cascada; el fallback non-auditable NO debe activarse cuando hay .ts.
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { v } from "./helper";
+        export function Probe() { return <span>{v}</span>; }
+      `,
+      "/repo/src/components/Probe/helper.ts": `export const v = 1;`,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations).toEqual([]);
+  });
+
   it("FALLA RUIDOSO aunque el JS no auditable sea LIMPIO (no se sigue ni se asume safe, codex P1)", () => {
     // Un .cjs limpio podría hacer `require("./dirty.cjs")` que el gate NO sigue → no se asume safe.
     const files = vfs({
