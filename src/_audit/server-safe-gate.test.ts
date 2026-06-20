@@ -2912,6 +2912,33 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     expect(checkSourceFile(`/** @server-safe */\nexport function f() { const { now } = performance; return now; }`, "perf-now-destr.fixture.tsx")).toEqual([]);
   });
 
+  // codex P2 (80aeece): `WebAssembly` es root SAFE (namespace existe en Edge) pero sus APIs de
+  // compilación/instanciación DINÁMICA están deshabilitadas en el baseline Edge (Vercel/Workers)
+  // igual que eval/Function → lanzan en render. PRESENT-but-throws: el optional-CALL también flaggea.
+  it.each([
+    ["compile(bytes)", `/** @server-safe */\nexport function f() { return WebAssembly.compile(new Uint8Array()); }`],
+    ["instantiate(bytes)", `/** @server-safe */\nexport function f() { return WebAssembly.instantiate(new Uint8Array()); }`],
+    ["instantiateStreaming", `/** @server-safe */\nexport function f() { return WebAssembly.instantiateStreaming(fetch("x")); }`],
+    ["compileStreaming", `/** @server-safe */\nexport function f() { return WebAssembly.compileStreaming(fetch("x")); }`],
+    ["new Module(bytes)", `/** @server-safe */\nexport function f() { return new WebAssembly.Module(new Uint8Array()); }`],
+    ["wrapped (WebAssembly as any).compile", `/** @server-safe */\nexport function f() { return (WebAssembly as any).compile(new Uint8Array()); }`],
+    ["element-access WebAssembly['compile']", `/** @server-safe */\nexport function f() { return (WebAssembly as any)["compile"](new Uint8Array()); }`],
+    ["destructuring const { compile }", `/** @server-safe */\nexport function f() { const { compile } = WebAssembly as any; return compile(new Uint8Array()); }`],
+    ["optional-call compile?.() (present-throws)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.(new Uint8Array()); }`],
+  ])("FLAGGEA dynamic codegen de WebAssembly (deshabilitado en Edge): %s", (_l, code) => {
+    expect(checkSourceFile(code, "wasm.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it.each([
+    ["typeof WebAssembly.compile (feature-detect)", `/** @server-safe */\nexport function f() { return typeof WebAssembly.compile; }`],
+    ["optional-ACCESS compile?.name (no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.name; }`],
+    ["new WebAssembly.Memory (no compila)", `/** @server-safe */\nexport function f() { return new WebAssembly.Memory({ initial: 1 }); }`],
+    ["WebAssembly.validate (no compila a ejecutable)", `/** @server-safe */\nexport function f() { return WebAssembly.validate(new Uint8Array()); }`],
+    ["typeof WebAssembly (namespace existe en Edge)", `/** @server-safe */\nexport function f() { return typeof WebAssembly; }`],
+  ])("NO flaggea miembros/probes seguros de WebAssembly: %s", (_l, code) => {
+    expect(checkSourceFile(code, "wasm-ok.fixture.tsx")).toEqual([]);
+  });
+
   // B3 (re-hunt): las NON_ABSENCE_DENIALS (raíces de escape / stubs que lanzan:
   // globalThis/global/self/setImmediate/clearImmediate) NO son hazards de ausencia
   // — disparan en Edge SIEMPRE, así que un timer (que SÍ corre en SSR) NO las exime

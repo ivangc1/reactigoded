@@ -461,7 +461,26 @@ const SAFE_GLOBALS = new Set(
 // Node); extensible al auditar más browser-only de performance/Intl/crypto. beta.27 BLOCKER-1.
 const PARTIAL_SAFE_GLOBAL_MEMBERS = {
   performance: new Set(["measureUserAgentSpecificMemory"]),
+  // `WebAssembly` existe como namespace en el baseline Edge (Vercel/Workers) → root SAFE, pero sus
+  // APIs de COMPILACIÓN/INSTANCIACIÓN DINÁMICA están deshabilitadas igual que eval/Function (dynamic
+  // code generation): `WebAssembly.compile(bytes)`, `instantiate(bytes)`, `*Streaming`, `new
+  // WebAssembly.Module(bytes)` LANZAN en render. (codex P2. `Memory`/`Table`/`Global`/`Instance`(de
+  // un módulo pre-compilado importado estáticamente)/`validate` NO compilan → siguen SAFE.)
+  WebAssembly: new Set([
+    "compile",
+    "compileStreaming",
+    "instantiate",
+    "instantiateStreaming",
+    "Module",
+  ]),
 };
+
+// Roots de PARTIAL_SAFE_GLOBAL_MEMBERS cuyos miembros están PRESENTES en el floor pero LANZAN al
+// INVOCARSE (dynamic codegen Edge), a diferencia de los AUSENTES (performance.measure…, donde el
+// miembro es undefined). Consecuencia para el safe-probe: `WebAssembly.compile?.()` SÍ invoca →
+// lanza, así que el optional-CALL NO es probe seguro (sí lo siguen siendo `typeof` y el optional-
+// ACCESS `?.name`, que no compilan). Para los AUSENTES, `?.()` corta a undefined = seguro.
+const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly"]);
 
 // Sinks de evaluación dinámica. NO son "browser globals" — existen
 // también en Node — pero PERMITEN bypassear el análisis estático del
@@ -4693,6 +4712,18 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+      // Miembro PRESENTE-pero-throws (WebAssembly.compile): el optional-CALL `?.()` SÍ invoca →
+      // lanza (dynamic codegen Edge), no es probe seguro. El optional-ACCESS (`?.name`) y `typeof`
+      // no compilan → siguen exentos. (codex P2: ≠ miembro ausente, donde `?.()` corta a undefined.)
+      if (
+        isSafeOptionalProbe &&
+        p &&
+        ts.isCallExpression(p) &&
+        partialRoot &&
+        PARTIAL_PRESENT_THROWS_ROOTS.has(partialRoot.text)
+      ) {
+        isSafeOptionalProbe = false;
+      }
       const safelyProbed = isTypeofProbe || isSafeOptionalProbe;
       if (
         partialRoot &&
@@ -4708,7 +4739,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           file: relPath,
           rule: "no-bare-dom-access",
           line: line + 1,
-          detail: `\`${partialRoot.text}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
+          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRoot.text)
+            ? `\`${partialRoot.text}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
+            : `\`${partialRoot.text}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
         });
       }
     }
