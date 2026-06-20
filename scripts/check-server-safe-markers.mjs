@@ -4811,17 +4811,29 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
-      // Miembro PRESENTE-pero-throws (WebAssembly.compile): el optional-CALL `?.()` SÍ invoca →
-      // lanza (dynamic codegen Edge), no es probe seguro. El optional-ACCESS (`?.name`) y `typeof`
-      // no compilan → siguen exentos. (codex P2: ≠ miembro ausente, donde `?.()` corta a undefined.)
+      // Miembro PRESENTE-pero-throws (WebAssembly.compile): NO es probe seguro si el optional-probe
+      // INVOCA el método (dynamic codegen Edge → lanza):
+      //   - optional-CALL directo `compile?.()` (p = CallExpression)
+      //   - optional-ACCESS a `call`/`apply`/`bind` `compile?.call(null,bytes)` — Function.prototype
+      //     invoca igual → compila → lanza (codex P1). El optional-access a METADATA (`?.name`,
+      //     `?.length`) NO compila → sigue exento. (≠ miembro AUSENTE, donde `?.x` corta a undefined.)
       if (
         isSafeOptionalProbe &&
         p &&
-        ts.isCallExpression(p) &&
         partialRootName &&
         PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
       ) {
-        isSafeOptionalProbe = false;
+        if (ts.isCallExpression(p)) {
+          isSafeOptionalProbe = false;
+        } else if (
+          ts.isPropertyAccessExpression(p) ||
+          ts.isElementAccessExpression(p)
+        ) {
+          const mn = accessedMemberName(p);
+          if (mn === "call" || mn === "apply" || mn === "bind") {
+            isSafeOptionalProbe = false;
+          }
+        }
       }
       const safelyProbed = isTypeofProbe || isSafeOptionalProbe;
       // shadow/forward value-read ya resueltos en exprPartialRoot (directo) o en la purga del alias.

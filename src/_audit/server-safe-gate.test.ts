@@ -2960,6 +2960,12 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["element-access WebAssembly['compile']", `/** @server-safe */\nexport function f() { return (WebAssembly as any)["compile"](new Uint8Array()); }`],
     ["destructuring const { compile }", `/** @server-safe */\nexport function f() { const { compile } = WebAssembly as any; return compile(new Uint8Array()); }`],
     ["optional-call compile?.() (present-throws)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.(new Uint8Array()); }`],
+    // codex P1 (3ae4423): optional-access a call/apply/bind sobre present-throws — Function.prototype
+    // INVOCA igual → compila → lanza. (≠ miembro ausente, donde `?.call` corta a undefined.)
+    ["optional compile?.call(null, bytes)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.call(null, new Uint8Array()); }`],
+    ["optional compile?.apply(null, [bytes])", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.apply(null, [new Uint8Array()]); }`],
+    ["optional compile?.bind(null)()", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.bind(null)(new Uint8Array()); }`],
+    ["alias WA.compile?.call(...)", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.compile?.call(null, new Uint8Array()); }`],
   ])("FLAGGEA dynamic codegen de WebAssembly (deshabilitado en Edge): %s", (_l, code) => {
     expect(checkSourceFile(code, "wasm.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
@@ -2970,6 +2976,11 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["new WebAssembly.Memory (no compila)", `/** @server-safe */\nexport function f() { return new WebAssembly.Memory({ initial: 1 }); }`],
     ["WebAssembly.validate (no compila a ejecutable)", `/** @server-safe */\nexport function f() { return WebAssembly.validate(new Uint8Array()); }`],
     ["typeof WebAssembly (namespace existe en Edge)", `/** @server-safe */\nexport function f() { return typeof WebAssembly; }`],
+    // codex P1 (3ae4423): optional-access a METADATA (no invoca) sigue siendo probe seguro.
+    ["compile?.name (metadata, no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.name; }`],
+    ["compile?.length (metadata, no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.length; }`],
+    // miembro AUSENTE: `?.call` corta a undefined (measure es undefined) → seguro.
+    ["perf.measure?.call(null) ausente (short-circuit)", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.call(null); }`],
   ])("NO flaggea miembros/probes seguros de WebAssembly: %s", (_l, code) => {
     expect(checkSourceFile(code, "wasm-ok.fixture.tsx")).toEqual([]);
   });
