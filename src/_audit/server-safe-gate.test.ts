@@ -303,6 +303,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['alias later=globalThis.setInterval; later("código")', `const later = globalThis.setInterval; later("window.x", 0);`],
     ['alias por assignment later=setTimeout; later("código")', `let later: any; later = setTimeout; later("window.x", 0);`],
     ['alias comma-wrapped (0,later)("código")', `const later = setTimeout; (0, later)("window.x", 0);`],
+    // codex P2 (ab77e8c): el shadow del nombre-timer debe ser SCOPE-AWARE — un `setTimeout` local
+    // en un scope HERMANO/interno NO oculta un alias del global real declarado fuera de ese scope.
+    ['alias global pese a wrapper en bloque hermano', `const later = setTimeout; { const setTimeout = (s: string) => s; void setTimeout; } later("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);

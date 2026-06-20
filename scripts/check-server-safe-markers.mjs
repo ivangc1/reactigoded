@@ -2118,107 +2118,90 @@ const TIMER_GLOBAL_NAMES = new Set([
 ]);
 
 /**
- * Nombres de bindings LOCALES que son alias SINTÁCTICOS (one-hop+, fixpoint) de un timer global:
- * `const later = setTimeout`, `const f = later`, `g = globalThis.setInterval`. Los timers están
- * en SAFE_GLOBALS → su read NO se flaggea aguas arriba (a diferencia de `eval`, que es sink y SÍ
- * se caza al leerse), así que un alias dejaría pasar `later("código")` = fail-open (codex P2). El
- * nombre del timer aparece LITERAL en la declaración del alias → token-en-su-sitio, dentro de la
- * frontera (no es data-flow runtime). Aproximación file-level fail-closed: un re-shadow del alias
- * en un scope anidado podría sobre-flaggear (igual que la familia react file-level), dirección
- * segura. NO incluye los globales en sí (la rama literal del check ya los cubre, shadow-aware).
+ * ¿`expr` resuelve (value-transparente) a un timer GLOBAL no sombreado, o a un alias ya conocido
+ * en este scope? `setTimeout`/`globalThis.setInterval`/un alias previo. El shadow se evalúa contra
+ * `context.localBindings` (SCOPE-ACCURATE en el punto de la declaración) — NO file-level: un
+ * `setTimeout` declarado en un scope HERMANO/interno NO debe ocultar un alias del global real aquí
+ * (codex P2). Los timers están en SAFE_GLOBALS → su read no se flaggea aguas arriba (≠ eval, sink)
+ * → sin resolver el alias `later("código")` sería fail-open.
  */
-function gatherTimerAliasNames(sourceFile) {
-  const aliases = new Set();
-  // Nombres de timer SOMBREADOS por una declaración LOCAL en cualquier parte del archivo
-  // (función/var/param/binding-element/clase/import homónimo): ese `setTimeout` NO es el global →
-  // NO seedear un alias desde él (el wrapper local con string-arg es FP, no eval del navegador;
-  // codex P2). Aproximación file-level conservadora: si el nombre se declara en alguna parte se
-  // excluye; coherente con el respeto al shadow de la rama directa (que ya exime el wrapper).
-  const shadowedTimerNames = new Set();
-  const collectShadow = (node) => {
-    let nm = null;
-    if (
-      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
-      node.name
-    ) {
-      nm = node.name.text;
-    } else if (
-      (ts.isVariableDeclaration(node) ||
-        ts.isParameter(node) ||
-        ts.isBindingElement(node) ||
-        ts.isImportSpecifier(node) ||
-        ts.isImportClause(node) ||
-        ts.isNamespaceImport(node)) &&
-      node.name &&
-      ts.isIdentifier(node.name)
-    ) {
-      nm = node.name.text;
-    }
-    if (nm && TIMER_GLOBAL_NAMES.has(nm)) shadowedTimerNames.add(nm);
-    ts.forEachChild(node, collectShadow);
-  };
-  collectShadow(sourceFile);
-  const exprIsTimerValued = (expr) => {
-    if (!expr) return false;
-    for (const leaf of valueTransparentLeaves(expr)) {
+function exprIsTimerValued(expr, context) {
+  if (!expr) return false;
+  const known = context.scopeTimerAliases;
+  for (const leaf of valueTransparentLeaves(expr)) {
+    if (ts.isIdentifier(leaf)) {
+      if (known && known.has(leaf.text)) return true;
       if (
-        ts.isIdentifier(leaf) &&
-        ((TIMER_GLOBAL_NAMES.has(leaf.text) &&
-          !shadowedTimerNames.has(leaf.text)) ||
-          aliases.has(leaf.text))
+        TIMER_GLOBAL_NAMES.has(leaf.text) &&
+        !context.localBindings.has(leaf.text)
       ) {
         return true;
       }
+    } else if (
+      ts.isPropertyAccessExpression(leaf) ||
+      ts.isElementAccessExpression(leaf)
+    ) {
+      const root = unwrapErased(leaf.expression);
       if (
-        ts.isPropertyAccessExpression(leaf) ||
-        ts.isElementAccessExpression(leaf)
+        ts.isIdentifier(root) &&
+        (root.text === "globalThis" ||
+          root.text === "window" ||
+          root.text === "self" ||
+          root.text === "global") &&
+        !context.localBindings.has(root.text)
       ) {
-        const root = unwrapErased(leaf.expression);
-        if (
-          ts.isIdentifier(root) &&
-          (root.text === "globalThis" ||
-            root.text === "window" ||
-            root.text === "self" ||
-            root.text === "global")
-        ) {
-          const mn = accessedMemberName(leaf);
-          if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
-        }
+        const mn = accessedMemberName(leaf);
+        if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
       }
     }
-    return false;
-  };
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const visit = (node) => {
-      if (
-        ts.isVariableDeclaration(node) &&
-        node.initializer &&
-        ts.isIdentifier(node.name)
-      ) {
-        if (
-          !aliases.has(node.name.text) &&
-          exprIsTimerValued(node.initializer)
-        ) {
-          aliases.add(node.name.text);
-          changed = true;
-        }
-      } else if (
-        ts.isBinaryExpression(node) &&
-        node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isIdentifier(node.left)
-      ) {
-        if (!aliases.has(node.left.text) && exprIsTimerValued(node.right)) {
-          aliases.add(node.left.text);
-          changed = true;
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
   }
-  return aliases;
+  return false;
+}
+
+/**
+ * Nombres de alias de timer global declarados por `stmt` (`const later = setTimeout`, `f = later`).
+ * SCOPE-AWARE: el shadow del nombre-timer se resuelve contra `context.localBindings` en este punto.
+ */
+function timerAliasNamesDeclaredBy(stmt, context) {
+  const names = new Set();
+  if (ts.isVariableStatement(stmt)) {
+    for (const d of stmt.declarationList.declarations) {
+      if (
+        ts.isIdentifier(d.name) &&
+        d.initializer &&
+        exprIsTimerValued(d.initializer, context)
+      ) {
+        names.add(d.name.text);
+      }
+    }
+  } else if (
+    ts.isExpressionStatement(stmt) &&
+    ts.isBinaryExpression(stmt.expression) &&
+    stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    ts.isIdentifier(stmt.expression.left) &&
+    exprIsTimerValued(stmt.expression.right, context)
+  ) {
+    names.add(stmt.expression.left.text);
+  }
+  return names;
+}
+
+/**
+ * Acumula (scope-aware) en `context.scopeTimerAliases` los alias de timer declarados por `stmt`.
+ * Gemelo de `addReactAliases`: vive en el scope donde se declara, no filtra a hermanos; un alias
+ * forward (`const a = setTimeout; const b = a`) se reconoce porque `a` ya está en el set al
+ * procesar la siguiente sentencia. Devuelve el mismo context si no hay alias.
+ */
+function addTimerAliases(context, stmt) {
+  const names = timerAliasNamesDeclaredBy(stmt, context);
+  if (names.size === 0) return context;
+  return {
+    ...context,
+    scopeTimerAliases: new Set([
+      ...(context.scopeTimerAliases ?? []),
+      ...names,
+    ]),
+  };
 }
 
 /**
@@ -4497,6 +4480,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           clauseCtx = purgeNonImportReactAliases(clauseCtx, stmt);
           // Aliases react scope-aware declarados por este statement.
           clauseCtx = addReactAliases(clauseCtx, stmt);
+          // Alias de timer global scope-aware (`const later = setTimeout`) — codex P2.
+          clauseCtx = addTimerAliases(clauseCtx, stmt);
           // Guard alias `const has = typeof X !== "undefined"` (narrowing — se resuelve contra
           // clauseCtx.guardAliases; propaga al siguiente clause solo con fall-through).
           const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
@@ -4906,8 +4891,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
           // Alias SINTÁCTICO de un timer global (`const later = setTimeout; later("código")`): el
           // read del timer está en SAFE_GLOBALS → invisible aguas arriba (≠ eval, que es sink), así
-          // que sin esto el alias sería fail-open (codex P2). gatherTimerAliasNames lo precomputa.
-          if (context.timerAliases.has(leaf.text)) {
+          // que sin esto el alias sería fail-open (codex P2). Acumulado SCOPE-AWARE en el walk.
+          if (context.scopeTimerAliases?.has(leaf.text)) {
             timerName = leaf.text;
             break;
           }
@@ -5064,6 +5049,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // nonImportBindings ya actualizado. Resuelve los NESTED [6]/[9]/[10] sin reabrir
       // el bypass file-global de codex P1.
       current = addReactAliases(current, stmt);
+      // Alias de timer global SCOPE-AWARE (`const later = setTimeout`) → los statements
+      // POSTERIORES reconocen `later("código")` como string-timer eval-sink (codex P2).
+      current = addTimerAliases(current, stmt);
       // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
       // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
       // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
@@ -5105,7 +5093,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const familyMutated = [...reactNsFamily].some((n) => memberWriteRoots.has(n));
   const mutatedNamespaceRoots = familyMutated ? reactNsFamily : new Set();
   const reactImports = gatherReactImports(sourceFile, mutatedNamespaceRoots);
-  const timerAliases = gatherTimerAliasNames(sourceFile);
   const baseContext = {
     activeGuards: new Set(),
     blockEntryGuards: new Set(),
@@ -5124,7 +5111,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     scopeReactNs: new Set(),
     scopeReactNamed: new Map(),
     mutatedNamespaceRoots,
-    timerAliases,
+    // Alias de timer global acumulados SCOPE-AWARE durante el walk (no file-level) — codex P2.
+    scopeTimerAliases: new Set(),
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
