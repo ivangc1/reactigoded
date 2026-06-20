@@ -4922,9 +4922,48 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+      // Posición del arg que debe ser string según la FORMA de invocación:
+      //   directo  `<timer>("código", …)`           → arg[0]
+      //   `.call`  `<timer>.call(thisArg, "c", …)`   → arg[1]
+      //   `.apply` `<timer>.apply(thisArg, ["c", …])` → arg[1] es array-literal → su elemento [0]
+      let stringArgExpr = timerName !== null ? (node.arguments[0] ?? null) : null;
+      if (timerName === null) {
+        // `<timer>.call`/`.apply` — Function.prototype.{call,apply} sobre el timer. El read del
+        // timer es SAFE → no se flaggea aguas arriba; sin esto `setTimeout.call(null,"c")` bypassea
+        // (codex P2). Receiver reconocido con exprIsTimerValued (global no-sombreado/alias/global-obj).
+        for (const leaf of valueTransparentLeaves(node.expression)) {
+          if (
+            !ts.isPropertyAccessExpression(leaf) &&
+            !ts.isElementAccessExpression(leaf)
+          ) {
+            continue;
+          }
+          const mn = accessedMemberName(leaf);
+          if (
+            (mn === "call" || mn === "apply") &&
+            exprIsTimerValued(leaf.expression, context)
+          ) {
+            timerName = `timer.${mn}`;
+            if (mn === "call") {
+              stringArgExpr = node.arguments[1] ?? null;
+            } else {
+              const arrLeaves = node.arguments[1]
+                ? valueTransparentLeaves(node.arguments[1])
+                : [];
+              const arr =
+                arrLeaves.length === 1 &&
+                ts.isArrayLiteralExpression(arrLeaves[0])
+                  ? arrLeaves[0]
+                  : null;
+              stringArgExpr = arr ? (arr.elements[0] ?? null) : null;
+            }
+            break;
+          }
+        }
+      }
       const isStringArg =
-        node.arguments.length > 0 &&
-        valueTransparentLeaves(node.arguments[0]).some(
+        stringArgExpr !== null &&
+        valueTransparentLeaves(stringArgExpr).some(
           (a) => ts.isStringLiteralLike(a) || ts.isTemplateExpression(a),
         );
       if (timerName !== null && isStringArg) {
