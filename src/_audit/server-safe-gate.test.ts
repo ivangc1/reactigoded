@@ -1606,6 +1606,11 @@ describe("server-safe gate — JSX uppercase tags (codex P2 beta.27)", () => {
     ["compound con miembro = nombre de global <Foo.window/>", `/** @server-safe */\nimport { Foo } from "./f";\nexport const C = () => <Foo.window />;`],
     ["compound 4-nivel <A.B.C.D/> root importado", `/** @server-safe */\nimport { A } from "./a";\nexport const C = () => <A.B.C.D />;`],
     ["compound local Card.Header", `/** @server-safe */\nconst Card: any = () => null; Card.Header = () => null;\nexport const C = () => <Card.Header />;`],
+    // codex (6728b31): re-raise de la clase ya cubierta arriba. `<React.Fragment/>` /
+    // `<Context.Provider/>` son PropertyAccessExpression → el `.name` (Fragment/Provider) lo exime
+    // la regla 1, no hay JsxMemberExpression que visite el nombre por separado. Sus ejemplos literales:
+    ["<React.Fragment/> (ns import)", `/** @server-safe */\nimport * as React from "react";\nexport const C = () => <React.Fragment>x</React.Fragment>;`],
+    ["<Context.Provider/> (createContext)", `/** @server-safe */\nimport { createContext } from "react";\nconst Context = createContext(null);\nexport const C = () => <Context.Provider value={null}>x</Context.Provider>;`],
   ])("NO genera falso positivo en componente legítimo: %s", (_label, code) => {
     expect(checkSourceFile(code, "jsx-ok.fixture.tsx")).toEqual([]);
   });
