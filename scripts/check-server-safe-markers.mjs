@@ -4772,7 +4772,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           (leaf) =>
             ts.isIdentifier(leaf) &&
             PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
-            !context.localBindings.has(leaf.text),
+            !context.localBindings.has(leaf.text) &&
+            // Forward value-read: un nombre module-declared leído DENTRO de una función (call-time
+            // → ya inicializado, es el local no el global), igual que la rama (c.1b)/(d) (codex P3).
+            !(
+              context.isInFunctionBody &&
+              moduleDeclaredNames.has(leaf.text)
+            ),
         );
         if (partialRoot) {
           const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRoot.text];

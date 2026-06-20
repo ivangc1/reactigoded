@@ -2912,6 +2912,16 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     expect(checkSourceFile(`/** @server-safe */\nexport function f() { const { now } = performance; return now; }`, "perf-now-destr.fixture.tsx")).toEqual([]);
   });
 
+  // codex P3 (fd84c07): el path de destructuring debe respetar el forward value-read igual que el
+  // de property-access — un binding MODULE-LEVEL declarado DESPUÉS de la función (leído a call-time
+  // = el local, no el global) no debe flaggearse.
+  it.each([
+    ["destr performance module-local (decl después)", `/** @server-safe */\nexport function C() { const { measureUserAgentSpecificMemory: x } = performance; return x; }\nconst performance: any = { measureUserAgentSpecificMemory: () => 0 };`],
+    ["destr WebAssembly module-local (decl después)", `/** @server-safe */\nexport function C() { const { compile } = WebAssembly; return compile; }\nconst WebAssembly: any = { compile: () => 0 };`],
+  ])("NO flaggea destructuring de un shadow MODULE-LEVEL (forward value-read): %s", (_l, code) => {
+    expect(checkSourceFile(code, "partial-fwd.fixture.tsx")).toEqual([]);
+  });
+
   // codex P2 (80aeece): `WebAssembly` es root SAFE (namespace existe en Edge) pero sus APIs de
   // compilación/instanciación DINÁMICA están deshabilitadas en el baseline Edge (Vercel/Workers)
   // igual que eval/Function → lanzan en render. PRESENT-but-throws: el optional-CALL también flaggea.
