@@ -2224,6 +2224,94 @@ function addTimerAliases(context, stmt) {
 }
 
 /**
+ * Nombre del GLOBAL parcial-safe al que `expr` resuelve (value-transparente): un identifier que ES
+ * un root de PARTIAL_SAFE_GLOBAL_MEMBERS no sombreado (`WebAssembly`, `performance`), o un alias ya
+ * conocido en scope (`const WA = WebAssembly` → "WebAssembly"). null si no. El read del root está en
+ * SAFE_GLOBALS → un alias sería invisible aguas arriba = bypass del partial-member gate (codex P2),
+ * misma asimetría que los timer-alias. Respeta shadow (localBindings) y forward value-read.
+ */
+function exprPartialRoot(expr, context) {
+  if (!expr) return null;
+  const known = context.scopePartialAliases;
+  for (const leaf of valueTransparentLeaves(expr)) {
+    if (!ts.isIdentifier(leaf)) continue;
+    if (known && known.has(leaf.text)) return known.get(leaf.text);
+    if (
+      PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
+      !context.localBindings.has(leaf.text) &&
+      !(
+        context.isInFunctionBody &&
+        context.moduleDeclaredNames?.has(leaf.text)
+      )
+    ) {
+      return leaf.text;
+    }
+  }
+  return null;
+}
+
+/** Mapa aliasName→rootGlobalName declarados por `stmt` (`const WA = WebAssembly`, `p = performance`). */
+function partialAliasesDeclaredBy(stmt, context) {
+  const out = new Map();
+  if (ts.isVariableStatement(stmt)) {
+    for (const d of stmt.declarationList.declarations) {
+      if (ts.isIdentifier(d.name) && d.initializer) {
+        const root = exprPartialRoot(d.initializer, context);
+        if (root) out.set(d.name.text, root);
+      }
+    }
+  } else if (
+    ts.isExpressionStatement(stmt) &&
+    ts.isBinaryExpression(stmt.expression) &&
+    stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    ts.isIdentifier(stmt.expression.left)
+  ) {
+    const root = exprPartialRoot(stmt.expression.right, context);
+    if (root) out.set(stmt.expression.left.text, root);
+  }
+  return out;
+}
+
+/** Acumula (scope-aware) en `context.scopePartialAliases` los alias de root parcial-safe de `stmt`. */
+function addPartialAliases(context, stmt) {
+  const m = partialAliasesDeclaredBy(stmt, context);
+  if (m.size === 0) return context;
+  return {
+    ...context,
+    scopePartialAliases: new Map([
+      ...(context.scopePartialAliases ?? []),
+      ...m,
+    ]),
+  };
+}
+
+/**
+ * Purga de `scopeTimerAliases` / `scopePartialAliases` los nombres que `names` REDECLARA en este
+ * scope (param/const/función/…). Un binding homónimo SOMBREA el alias → en este scope ya no es el
+ * global (codex P2: `const later = setTimeout; function f(later){ later("x") }`). Devuelve solo los
+ * campos que cambian (para no romper la igualdad referencial del resto del context).
+ */
+function purgeScopeAliasShadows(context, names) {
+  if (!names || names.size === 0) return null;
+  const out = {};
+  const timers = context.scopeTimerAliases;
+  if (timers && timers.size > 0) {
+    let changed = false;
+    const next = new Set(timers);
+    for (const n of names) if (next.delete(n)) changed = true;
+    if (changed) out.scopeTimerAliases = next;
+  }
+  const partials = context.scopePartialAliases;
+  if (partials && partials.size > 0) {
+    let changed = false;
+    const next = new Map(partials);
+    for (const n of names) if (next.delete(n)) changed = true;
+    if (changed) out.scopePartialAliases = next;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
  * Imports de "react", resueltos por su EXPORT CANÓNICO (no el binding local). Un
  * deferred-hook se reconoce por el nombre que EXPORTA react, no por el alias local:
  * `import { useState as useEffect }` tiene binding local "useEffect" ∈ DEFERRED_HOOKS
@@ -4001,6 +4089,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         ...nonImportNames,
       ]),
       ...(guardAliases !== currentContext.guardAliases ? { guardAliases } : {}),
+      // Un binding nuevo que SOMBREA un timer/partial alias lo purga en este scope (codex P2).
+      ...(purgeScopeAliasShadows(currentContext, names) ?? {}),
     };
   }
 
@@ -4501,6 +4591,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           clauseCtx = addReactAliases(clauseCtx, stmt);
           // Alias de timer global scope-aware (`const later = setTimeout`) — codex P2.
           clauseCtx = addTimerAliases(clauseCtx, stmt);
+          // Alias de root parcial-safe (`const WA = WebAssembly`) — codex P2.
+          clauseCtx = addPartialAliases(clauseCtx, stmt);
           // Guard alias `const has = typeof X !== "undefined"` (narrowing — se resuelve contra
           // clauseCtx.guardAliases; propaga al siguiente clause solo con fall-through).
           const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
@@ -4644,11 +4736,18 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // El RECEIVER se desenvuelve VALUE-TRANSPARENTE: `(performance as any).x`, `(0,
       // performance).x` — el cast a `any` es PROBABLE para un método no-estándar (codex P1).
       const partialMember = accessedMemberName(node);
-      const partialRoot = valueTransparentLeaves(node.expression).find(
-        (leaf) =>
-          ts.isIdentifier(leaf) &&
-          PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text]?.has(partialMember),
-      );
+      // El receiver resuelve a un root parcial-safe DIRECTO (`performance`/`WebAssembly` no
+      // sombreado) o vía ALIAS scope-aware (`const WA = WebAssembly; WA.compile()` — el root está en
+      // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). exprPartialRoot ya respeta
+      // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
+      const resolvedPartialRoot = partialMember
+        ? exprPartialRoot(node.expression, context)
+        : null;
+      const partialRootName =
+        resolvedPartialRoot &&
+        PARTIAL_SAFE_GLOBAL_MEMBERS[resolvedPartialRoot]?.has(partialMember)
+          ? resolvedPartialRoot
+          : null;
       // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
       // (`typeof performance.x` → "undefined", no lee); (2) short-circuit opcional (`x?.()`,
       // `x?.foo`, `x?.[i]` → undefined si el miembro falta). Reading el miembro ausente da
@@ -4719,18 +4818,17 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         isSafeOptionalProbe &&
         p &&
         ts.isCallExpression(p) &&
-        partialRoot &&
-        PARTIAL_PRESENT_THROWS_ROOTS.has(partialRoot.text)
+        partialRootName &&
+        PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
       ) {
         isSafeOptionalProbe = false;
       }
       const safelyProbed = isTypeofProbe || isSafeOptionalProbe;
+      // shadow/forward value-read ya resueltos en exprPartialRoot (directo) o en la purga del alias.
       if (
-        partialRoot &&
+        partialRootName &&
         !safelyProbed &&
-        !context.localBindings.has(partialRoot.text) &&
-        !context.isInClientOnlyDeferredBody &&
-        !(context.isInFunctionBody && moduleDeclaredNames.has(partialRoot.text))
+        !context.isInClientOnlyDeferredBody
       ) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -4739,9 +4837,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           file: relPath,
           rule: "no-bare-dom-access",
           line: line + 1,
-          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRoot.text)
-            ? `\`${partialRoot.text}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
-            : `\`${partialRoot.text}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
+          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+            ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
+            : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
         });
       }
     }
@@ -4768,20 +4866,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         initExpr = node.parent.right;
       }
       if (pattern && initExpr && !context.isInClientOnlyDeferredBody) {
-        const partialRoot = valueTransparentLeaves(initExpr).find(
-          (leaf) =>
-            ts.isIdentifier(leaf) &&
-            PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
-            !context.localBindings.has(leaf.text) &&
-            // Forward value-read: un nombre module-declared leído DENTRO de una función (call-time
-            // → ya inicializado, es el local no el global), igual que la rama (c.1b)/(d) (codex P3).
-            !(
-              context.isInFunctionBody &&
-              moduleDeclaredNames.has(leaf.text)
-            ),
-        );
-        if (partialRoot) {
-          const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRoot.text];
+        // El root resuelve DIRECTO (no sombreado / forward) o vía ALIAS scope-aware
+        // (`const WA = WebAssembly; const { compile } = WA`) — exprPartialRoot lo cubre (codex P2).
+        const partialRootName = exprPartialRoot(initExpr, context);
+        if (partialRootName) {
+          const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRootName];
           const keyTextOf = (kn) => {
             if (!kn) return null;
             if (ts.isComputedPropertyName(kn)) {
@@ -4818,7 +4907,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                 file: relPath,
                 rule: "no-bare-dom-access",
                 line: line + 1,
-                detail: `destructuring de \`${partialRoot.text}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+                detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+                  ? `destructuring de \`${partialRootName}.${key}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+                  : `destructuring de \`${partialRootName}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
               });
             }
           }
@@ -5130,6 +5221,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // Alias de timer global SCOPE-AWARE (`const later = setTimeout`) → los statements
       // POSTERIORES reconocen `later("código")` como string-timer eval-sink (codex P2).
       current = addTimerAliases(current, stmt);
+      // Alias de root parcial-safe (`const WA = WebAssembly`) → reconocer `WA.compile()` (codex P2).
+      current = addPartialAliases(current, stmt);
       // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
       // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
       // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
@@ -5191,6 +5284,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     mutatedNamespaceRoots,
     // Alias de timer global acumulados SCOPE-AWARE durante el walk (no file-level) — codex P2.
     scopeTimerAliases: new Set(),
+    // Alias de root parcial-safe (`const WA = WebAssembly`) → rootName, scope-aware — codex P2.
+    scopePartialAliases: new Map(),
+    // Para los helpers de alias (exprPartialRoot): forward value-read module-level.
+    moduleDeclaredNames,
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;

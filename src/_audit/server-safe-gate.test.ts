@@ -2922,6 +2922,31 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     expect(checkSourceFile(code, "partial-fwd.fixture.tsx")).toEqual([]);
   });
 
+  // codex P2 (3ae4423): ALIAS scope-aware de un root parcial-safe — el root está en SAFE_GLOBALS,
+  // así que `const WA = WebAssembly; WA.compile()` era invisible aguas arriba = bypass.
+  it.each([
+    ["alias WA.compile()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.compile(new Uint8Array()); }`],
+    ["alias perf.measure()", `/** @server-safe */\nexport function f() { const perf = performance; return perf.measureUserAgentSpecificMemory(); }`],
+    ["alias multi-hop b.compile()", `/** @server-safe */\nexport function f() { const a = WebAssembly; const b = a; return b.compile(new Uint8Array()); }`],
+    ["alias destructure const {compile}=WA", `/** @server-safe */\nexport function f() { const WA = WebAssembly as any; const { compile } = WA; return compile(new Uint8Array()); }`],
+    ["alias value-transparent (0,WebAssembly)", `/** @server-safe */\nexport function f() { const WA = (0, WebAssembly); return WA.compile(new Uint8Array()); }`],
+    ["alias present-throws optional-call WA.compile?.()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.compile?.(new Uint8Array()); }`],
+  ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
+    expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
+  });
+
+  it.each([
+    ["alias de miembro SAFE perf.now()", `/** @server-safe */\nexport function f() { const perf = performance; return perf.now(); }`],
+    ["alias de miembro SAFE WA.validate()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.validate(new Uint8Array()); }`],
+    ["typeof sobre alias", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return typeof WA.compile; }`],
+    // codex P2 (3ae4423): alias purgado al ser SOMBREADO por un binding interno homónimo.
+    ["partial alias sombreado por param", `/** @server-safe */\nexport function f() { const WA = WebAssembly; function g(WA: any) { return WA.compile("x"); } return g; }`],
+    ["timer alias sombreado por param", `/** @server-safe */\nexport function f() { const later = setTimeout; function g(later: any) { return later("x"); } return g; }`],
+    ["timer alias sombreado por const interno", `/** @server-safe */\nexport function f() { const later = setTimeout; { const later = (s: string) => s; void later("x"); } return null; }`],
+  ])("NO flaggea (alias safe / alias sombreado): %s", (_l, code) => {
+    expect(checkSourceFile(code, "partial-alias-ok.fixture.tsx")).toEqual([]);
+  });
+
   // codex P2 (80aeece): `WebAssembly` es root SAFE (namespace existe en Edge) pero sus APIs de
   // compilación/instanciación DINÁMICA están deshabilitadas en el baseline Edge (Vercel/Workers)
   // igual que eval/Function → lanzan en render. PRESENT-but-throws: el optional-CALL también flaggea.
