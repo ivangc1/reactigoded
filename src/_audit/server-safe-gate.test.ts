@@ -329,6 +329,10 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['array-index const later=[setTimeout][0]', `const later = [setTimeout][0]; later("window.x", 0);`],
     ['obj-destr const {a:later}={a:setTimeout}', `const { a: later } = { a: setTimeout }; later("window.x", 0);`],
     ['obj-default const {later=setTimeout}={}', `const { later = setTimeout } = {} as any; (later as any)("window.x", 0);`],
+    // codex P2 (59afad2, #133): alias por ASSIGNMENT-destructuring (object necesita paréntesis).
+    ['assign ({later}={later:setTimeout})', `let later: any; ({ later } = { later: setTimeout }); later("window.x", 0);`],
+    ['assign ({a:later}={a:setTimeout})', `let later: any; ({ a: later } = { a: setTimeout }); later("window.x", 0);`],
+    ['assign [later]=[setTimeout]', `let later: any; [later] = [setTimeout]; later("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -2970,6 +2974,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["array-destr const [WA]=[WebAssembly]", `/** @server-safe */\nexport function f() { const [WA] = [WebAssembly]; return WA.compile(new Uint8Array()); }`],
     ["obj-default const {WA=WebAssembly}={}", `/** @server-safe */\nexport function f() { const { WA = WebAssembly } = {} as any; return WA.compile(new Uint8Array()); }`],
     ["array-index const WA=[WebAssembly][0]", `/** @server-safe */\nexport function f() { const WA = [WebAssembly][0]; return WA.compile(new Uint8Array()); }`],
+    // codex P2 (59afad2, #133): alias de root parcial por ASSIGNMENT-destructuring.
+    ["assign ({WA}={WA:WebAssembly})", `/** @server-safe */\nexport function f() { let WA: any; ({ WA } = { WA: WebAssembly }); return WA.compile(new Uint8Array()); }`],
+    ["assign [WA]=[WebAssembly]", `/** @server-safe */\nexport function f() { let WA: any; [WA] = [WebAssembly]; return WA.compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
@@ -3169,6 +3176,12 @@ describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => 
     // F4: forward value-read de un nombre module-declared dentro de una función.
     ["F4 forward const (function)", `/** @server-safe */\nexport function Price() { return CURRENCY + "9.99"; }\nconst CURRENCY = "$";`],
     ["F4 forward const (arrow) + property + class", `/** @server-safe */\nexport const P = () => CURRENCY;\nconst CURRENCY = "$";\n/** @server-safe */\nexport function T() { return TABLE.length; }\nconst TABLE = [1];\n/** @server-safe */\nexport function H() { return new Helper(); }\nclass Helper {}`],
+    // codex P2 (59afad2, #133): MULTI-DECLARATOR left-to-right — `const a = …, b = a` lee `a`
+    // (1er declarador, ya inicializado en orden) en el 2º; antes el statement se visitaba entero
+    // antes de bindear → `a` se veía como global no-bound = FP.
+    ["multi-declarator const a=1, b=a", `/** @server-safe */\nexport function f() { const a = 1, b = a; return b; }`],
+    ["multi-declarator const cfg={x:1}, value=cfg.x", `/** @server-safe */\nconst cfg = { x: 1 }, value = cfg.x;\nexport const v = value;`],
+    ["multi-declarator const a=1, b=a, c=a+b", `/** @server-safe */\nexport function f() { const a = 1, b = a, c = a + b; return c; }`],
     // F5: cast (as/satisfies) entre el callback y su sink diferido.
     ["F5 useEffect callback casteado (as)", `import { useEffect } from "react";\n/** @server-safe */\nexport function R() { useEffect((() => { document.title = String(window.innerWidth); }) as () => void, []); }`],
     ["F5 useEffect callback casteado (satisfies)", `import { useEffect } from "react";\n/** @server-safe */\nexport function R() { useEffect((() => { document.title = "x"; }) satisfies () => void, []); }`],
@@ -3202,6 +3215,8 @@ describe("server-safe gate — FP batch del re-hunt (F1-F5) + soundness", () => 
     ["global real dentro de función", `/** @server-safe */\nexport function C() { return window.location.href; }`],
     // F4 soundness: read DIRECTO render-path de un global → FLAG (no es función).
     ["global directo render-path", `/** @server-safe */\nexport const x = window.location.href;`],
+    // multi-declarator soundness: un GLOBAL real en un declarador posterior SIGUE flaggeando.
+    ["multi-declarator con global real const a=1, b=window.x", `/** @server-safe */\nexport function f() { const a = 1, b = (window as any).x; return [a, b]; }`],
     // F5 soundness: eval-sink en un timer casteado SIGUE flaggeando (timer dispara en Edge).
     ["eval-sink en setTimeout casteado", `/** @server-safe */\nexport function B() { setTimeout((() => { Function("return 1")(); }) as () => void, 0); }`],
     // paren-operand soundness: `typeof window.location` (property access) EJECUTA el

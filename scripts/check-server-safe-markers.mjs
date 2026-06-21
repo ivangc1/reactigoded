@@ -2172,6 +2172,8 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
     if (v) emit(t.text, v);
     return;
   }
+  // Element DEFAULTS de un binding-pattern (`{ X = setTimeout }`) + patterns ANIDADOS,
+  // independientes del init.
   if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
     for (const e of t.elements) {
       if (!ts.isBindingElement(e)) continue;
@@ -2187,14 +2189,37 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
     }
   }
   const lit = singleLiteralLeaf(init);
+  // Object: binding-pattern DECL (`const {a:X}=…`) O object-LITERAL target de assignment-destr
+  // (`({a:X}={a:setTimeout})`). Match estructural por key (codex P2).
   if (
-    ts.isObjectBindingPattern(t) &&
+    (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
     lit &&
     ts.isObjectLiteralExpression(lit)
   ) {
-    for (const e of t.elements) {
-      if (!ts.isBindingElement(e)) continue;
-      const keyNode = e.propertyName || e.name;
+    const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
+    for (const e of elems) {
+      let keyNode;
+      let sub;
+      if (ts.isBindingElement(e)) {
+        keyNode = e.propertyName || e.name;
+        sub = e.name;
+      } else if (ts.isPropertyAssignment(e)) {
+        keyNode = e.name;
+        sub = e.initializer;
+      } else if (ts.isShorthandPropertyAssignment(e)) {
+        keyNode = e.name;
+        sub = e.name;
+        // default en assignment-destr `({ X = setTimeout } = {})`.
+        if (e.objectAssignmentInitializer) {
+          collectStructuralAliases(
+            e.name,
+            e.objectAssignmentInitializer,
+            context,
+            resolve,
+            emit,
+          );
+        }
+      } else continue;
       const key =
         keyNode && (ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode))
           ? keyNode.text
@@ -2207,15 +2232,19 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
           (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
           p.name.text === key,
       );
-      if (ip) {
-        collectStructuralAliases(e.name, ip.initializer, context, resolve, emit);
-      }
+      if (ip) collectStructuralAliases(sub, ip.initializer, context, resolve, emit);
     }
   }
-  if (ts.isArrayBindingPattern(t) && lit && ts.isArrayLiteralExpression(lit)) {
+  // Array: binding-pattern DECL (`const [X]=…`) O array-LITERAL target (`[X]=[setTimeout]`).
+  if (
+    (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
+    lit &&
+    ts.isArrayLiteralExpression(lit)
+  ) {
     t.elements.forEach((e, i) => {
       if (ts.isOmittedExpression(e)) return;
-      collectStructuralAliases(e.name, lit.elements[i], context, resolve, emit);
+      const sub = ts.isBindingElement(e) ? e.name : e;
+      collectStructuralAliases(sub, lit.elements[i], context, resolve, emit);
     });
   }
 }
@@ -2296,14 +2325,16 @@ function timerAliasNamesDeclaredBy(stmt, context) {
         emit,
       );
     }
-  } else if (
-    ts.isExpressionStatement(stmt) &&
-    ts.isBinaryExpression(stmt.expression) &&
-    stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-    ts.isIdentifier(stmt.expression.left) &&
-    exprIsTimerValued(stmt.expression.right, context)
-  ) {
-    names.add(stmt.expression.left.text);
+  } else if (ts.isExpressionStatement(stmt)) {
+    // `({ later } = …)` envuelve la asignación en paréntesis (los object-literal targets los exigen)
+    // → desenvolver antes de leer el BinaryExpression. identifier-LHS Y destructuring-assign (codex P2).
+    const ax = unwrapErased(stmt.expression);
+    if (
+      ts.isBinaryExpression(ax) &&
+      ax.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      collectStructuralAliases(ax.left, ax.right, context, exprIsTimerValued, emit);
+    }
   }
   return names;
 }
@@ -2374,14 +2405,15 @@ function partialAliasesDeclaredBy(stmt, context) {
     for (const d of stmt.declarationList.declarations) {
       collectStructuralAliases(d.name, d.initializer, context, exprPartialRoot, emit);
     }
-  } else if (
-    ts.isExpressionStatement(stmt) &&
-    ts.isBinaryExpression(stmt.expression) &&
-    stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-    ts.isIdentifier(stmt.expression.left)
-  ) {
-    const root = exprPartialRoot(stmt.expression.right, context);
-    if (root) out.set(stmt.expression.left.text, root);
+  } else if (ts.isExpressionStatement(stmt)) {
+    // `({ WA } = …)` va entre paréntesis → desenvolver antes del BinaryExpression (codex P2).
+    const ax = unwrapErased(stmt.expression);
+    if (
+      ts.isBinaryExpression(ax) &&
+      ax.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      collectStructuralAliases(ax.left, ax.right, context, exprPartialRoot, emit);
+    }
   }
   return out;
 }
@@ -5315,6 +5347,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+    }
+
+    // Declaradores LEFT-TO-RIGHT: en `const a = {x:1}, b = a.x`, el read de `a` en el 2º declarador
+    // resuelve al 1º (ya inicializado en orden de evaluación). Visitar el statement entero ANTES de
+    // bindear hacía ver `a` como global no-bound = FP (codex P2). Bindea cada declarador antes del
+    // siguiente; el binding queda LOCAL al recorrido (la per-stmt loop sigue añadiéndolos al scope
+    // que se propaga a los statements posteriores).
+    if (ts.isVariableDeclarationList(node)) {
+      let declCtx = context;
+      for (const decl of node.declarations) {
+        visit(decl, declCtx);
+        const declNames = new Set();
+        addBindingNamesFromPattern(decl.name, declNames);
+        if (declNames.size > 0) declCtx = addToScope(declCtx, declNames);
+      }
+      return;
     }
 
     ts.forEachChild(node, (child) => visit(child, context));
