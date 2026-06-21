@@ -2316,14 +2316,24 @@ function timerAliasNamesDeclaredBy(stmt, context) {
   const emit = (name) => names.add(name);
   if (ts.isVariableStatement(stmt)) {
     // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
+    // Declaradores LEFT-TO-RIGHT: un alias en cadena dentro del mismo statement (`const a =
+    // setTimeout, b = a`) — `b` debe ver `a` ya enrolado (codex P2). Avanzar un ctx local.
+    let ctx = context;
     for (const d of stmt.declarationList.declarations) {
-      collectStructuralAliases(
-        d.name,
-        d.initializer,
-        context,
-        exprIsTimerValued,
-        emit,
-      );
+      const local = new Set();
+      collectStructuralAliases(d.name, d.initializer, ctx, exprIsTimerValued, (n) => {
+        local.add(n);
+        names.add(n);
+      });
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopeTimerAliases: new Set([
+            ...(ctx.scopeTimerAliases ?? []),
+            ...local,
+          ]),
+        };
+      }
     }
   } else if (ts.isExpressionStatement(stmt)) {
     // `({ later } = …)` envuelve la asignación en paréntesis (los object-literal targets los exigen)
@@ -2402,8 +2412,24 @@ function partialAliasesDeclaredBy(stmt, context) {
   const emit = (name, root) => out.set(name, root);
   if (ts.isVariableStatement(stmt)) {
     // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
+    // Declaradores LEFT-TO-RIGHT: cadena en el mismo statement (`const A = WebAssembly, B = A`) —
+    // `B` debe ver `A` ya enrolado (codex P2). Avanzar un ctx local.
+    let ctx = context;
     for (const d of stmt.declarationList.declarations) {
-      collectStructuralAliases(d.name, d.initializer, context, exprPartialRoot, emit);
+      const local = new Map();
+      collectStructuralAliases(d.name, d.initializer, ctx, exprPartialRoot, (n, root) => {
+        local.set(n, root);
+        out.set(n, root);
+      });
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopePartialAliases: new Map([
+            ...(ctx.scopePartialAliases ?? []),
+            ...local,
+          ]),
+        };
+      }
     }
   } else if (ts.isExpressionStatement(stmt)) {
     // `({ WA } = …)` va entre paréntesis → desenvolver antes del BinaryExpression (codex P2).
