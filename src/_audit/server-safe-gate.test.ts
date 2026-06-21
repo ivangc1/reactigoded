@@ -314,6 +314,12 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['globalThis.setTimeout.call(null, "código")', `globalThis.setTimeout.call(null, "window.x", 0);`],
     ['alias later.call(null, "código")', `const later = setTimeout; later.call(null, "window.x", 0);`],
     ['alias later.apply(null, ["código"])', `const later = setTimeout; later.apply(null, ["window.x", 0]);`],
+    // codex P2 (b22a600, #133): `.bind` es otro wrapper de Function.prototype — el handler queda
+    // PRE-bindeado en arguments[1] y al invocar la fn ligada llama setTimeout(handler,…).
+    ['setTimeout.bind(null, "código", 0)()', `setTimeout.bind(null, "window.x", 0)();`],
+    ['setInterval.bind(null, "código")()', `setInterval.bind(null, "window.x")();`],
+    ['alias later.bind(null, "código")()', `const later = setTimeout; later.bind(null, "window.x", 0)();`],
+    ['bind almacenado (fail-closed)', `const b = setTimeout.bind(null, "window.x"); void b;`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -322,6 +328,26 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it("NO flaggea setTimeout con callback función (no string)", () => {
     const v = checkSourceFile(fixture(`setTimeout(() => { let n = 0; n += 1; void n; }, 0);`), "fn-timer.fixture.tsx");
     expect(v).toEqual([]);
+  });
+
+  it("NO flaggea setTimeout.bind con callback función (no string)", () => {
+    const v = checkSourceFile(fixture(`setTimeout.bind(null, () => {})();`), "bind-fn-timer.fixture.tsx");
+    expect(v).toEqual([]);
+  });
+
+  // codex P2 (b22a600, #133): destructuring con DEFAULT de un miembro AUSENTE (performance.measure
+  // es undefined en el floor → el default se activa → seguro). Para un root PRESENT-throws el
+  // miembro EXISTE → el default no se activa → sigue lanzando.
+  it.each([
+    ["perf.measure con default (rename)", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory: m = () => 0 } = performance; return m(); }`],
+    ["perf.measure con default (shorthand)", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory = () => 0 } = performance as any; return measureUserAgentSpecificMemory(); }`],
+  ])("NO flaggea destructuring de un miembro AUSENTE con default seguro: %s", (_l, code) => {
+    expect(checkSourceFile(code, "partial-default.fixture.tsx")).toEqual([]);
+  });
+
+  it("SÍ flaggea destructuring con default de un root PRESENT-throws (WebAssembly, el default no se activa)", () => {
+    const code = `/** @server-safe */\nexport function f() { const { compile = () => 0 } = WebAssembly as any; return compile(new Uint8Array()); }`;
+    expect(checkSourceFile(code, "wasm-default.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
   // codex P3 (f669bce): un binding LOCAL homónimo (import/función/const/param) NO es el timer

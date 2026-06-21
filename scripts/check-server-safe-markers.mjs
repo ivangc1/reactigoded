@@ -4911,6 +4911,27 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                 ? el.name
                 : null;
             const key = keyTextOf(kn);
+            // ¿El binding tiene DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` /
+            // `{ x: y = d }` (assignment-destr). Para un miembro AUSENTE (performance.measure es
+            // undefined en el floor) el default SE ACTIVA → `m()` usa el fallback, no crashea =
+            // patrón seguro. Para un root PRESENT-throws (WebAssembly.compile EXISTE) el default NO
+            // se activa → sigue lanzando. (codex P2.)
+            const hasDefault =
+              (ts.isBindingElement(el) && el.initializer !== undefined) ||
+              (ts.isShorthandPropertyAssignment(el) &&
+                el.objectAssignmentInitializer !== undefined) ||
+              (ts.isPropertyAssignment(el) &&
+                el.initializer &&
+                ts.isBinaryExpression(el.initializer) &&
+                el.initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken);
+            if (
+              key &&
+              set.has(key) &&
+              hasDefault &&
+              !PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+            ) {
+              continue; // miembro ausente con default → seguro
+            }
             if (key && set.has(key)) {
               const start = el.getStart(sourceFile);
               const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -5082,11 +5103,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
           const mn = accessedMemberName(leaf);
           if (
-            (mn === "call" || mn === "apply") &&
+            (mn === "call" || mn === "apply" || mn === "bind") &&
             exprIsTimerValued(leaf.expression, context)
           ) {
             timerName = `timer.${mn}`;
-            if (mn === "call") {
+            if (mn === "call" || mn === "bind") {
+              // `.call(thisArg, handler, …)` y `.bind(thisArg, handler, …)` → el handler es
+              // arguments[1]. `.bind` devuelve la fn ligada; al invocarse llama `setTimeout(handler,
+              // …)` con el string PRE-bindeado → mismo eval-sink (codex P2). Token-en-su-sitio.
               stringArgExpr = node.arguments[1] ?? null;
             } else {
               const arrLeaves = node.arguments[1]
