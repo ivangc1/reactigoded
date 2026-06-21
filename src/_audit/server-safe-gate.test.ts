@@ -320,6 +320,15 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['setInterval.bind(null, "código")()', `setInterval.bind(null, "window.x")();`],
     ['alias later.bind(null, "código")()', `const later = setTimeout; later.bind(null, "window.x", 0)();`],
     ['bind almacenado (fail-closed)', `const b = setTimeout.bind(null, "window.x"); void b;`],
+    // codex P2 (2870236, #133): BIND-only — `.bind(null)` sin handler bindeado; el string llega en
+    // la llamada externa. La fn ligada sigue siendo un timer.
+    ['bind-only setTimeout.bind(null)("código")', `setTimeout.bind(null)("window.x", 0);`],
+    ['bind-only alias fn=setTimeout.bind(null); fn("código")', `const fn = setTimeout.bind(null); fn("window.x");`],
+    // codex P2 (2870236, #133): alias de timer por DESTRUCTURING / array-index.
+    ['array-destr const [later]=[setTimeout]', `const [later] = [setTimeout]; later("window.x", 0);`],
+    ['array-index const later=[setTimeout][0]', `const later = [setTimeout][0]; later("window.x", 0);`],
+    ['obj-destr const {a:later}={a:setTimeout}', `const { a: later } = { a: setTimeout }; later("window.x", 0);`],
+    ['obj-default const {later=setTimeout}={}', `const { later = setTimeout } = {} as any; (later as any)("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -2957,6 +2966,10 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["alias destructure const {compile}=WA", `/** @server-safe */\nexport function f() { const WA = WebAssembly as any; const { compile } = WA; return compile(new Uint8Array()); }`],
     ["alias value-transparent (0,WebAssembly)", `/** @server-safe */\nexport function f() { const WA = (0, WebAssembly); return WA.compile(new Uint8Array()); }`],
     ["alias present-throws optional-call WA.compile?.()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.compile?.(new Uint8Array()); }`],
+    // codex P2 (2870236, #133): alias de root parcial por DESTRUCTURING / array-index.
+    ["array-destr const [WA]=[WebAssembly]", `/** @server-safe */\nexport function f() { const [WA] = [WebAssembly]; return WA.compile(new Uint8Array()); }`],
+    ["obj-default const {WA=WebAssembly}={}", `/** @server-safe */\nexport function f() { const { WA = WebAssembly } = {} as any; return WA.compile(new Uint8Array()); }`],
+    ["array-index const WA=[WebAssembly][0]", `/** @server-safe */\nexport function f() { const WA = [WebAssembly][0]; return WA.compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

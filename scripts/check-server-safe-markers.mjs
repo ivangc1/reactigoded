@@ -2144,6 +2144,82 @@ const TIMER_GLOBAL_NAMES = new Set([
  * (codex P2). Los timers están en SAFE_GLOBALS → su read no se flaggea aguas arriba (≠ eval, sink)
  * → sin resolver el alias `later("código")` sería fail-open.
  */
+// La única hoja value-transparente de `expr` SI es un literal object/array (para matchear patrones
+// de destructuring contra `{a: X}` / `[X]`). Versión module-level del `literalInit` de react-family.
+function singleLiteralLeaf(expr) {
+  if (!expr) return null;
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length !== 1) return null;
+  const l = leaves[0];
+  return ts.isObjectLiteralExpression(l) || ts.isArrayLiteralExpression(l)
+    ? l
+    : null;
+}
+
+/**
+ * Recorre `target` (identifier | array/object binding pattern) contra `init`, llamando
+ * `emit(name, value)` por cada binding cuyo valor (vía `resolve(expr, context)` → truthy) es un
+ * alias. Cubre: identifier directo, DEFAULTS de binding-element (`{ X = WebAssembly }`), match
+ * ESTRUCTURAL contra object/array literal (`const [later] = [setTimeout]`, `const {a:X}={a:React}`),
+ * patterns ANIDADOS, y proyección `[X][i]` (vía resolve). Espejo genérico de `enrollBinding`
+ * (react-family) para los colectores de timer/partial alias. codex P2 (alias-form completeness).
+ */
+function collectStructuralAliases(target, init, context, resolve, emit) {
+  if (!target) return;
+  const t = unwrapErased(target);
+  if (ts.isIdentifier(t)) {
+    const v = resolve(init, context);
+    if (v) emit(t.text, v);
+    return;
+  }
+  if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
+    for (const e of t.elements) {
+      if (!ts.isBindingElement(e)) continue;
+      if (e.initializer) {
+        collectStructuralAliases(e.name, e.initializer, context, resolve, emit);
+      }
+      if (
+        ts.isObjectBindingPattern(e.name) ||
+        ts.isArrayBindingPattern(e.name)
+      ) {
+        collectStructuralAliases(e.name, undefined, context, resolve, emit);
+      }
+    }
+  }
+  const lit = singleLiteralLeaf(init);
+  if (
+    ts.isObjectBindingPattern(t) &&
+    lit &&
+    ts.isObjectLiteralExpression(lit)
+  ) {
+    for (const e of t.elements) {
+      if (!ts.isBindingElement(e)) continue;
+      const keyNode = e.propertyName || e.name;
+      const key =
+        keyNode && (ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode))
+          ? keyNode.text
+          : null;
+      if (!key) continue;
+      const ip = lit.properties.find(
+        (p) =>
+          ts.isPropertyAssignment(p) &&
+          p.name &&
+          (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
+          p.name.text === key,
+      );
+      if (ip) {
+        collectStructuralAliases(e.name, ip.initializer, context, resolve, emit);
+      }
+    }
+  }
+  if (ts.isArrayBindingPattern(t) && lit && ts.isArrayLiteralExpression(lit)) {
+    t.elements.forEach((e, i) => {
+      if (ts.isOmittedExpression(e)) return;
+      collectStructuralAliases(e.name, lit.elements[i], context, resolve, emit);
+    });
+  }
+}
+
 function exprIsTimerValued(expr, context) {
   if (!expr) return false;
   const known = context.scopeTimerAliases;
@@ -2172,6 +2248,31 @@ function exprIsTimerValued(expr, context) {
         const mn = accessedMemberName(leaf);
         if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
       }
+      // Proyección array-literal-index `[setTimeout][0]` (token-en-su-sitio). codex P2.
+      if (ts.isElementAccessExpression(leaf)) {
+        const base = unwrapErased(leaf.expression);
+        const idx = leaf.argumentExpression
+          ? unwrapErased(leaf.argumentExpression)
+          : null;
+        if (ts.isArrayLiteralExpression(base) && idx && ts.isNumericLiteral(idx)) {
+          const el = base.elements[Number(idx.text)];
+          if (el && exprIsTimerValued(el, context)) return true;
+        }
+      }
+    } else if (ts.isCallExpression(leaf)) {
+      // `<timer>.bind(thisArg?)` SIN handler bindeado → la fn ligada SIGUE siendo un timer (el
+      // handler llega en la llamada externa: `setTimeout.bind(null)("código")`). Con ≥1 handler
+      // bindeado el string ya está en los args de `.bind` (lo caza la rama `.bind`). codex P2.
+      const callee = unwrapErased(leaf.expression);
+      if (
+        (ts.isPropertyAccessExpression(callee) ||
+          ts.isElementAccessExpression(callee)) &&
+        accessedMemberName(callee) === "bind" &&
+        leaf.arguments.length <= 1 &&
+        exprIsTimerValued(callee.expression, context)
+      ) {
+        return true;
+      }
     }
   }
   return false;
@@ -2183,15 +2284,17 @@ function exprIsTimerValued(expr, context) {
  */
 function timerAliasNamesDeclaredBy(stmt, context) {
   const names = new Set();
+  const emit = (name) => names.add(name);
   if (ts.isVariableStatement(stmt)) {
+    // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
     for (const d of stmt.declarationList.declarations) {
-      if (
-        ts.isIdentifier(d.name) &&
-        d.initializer &&
-        exprIsTimerValued(d.initializer, context)
-      ) {
-        names.add(d.name.text);
-      }
+      collectStructuralAliases(
+        d.name,
+        d.initializer,
+        context,
+        exprIsTimerValued,
+        emit,
+      );
     }
   } else if (
     ts.isExpressionStatement(stmt) &&
@@ -2234,17 +2337,29 @@ function exprPartialRoot(expr, context) {
   if (!expr) return null;
   const known = context.scopePartialAliases;
   for (const leaf of valueTransparentLeaves(expr)) {
-    if (!ts.isIdentifier(leaf)) continue;
-    if (known && known.has(leaf.text)) return known.get(leaf.text);
-    if (
-      PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
-      !context.localBindings.has(leaf.text) &&
-      !(
-        context.isInFunctionBody &&
-        context.moduleDeclaredNames?.has(leaf.text)
-      )
-    ) {
-      return leaf.text;
+    if (ts.isIdentifier(leaf)) {
+      if (known && known.has(leaf.text)) return known.get(leaf.text);
+      if (
+        PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
+        !context.localBindings.has(leaf.text) &&
+        !(
+          context.isInFunctionBody &&
+          context.moduleDeclaredNames?.has(leaf.text)
+        )
+      ) {
+        return leaf.text;
+      }
+    } else if (ts.isElementAccessExpression(leaf)) {
+      // Proyección array-literal-index `[WebAssembly][0]`. codex P2.
+      const base = unwrapErased(leaf.expression);
+      const idx = leaf.argumentExpression
+        ? unwrapErased(leaf.argumentExpression)
+        : null;
+      if (ts.isArrayLiteralExpression(base) && idx && ts.isNumericLiteral(idx)) {
+        const el = base.elements[Number(idx.text)];
+        const r = el ? exprPartialRoot(el, context) : null;
+        if (r) return r;
+      }
     }
   }
   return null;
@@ -2253,12 +2368,11 @@ function exprPartialRoot(expr, context) {
 /** Mapa aliasName→rootGlobalName declarados por `stmt` (`const WA = WebAssembly`, `p = performance`). */
 function partialAliasesDeclaredBy(stmt, context) {
   const out = new Map();
+  const emit = (name, root) => out.set(name, root);
   if (ts.isVariableStatement(stmt)) {
+    // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
     for (const d of stmt.declarationList.declarations) {
-      if (ts.isIdentifier(d.name) && d.initializer) {
-        const root = exprPartialRoot(d.initializer, context);
-        if (root) out.set(d.name.text, root);
-      }
+      collectStructuralAliases(d.name, d.initializer, context, exprPartialRoot, emit);
     }
   } else if (
     ts.isExpressionStatement(stmt) &&
@@ -5082,6 +5196,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               timerName = mn;
               break;
             }
+          }
+        } else if (ts.isCallExpression(leaf)) {
+          // BIND-only: `setTimeout.bind(null)("código")` — la fn ligada (sin handler bindeado) es un
+          // timer cuyo handler llega en ESTA llamada externa (arg[0]). exprIsTimerValued reconoce
+          // `<timer>.bind(≤1)`. Con handler bindeado el string va en los args de `.bind` (rama .bind).
+          if (exprIsTimerValued(leaf, context)) {
+            timerName = "timer.bind";
+            break;
           }
         }
       }
