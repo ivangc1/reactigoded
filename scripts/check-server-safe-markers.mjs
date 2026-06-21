@@ -2314,12 +2314,18 @@ function exprIsTimerValued(expr, context) {
 function timerAliasNamesDeclaredBy(stmt, context) {
   const names = new Set();
   const emit = (name) => names.add(name);
-  if (ts.isVariableStatement(stmt)) {
+  // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
+  const declList = ts.isVariableStatement(stmt)
+    ? stmt.declarationList
+    : ts.isVariableDeclarationList(stmt)
+      ? stmt
+      : null;
+  if (declList) {
     // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
     // Declaradores LEFT-TO-RIGHT: un alias en cadena dentro del mismo statement (`const a =
     // setTimeout, b = a`) — `b` debe ver `a` ya enrolado (codex P2). Avanzar un ctx local.
     let ctx = context;
-    for (const d of stmt.declarationList.declarations) {
+    for (const d of declList.declarations) {
       const local = new Set();
       collectStructuralAliases(d.name, d.initializer, ctx, exprIsTimerValued, (n) => {
         local.add(n);
@@ -2410,12 +2416,18 @@ function exprPartialRoot(expr, context) {
 function partialAliasesDeclaredBy(stmt, context) {
   const out = new Map();
   const emit = (name, root) => out.set(name, root);
-  if (ts.isVariableStatement(stmt)) {
+  // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
+  const declList = ts.isVariableStatement(stmt)
+    ? stmt.declarationList
+    : ts.isVariableDeclarationList(stmt)
+      ? stmt
+      : null;
+  if (declList) {
     // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
     // Declaradores LEFT-TO-RIGHT: cadena en el mismo statement (`const A = WebAssembly, B = A`) —
     // `B` debe ver `A` ya enrolado (codex P2). Avanzar un ctx local.
     let ctx = context;
-    for (const d of stmt.declarationList.declarations) {
+    for (const d of declList.declarations) {
       const local = new Map();
       collectStructuralAliases(d.name, d.initializer, ctx, exprPartialRoot, (n, root) => {
         local.set(n, root);
@@ -4831,8 +4843,18 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const bodyGuards = new Set();
       if (cond) collectConjunctionGuards(cond, bodyGuards, context.guardAliases);
       if (forBindings.size > 0 || bodyGuards.size > 0) {
-        const baseCtx =
+        let baseCtx =
           forBindings.size > 0 ? addToScope(context, forBindings) : context;
+        // Alias de timer/partial declarados en el for-init (`for (const later = setTimeout;;)`) —
+        // el body corre en el server, así que `later(...)`/`WA.compile()` deben reconocerse (codex P2).
+        if (
+          init &&
+          ts.isVariableDeclarationList(init) &&
+          isBlockScopedDeclList(init.flags)
+        ) {
+          baseCtx = addTimerAliases(baseCtx, init);
+          baseCtx = addPartialAliases(baseCtx, init);
+        }
         const bodyCtx =
           bodyGuards.size > 0
             ? {

@@ -336,6 +336,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (a94f607, #133): cadena de alias en el MISMO statement (left-to-right).
     ['chain const a=setTimeout, b=a; b(str)', `const a = setTimeout, b = a; b("window.x", 0);`],
     ['chain const a=setTimeout, b=a, c=b; c(str)', `const a = setTimeout, b = a, c = b; c("window.x", 0);`],
+    // codex P2 (f32a946, #133): alias declarado en el HEADER de un for (el body corre en server).
+    ['for(const later=setTimeout;;){later(str);break}', `for (const later = setTimeout; ; ) { later("window.x", 0); break; }`],
+    ['for(const a=setTimeout, b=a;;){b(str);break}', `for (const a = setTimeout, b = a; ; ) { b("window.x", 0); break; }`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -2983,6 +2986,8 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (a94f607, #133): cadena de alias en el MISMO statement (left-to-right).
     ["chain const A=WebAssembly, B=A; B.compile()", `/** @server-safe */\nexport function f() { const A = WebAssembly, B = A; return B.compile(new Uint8Array()); }`],
     ["chain const A=WebAssembly, B=A, C=B; C.compile()", `/** @server-safe */\nexport function f() { const A = WebAssembly, B = A, C = B; return C.compile(new Uint8Array()); }`],
+    // codex P2 (f32a946, #133): alias declarado en el HEADER de un for.
+    ["for(const WA=WebAssembly;;){WA.compile()}", `/** @server-safe */\nexport function f() { for (const WA = WebAssembly; ; ) { return WA.compile(new Uint8Array()); } return null; }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
