@@ -2206,6 +2206,17 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
       } else if (ts.isPropertyAssignment(e)) {
         keyNode = e.name;
         sub = e.initializer;
+        // default en assignment-destr RENOMBRADO `({ x: later = setTimeout } = {})`: el initializer
+        // es `later = setTimeout` (BinaryExpression). Desempaquetar: target=left, default=right —
+        // el target puede resolver a su default aunque el init no matchee la key (codex P2).
+        if (
+          sub &&
+          ts.isBinaryExpression(sub) &&
+          sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+          collectStructuralAliases(sub.left, sub.right, context, resolve, emit);
+          sub = sub.left;
+        }
       } else if (ts.isShorthandPropertyAssignment(e)) {
         keyNode = e.name;
         sub = e.name;
@@ -2314,6 +2325,11 @@ function exprIsTimerValued(expr, context) {
 function timerAliasNamesDeclaredBy(stmt, context) {
   const names = new Set();
   const emit = (name) => names.add(name);
+  // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
+  if (ts.isVariableDeclaration(stmt)) {
+    collectStructuralAliases(stmt.name, stmt.initializer, context, exprIsTimerValued, emit);
+    return names;
+  }
   // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
   const declList = ts.isVariableStatement(stmt)
     ? stmt.declarationList
@@ -2416,6 +2432,11 @@ function exprPartialRoot(expr, context) {
 function partialAliasesDeclaredBy(stmt, context) {
   const out = new Map();
   const emit = (name, root) => out.set(name, root);
+  // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
+  if (ts.isVariableDeclaration(stmt)) {
+    collectStructuralAliases(stmt.name, stmt.initializer, context, exprPartialRoot, emit);
+    return out;
+  }
   // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
   const declList = ts.isVariableStatement(stmt)
     ? stmt.declarationList
@@ -4839,21 +4860,46 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           addBindingNamesFromPattern(decl.name, forBindings);
         }
       }
+      // Alias de timer/partial del for-init: const/let Y `var` (`for (var later = setTimeout;;)` —
+      // el var-binding lo añade el hoisting, pero el ALIAS no se enrolaba; codex P2). NO gateado por
+      // isBlockScopedDeclList. Se calcula aquí para poder entrar al bloque especial aunque no haya
+      // forBindings (caso var) ni guards.
+      const forTimerAliases =
+        init && ts.isVariableDeclarationList(init)
+          ? timerAliasNamesDeclaredBy(init, context)
+          : new Set();
+      const forPartialAliases =
+        init && ts.isVariableDeclarationList(init)
+          ? partialAliasesDeclaredBy(init, context)
+          : new Map();
       const cond = ts.isWhileStatement(node) ? node.expression : node.condition;
       const bodyGuards = new Set();
       if (cond) collectConjunctionGuards(cond, bodyGuards, context.guardAliases);
-      if (forBindings.size > 0 || bodyGuards.size > 0) {
+      if (
+        forBindings.size > 0 ||
+        bodyGuards.size > 0 ||
+        forTimerAliases.size > 0 ||
+        forPartialAliases.size > 0
+      ) {
         let baseCtx =
           forBindings.size > 0 ? addToScope(context, forBindings) : context;
-        // Alias de timer/partial declarados en el for-init (`for (const later = setTimeout;;)`) —
-        // el body corre en el server, así que `later(...)`/`WA.compile()` deben reconocerse (codex P2).
-        if (
-          init &&
-          ts.isVariableDeclarationList(init) &&
-          isBlockScopedDeclList(init.flags)
-        ) {
-          baseCtx = addTimerAliases(baseCtx, init);
-          baseCtx = addPartialAliases(baseCtx, init);
+        if (forTimerAliases.size > 0) {
+          baseCtx = {
+            ...baseCtx,
+            scopeTimerAliases: new Set([
+              ...(baseCtx.scopeTimerAliases ?? []),
+              ...forTimerAliases,
+            ]),
+          };
+        }
+        if (forPartialAliases.size > 0) {
+          baseCtx = {
+            ...baseCtx,
+            scopePartialAliases: new Map([
+              ...(baseCtx.scopePartialAliases ?? []),
+              ...forPartialAliases,
+            ]),
+          };
         }
         const bodyCtx =
           bodyGuards.size > 0
@@ -5409,6 +5455,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         const declNames = new Set();
         addBindingNamesFromPattern(decl.name, declNames);
         if (declNames.size > 0) declCtx = addToScope(declCtx, declNames);
+        // Enrolar el alias del declarador para que el SIGUIENTE initializer del mismo statement lo
+        // reconozca (`const later = setTimeout, id = later("código")`) — codex P2.
+        declCtx = addTimerAliases(declCtx, decl);
+        declCtx = addPartialAliases(declCtx, decl);
       }
       return;
     }
