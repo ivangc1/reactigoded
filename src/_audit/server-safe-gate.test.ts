@@ -2998,6 +2998,11 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["const WA=WebAssembly, x=WA.compile()", `/** @server-safe */\nexport function f() { const WA = WebAssembly, x = WA.compile(new Uint8Array()); return x; }`],
     ["for(var WA=WebAssembly;;){WA.compile()}", `/** @server-safe */\nexport function f() { for (var WA = WebAssembly; ; ) { return WA.compile(new Uint8Array()); } return null; }`],
     ["({x:WA=WebAssembly}={}); WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; ({ x: WA = WebAssembly } = {} as any); return WA.compile(new Uint8Array()); }`],
+    // codex P2 (8296ebc, #133): OBJECT-REST copia el partial-root → alias (el miembro va con él o
+    // falta igual). Solo partial (un timer-rest da un objeto no invocable, no es alias de timer).
+    ["object-rest const {...WA}=WebAssembly", `/** @server-safe */\nexport function f() { const { ...WA } = WebAssembly as any; return WA.compile(new Uint8Array()); }`],
+    ["object-rest const {...perf}=performance", `/** @server-safe */\nexport function f() { const { ...perf } = performance as any; return perf.measureUserAgentSpecificMemory(); }`],
+    ["object-rest parcial {len, ...WA}=WebAssembly", `/** @server-safe */\nexport function f() { const { length: len, ...WA } = WebAssembly as any; void len; return WA.compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
@@ -3006,6 +3011,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["alias de miembro SAFE perf.now()", `/** @server-safe */\nexport function f() { const perf = performance; return perf.now(); }`],
     ["alias de miembro SAFE WA.validate()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.validate(new Uint8Array()); }`],
     ["typeof sobre alias", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return typeof WA.compile; }`],
+    // codex P2 (8296ebc): object-rest de un TIMER da un objeto NO invocable → no es timer-alias
+    // (llamarlo es TypeError genérico, no eval del navegador) → fuera del contrato del eval-sink.
+    ["object-rest de timer no es eval-sink", `/** @server-safe */\nexport function f() { const { ...later } = setTimeout as any; return (later as any)("x"); }`],
     // codex P2 (3ae4423): alias purgado al ser SOMBREADO por un binding interno homónimo.
     ["partial alias sombreado por param", `/** @server-safe */\nexport function f() { const WA = WebAssembly; function g(WA: any) { return WA.compile("x"); } return g; }`],
     ["timer alias sombreado por param", `/** @server-safe */\nexport function f() { const later = setTimeout; function g(later: any) { return later("x"); } return g; }`],

@@ -2164,7 +2164,7 @@ function singleLiteralLeaf(expr) {
  * patterns ANIDADOS, y proyección `[X][i]` (vía resolve). Espejo genérico de `enrollBinding`
  * (react-family) para los colectores de timer/partial alias. codex P2 (alias-form completeness).
  */
-function collectStructuralAliases(target, init, context, resolve, emit) {
+function collectStructuralAliases(target, init, context, resolve, emit, enrollRest = false) {
   if (!target) return;
   const t = unwrapErased(target);
   if (ts.isIdentifier(t)) {
@@ -2177,14 +2177,28 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
   if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
     for (const e of t.elements) {
       if (!ts.isBindingElement(e)) continue;
+      // OBJECT-REST `const { ...WA } = WebAssembly`: WA es un (shallow copy del) root → los miembros
+      // peligrosos van con él (o faltan igual) → alias del partial-root (codex P2). Solo PARTIAL
+      // (enrollRest): para un timer, `{ ...later } = setTimeout` da un objeto NO invocable (TypeError
+      // genérico al llamarlo, no eval del navegador), así que no es un timer-alias.
+      if (
+        enrollRest &&
+        ts.isObjectBindingPattern(t) &&
+        e.dotDotDotToken &&
+        ts.isIdentifier(e.name)
+      ) {
+        const v = resolve(init, context);
+        if (v) emit(e.name.text, v);
+        continue;
+      }
       if (e.initializer) {
-        collectStructuralAliases(e.name, e.initializer, context, resolve, emit);
+        collectStructuralAliases(e.name, e.initializer, context, resolve, emit, enrollRest);
       }
       if (
         ts.isObjectBindingPattern(e.name) ||
         ts.isArrayBindingPattern(e.name)
       ) {
-        collectStructuralAliases(e.name, undefined, context, resolve, emit);
+        collectStructuralAliases(e.name, undefined, context, resolve, emit, enrollRest);
       }
     }
   }
@@ -2214,7 +2228,7 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
           ts.isBinaryExpression(sub) &&
           sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
         ) {
-          collectStructuralAliases(sub.left, sub.right, context, resolve, emit);
+          collectStructuralAliases(sub.left, sub.right, context, resolve, emit, enrollRest);
           sub = sub.left;
         }
       } else if (ts.isShorthandPropertyAssignment(e)) {
@@ -2228,6 +2242,7 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
             context,
             resolve,
             emit,
+            enrollRest,
           );
         }
       } else continue;
@@ -2243,7 +2258,9 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
           (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
           p.name.text === key,
       );
-      if (ip) collectStructuralAliases(sub, ip.initializer, context, resolve, emit);
+      if (ip) {
+        collectStructuralAliases(sub, ip.initializer, context, resolve, emit, enrollRest);
+      }
     }
   }
   // Array: binding-pattern DECL (`const [X]=…`) O array-LITERAL target (`[X]=[setTimeout]`).
@@ -2255,7 +2272,7 @@ function collectStructuralAliases(target, init, context, resolve, emit) {
     t.elements.forEach((e, i) => {
       if (ts.isOmittedExpression(e)) return;
       const sub = ts.isBindingElement(e) ? e.name : e;
-      collectStructuralAliases(sub, lit.elements[i], context, resolve, emit);
+      collectStructuralAliases(sub, lit.elements[i], context, resolve, emit, enrollRest);
     });
   }
 }
@@ -2434,7 +2451,7 @@ function partialAliasesDeclaredBy(stmt, context) {
   const emit = (name, root) => out.set(name, root);
   // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
   if (ts.isVariableDeclaration(stmt)) {
-    collectStructuralAliases(stmt.name, stmt.initializer, context, exprPartialRoot, emit);
+    collectStructuralAliases(stmt.name, stmt.initializer, context, exprPartialRoot, emit, true);
     return out;
   }
   // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
@@ -2450,10 +2467,17 @@ function partialAliasesDeclaredBy(stmt, context) {
     let ctx = context;
     for (const d of declList.declarations) {
       const local = new Map();
-      collectStructuralAliases(d.name, d.initializer, ctx, exprPartialRoot, (n, root) => {
-        local.set(n, root);
-        out.set(n, root);
-      });
+      collectStructuralAliases(
+        d.name,
+        d.initializer,
+        ctx,
+        exprPartialRoot,
+        (n, root) => {
+          local.set(n, root);
+          out.set(n, root);
+        },
+        true,
+      );
       if (local.size > 0) {
         ctx = {
           ...ctx,
@@ -2471,7 +2495,7 @@ function partialAliasesDeclaredBy(stmt, context) {
       ts.isBinaryExpression(ax) &&
       ax.operatorToken.kind === ts.SyntaxKind.EqualsToken
     ) {
-      collectStructuralAliases(ax.left, ax.right, context, exprPartialRoot, emit);
+      collectStructuralAliases(ax.left, ax.right, context, exprPartialRoot, emit, true);
     }
   }
   return out;
