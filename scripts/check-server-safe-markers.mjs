@@ -5524,6 +5524,32 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // [WebAssembly] }`) — paridad con collectStructuralAliases (codex P2).
           const lit = singleLiteralLeaf(init);
           if (!lit) return;
+          // sub-patrón + DEFAULT del elemento (`{ x: { compile } = WebAssembly }`): el default provee
+          // el root cuando la key falta → recursar también contra él, paridad con los alias collectors
+          // (codex P2). PropertyAssignment con rename-default (`{ x: t = d }`) = BinaryExpression `=`.
+          const subAndDefault = (el) => {
+            if (ts.isBindingElement(el)) {
+              return { sub: el.name, def: el.initializer ?? null };
+            }
+            if (ts.isPropertyAssignment(el)) {
+              const v = el.initializer;
+              if (
+                v &&
+                ts.isBinaryExpression(v) &&
+                v.operatorToken.kind === ts.SyntaxKind.EqualsToken
+              ) {
+                return { sub: v.left, def: v.right };
+              }
+              return { sub: v ?? null, def: null };
+            }
+            if (
+              ts.isBinaryExpression(el) &&
+              el.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            ) {
+              return { sub: el.left, def: el.right };
+            }
+            return { sub: el, def: null };
+          };
           if (isObjPat && ts.isObjectLiteralExpression(lit)) {
             for (const el of elems) {
               const kn = ts.isBindingElement(el)
@@ -5532,12 +5558,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                   ? el.name
                   : null;
               const key = keyTextOf(kn);
-              const sub = ts.isBindingElement(el)
-                ? el.name
-                : ts.isPropertyAssignment(el)
-                  ? el.initializer
-                  : null;
-              if (!key || !sub || !isDestructurePattern(sub)) continue;
+              const { sub, def } = subAndDefault(el);
+              if (!key || !sub || !isDestructurePattern(sub)) {
+                if (def && sub && isDestructurePattern(sub)) {
+                  flagPartialDestructure(sub, def);
+                }
+                continue;
+              }
               const ip = lit.properties.find(
                 (p) =>
                   ts.isPropertyAssignment(p) &&
@@ -5545,17 +5572,19 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                   structuralKeyText(p.name) === key,
               );
               if (ip) flagPartialDestructure(sub, ip.initializer);
+              if (def) flagPartialDestructure(sub, def);
             }
           } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
             for (let i = 0; i < elems.length; i++) {
               const el = elems[i];
               if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) continue;
-              const sub = ts.isBindingElement(el) ? el.name : el;
+              const { sub, def } = subAndDefault(el);
               if (!sub || !isDestructurePattern(sub)) continue;
               const initEl = lit.elements[i];
               if (initEl && !ts.isOmittedExpression(initEl)) {
                 flagPartialDestructure(sub, initEl);
               }
+              if (def) flagPartialDestructure(sub, def);
             }
           }
         };
@@ -5748,20 +5777,46 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // Args con SPREAD de array-literal aplanados (`setTimeout(...["código", 0])` /
       // `setTimeout.call(...[null,"c"])`) → el handler no queda oculto tras el spread (codex P2).
       const effArgs = flattenLiteralSpreadArgs(node.arguments);
-      const firstArrayLiteralElement = (arg) => {
-        if (!arg) return null;
-        const ls = valueTransparentLeaves(arg);
-        const arr =
-          ls.length === 1 && ts.isArrayLiteralExpression(ls[0]) ? ls[0] : null;
-        // Aplanar SPREADs dentro del array de args (`apply(null, [...["código"]])`) antes de tomar
-        // el [0], igual que la lista de args externa (codex P2).
-        return arr ? (flattenLiteralSpreadArgs(arr.elements)[0] ?? null) : null;
+      // Ramas array-literal que un arg-expr puede tomar value-transparentemente: array directo
+      // `["a"]` o ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2). Fail-closed: cualquiera cuenta.
+      const arrayLiteralAlternatives = (expr) =>
+        valueTransparentLeaves(expr).filter((l) =>
+          ts.isArrayLiteralExpression(l),
+        );
+      // Candidatos al handler en la posición lógica `idx` de una lista de args que puede venir por
+      // SPREAD (incluido un spread de ALTERNATIVAS): cada rama aporta su elemento [idx] (codex P2).
+      const handlerCandidates = (rawArgs, idx) => {
+        const flat = flattenLiteralSpreadArgs(rawArgs);
+        const cands = [];
+        if (flat[idx] && !ts.isSpreadElement(flat[idx])) cands.push(flat[idx]);
+        for (const a of rawArgs) {
+          if (!ts.isSpreadElement(a)) continue;
+          for (const alt of arrayLiteralAlternatives(a.expression)) {
+            const altFlat = flattenLiteralSpreadArgs(alt.elements);
+            if (altFlat[idx] && !ts.isSpreadElement(altFlat[idx])) {
+              cands.push(altFlat[idx]);
+            }
+          }
+        }
+        return cands;
+      };
+      // Elemento [0] del array de args de `.apply`/`Reflect.apply` (`apply(thisArg, ["código"])`),
+      // considerando alternativas e inner-spreads del array (codex P2).
+      const applyHandlerCandidates = (arg) => {
+        if (!arg) return [];
+        const cands = [];
+        for (const alt of arrayLiteralAlternatives(arg)) {
+          const flat = flattenLiteralSpreadArgs(alt.elements);
+          if (flat[0] && !ts.isSpreadElement(flat[0])) cands.push(flat[0]);
+        }
+        return cands;
       };
       // Posición del arg que debe ser string según la FORMA de invocación:
       //   directo  `<timer>("código", …)`           → arg[0]
       //   `.call`  `<timer>.call(thisArg, "c", …)`   → arg[1]
       //   `.apply` `<timer>.apply(thisArg, ["c", …])` → arg[1] es array-literal → su elemento [0]
-      let stringArgExpr = timerName !== null ? (effArgs[0] ?? null) : null;
+      let stringArgCandidates =
+        timerName !== null ? handlerCandidates(node.arguments, 0) : [];
       if (timerName === null) {
         // `<timer>.call`/`.apply`/`.bind` — Function.prototype sobre el timer. El read del timer es
         // SAFE → no se flaggea aguas arriba; sin esto `setTimeout.call(null,"c")` bypassea (codex P2).
@@ -5778,10 +5833,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             exprIsTimerValued(leaf.expression, context)
           ) {
             timerName = `timer.${mn}`;
-            stringArgExpr =
+            stringArgCandidates =
               mn === "apply"
-                ? firstArrayLiteralElement(effArgs[1])
-                : (effArgs[1] ?? null);
+                ? applyHandlerCandidates(effArgs[1])
+                : handlerCandidates(node.arguments, 1);
             break;
           }
         }
@@ -5802,16 +5857,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             exprIsTimerValued(effArgs[0], context)
           ) {
             timerName = "Reflect.apply(timer)";
-            stringArgExpr = firstArrayLiteralElement(effArgs[2]);
+            stringArgCandidates = applyHandlerCandidates(effArgs[2]);
             break;
           }
         }
       }
-      const isStringArg =
-        stringArgExpr !== null &&
-        valueTransparentLeaves(stringArgExpr).some(
+      const isStringArg = stringArgCandidates.some((c) =>
+        valueTransparentLeaves(c).some(
           (a) => ts.isStringLiteralLike(a) || ts.isTemplateExpression(a),
-        );
+        ),
+      );
       if (timerName !== null && isStringArg) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);

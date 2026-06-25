@@ -379,6 +379,11 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['setTimeout.apply(null, [...["código"]])', `setTimeout.apply(null, [...["window.x"]]);`],
     ['Reflect.apply(setTimeout, u, [...["código"]])', `Reflect.apply(setTimeout, undefined, [...["window.x"]]);`],
     ['array-indexed callee [setTimeout][0]("código")', `[setTimeout][0]("window.x", 0);`],
+    // codex P2 (c23f5a7, #133): ALTERNATIVAS value-transparentes de array-literal en el spread.
+    ['spread alt setTimeout(...(c?["a",0]:["b",0]))', `const c = (0 as unknown as boolean); setTimeout(...(c ? ["window.x", 0] : ["document.y", 0]));`],
+    ['spread alt .call(...(c?[null,"a"]:[null,"b"]))', `const c = (0 as unknown as boolean); setTimeout.call(...(c ? [null, "window.x"] : [null, "document.y"]));`],
+    ['alt .apply(null, c?["a"]:["b"])', `const c = (0 as unknown as boolean); setTimeout.apply(null, c ? ["window.x"] : ["document.y"]);`],
+    ['alt one-branch-string c?["a"]:[fn]', `const c = (0 as unknown as boolean); setTimeout(...(c ? ["window.x"] : [() => {}]));`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -415,6 +420,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(fixture(`const fn: any = (s: string) => s; Reflect.apply(fn, undefined, ["x"]);`), "reflect-nontimer.fixture.tsx")).toEqual([]);
     // array-indexed callee con timer SOMBREADO localmente = no es el global → exento (codex P2).
     expect(checkSourceFile(fixture(`const setTimeout: any = (s: string) => s; [setTimeout][0]("x");`), "shadow-arr-timer.fixture.tsx")).toEqual([]);
+    // alternativa de spread con TODAS las ramas función/número = sin string handler → exento (codex P2).
+    expect(checkSourceFile(fixture(`const c = (0 as unknown as boolean); setTimeout(...(c ? [() => {}] : [() => {}]));`), "alt-fn.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea destructuring ARRAY/anidado de un miembro SAFE (now) (codex P2)", () => {
@@ -3112,6 +3119,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["array nested const [{compile}]=[WebAssembly]", `/** @server-safe */\nexport function f() { const [{ compile }] = [WebAssembly]; return compile(new Uint8Array()); }`],
     ["mixed const {x:[{compile}]}={x:[WebAssembly]}", `/** @server-safe */\nexport function f() { const { x: [{ compile }] } = { x: [WebAssembly] }; return compile(new Uint8Array()); }`],
     ["array assign [{compile}]=[WebAssembly]", `/** @server-safe */\nexport function f() { let compile: any; [{ compile }] = [WebAssembly]; return compile(new Uint8Array()); }`],
+    // codex P2 (c23f5a7, #133): el DEFAULT del binding-element provee el root (key ausente).
+    ["default {x:{compile}=WebAssembly}={}", `/** @server-safe */\nexport function f() { const { x: { compile } = WebAssembly } = {} as any; return compile(new Uint8Array()); }`],
+    ["default array [{compile}=WebAssembly]=[]", `/** @server-safe */\nexport function f() { const [{ compile } = WebAssembly] = [] as any; return compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
