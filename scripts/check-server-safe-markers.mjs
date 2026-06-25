@@ -3216,43 +3216,45 @@ function eachEmbeddedAssignment(node, visit) {
  * un path paralelo). Order-INDEPENDENT fail-closed: un use-before-assign sobre-flaggea (seguro).
  */
 function withEmbeddedAssignmentAliases(context, node) {
-  let timer = null;
-  let partial = null;
+  // `eachEmbeddedAssignment` visita en ORDEN DE EVALUACIÓN (left-to-right). Threadeamos un ctx
+  // evolutivo para que una cadena en la misma expresión (`(later = setTimeout, alias = later,
+  // alias)(…)`) reconozca el alias creado por una asignación ANTERIOR (codex P2).
+  let ctx = context;
   eachEmbeddedAssignment(node, (assign) => {
+    let timer = null;
+    let partial = null;
     collectStructuralAliases(
       assign.left,
       assign.right,
-      context,
+      ctx,
       exprIsTimerValued,
       (n) => (timer ||= new Set()).add(n),
     );
     collectStructuralAliases(
       assign.left,
       assign.right,
-      context,
+      ctx,
       exprPartialRoot,
       (n, r) => (partial ||= new Map()).set(n, r),
       true,
     );
+    if (timer) {
+      ctx = {
+        ...ctx,
+        scopeTimerAliases: new Set([...(ctx.scopeTimerAliases ?? []), ...timer]),
+      };
+    }
+    if (partial) {
+      ctx = {
+        ...ctx,
+        scopePartialAliases: new Map([
+          ...(ctx.scopePartialAliases ?? []),
+          ...partial,
+        ]),
+      };
+    }
   });
-  if (!timer && !partial) return context;
-  let out = context;
-  if (timer) {
-    out = {
-      ...out,
-      scopeTimerAliases: new Set([...(out.scopeTimerAliases ?? []), ...timer]),
-    };
-  }
-  if (partial) {
-    out = {
-      ...out,
-      scopePartialAliases: new Map([
-        ...(out.scopePartialAliases ?? []),
-        ...partial,
-      ]),
-    };
-  }
-  return out;
+  return ctx;
 }
 
 /**
@@ -5377,6 +5379,39 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             }
           }
         }
+      }
+    }
+
+    // (c.1d) import-equals que aliasa un MIEMBRO partial-denied de un SAFE root: `import compile =
+    // WebAssembly.compile` emite `var compile = WebAssembly.compile`, y `compile(bytes)` invoca el
+    // dynamic codegen — el qualified name NO produce un PropertyAccess que cace (c.1b), y el root SAFE
+    // no flaggea por (d). Flaggear la EXTRACCIÓN (codex P2), análogo al destructuring (c.1c). Root no
+    // sombreado; exento solo en client-only deferred.
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      !node.isTypeOnly &&
+      ts.isQualifiedName(node.moduleReference) &&
+      ts.isIdentifier(node.moduleReference.left) &&
+      ts.isIdentifier(node.moduleReference.right) &&
+      !context.isInClientOnlyDeferredBody
+    ) {
+      const ieRoot = node.moduleReference.left.text;
+      const ieMember = node.moduleReference.right.text;
+      if (
+        PARTIAL_SAFE_GLOBAL_MEMBERS[ieRoot]?.has(ieMember) &&
+        !context.localBindings.has(ieRoot)
+      ) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(ieRoot)
+            ? `import-equals de \`${ieRoot}.${ieMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+            : `import-equals de \`${ieRoot}.${ieMember}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+        });
       }
     }
 

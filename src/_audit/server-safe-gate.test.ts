@@ -357,6 +357,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (3f27e0c, #133): assignment embebida en el CALLEE (se evalúa antes del sink-check del call).
     ['embedded en callee ((later=setTimeout), later)(str)', `let later: any; void (((later = setTimeout), later)("window.x", 0));`],
     ['embedded en callee ((later=setTimeout) && later)(str)', `let later: any; void (((later = setTimeout) && later)("window.x", 0));`],
+    // codex P2 (eb9d71c, #133): cadena de aliases embebidos en la MISMA expresión (left-to-right).
+    ['chain embebida (later=setTimeout, a=later, a)(str)', `let later: any; let a: any; void ((later = setTimeout, a = later, a)("window.x", 0));`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -2989,6 +2991,11 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     expect(checkSourceFile(code, "perf-destr.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
+  it("NO flaggea import-equals de un miembro SAFE (performance.now) ni type-only", () => {
+    expect(checkSourceFile(`/** @server-safe */\nimport now = performance.now;\nexport function f() { return now(); }`, "ie-safe.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(`/** @server-safe */\nimport type compile = WebAssembly.compile;\nexport function f() { return 1; }`, "ie-typeonly.fixture.tsx")).toEqual([]);
+  });
+
   it("NO flaggea destructuring de un miembro PRESENTE (now)", () => {
     expect(checkSourceFile(`/** @server-safe */\nexport function f() { const { now } = performance; return now; }`, "perf-now-destr.fixture.tsx")).toEqual([]);
   });
@@ -3040,6 +3047,10 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["embedded (WA=WebAssembly) && WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; return (WA = WebAssembly) && WA.compile(new Uint8Array()); }`],
     // codex P2 (3f27e0c, #133): embebida en el RECEIVER (se evalúa antes del sink-check del member).
     ["embedded en receiver ((WA=WebAssembly), WA).compile()", `/** @server-safe */\nexport function f() { let WA: any; return ((WA = WebAssembly), WA).compile(new Uint8Array()); }`],
+    // codex P2 (eb9d71c, #133): chain embebida + import-equals de un miembro partial-denied.
+    ["chain embebida (WA=WebAssembly, A=WA, A).compile()", `/** @server-safe */\nexport function f() { let WA: any; let A: any; return (WA = WebAssembly, A = WA, A).compile(new Uint8Array()); }`],
+    ["import-equals WebAssembly.compile", `/** @server-safe */\nimport compile = WebAssembly.compile;\nexport function f() { return compile(new Uint8Array()); }`],
+    ["import-equals performance.measure...", `/** @server-safe */\nimport m = performance.measureUserAgentSpecificMemory;\nexport function f() { return m(); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
