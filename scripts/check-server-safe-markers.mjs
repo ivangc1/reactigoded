@@ -5783,31 +5783,59 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         valueTransparentLeaves(expr).filter((l) =>
           ts.isArrayLiteralExpression(l),
         );
-      // Candidatos al handler en la posición lógica `idx` de una lista de args que puede venir por
-      // SPREAD (incluido un spread de ALTERNATIVAS): cada rama aporta su elemento [idx] (codex P2).
-      const handlerCandidates = (rawArgs, idx) => {
-        const flat = flattenLiteralSpreadArgs(rawArgs);
-        const cands = [];
-        if (flat[idx] && !ts.isSpreadElement(flat[idx])) cands.push(flat[idx]);
+      // Enumera las listas de args APLANADAS posibles, RAMIFICANDO en cada spread de ALTERNATIVAS
+      // de array-literal y reconstruyendo la lista COMPLETA por rama — incluidas ramas de longitud
+      // DISTINTA, que desplazan los args TRAILING (`...(cond ? [] : [fn]), "x"` → ["x"] | [fn, "x"]).
+      // Un spread de array único se aplana inline; un spread OPACO (variable) TRUNCA la rama (data-
+      // flow residual: posición indeterminable más allá). codex P2.
+      const expandArgLists = (rawArgs) => {
+        let lists = [{ nodes: [], truncated: false }];
         for (const a of rawArgs) {
-          if (!ts.isSpreadElement(a)) continue;
-          for (const alt of arrayLiteralAlternatives(a.expression)) {
-            const altFlat = flattenLiteralSpreadArgs(alt.elements);
-            if (altFlat[idx] && !ts.isSpreadElement(altFlat[idx])) {
-              cands.push(altFlat[idx]);
+          if (ts.isSpreadElement(a)) {
+            const alts = arrayLiteralAlternatives(a.expression);
+            if (alts.length === 0) {
+              lists = lists.map((l) => ({ ...l, truncated: true }));
+              continue;
             }
+            const next = [];
+            for (const l of lists) {
+              if (l.truncated) {
+                next.push(l);
+                continue;
+              }
+              for (const alt of alts) {
+                next.push({
+                  nodes: [...l.nodes, ...flattenLiteralSpreadArgs(alt.elements)],
+                  truncated: false,
+                });
+              }
+            }
+            lists = next;
+          } else {
+            lists = lists.map((l) =>
+              l.truncated ? l : { ...l, nodes: [...l.nodes, a] },
+            );
           }
+        }
+        return lists;
+      };
+      // Candidatos al nodo en la posición lógica `idx` de `rawArgs` sobre TODAS las ramas posibles.
+      const candidatesAt = (rawArgs, idx) => {
+        const cands = [];
+        for (const l of expandArgLists(rawArgs)) {
+          const n = l.nodes[idx];
+          if (n && !ts.isSpreadElement(n)) cands.push(n);
         }
         return cands;
       };
+      const handlerCandidates = (rawArgs, idx) => candidatesAt(rawArgs, idx);
       // Elemento [0] del array de args de `.apply`/`Reflect.apply` (`apply(thisArg, ["código"])`),
-      // considerando alternativas e inner-spreads del array (codex P2).
+      // considerando alternativas del array Y inner-spreads (incl. de longitud variable) (codex P2).
       const applyHandlerCandidates = (arg) => {
         if (!arg) return [];
         const cands = [];
         for (const alt of arrayLiteralAlternatives(arg)) {
-          const flat = flattenLiteralSpreadArgs(alt.elements);
-          if (flat[0] && !ts.isSpreadElement(flat[0])) cands.push(flat[0]);
+          cands.push(...candidatesAt(alt.elements, 0));
         }
         return cands;
       };

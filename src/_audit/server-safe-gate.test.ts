@@ -384,6 +384,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['spread alt .call(...(c?[null,"a"]:[null,"b"]))', `const c = (0 as unknown as boolean); setTimeout.call(...(c ? [null, "window.x"] : [null, "document.y"]));`],
     ['alt .apply(null, c?["a"]:["b"])', `const c = (0 as unknown as boolean); setTimeout.apply(null, c ? ["window.x"] : ["document.y"]);`],
     ['alt one-branch-string c?["a"]:[fn]', `const c = (0 as unknown as boolean); setTimeout(...(c ? ["window.x"] : [() => {}]));`],
+    // codex P2 (0e1467a, #133): ramas de spread de LONGITUD DISTINTA desplazan los args trailing.
+    ['diff-len ...(c?[]:[fn]), "código"', `const c = (0 as unknown as boolean); setTimeout(...(c ? [] : [() => {}]), "window.x");`],
+    ['diff-len apply inner-spread [...(c?[]:[fn]), "código"]', `const c = (0 as unknown as boolean); setTimeout.apply(null, [...(c ? [] : [() => {}]), "window.x"]);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -422,6 +425,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(fixture(`const setTimeout: any = (s: string) => s; [setTimeout][0]("x");`), "shadow-arr-timer.fixture.tsx")).toEqual([]);
     // alternativa de spread con TODAS las ramas función/número = sin string handler → exento (codex P2).
     expect(checkSourceFile(fixture(`const c = (0 as unknown as boolean); setTimeout(...(c ? [() => {}] : [() => {}]));`), "alt-fn.fixture.tsx")).toEqual([]);
+    // ramas de longitud distinta con trailing NO-string + spread de VARIABLE = exento/residual (codex P2).
+    expect(checkSourceFile(fixture(`const c = (0 as unknown as boolean); setTimeout(...(c ? [] : [() => {}]), () => {});`), "alt-difflen-fn.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(fixture(`const args: any[] = []; setTimeout(...args, "x");`), "var-spread-trailing.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea destructuring ARRAY/anidado de un miembro SAFE (now) (codex P2)", () => {
