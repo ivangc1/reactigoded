@@ -4880,10 +4880,83 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       for (const p of node.parameters) addBindingNamesFromPattern(p.name, paramScope);
       if (!ts.isArrowFunction(node)) paramScope.add("arguments");
       const paramContext = { ...bodyContext, localBindings: paramScope };
+      // PARÁMETROS con DEFAULT que aliasa un timer/partial-root (`function run(later = setTimeout)`,
+      // `run(WA = WebAssembly)`): el default corre en el scope de params pero el ALIAS vale en el
+      // BODY. Sin esto el body ve `later`/`WA` como locales OPACOS → bypass (codex P2). Threadea
+      // left-to-right (`f(a = setTimeout, b = a)`), resuelto contra el scope de params (shadow-aware).
+      // El partial-MEMBER de un pattern-param (`run({ compile } = WA)`) lo caza flagPartialDestructure.
+      let bodyCtx = bodyContext;
+      {
+        let pCtx = paramContext;
+        const tAdds = new Set();
+        const pAdds = new Map();
+        for (const p of node.parameters) {
+          if (!p.initializer) continue;
+          const lt = new Set();
+          collectStructuralAliases(
+            p.name,
+            p.initializer,
+            pCtx,
+            exprIsTimerValued,
+            (n) => {
+              lt.add(n);
+              tAdds.add(n);
+            },
+          );
+          const lp = new Map();
+          collectStructuralAliases(
+            p.name,
+            p.initializer,
+            pCtx,
+            exprPartialRoot,
+            (n, r) => {
+              lp.set(n, r);
+              pAdds.set(n, r);
+            },
+            true,
+          );
+          if (lt.size) {
+            pCtx = {
+              ...pCtx,
+              scopeTimerAliases: new Set([
+                ...(pCtx.scopeTimerAliases ?? []),
+                ...lt,
+              ]),
+            };
+          }
+          if (lp.size) {
+            pCtx = {
+              ...pCtx,
+              scopePartialAliases: new Map([
+                ...(pCtx.scopePartialAliases ?? []),
+                ...lp,
+              ]),
+            };
+          }
+        }
+        if (tAdds.size) {
+          bodyCtx = {
+            ...bodyCtx,
+            scopeTimerAliases: new Set([
+              ...(bodyCtx.scopeTimerAliases ?? []),
+              ...tAdds,
+            ]),
+          };
+        }
+        if (pAdds.size) {
+          bodyCtx = {
+            ...bodyCtx,
+            scopePartialAliases: new Map([
+              ...(bodyCtx.scopePartialAliases ?? []),
+              ...pAdds,
+            ]),
+          };
+        }
+      }
       const paramNodes = new Set(node.parameters);
       ts.forEachChild(node, (child) => {
         if (child === node.body) {
-          visit(child, bodyContext);
+          visit(child, bodyCtx);
         } else if (child === node.name && ts.isComputedPropertyName(child)) {
           // Computed key de método/accessor (`{ [window.x]() {} }`): se EVALÚA al crear
           // el objeto/clase (render path, scope EXTERNO) → si lee un global FLAGGEA aunque
@@ -5489,8 +5562,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       if (
         (ts.isObjectBindingPattern(node) ||
           ts.isArrayBindingPattern(node)) &&
-        ts.isVariableDeclaration(node.parent)
+        (ts.isVariableDeclaration(node.parent) ||
+          ts.isParameter(node.parent))
       ) {
+        // VariableDeclaration `const { compile } = WebAssembly` o PARÁMETRO con DEFAULT
+        // `function run({ compile } = WebAssembly)` — el default es el root destructurado (codex P2).
         pattern = node;
         initExpr = node.parent.initializer;
       } else if (

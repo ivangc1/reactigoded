@@ -396,6 +396,15 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
   });
 
+  // codex P2 (3b97676, #133): DEFAULT de un PARÁMETRO que aliasa un timer (superficie nueva: params).
+  it.each([
+    ["param default function run(later=setTimeout)", `export function run(later: any = setTimeout){ return later("window.x", 0); }`],
+    ["param default threaded run(a=setTimeout, b=a)", `export function run(a: any = setTimeout, b: any = a){ void a; return b("window.x", 0); }`],
+  ])("caza el timer aliasado por un DEFAULT de parámetro: %s", (_l, body) => {
+    const v = checkSourceFile(`/** @server-safe */\n${body}`, "param-timer.fixture.tsx");
+    expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
   it("NO flaggea setTimeout con callback función (no string)", () => {
     const v = checkSourceFile(fixture(`setTimeout(() => { let n = 0; n += 1; void n; }, 0);`), "fn-timer.fixture.tsx");
     expect(v).toEqual([]);
@@ -436,6 +445,14 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
 
   it("NO flaggea destructuring ARRAY/anidado de un miembro SAFE (now) (codex P2)", () => {
     expect(checkSourceFile(fixture(`const [{ now }] = [performance]; void now();`), "arr-safe-member.fixture.tsx")).toEqual([]);
+  });
+
+  it("NO flaggea parámetro SIN default ni con default seguro (param es opaco en runtime) (codex P2)", () => {
+    // Sin default → el arg es opaco (no resoluble parser-puro) → exento.
+    expect(checkSourceFile(`/** @server-safe */\nexport function run(later: any){ return later("x", 0); }`, "param-nodefault.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(`/** @server-safe */\nexport function run({ compile }: any){ return compile(new Uint8Array()); }`, "param-pat-nodefault.fixture.tsx")).toEqual([]);
+    // default a miembro SAFE / no-root → exento.
+    expect(checkSourceFile(`/** @server-safe */\nexport function run(now: any = performance.now){ return now(); }`, "param-safe.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -3144,6 +3161,10 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (c23f5a7, #133): el DEFAULT del binding-element provee el root (key ausente).
     ["default {x:{compile}=WebAssembly}={}", `/** @server-safe */\nexport function f() { const { x: { compile } = WebAssembly } = {} as any; return compile(new Uint8Array()); }`],
     ["default array [{compile}=WebAssembly]=[]", `/** @server-safe */\nexport function f() { const [{ compile } = WebAssembly] = [] as any; return compile(new Uint8Array()); }`],
+    // codex P2 (3b97676, #133): PARÁMETRO con default partial-root (alias-root o destructure-member).
+    ["param run(WA=WebAssembly){ WA.compile() }", `/** @server-safe */\nexport function run(WA: any = WebAssembly){ return WA.compile(new Uint8Array()); }`],
+    ["param run({compile}=WebAssembly){ compile() }", `/** @server-safe */\nexport function run({ compile }: any = WebAssembly){ return compile(new Uint8Array()); }`],
+    ["param run([{compile}]=[WebAssembly]){ compile() }", `/** @server-safe */\nexport function run([{ compile }]: any = [WebAssembly]){ return compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
