@@ -4891,7 +4891,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         const tAdds = new Set();
         const pAdds = new Map();
         for (const p of node.parameters) {
-          if (!p.initializer) continue;
+          // NO saltar por `!p.initializer`: un DEFAULT de binding-element dentro del pattern
+          // (`run({ later = setTimeout })`) ejecuta aunque el parámetro no tenga default ENTERO —
+          // collectStructuralAliases recursa esos defaults desde el pattern (codex P2).
           const lt = new Set();
           collectStructuralAliases(
             p.name,
@@ -5666,14 +5668,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             }
             return; // init ES el root → no hay literal anidado que recursar
           }
-          // RECURSIÓN ESTRUCTURAL: init es un object/array LITERAL → matchear sub-patrones (por key /
-          // por índice) y bajar. Cubre object, array y mezclas (`{ x: [{ compile }] } = { x:
-          // [WebAssembly] }`) — paridad con collectStructuralAliases (codex P2).
-          const lit = singleLiteralLeaf(init);
-          if (!lit) return;
           // sub-patrón + DEFAULT del elemento (`{ x: { compile } = WebAssembly }`): el default provee
-          // el root cuando la key falta → recursar también contra él, paridad con los alias collectors
-          // (codex P2). PropertyAssignment con rename-default (`{ x: t = d }`) = BinaryExpression `=`.
+          // el root cuando la key falta → recursar contra él, paridad con los alias collectors (codex
+          // P2). PropertyAssignment con rename-default (`{ x: t = d }`) = BinaryExpression `=`.
           const subAndDefault = (el) => {
             if (ts.isBindingElement(el)) {
               return { sub: el.name, def: el.initializer ?? null };
@@ -5697,6 +5694,21 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             }
             return { sub: el, def: null };
           };
+          // DEFAULTS: se evalúan cuando la key/índice FALTA, INDEPENDIENTE de si el init es un literal
+          // o un source OPACO (`const { x: { compile } = WebAssembly } = props`) → escanear SIEMPRE,
+          // antes del early-return por init no-literal (codex P2).
+          for (const el of elems) {
+            if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) continue;
+            const { sub, def } = subAndDefault(el);
+            if (def && sub && isDestructurePattern(sub)) {
+              flagPartialDestructure(sub, def);
+            }
+          }
+          // RECURSIÓN ESTRUCTURAL por VALOR MATCHEADO: solo si init es un object/array LITERAL →
+          // matchear sub-patrones (por key / por índice) y bajar. Cubre object, array y mezclas
+          // (`{ x: [{ compile }] } = { x: [WebAssembly] }`) — paridad con collectStructuralAliases.
+          const lit = singleLiteralLeaf(init);
+          if (!lit) return;
           if (isObjPat && ts.isObjectLiteralExpression(lit)) {
             for (const el of elems) {
               const kn = ts.isBindingElement(el)
@@ -5705,13 +5717,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                   ? el.name
                   : null;
               const key = keyTextOf(kn);
-              const { sub, def } = subAndDefault(el);
-              if (!key || !sub || !isDestructurePattern(sub)) {
-                if (def && sub && isDestructurePattern(sub)) {
-                  flagPartialDestructure(sub, def);
-                }
-                continue;
-              }
+              const { sub } = subAndDefault(el);
+              if (!key || !sub || !isDestructurePattern(sub)) continue;
               const ip = lit.properties.find(
                 (p) =>
                   ts.isPropertyAssignment(p) &&
@@ -5719,19 +5726,17 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                   structuralKeyText(p.name) === key,
               );
               if (ip) flagPartialDestructure(sub, ip.initializer);
-              if (def) flagPartialDestructure(sub, def);
             }
           } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
             for (let i = 0; i < elems.length; i++) {
               const el = elems[i];
               if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) continue;
-              const { sub, def } = subAndDefault(el);
+              const { sub } = subAndDefault(el);
               if (!sub || !isDestructurePattern(sub)) continue;
               const initEl = lit.elements[i];
               if (initEl && !ts.isOmittedExpression(initEl)) {
                 flagPartialDestructure(sub, initEl);
               }
-              if (def) flagPartialDestructure(sub, def);
             }
           }
         };
@@ -5884,16 +5889,21 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           ts.isPropertyAccessExpression(leaf) ||
           ts.isElementAccessExpression(leaf)
         ) {
-          const root = unwrapErased(leaf.expression);
-          if (
-            ts.isIdentifier(root) &&
-            (root.text === "globalThis" ||
-              root.text === "window" ||
-              root.text === "self" ||
-              root.text === "global") &&
-            // Mismo respeto al shadow: un `globalThis`/`window` LOCAL no es el objeto global real.
-            !context.localBindings.has(root.text)
-          ) {
+          // Receiver value-transparente: `(0, globalThis).setTimeout(…)`, `(c ? window : self).
+          // setTimeout(…)` — resolver por valueTransparentLeaves, no solo unwrapErased (globalThis/
+          // window/… y setTimeout son SAFE → sin esto no flaggea aguas arriba) (codex P2). Shadow-aware.
+          const receiverIsGlobalObj = valueTransparentLeaves(
+            leaf.expression,
+          ).some(
+            (r) =>
+              ts.isIdentifier(r) &&
+              (r.text === "globalThis" ||
+                r.text === "window" ||
+                r.text === "self" ||
+                r.text === "global") &&
+              !context.localBindings.has(r.text),
+          );
+          if (receiverIsGlobalObj) {
             const mn = accessedMemberName(leaf);
             if (
               mn === "setTimeout" ||
