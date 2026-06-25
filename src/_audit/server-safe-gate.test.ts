@@ -345,6 +345,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['for(var later=setTimeout;;){later(str);break}', `for (var later = setTimeout; ; ) { later("window.x", 0); break; }`],
     // codex P2: default renombrado en assignment-destructuring.
     ['({x:later=setTimeout}={}); later(str)', `let later: any; ({ x: later = setTimeout } = {} as any); later("window.x", 0);`],
+    // codex P2 (c2eec1a, #133): key COMPUTADA value-transparente + default de array-assignment.
+    ['const {["t"]:later}={t:setTimeout}; later(str)', `const { ["t"]: later } = { t: setTimeout } as any; later("window.x", 0);`],
+    ['[later=setTimeout]=[]; later(str)', `let later: any; [later = setTimeout] = [] as any; later("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -3003,6 +3006,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["object-rest const {...WA}=WebAssembly", `/** @server-safe */\nexport function f() { const { ...WA } = WebAssembly as any; return WA.compile(new Uint8Array()); }`],
     ["object-rest const {...perf}=performance", `/** @server-safe */\nexport function f() { const { ...perf } = performance as any; return perf.measureUserAgentSpecificMemory(); }`],
     ["object-rest parcial {len, ...WA}=WebAssembly", `/** @server-safe */\nexport function f() { const { length: len, ...WA } = WebAssembly as any; void len; return WA.compile(new Uint8Array()); }`],
+    // codex P2 (c2eec1a, #133): key COMPUTADA + default de array-assignment.
+    ['computed const {["wa"]:WA}={wa:WebAssembly}', `/** @server-safe */\nexport function f() { const { ["wa"]: WA } = { wa: WebAssembly } as any; return WA.compile(new Uint8Array()); }`],
+    ["array-assign default [WA=WebAssembly]=[]", `/** @server-safe */\nexport function f() { let WA: any; [WA = WebAssembly] = [] as any; return WA.compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

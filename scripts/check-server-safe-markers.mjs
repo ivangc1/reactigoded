@@ -2164,6 +2164,22 @@ function singleLiteralLeaf(expr) {
  * patterns ANIDADOS, y proyección `[X][i]` (vía resolve). Espejo genérico de `enrollBinding`
  * (react-family) para los colectores de timer/partial alias. codex P2 (alias-form completeness).
  */
+// Texto de una key de propiedad/binding, foldeando keys COMPUTADAS value-transparentes
+// (`["wa"]`, `[1 && "wa"]` → "wa"), como el resto de paths del gate (codex P2). null si no es
+// estáticamente conocible.
+function structuralKeyText(keyNode) {
+  if (!keyNode) return null;
+  if (ts.isComputedPropertyName(keyNode)) {
+    const leaves = valueTransparentLeaves(keyNode.expression);
+    const lit =
+      leaves.length === 1 && ts.isStringLiteralLike(leaves[0]) ? leaves[0] : null;
+    return lit ? lit.text : null;
+  }
+  return ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode)
+    ? keyNode.text
+    : null;
+}
+
 function collectStructuralAliases(target, init, context, resolve, emit, enrollRest = false) {
   if (!target) return;
   const t = unwrapErased(target);
@@ -2246,17 +2262,13 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
           );
         }
       } else continue;
-      const key =
-        keyNode && (ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode))
-          ? keyNode.text
-          : null;
+      const key = structuralKeyText(keyNode);
       if (!key) continue;
       const ip = lit.properties.find(
         (p) =>
           ts.isPropertyAssignment(p) &&
           p.name &&
-          (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
-          p.name.text === key,
+          structuralKeyText(p.name) === key,
       );
       if (ip) {
         collectStructuralAliases(sub, ip.initializer, context, resolve, emit, enrollRest);
@@ -2271,7 +2283,17 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
   ) {
     t.elements.forEach((e, i) => {
       if (ts.isOmittedExpression(e)) return;
-      const sub = ts.isBindingElement(e) ? e.name : e;
+      let sub = ts.isBindingElement(e) ? e.name : e;
+      // default en array assignment-destr `[WA = WebAssembly] = []`: el elemento es la
+      // BinaryExpression `WA = WebAssembly`. Desempaquetar: target=left, default=right (codex P2).
+      if (
+        sub &&
+        ts.isBinaryExpression(sub) &&
+        sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        collectStructuralAliases(sub.left, sub.right, context, resolve, emit, enrollRest);
+        sub = sub.left;
+      }
       collectStructuralAliases(sub, lit.elements[i], context, resolve, emit, enrollRest);
     });
   }
