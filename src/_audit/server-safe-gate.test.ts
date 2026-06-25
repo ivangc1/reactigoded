@@ -375,6 +375,10 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['spread setTimeout.bind(...[null, "código"])()', `(setTimeout.bind(...[null, "window.x"]))();`],
     ['Reflect.apply(setTimeout, undefined, ["código"])', `Reflect.apply(setTimeout, undefined, ["window.x"]);`],
     ['Reflect.apply(alias, u, ["código"])', `const later = setTimeout; Reflect.apply(later, undefined, ["window.x"]);`],
+    // codex P2 (5eee12d, #133): spread DENTRO del array de apply + callee array-indexado.
+    ['setTimeout.apply(null, [...["código"]])', `setTimeout.apply(null, [...["window.x"]]);`],
+    ['Reflect.apply(setTimeout, u, [...["código"]])', `Reflect.apply(setTimeout, undefined, [...["window.x"]]);`],
+    ['array-indexed callee [setTimeout][0]("código")', `[setTimeout][0]("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -409,6 +413,12 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // Reflect.apply con timer pero args VARIABLE = data-flow residual; con no-timer = exento (codex P2).
     expect(checkSourceFile(fixture(`const a: any = ["x"]; Reflect.apply(setTimeout, undefined, a);`), "reflect-var.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(fixture(`const fn: any = (s: string) => s; Reflect.apply(fn, undefined, ["x"]);`), "reflect-nontimer.fixture.tsx")).toEqual([]);
+    // array-indexed callee con timer SOMBREADO localmente = no es el global → exento (codex P2).
+    expect(checkSourceFile(fixture(`const setTimeout: any = (s: string) => s; [setTimeout][0]("x");`), "shadow-arr-timer.fixture.tsx")).toEqual([]);
+  });
+
+  it("NO flaggea destructuring ARRAY/anidado de un miembro SAFE (now) (codex P2)", () => {
+    expect(checkSourceFile(fixture(`const [{ now }] = [performance]; void now();`), "arr-safe-member.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -470,6 +480,14 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(v.length).toBeGreaterThan(0);
     // Function aparece como identifier en posición de read (arg) → caza.
     expect(v.some((it) => it.detail.includes("Function"))).toBe(true);
+  });
+
+  it("caza `Reflect.construct(...[F.constructor, [...]])` con .constructor en SPREAD (codex P2)", () => {
+    const v = checkSourceFile(
+      fixture(`Reflect.construct(...[((() => {}) as any).constructor, ["return window"]])();`),
+      "Reflect-construct-spread.fixture.tsx",
+    );
+    expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
   });
 
   it("caza `globalThis.constructor.constructor(...)` (vía globalThis access)", () => {
@@ -3090,6 +3108,10 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (3b7b6ba, #133): destructuring ANIDADO contra un object-literal (recursión estructural).
     ["nested destructure const {x:{compile}}={x:WebAssembly}", `/** @server-safe */\nexport function f() { const { x: { compile } } = { x: WebAssembly }; return compile(new Uint8Array()); }`],
     ["nested destructure const {x:{measure}}={x:performance}", `/** @server-safe */\nexport function f() { const { x: { measureUserAgentSpecificMemory: m } } = { x: performance }; return m(); }`],
+    // codex P2 (5eee12d, #133): destructuring ARRAY + mezclas obj/array (recursión estructural).
+    ["array nested const [{compile}]=[WebAssembly]", `/** @server-safe */\nexport function f() { const [{ compile }] = [WebAssembly]; return compile(new Uint8Array()); }`],
+    ["mixed const {x:[{compile}]}={x:[WebAssembly]}", `/** @server-safe */\nexport function f() { const { x: [{ compile }] } = { x: [WebAssembly] }; return compile(new Uint8Array()); }`],
+    ["array assign [{compile}]=[WebAssembly]", `/** @server-safe */\nexport function f() { let compile: any; [{ compile }] = [WebAssembly]; return compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

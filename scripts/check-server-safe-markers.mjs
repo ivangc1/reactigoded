@@ -3488,12 +3488,25 @@ function isWeaponizedConstructorAccess(node) {
   //     es eval. El guard de receiver (arriba) ya descartó `Reflect.construct(({}).constructor,…)`
   //     (= new Object, no eval). DISTINTO del residual `Reflect.get(x,"constructor")` (ACCESO
   //     indirecto, sin nodo `.constructor` a la vista). dot O bracket-string. codex P1.
+  // El `.constructor` puede llegar como 1er arg DIRECTO o dentro de un SPREAD de array-literal
+  // (`Reflect.construct(...[F.constructor, […]])`): subir por el array+spread hasta el call y
+  // comparar contra el 1er arg APLANADO (codex P2). Token-en-su-sitio (el array está a la vista).
+  let callNode = parent;
   if (
-    ts.isCallExpression(parent) &&
-    parent.arguments.length > 0 &&
-    parent.arguments[0] === child
+    ts.isArrayLiteralExpression(parent) &&
+    parent.parent &&
+    ts.isSpreadElement(parent.parent) &&
+    parent.parent.parent &&
+    ts.isCallExpression(parent.parent.parent)
   ) {
-    const callee = unwrapErased(parent.expression);
+    callNode = parent.parent.parent;
+  }
+  if (
+    ts.isCallExpression(callNode) &&
+    callNode.arguments.length > 0 &&
+    flattenLiteralSpreadArgs(callNode.arguments)[0] === child
+  ) {
+    const callee = unwrapErased(callNode.expression);
     if (
       ts.isPropertyAccessExpression(callee) ||
       ts.isElementAccessExpression(callee)
@@ -5402,11 +5415,16 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     {
       let pattern = null;
       let initExpr = null;
-      if (ts.isObjectBindingPattern(node) && ts.isVariableDeclaration(node.parent)) {
+      if (
+        (ts.isObjectBindingPattern(node) ||
+          ts.isArrayBindingPattern(node)) &&
+        ts.isVariableDeclaration(node.parent)
+      ) {
         pattern = node;
         initExpr = node.parent.initializer;
       } else if (
-        ts.isObjectLiteralExpression(node) &&
+        (ts.isObjectLiteralExpression(node) ||
+          ts.isArrayLiteralExpression(node)) &&
         ts.isBinaryExpression(node.parent) &&
         node.parent.left === node &&
         node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
@@ -5437,12 +5455,23 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         // WebAssembly; const { compile } = WA`) — exprPartialRoot lo cubre. Y RECURSE por las mismas
         // formas estructurales que `collectStructuralAliases` (`const { x: { compile } } = { x:
         // WebAssembly }`): el init es un object/array literal, no el root directo (codex P2).
+        const isDestructurePattern = (n) =>
+          ts.isObjectBindingPattern(n) ||
+          ts.isObjectLiteralExpression(n) ||
+          ts.isArrayBindingPattern(n) ||
+          ts.isArrayLiteralExpression(n);
         const flagPartialDestructure = (pat, init) => {
-          const elems = ts.isObjectBindingPattern(pat)
-            ? pat.elements
-            : pat.properties;
+          const isObjPat =
+            ts.isObjectBindingPattern(pat) ||
+            ts.isObjectLiteralExpression(pat);
+          const elems = ts.isObjectLiteralExpression(pat)
+            ? pat.properties
+            : pat.elements;
           const partialRootName = exprPartialRoot(init, context);
           if (partialRootName) {
+            // Solo un OBJECT pattern extrae un MIEMBRO por key; un array pattern sobre el root es
+            // iteración (no member-access). init ES el root → sin literal anidado que recursar.
+            if (!isObjPat) return;
             const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRootName];
             for (const el of elems) {
               const kn = ts.isBindingElement(el)
@@ -5490,38 +5519,44 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             }
             return; // init ES el root → no hay literal anidado que recursar
           }
-          // RECURSIÓN: init es un object-literal → matchear sub-patrones por key y bajar.
+          // RECURSIÓN ESTRUCTURAL: init es un object/array LITERAL → matchear sub-patrones (por key /
+          // por índice) y bajar. Cubre object, array y mezclas (`{ x: [{ compile }] } = { x:
+          // [WebAssembly] }`) — paridad con collectStructuralAliases (codex P2).
           const lit = singleLiteralLeaf(init);
-          if (!lit || !ts.isObjectLiteralExpression(lit)) return;
-          for (const el of elems) {
-            const kn = ts.isBindingElement(el)
-              ? el.propertyName || el.name
-              : ts.isPropertyAssignment(el)
+          if (!lit) return;
+          if (isObjPat && ts.isObjectLiteralExpression(lit)) {
+            for (const el of elems) {
+              const kn = ts.isBindingElement(el)
+                ? el.propertyName || el.name
+                : ts.isPropertyAssignment(el)
+                  ? el.name
+                  : null;
+              const key = keyTextOf(kn);
+              const sub = ts.isBindingElement(el)
                 ? el.name
-                : null;
-            const key = keyTextOf(kn);
-            const sub = ts.isBindingElement(el)
-              ? el.name
-              : ts.isPropertyAssignment(el)
-                ? el.initializer
-                : null;
-            if (
-              !key ||
-              !sub ||
-              !(
-                ts.isObjectBindingPattern(sub) ||
-                ts.isObjectLiteralExpression(sub)
-              )
-            ) {
-              continue;
+                : ts.isPropertyAssignment(el)
+                  ? el.initializer
+                  : null;
+              if (!key || !sub || !isDestructurePattern(sub)) continue;
+              const ip = lit.properties.find(
+                (p) =>
+                  ts.isPropertyAssignment(p) &&
+                  p.name &&
+                  structuralKeyText(p.name) === key,
+              );
+              if (ip) flagPartialDestructure(sub, ip.initializer);
             }
-            const ip = lit.properties.find(
-              (p) =>
-                ts.isPropertyAssignment(p) &&
-                p.name &&
-                structuralKeyText(p.name) === key,
-            );
-            if (ip) flagPartialDestructure(sub, ip.initializer);
+          } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
+            for (let i = 0; i < elems.length; i++) {
+              const el = elems[i];
+              if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) continue;
+              const sub = ts.isBindingElement(el) ? el.name : el;
+              if (!sub || !isDestructurePattern(sub)) continue;
+              const initEl = lit.elements[i];
+              if (initEl && !ts.isOmittedExpression(initEl)) {
+                flagPartialDestructure(sub, initEl);
+              }
+            }
           }
         };
         flagPartialDestructure(pattern, initExpr);
@@ -5693,6 +5728,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               break;
             }
           }
+          // Proyección token-local de un timer (`[setTimeout][0]("código")`) — exprIsTimerValued ya
+          // conoce `[X][i]` y respeta el shadow; sin esto el callee array-indexado bypassea (codex
+          // P2). Llamada directa → handler en arg[0].
+          if (timerName === null && exprIsTimerValued(leaf, context)) {
+            timerName = "timer.projection";
+            break;
+          }
         } else if (ts.isCallExpression(leaf)) {
           // BIND-only: `setTimeout.bind(null)("código")` — la fn ligada (sin handler bindeado) es un
           // timer cuyo handler llega en ESTA llamada externa (arg[0]). exprIsTimerValued reconoce
@@ -5711,7 +5753,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         const ls = valueTransparentLeaves(arg);
         const arr =
           ls.length === 1 && ts.isArrayLiteralExpression(ls[0]) ? ls[0] : null;
-        return arr ? (arr.elements[0] ?? null) : null;
+        // Aplanar SPREADs dentro del array de args (`apply(null, [...["código"]])`) antes de tomar
+        // el [0], igual que la lista de args externa (codex P2).
+        return arr ? (flattenLiteralSpreadArgs(arr.elements)[0] ?? null) : null;
       };
       // Posición del arg que debe ser string según la FORMA de invocación:
       //   directo  `<timer>("código", …)`           → arg[0]
