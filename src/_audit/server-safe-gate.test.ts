@@ -367,6 +367,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['import-equals later=setTimeout; later(str)', `import later = setTimeout; later("window.x", 0);`],
     ['declarador const _=(later=setTimeout), id=later(str)', `let later: any; const _ = (later = setTimeout), id = later("window.x", 0); void _; void id;`],
     ['for-init expr (later=setTimeout; later(str);)', `let later: any; for (later = setTimeout; later("window.x", 0); ) { break; }`],
+    // codex P2 (9abe984, #133): handler vía SPREAD de array-literal.
+    ['spread setTimeout(...["código", 0])', `setTimeout(...["window.x", 0]);`],
+    ['spread alias later(...["código"])', `const later = setTimeout; later(...["window.x"]);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -393,6 +396,11 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it("NO flaggea una asignación embebida que NO es un root (sin timer/partial)", () => {
     const code = `/** @server-safe */\nexport function f() { let x: any; const y: any = (s: string) => s; return (x = 1) && y("s"); }`;
     expect(checkSourceFile(code, "embed-fp.fixture.tsx")).toEqual([]);
+  });
+
+  it("NO flaggea spread de timer con callback función o variable (codex P2)", () => {
+    expect(checkSourceFile(fixture(`setTimeout(...[() => {}, 0]);`), "spread-fn.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(fixture(`const args: any = ["x"]; setTimeout(...args);`), "spread-var.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -2427,6 +2435,8 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: param nested-default go({opts:{R=React}})", HD + `export function C(){ function go({ opts: { R = React as any } = {} as any } = {} as any){ R.useEffect=(cb:any)=>cb(); } go(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: var nested-default const {opts:{R=React}}", HD + `export function C(){ const { opts: { R = React as any } = {} as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: deep nested-default {a:{b:{R=React}}}", HD + `export function C(){ const { a: { b: { R = React as any } = {} as any } = {} as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (9abe984, #133): key COMPUTADA value-transparente en el destructuring de la familia.
+    ["familia: computed key {[\"a\"]:A}={a:React}", HD + `export function C(){ const { ["a"]: A } = { a: React }; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });

@@ -2050,17 +2050,15 @@ function gatherReactNamespaceFamily(sourceFile) {
           keyNode = e.name;
           sub = e.name;
         } else continue;
-        const key =
-          keyNode && (ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode))
-            ? keyNode.text
-            : null;
+        // Key COMPUTADA value-transparente (`{ ["a"]: A } = { a: React }`) → "a", como el resto del
+        // gate (structuralKeyText), para no dejar `A` fuera de la familia react (codex P2).
+        const key = structuralKeyText(keyNode);
         if (!key) continue;
         const ip = lit.properties.find(
           (p) =>
             ts.isPropertyAssignment(p) &&
             p.name &&
-            (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) &&
-            p.name.text === key,
+            structuralKeyText(p.name) === key,
         );
         if (ip) enrollBinding(sub, ip.initializer);
       }
@@ -5679,6 +5677,18 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             break;
           }
         }
+      }
+      // SPREAD de array-literal como handler: `setTimeout(...["código", 0])` → su elemento [0]
+      // (codex P2). El callee sigue siendo el timer; sin esto el SpreadElement oculta el string.
+      // Spread de una VARIABLE = data-flow residual.
+      if (stringArgExpr && ts.isSpreadElement(stringArgExpr)) {
+        const spreadLeaves = valueTransparentLeaves(stringArgExpr.expression);
+        const arr =
+          spreadLeaves.length === 1 &&
+          ts.isArrayLiteralExpression(spreadLeaves[0])
+            ? spreadLeaves[0]
+            : null;
+        stringArgExpr = arr ? (arr.elements[0] ?? null) : null;
       }
       const isStringArg =
         stringArgExpr !== null &&
