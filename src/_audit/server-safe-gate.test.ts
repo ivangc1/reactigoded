@@ -354,6 +354,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['embedded comma (later=setTimeout, later(str))', `let later: any; void ((later = setTimeout, later("window.x", 0)));`],
     ['embedded || (later=setTimeout) || later(str)', `let later: any; void ((later = setTimeout) || later("window.x", 0));`],
     ['embedded ?: c?(later=setTimeout)&&later(str):0', `let later: any; const c = (globalThis as any).c; void (c ? ((later = setTimeout) && later("window.x", 0)) : 0);`],
+    // codex P2 (3f27e0c, #133): assignment embebida en el CALLEE (se evalúa antes del sink-check del call).
+    ['embedded en callee ((later=setTimeout), later)(str)', `let later: any; void (((later = setTimeout), later)("window.x", 0));`],
+    ['embedded en callee ((later=setTimeout) && later)(str)', `let later: any; void (((later = setTimeout) && later)("window.x", 0));`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -3035,6 +3038,8 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["array-assign default [WA=WebAssembly]=[]", `/** @server-safe */\nexport function f() { let WA: any; [WA = WebAssembly] = [] as any; return WA.compile(new Uint8Array()); }`],
     // codex P2 / §141: assignment-EXPRESSION embebida en operador value-transparente.
     ["embedded (WA=WebAssembly) && WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; return (WA = WebAssembly) && WA.compile(new Uint8Array()); }`],
+    // codex P2 (3f27e0c, #133): embebida en el RECEIVER (se evalúa antes del sink-check del member).
+    ["embedded en receiver ((WA=WebAssembly), WA).compile()", `/** @server-safe */\nexport function f() { let WA: any; return ((WA = WebAssembly), WA).compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

@@ -4487,6 +4487,30 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   // (que se corrige reescribiendo en el patrón canónico useCallback +
   // JSX prop directo), uno espurio produce un silent bypass del gate.
   function visit(node, context) {
+    // §141 — alias de assignment-expressions EMBEBIDAS evaluadas ANTES de que `node` sea relevante
+    // para un sink, enroladas ANTES de los checks (codex P2): (1) operandos hermanos en una cadena
+    // value-transparente (`(later = setTimeout) && later(…)`) — enrolar en el TOP de la cadena; (2) el
+    // callee/receiver de un call/member/new/tagged (`((later = setTimeout), later)("x")`, `((WA =
+    // WebAssembly), WA).compile(…)`) — el head se EVALÚA antes del sink, y su check corre en ESTE
+    // nodo (no al descender). Mismo unwrap value-transparente; NO atraviesa calls (RHS-call = residual).
+    if (
+      isValueTransparentOperatorNode(node) &&
+      !isValueTransparentOperatorNode(node.parent)
+    ) {
+      context = withEmbeddedAssignmentAliases(context, node);
+    }
+    if (
+      ts.isCallExpression(node) ||
+      ts.isNewExpression(node) ||
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node) ||
+      ts.isTaggedTemplateExpression(node)
+    ) {
+      const head = ts.isTaggedTemplateExpression(node)
+        ? node.tag
+        : node.expression;
+      context = withEmbeddedAssignmentAliases(context, head);
+    }
     // (a) Detectar typeof guards en if-statements: el then-branch
     // hereda el guard activo. El else-branch NO (en else, X está
     // undefined per la negación de la condición positiva).
@@ -5614,17 +5638,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // bindear hacía ver `a` como global no-bound = FP (codex P2). Bindea cada declarador antes del
     // siguiente; el binding queda LOCAL al recorrido (la per-stmt loop sigue añadiéndolos al scope
     // que se propaga a los statements posteriores).
-    // Assignment-alias EMBEBIDO en un operador value-transparente (`(later = setTimeout) && later(…)`):
-    // enrolar antes de visitar los hijos para que un uso HERMANO lo reconozca (codex P2/§141 — root
-    // intacto + operadores ya ratificados = lado CAZAR). Solo en el TOP de la cadena (parent NO es
-    // VT-operator) para no re-escanear. Reusa el mismo unwrap; no atraviesa calls (RHS-call = residual).
-    if (
-      isValueTransparentOperatorNode(node) &&
-      !isValueTransparentOperatorNode(node.parent)
-    ) {
-      context = withEmbeddedAssignmentAliases(context, node);
-    }
-
     if (ts.isVariableDeclarationList(node)) {
       let declCtx = context;
       for (const decl of node.declarations) {
