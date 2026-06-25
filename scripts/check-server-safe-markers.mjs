@@ -2397,15 +2397,24 @@ function timerAliasNamesDeclaredBy(stmt, context) {
       }
     }
   } else if (ts.isExpressionStatement(stmt)) {
-    // `({ later } = …)` envuelve la asignación en paréntesis (los object-literal targets los exigen)
-    // → desenvolver antes de leer el BinaryExpression. identifier-LHS Y destructuring-assign (codex P2).
-    const ax = unwrapErased(stmt.expression);
-    if (
-      ts.isBinaryExpression(ax) &&
-      ax.operatorToken.kind === ts.SyntaxKind.EqualsToken
-    ) {
-      collectStructuralAliases(ax.left, ax.right, context, exprIsTimerValued, emit);
-    }
+    // Assignments TOP-LEVEL (`later = setTimeout;`, `({later}={…})`) Y EMBEBIDAS en operadores value-
+    // transparentes (`(later = setTimeout, 0);`) → enrolar para statements POSTERIORES (la asignación
+    // YA ejecutó antes del sink siguiente; codex P2). `eachEmbeddedAssignment` (mismo predicado §141,
+    // sin path paralelo) cubre las tres; threadea ctx left-to-right para cadenas.
+    let ctx = context;
+    eachEmbeddedAssignment(stmt.expression, (assign) => {
+      const local = new Set();
+      collectStructuralAliases(assign.left, assign.right, ctx, exprIsTimerValued, (n) => {
+        local.add(n);
+        names.add(n);
+      });
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopeTimerAliases: new Set([...(ctx.scopeTimerAliases ?? []), ...local]),
+        };
+      }
+    });
   }
   return names;
 }
@@ -2511,14 +2520,32 @@ function partialAliasesDeclaredBy(stmt, context) {
       }
     }
   } else if (ts.isExpressionStatement(stmt)) {
-    // `({ WA } = …)` va entre paréntesis → desenvolver antes del BinaryExpression (codex P2).
-    const ax = unwrapErased(stmt.expression);
-    if (
-      ts.isBinaryExpression(ax) &&
-      ax.operatorToken.kind === ts.SyntaxKind.EqualsToken
-    ) {
-      collectStructuralAliases(ax.left, ax.right, context, exprPartialRoot, emit, true);
-    }
+    // Assignments TOP-LEVEL (`({WA}={…})`) Y EMBEBIDAS (`(WA = WebAssembly, 0);`) → enrolar para
+    // statements POSTERIORES (codex P2). Mismo eachEmbeddedAssignment del §141; threadea ctx.
+    let ctx = context;
+    eachEmbeddedAssignment(stmt.expression, (assign) => {
+      const local = new Map();
+      collectStructuralAliases(
+        assign.left,
+        assign.right,
+        ctx,
+        exprPartialRoot,
+        (n, r) => {
+          local.set(n, r);
+          out.set(n, r);
+        },
+        true,
+      );
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopePartialAliases: new Map([
+            ...(ctx.scopePartialAliases ?? []),
+            ...local,
+          ]),
+        };
+      }
+    });
   }
   return out;
 }
