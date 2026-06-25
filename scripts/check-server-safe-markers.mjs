@@ -1926,8 +1926,10 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       if (om && MUTATORS[om[0]]?.has(om[1]) && node.arguments.length > 0) {
         // Object.assign(X,…) / Reflect.set(X,…) — X (1er arg) es el target. Value-transparent
         // (`Object.assign((0, React), …)` → React). El CALLEE (Object.assign) se resolvió
-        // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT.
-        addReceiverRoots(node.arguments[0]);
+        // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT. Args con
+        // SPREAD de array-literal aplanados (`Object.assign(...[React, …])`) (codex P2).
+        const mutArgs = flattenLiteralSpreadArgs(node.arguments);
+        if (mutArgs[0]) addReceiverRoots(mutArgs[0]);
       }
     }
     ts.forEachChild(node, visit);
@@ -3201,6 +3203,30 @@ function valueTransparentLeaves(node, out) {
 /** ¿`child` es una sub-expresión value-transparente de `parent`? (ascenso). */
 function isValueTransparentParent(parent, child) {
   return valueTransparentChildren(parent).indexOf(child) !== -1;
+}
+
+// Aplana los SPREAD de ARRAY-LITERAL en una lista de args: `f(...["a", b], c)` → ["a", b, c]. Un
+// spread de VARIABLE (`...args`) NO se aplana (data-flow residual): se conserva como SpreadElement
+// (no produce un string-leaf, así que no flaggea). Usado para que el handler/target/string de un
+// sink (timer directo/.call/.apply/.bind, Reflect.apply, mutador react) no quede oculto tras un
+// spread literal (codex P2). Token-en-su-sitio: el array literal está a la vista.
+function flattenLiteralSpreadArgs(args) {
+  const out = [];
+  for (const a of args) {
+    if (ts.isSpreadElement(a)) {
+      const leaves = valueTransparentLeaves(a.expression);
+      const arr =
+        leaves.length === 1 && ts.isArrayLiteralExpression(leaves[0])
+          ? leaves[0]
+          : null;
+      if (arr) {
+        for (const el of arr.elements) out.push(el);
+        continue;
+      }
+    }
+    out.push(a);
+  }
+  return out;
 }
 
 // ¿`node` es un NODO operador value-transparente? Mismo SET de operadores que `valueTransparentChildren`
@@ -5389,75 +5415,116 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         initExpr = node.parent.right;
       }
       if (pattern && initExpr && !context.isInClientOnlyDeferredBody) {
-        // El root resuelve DIRECTO (no sombreado / forward) o vía ALIAS scope-aware
-        // (`const WA = WebAssembly; const { compile } = WA`) — exprPartialRoot lo cubre (codex P2).
-        const partialRootName = exprPartialRoot(initExpr, context);
-        if (partialRootName) {
-          const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRootName];
-          const keyTextOf = (kn) => {
-            if (!kn) return null;
-            if (ts.isComputedPropertyName(kn)) {
-              // Key computada VALUE-TRANSPARENTE: `[1 && "M"]`, `[(0,"M")]`, `["M" as const]`
-              // → "M". Mismo fold que el property-access path (accessedMemberName), para no
-              // dejar un hueco que la rama (c.1b) ya normaliza (codex P2). Operador no-value-
-              // transparente (concat `"a"+"b"`) = §141 residual, igual que el eval-sink.
-              const leaves = valueTransparentLeaves(kn.expression);
-              const lit =
-                leaves.length === 1 && ts.isStringLiteralLike(leaves[0])
-                  ? leaves[0]
+        const keyTextOf = (kn) => {
+          if (!kn) return null;
+          if (ts.isComputedPropertyName(kn)) {
+            // Key computada VALUE-TRANSPARENTE: `[1 && "M"]`, `[(0,"M")]`, `["M" as const]`
+            // → "M". Mismo fold que el property-access path (accessedMemberName), para no
+            // dejar un hueco que la rama (c.1b) ya normaliza (codex P2). Operador no-value-
+            // transparente (concat `"a"+"b"`) = §141 residual, igual que el eval-sink.
+            const leaves = valueTransparentLeaves(kn.expression);
+            const lit =
+              leaves.length === 1 && ts.isStringLiteralLike(leaves[0])
+                ? leaves[0]
+                : null;
+            return lit ? lit.text : null;
+          }
+          return ts.isIdentifier(kn) || ts.isStringLiteralLike(kn)
+            ? kn.text
+            : null;
+        };
+        // El root resuelve DIRECTO (no sombreado / forward) o vía ALIAS scope-aware (`const WA =
+        // WebAssembly; const { compile } = WA`) — exprPartialRoot lo cubre. Y RECURSE por las mismas
+        // formas estructurales que `collectStructuralAliases` (`const { x: { compile } } = { x:
+        // WebAssembly }`): el init es un object/array literal, no el root directo (codex P2).
+        const flagPartialDestructure = (pat, init) => {
+          const elems = ts.isObjectBindingPattern(pat)
+            ? pat.elements
+            : pat.properties;
+          const partialRootName = exprPartialRoot(init, context);
+          if (partialRootName) {
+            const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRootName];
+            for (const el of elems) {
+              const kn = ts.isBindingElement(el)
+                ? el.propertyName || el.name
+                : ts.isPropertyAssignment(el) ||
+                    ts.isShorthandPropertyAssignment(el)
+                  ? el.name
                   : null;
-              return lit ? lit.text : null;
+              const key = keyTextOf(kn);
+              // ¿DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` / `{ x: y = d }` (assign).
+              // Miembro AUSENTE (performance.measure undefined) → default SE ACTIVA → seguro. Root
+              // PRESENT-throws (WebAssembly.compile EXISTE) → default NO se activa → sigue lanzando.
+              const hasDefault =
+                (ts.isBindingElement(el) && el.initializer !== undefined) ||
+                (ts.isShorthandPropertyAssignment(el) &&
+                  el.objectAssignmentInitializer !== undefined) ||
+                (ts.isPropertyAssignment(el) &&
+                  el.initializer &&
+                  ts.isBinaryExpression(el.initializer) &&
+                  el.initializer.operatorToken.kind ===
+                    ts.SyntaxKind.EqualsToken);
+              if (
+                key &&
+                set.has(key) &&
+                hasDefault &&
+                !PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+              ) {
+                continue; // miembro ausente con default → seguro
+              }
+              if (key && set.has(key)) {
+                const start = el.getStart(sourceFile);
+                const { line } =
+                  sourceFile.getLineAndCharacterOfPosition(start);
+                const lineText =
+                  content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+                violations.push({
+                  file: relPath,
+                  rule: "no-bare-dom-access",
+                  line: line + 1,
+                  detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+                    ? `destructuring de \`${partialRootName}.${key}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+                    : `destructuring de \`${partialRootName}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+                });
+              }
             }
-            return ts.isIdentifier(kn) || ts.isStringLiteralLike(kn)
-              ? kn.text
-              : null;
-          };
-          const elems = ts.isObjectBindingPattern(pattern)
-            ? pattern.elements
-            : pattern.properties;
+            return; // init ES el root → no hay literal anidado que recursar
+          }
+          // RECURSIÓN: init es un object-literal → matchear sub-patrones por key y bajar.
+          const lit = singleLiteralLeaf(init);
+          if (!lit || !ts.isObjectLiteralExpression(lit)) return;
           for (const el of elems) {
             const kn = ts.isBindingElement(el)
               ? el.propertyName || el.name
-              : ts.isPropertyAssignment(el) || ts.isShorthandPropertyAssignment(el)
+              : ts.isPropertyAssignment(el)
                 ? el.name
                 : null;
             const key = keyTextOf(kn);
-            // ¿El binding tiene DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` /
-            // `{ x: y = d }` (assignment-destr). Para un miembro AUSENTE (performance.measure es
-            // undefined en el floor) el default SE ACTIVA → `m()` usa el fallback, no crashea =
-            // patrón seguro. Para un root PRESENT-throws (WebAssembly.compile EXISTE) el default NO
-            // se activa → sigue lanzando. (codex P2.)
-            const hasDefault =
-              (ts.isBindingElement(el) && el.initializer !== undefined) ||
-              (ts.isShorthandPropertyAssignment(el) &&
-                el.objectAssignmentInitializer !== undefined) ||
-              (ts.isPropertyAssignment(el) &&
-                el.initializer &&
-                ts.isBinaryExpression(el.initializer) &&
-                el.initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken);
+            const sub = ts.isBindingElement(el)
+              ? el.name
+              : ts.isPropertyAssignment(el)
+                ? el.initializer
+                : null;
             if (
-              key &&
-              set.has(key) &&
-              hasDefault &&
-              !PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+              !key ||
+              !sub ||
+              !(
+                ts.isObjectBindingPattern(sub) ||
+                ts.isObjectLiteralExpression(sub)
+              )
             ) {
-              continue; // miembro ausente con default → seguro
+              continue;
             }
-            if (key && set.has(key)) {
-              const start = el.getStart(sourceFile);
-              const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-              const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-              violations.push({
-                file: relPath,
-                rule: "no-bare-dom-access",
-                line: line + 1,
-                detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
-                  ? `destructuring de \`${partialRootName}.${key}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
-                  : `destructuring de \`${partialRootName}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
-              });
-            }
+            const ip = lit.properties.find(
+              (p) =>
+                ts.isPropertyAssignment(p) &&
+                p.name &&
+                structuralKeyText(p.name) === key,
+            );
+            if (ip) flagPartialDestructure(sub, ip.initializer);
           }
-        }
+        };
+        flagPartialDestructure(pattern, initExpr);
       }
     }
 
@@ -5636,15 +5703,24 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
+      // Args con SPREAD de array-literal aplanados (`setTimeout(...["código", 0])` /
+      // `setTimeout.call(...[null,"c"])`) → el handler no queda oculto tras el spread (codex P2).
+      const effArgs = flattenLiteralSpreadArgs(node.arguments);
+      const firstArrayLiteralElement = (arg) => {
+        if (!arg) return null;
+        const ls = valueTransparentLeaves(arg);
+        const arr =
+          ls.length === 1 && ts.isArrayLiteralExpression(ls[0]) ? ls[0] : null;
+        return arr ? (arr.elements[0] ?? null) : null;
+      };
       // Posición del arg que debe ser string según la FORMA de invocación:
       //   directo  `<timer>("código", …)`           → arg[0]
       //   `.call`  `<timer>.call(thisArg, "c", …)`   → arg[1]
       //   `.apply` `<timer>.apply(thisArg, ["c", …])` → arg[1] es array-literal → su elemento [0]
-      let stringArgExpr = timerName !== null ? (node.arguments[0] ?? null) : null;
+      let stringArgExpr = timerName !== null ? (effArgs[0] ?? null) : null;
       if (timerName === null) {
-        // `<timer>.call`/`.apply` — Function.prototype.{call,apply} sobre el timer. El read del
-        // timer es SAFE → no se flaggea aguas arriba; sin esto `setTimeout.call(null,"c")` bypassea
-        // (codex P2). Receiver reconocido con exprIsTimerValued (global no-sombreado/alias/global-obj).
+        // `<timer>.call`/`.apply`/`.bind` — Function.prototype sobre el timer. El read del timer es
+        // SAFE → no se flaggea aguas arriba; sin esto `setTimeout.call(null,"c")` bypassea (codex P2).
         for (const leaf of valueTransparentLeaves(node.expression)) {
           if (
             !ts.isPropertyAccessExpression(leaf) &&
@@ -5658,37 +5734,34 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             exprIsTimerValued(leaf.expression, context)
           ) {
             timerName = `timer.${mn}`;
-            if (mn === "call" || mn === "bind") {
-              // `.call(thisArg, handler, …)` y `.bind(thisArg, handler, …)` → el handler es
-              // arguments[1]. `.bind` devuelve la fn ligada; al invocarse llama `setTimeout(handler,
-              // …)` con el string PRE-bindeado → mismo eval-sink (codex P2). Token-en-su-sitio.
-              stringArgExpr = node.arguments[1] ?? null;
-            } else {
-              const arrLeaves = node.arguments[1]
-                ? valueTransparentLeaves(node.arguments[1])
-                : [];
-              const arr =
-                arrLeaves.length === 1 &&
-                ts.isArrayLiteralExpression(arrLeaves[0])
-                  ? arrLeaves[0]
-                  : null;
-              stringArgExpr = arr ? (arr.elements[0] ?? null) : null;
-            }
+            stringArgExpr =
+              mn === "apply"
+                ? firstArrayLiteralElement(effArgs[1])
+                : (effArgs[1] ?? null);
             break;
           }
         }
       }
-      // SPREAD de array-literal como handler: `setTimeout(...["código", 0])` → su elemento [0]
-      // (codex P2). El callee sigue siendo el timer; sin esto el SpreadElement oculta el string.
-      // Spread de una VARIABLE = data-flow residual.
-      if (stringArgExpr && ts.isSpreadElement(stringArgExpr)) {
-        const spreadLeaves = valueTransparentLeaves(stringArgExpr.expression);
-        const arr =
-          spreadLeaves.length === 1 &&
-          ts.isArrayLiteralExpression(spreadLeaves[0])
-            ? spreadLeaves[0]
-            : null;
-        stringArgExpr = arr ? (arr.elements[0] ?? null) : null;
+      if (timerName === null) {
+        // `Reflect.apply(<timer>, thisArg, ["código"])` — el timer es arg[0], el handler es
+        // arg[2] array-literal → su elemento [0]. Reflect/setTimeout son SAFE → no flaggea aguas
+        // arriba; misma clase que `.apply` (codex P2). Token-en-su-sitio.
+        for (const leaf of valueTransparentLeaves(node.expression)) {
+          if (
+            (ts.isPropertyAccessExpression(leaf) ||
+              ts.isElementAccessExpression(leaf)) &&
+            accessedMemberName(leaf) === "apply" &&
+            ts.isIdentifier(unwrapErased(leaf.expression)) &&
+            unwrapErased(leaf.expression).text === "Reflect" &&
+            !context.localBindings.has("Reflect") &&
+            effArgs[0] &&
+            exprIsTimerValued(effArgs[0], context)
+          ) {
+            timerName = "Reflect.apply(timer)";
+            stringArgExpr = firstArrayLiteralElement(effArgs[2]);
+            break;
+          }
+        }
       }
       const isStringArg =
         stringArgExpr !== null &&

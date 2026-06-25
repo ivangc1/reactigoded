@@ -370,6 +370,11 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (9abe984, #133): handler vía SPREAD de array-literal.
     ['spread setTimeout(...["código", 0])', `setTimeout(...["window.x", 0]);`],
     ['spread alias later(...["código"])', `const later = setTimeout; later(...["window.x"]);`],
+    // codex P2 (3b7b6ba, #133): spread en .call/.bind + Reflect.apply.
+    ['spread setTimeout.call(...[null, "código"])', `setTimeout.call(...[null, "window.x"]);`],
+    ['spread setTimeout.bind(...[null, "código"])()', `(setTimeout.bind(...[null, "window.x"]))();`],
+    ['Reflect.apply(setTimeout, undefined, ["código"])', `Reflect.apply(setTimeout, undefined, ["window.x"]);`],
+    ['Reflect.apply(alias, u, ["código"])', `const later = setTimeout; Reflect.apply(later, undefined, ["window.x"]);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -401,6 +406,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it("NO flaggea spread de timer con callback función o variable (codex P2)", () => {
     expect(checkSourceFile(fixture(`setTimeout(...[() => {}, 0]);`), "spread-fn.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(fixture(`const args: any = ["x"]; setTimeout(...args);`), "spread-var.fixture.tsx")).toEqual([]);
+    // Reflect.apply con timer pero args VARIABLE = data-flow residual; con no-timer = exento (codex P2).
+    expect(checkSourceFile(fixture(`const a: any = ["x"]; Reflect.apply(setTimeout, undefined, a);`), "reflect-var.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(fixture(`const fn: any = (s: string) => s; Reflect.apply(fn, undefined, ["x"]);`), "reflect-nontimer.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -2437,6 +2445,8 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: deep nested-default {a:{b:{R=React}}}", HD + `export function C(){ const { a: { b: { R = React as any } = {} as any } = {} as any } = {} as any; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     // codex P2 (9abe984, #133): key COMPUTADA value-transparente en el destructuring de la familia.
     ["familia: computed key {[\"a\"]:A}={a:React}", HD + `export function C(){ const { ["a"]: A } = { a: React }; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (3b7b6ba, #133): mutador con target vía SPREAD de array-literal.
+    ["familia: Object.assign(...[React, {…}])", HD + `export function C(){ Object.assign(...[React, { useEffect(cb: any){ cb(); } }] as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -3077,6 +3087,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["for-init expr (WA=WebAssembly; WA.compile();)", `/** @server-safe */\nexport function f() { let WA: any; for (WA = WebAssembly; WA.compile(new Uint8Array()); ) { break; } return null; }`],
     ["import-equals alias-root import WA=WebAssembly; import compile=WA.compile", `/** @server-safe */\nnamespace N { import WA = WebAssembly; import compile = WA.compile; export const p = compile(new Uint8Array()); }`],
     ["object-rest assignment ({...WA}=WebAssembly)", `/** @server-safe */\nexport function f() { let WA: any; ({ ...WA } = WebAssembly as any); return WA.compile(new Uint8Array()); }`],
+    // codex P2 (3b7b6ba, #133): destructuring ANIDADO contra un object-literal (recursión estructural).
+    ["nested destructure const {x:{compile}}={x:WebAssembly}", `/** @server-safe */\nexport function f() { const { x: { compile } } = { x: WebAssembly }; return compile(new Uint8Array()); }`],
+    ["nested destructure const {x:{measure}}={x:performance}", `/** @server-safe */\nexport function f() { const { x: { measureUserAgentSpecificMemory: m } } = { x: performance }; return m(); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
