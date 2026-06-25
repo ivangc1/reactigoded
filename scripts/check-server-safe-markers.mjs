@@ -2218,6 +2218,17 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
       }
     }
   }
+  // OBJECT-REST en un ASSIGNMENT-pattern (`({ ...WA } = WebAssembly)`): el SpreadAssignment del
+  // object-literal TARGET copia el root → WA aliasa el partial-root (codex P2). Gemelo del
+  // binding-rest de arriba; solo PARTIAL (enrollRest).
+  if (enrollRest && ts.isObjectLiteralExpression(t)) {
+    for (const e of t.properties) {
+      if (ts.isSpreadAssignment(e) && ts.isIdentifier(e.expression)) {
+        const v = resolve(init, context);
+        if (v) emit(e.expression.text, v);
+      }
+    }
+  }
   const lit = singleLiteralLeaf(init);
   // Object: binding-pattern DECL (`const {a:X}=…`) O object-LITERAL target de assignment-destr
   // (`({a:X}={a:setTimeout})`). Match estructural por key (codex P2).
@@ -2364,9 +2375,24 @@ function exprIsTimerValued(expr, context) {
 function timerAliasNamesDeclaredBy(stmt, context) {
   const names = new Set();
   const emit = (name) => names.add(name);
+  // import-equals value-alias: `import later = setTimeout` / `import Y = X` (X alias). El
+  // moduleReference es un EntityName; un Identifier que resuelve a timer enrola el alias (codex P2).
+  if (
+    ts.isImportEqualsDeclaration(stmt) &&
+    !stmt.isTypeOnly &&
+    ts.isIdentifier(stmt.moduleReference) &&
+    exprIsTimerValued(stmt.moduleReference, context)
+  ) {
+    names.add(stmt.name.text);
+    return names;
+  }
   // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
   if (ts.isVariableDeclaration(stmt)) {
     collectStructuralAliases(stmt.name, stmt.initializer, context, exprIsTimerValued, emit);
+    // Assignments EMBEBIDAS en el initializer (`const _ = (later = setTimeout)`) (codex P2).
+    eachEmbeddedAssignment(stmt.initializer, (a) =>
+      collectStructuralAliases(a.left, a.right, context, exprIsTimerValued, emit),
+    );
     return names;
   }
   // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
@@ -2382,10 +2408,15 @@ function timerAliasNamesDeclaredBy(stmt, context) {
     let ctx = context;
     for (const d of declList.declarations) {
       const local = new Set();
-      collectStructuralAliases(d.name, d.initializer, ctx, exprIsTimerValued, (n) => {
+      const addLocal = (n) => {
         local.add(n);
         names.add(n);
-      });
+      };
+      collectStructuralAliases(d.name, d.initializer, ctx, exprIsTimerValued, addLocal);
+      // Assignments EMBEBIDAS en el initializer (`const _ = (later = setTimeout), id = …`) (codex P2).
+      eachEmbeddedAssignment(d.initializer, (a) =>
+        collectStructuralAliases(a.left, a.right, ctx, exprIsTimerValued, addLocal),
+      );
       if (local.size > 0) {
         ctx = {
           ...ctx,
@@ -2480,9 +2511,23 @@ function exprPartialRoot(expr, context) {
 function partialAliasesDeclaredBy(stmt, context) {
   const out = new Map();
   const emit = (name, root) => out.set(name, root);
+  // import-equals ROOT-alias: `import WA = WebAssembly` (Identifier moduleReference) → WA aliasa el
+  // root parcial. (El `import compile = WA.compile` MIEMBRO lo caza la rama c.1d.) codex P2.
+  if (
+    ts.isImportEqualsDeclaration(stmt) &&
+    !stmt.isTypeOnly &&
+    ts.isIdentifier(stmt.moduleReference)
+  ) {
+    const root = exprPartialRoot(stmt.moduleReference, context);
+    if (root) out.set(stmt.name.text, root);
+    return out;
+  }
   // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
   if (ts.isVariableDeclaration(stmt)) {
     collectStructuralAliases(stmt.name, stmt.initializer, context, exprPartialRoot, emit, true);
+    eachEmbeddedAssignment(stmt.initializer, (a) =>
+      collectStructuralAliases(a.left, a.right, context, exprPartialRoot, emit, true),
+    );
     return out;
   }
   // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
@@ -2498,16 +2543,14 @@ function partialAliasesDeclaredBy(stmt, context) {
     let ctx = context;
     for (const d of declList.declarations) {
       const local = new Map();
-      collectStructuralAliases(
-        d.name,
-        d.initializer,
-        ctx,
-        exprPartialRoot,
-        (n, root) => {
-          local.set(n, root);
-          out.set(n, root);
-        },
-        true,
+      const addLocal = (n, root) => {
+        local.set(n, root);
+        out.set(n, root);
+      };
+      collectStructuralAliases(d.name, d.initializer, ctx, exprPartialRoot, addLocal, true);
+      // Assignments EMBEBIDAS en el initializer (`const _ = (WA = WebAssembly), …`) (codex P2).
+      eachEmbeddedAssignment(d.initializer, (a) =>
+        collectStructuralAliases(a.left, a.right, ctx, exprPartialRoot, addLocal, true),
       );
       if (local.size > 0) {
         ctx = {
@@ -5091,6 +5134,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         init && ts.isVariableDeclarationList(init)
           ? partialAliasesDeclaredBy(init, context)
           : new Map();
+      // for-init que es una EXPRESIÓN (no declaración): assignments embebidas (`for (later =
+      // setTimeout; later(…); )`) ejecutan ANTES de la condición/body → enrolar (codex P2).
+      const forExprInit =
+        init && !ts.isVariableDeclarationList(init) ? init : null;
+      const baseFromExpr = forExprInit
+        ? withEmbeddedAssignmentAliases(context, forExprInit)
+        : context;
+      const hasExprAliases = baseFromExpr !== context;
       const cond = ts.isWhileStatement(node) ? node.expression : node.condition;
       const bodyGuards = new Set();
       if (cond) collectConjunctionGuards(cond, bodyGuards, context.guardAliases);
@@ -5098,10 +5149,13 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         forBindings.size > 0 ||
         bodyGuards.size > 0 ||
         forTimerAliases.size > 0 ||
-        forPartialAliases.size > 0
+        forPartialAliases.size > 0 ||
+        hasExprAliases
       ) {
         let baseCtx =
-          forBindings.size > 0 ? addToScope(context, forBindings) : context;
+          forBindings.size > 0
+            ? addToScope(baseFromExpr, forBindings)
+            : baseFromExpr;
         if (forTimerAliases.size > 0) {
           baseCtx = {
             ...baseCtx,
@@ -5422,12 +5476,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ts.isIdentifier(node.moduleReference.right) &&
       !context.isInClientOnlyDeferredBody
     ) {
-      const ieRoot = node.moduleReference.left.text;
+      // El root resuelve DIRECTO (no sombreado) o vía ALIAS scope-aware (`import WA = WebAssembly;
+      // import compile = WA.compile`) — exprPartialRoot ya pliega shadow/forward/alias (codex P2).
+      const ieRootName = exprPartialRoot(node.moduleReference.left, context);
       const ieMember = node.moduleReference.right.text;
-      if (
-        PARTIAL_SAFE_GLOBAL_MEMBERS[ieRoot]?.has(ieMember) &&
-        !context.localBindings.has(ieRoot)
-      ) {
+      if (ieRootName && PARTIAL_SAFE_GLOBAL_MEMBERS[ieRootName]?.has(ieMember)) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
         const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -5435,9 +5488,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           file: relPath,
           rule: "no-bare-dom-access",
           line: line + 1,
-          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(ieRoot)
-            ? `import-equals de \`${ieRoot}.${ieMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
-            : `import-equals de \`${ieRoot}.${ieMember}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(ieRootName)
+            ? `import-equals de \`${ieRootName}.${ieMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+            : `import-equals de \`${ieRootName}.${ieMember}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
         });
       }
     }

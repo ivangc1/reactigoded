@@ -363,6 +363,10 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // posteriores (la asignación ya ejecutó).
     ['cross-stmt (later=setTimeout, 0); later(str)', `let later: any; (later = setTimeout, 0); later("window.x", 0);`],
     ['cross-stmt (later=setTimeout) && 0; later(str)', `let later: any; (later = setTimeout) && 0; later("window.x", 0);`],
+    // codex P2 (9d5ba3a, #133, exhaustive): import-equals alias / embedded en declarador / for-init expr.
+    ['import-equals later=setTimeout; later(str)', `import later = setTimeout; later("window.x", 0);`],
+    ['declarador const _=(later=setTimeout), id=later(str)', `let later: any; const _ = (later = setTimeout), id = later("window.x", 0); void _; void id;`],
+    ['for-init expr (later=setTimeout; later(str);)', `let later: any; for (later = setTimeout; later("window.x", 0); ) { break; }`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -3057,6 +3061,12 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["import-equals performance.measure...", `/** @server-safe */\nimport m = performance.measureUserAgentSpecificMemory;\nexport function f() { return m(); }`],
     // codex P2 (069d4c8, #133): embedded assignment cross-statement (persiste al siguiente stmt).
     ["cross-stmt (WA=WebAssembly, 0); WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; (WA = WebAssembly, 0); return WA.compile(new Uint8Array()); }`],
+    // codex P2 (9d5ba3a, #133, exhaustive): embedded-en-declarador / for-init expr / import-equals
+    // alias-root / object-rest assignment.
+    ["declarador const _=(WA=WebAssembly), x=WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; const _ = (WA = WebAssembly), x = WA.compile(new Uint8Array()); void _; return x; }`],
+    ["for-init expr (WA=WebAssembly; WA.compile();)", `/** @server-safe */\nexport function f() { let WA: any; for (WA = WebAssembly; WA.compile(new Uint8Array()); ) { break; } return null; }`],
+    ["import-equals alias-root import WA=WebAssembly; import compile=WA.compile", `/** @server-safe */\nnamespace N { import WA = WebAssembly; import compile = WA.compile; export const p = compile(new Uint8Array()); }`],
+    ["object-rest assignment ({...WA}=WebAssembly)", `/** @server-safe */\nexport function f() { let WA: any; ({ ...WA } = WebAssembly as any); return WA.compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
