@@ -1866,15 +1866,21 @@ function gatherMutatedNamespaceRoots(sourceFile) {
   };
   // `[obj, member]` de un callee `Obj.m(…)` (dot) o `Obj["m"](…)` (bracket string literal) — misma
   // normalización dot/bracket que el resto del gate (codex P1: el bracket-form se colaba).
+  // Receiver del mutador value-transparente (`(0, Object).assign(React, …)`, `(c ? Reflect : Reflect)
+  // .set(React, …)`) → resolver por el primer identifier-leaf VT, no solo unwrapErased; paridad con
+  // los otros receiver paths (codex P2).
+  const mutatorReceiverIdent = (recv) =>
+    valueTransparentLeaves(recv).find((o) => ts.isIdentifier(o)) ??
+    unwrapErased(recv);
   const calleeObjMember = (callee) => {
     if (ts.isPropertyAccessExpression(callee)) {
-      const obj = unwrapErased(callee.expression);
+      const obj = mutatorReceiverIdent(callee.expression);
       if (ts.isIdentifier(obj) && ts.isIdentifier(callee.name)) {
         return [obj.text, callee.name.text];
       }
     }
     if (ts.isElementAccessExpression(callee)) {
-      const obj = unwrapErased(callee.expression);
+      const obj = mutatorReceiverIdent(callee.expression);
       // Desenvolver la KEY: `Object[("assign")]` (paréntesis), `Object["assign" as const]`
       // (as) — nodos ERASED en runtime → misma normalización que los otros member-name paths
       // (codex P1: la key envuelta se colaba). NO se foldea una key COMPUTADA por un OPERADOR
@@ -2165,14 +2171,14 @@ const TIMER_GLOBAL_NAMES = new Set([
  */
 // La única hoja value-transparente de `expr` SI es un literal object/array (para matchear patrones
 // de destructuring contra `{a: X}` / `[X]`). Versión module-level del `literalInit` de react-family.
-function singleLiteralLeaf(expr) {
-  if (!expr) return null;
-  const leaves = valueTransparentLeaves(expr);
-  if (leaves.length !== 1) return null;
-  const l = leaves[0];
-  return ts.isObjectLiteralExpression(l) || ts.isArrayLiteralExpression(l)
-    ? l
-    : null;
+// TODOS los object/array literal leaves value-transparentes de `expr` — ALTERNATIVAS incluidas
+// (`cond ? { a: X } : { a: Y }` → [{a:X},{a:Y}]). Fail-closed: el match estructural corre contra
+// CADA uno (si CUALQUIER rama liga el token, enrola/flaggea) (codex P2).
+function literalLeaves(expr) {
+  if (!expr) return [];
+  return valueTransparentLeaves(expr).filter(
+    (l) => ts.isObjectLiteralExpression(l) || ts.isArrayLiteralExpression(l),
+  );
 }
 
 /**
@@ -2248,12 +2254,13 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
       }
     }
   }
-  const lit = singleLiteralLeaf(init);
+  // Iterar TODAS las alternativas literal (`cond ? {a:X} : {a:Y}`): el match estructural corre
+  // contra cada rama, fail-closed (codex P2).
+  for (const lit of literalLeaves(init)) {
   // Object: binding-pattern DECL (`const {a:X}=…`) O object-LITERAL target de assignment-destr
   // (`({a:X}={a:setTimeout})`). Match estructural por key (codex P2).
   if (
     (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
-    lit &&
     ts.isObjectLiteralExpression(lit)
   ) {
     const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
@@ -2308,7 +2315,6 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
   // Array: binding-pattern DECL (`const [X]=…`) O array-LITERAL target (`[X]=[setTimeout]`).
   if (
     (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
-    lit &&
     ts.isArrayLiteralExpression(lit)
   ) {
     t.elements.forEach((e, i) => {
@@ -2326,6 +2332,7 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
       }
       collectStructuralAliases(sub, lit.elements[i], context, resolve, emit, enrollRest);
     });
+  }
   }
 }
 
@@ -5290,7 +5297,37 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         catchBindings,
       );
       if (catchBindings.size > 0) {
-        const bodyContext = addToScope(context, catchBindings);
+        let bodyContext = addToScope(context, catchBindings);
+        // El catch param no tiene init, pero sus binding-element DEFAULTS aliasan un timer/partial-
+        // root cuando el valor capturado omite la prop (`catch ({ later = setTimeout })`) → enrolar
+        // como en el param-loop, paridad con flagPartialDestructure que caza su member-extract (codex P2).
+        const pat = node.variableDeclaration.name;
+        const tAdds = new Set();
+        collectStructuralAliases(pat, undefined, bodyContext, exprIsTimerValued, (n) =>
+          tAdds.add(n),
+        );
+        const pAdds = new Map();
+        collectStructuralAliases(pat, undefined, bodyContext, exprPartialRoot, (n, r) =>
+          pAdds.set(n, r), true,
+        );
+        if (tAdds.size > 0) {
+          bodyContext = {
+            ...bodyContext,
+            scopeTimerAliases: new Set([
+              ...(bodyContext.scopeTimerAliases ?? []),
+              ...tAdds,
+            ]),
+          };
+        }
+        if (pAdds.size > 0) {
+          bodyContext = {
+            ...bodyContext,
+            scopePartialAliases: new Map([
+              ...(bodyContext.scopePartialAliases ?? []),
+              ...pAdds,
+            ]),
+          };
+        }
         ts.forEachChild(node, (child) => visit(child, bodyContext));
         return;
       }
@@ -5722,38 +5759,40 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               flagPartialDestructure(sub, def);
             }
           }
-          // RECURSIÓN ESTRUCTURAL por VALOR MATCHEADO: solo si init es un object/array LITERAL →
-          // matchear sub-patrones (por key / por índice) y bajar. Cubre object, array y mezclas
-          // (`{ x: [{ compile }] } = { x: [WebAssembly] }`) — paridad con collectStructuralAliases.
-          const lit = init ? singleLiteralLeaf(init) : null;
-          if (!lit) return;
-          if (isObjPat && ts.isObjectLiteralExpression(lit)) {
-            for (const el of elems) {
-              const kn = ts.isBindingElement(el)
-                ? el.propertyName || el.name
-                : ts.isPropertyAssignment(el)
-                  ? el.name
-                  : null;
-              const key = keyTextOf(kn);
-              const { sub } = subAndDefault(el);
-              if (!key || !sub || !isDestructurePattern(sub)) continue;
-              const ip = lit.properties.find(
-                (p) =>
-                  ts.isPropertyAssignment(p) &&
-                  p.name &&
-                  structuralKeyText(p.name) === key,
-              );
-              if (ip) flagPartialDestructure(sub, ip.initializer);
-            }
-          } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
-            for (let i = 0; i < elems.length; i++) {
-              const el = elems[i];
-              if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) continue;
-              const { sub } = subAndDefault(el);
-              if (!sub || !isDestructurePattern(sub)) continue;
-              const initEl = lit.elements[i];
-              if (initEl && !ts.isOmittedExpression(initEl)) {
-                flagPartialDestructure(sub, initEl);
+          // RECURSIÓN ESTRUCTURAL por VALOR MATCHEADO: por cada ALTERNATIVA literal de init
+          // (`cond ? { x: WebAssembly } : {…}`) → matchear sub-patrones (por key / por índice) y
+          // bajar. Cubre object, array, mezclas y alternativas — paridad con collectStructuralAliases.
+          for (const lit of init ? literalLeaves(init) : []) {
+            if (isObjPat && ts.isObjectLiteralExpression(lit)) {
+              for (const el of elems) {
+                const kn = ts.isBindingElement(el)
+                  ? el.propertyName || el.name
+                  : ts.isPropertyAssignment(el)
+                    ? el.name
+                    : null;
+                const key = keyTextOf(kn);
+                const { sub } = subAndDefault(el);
+                if (!key || !sub || !isDestructurePattern(sub)) continue;
+                const ip = lit.properties.find(
+                  (p) =>
+                    ts.isPropertyAssignment(p) &&
+                    p.name &&
+                    structuralKeyText(p.name) === key,
+                );
+                if (ip) flagPartialDestructure(sub, ip.initializer);
+              }
+            } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
+              for (let i = 0; i < elems.length; i++) {
+                const el = elems[i];
+                if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) {
+                  continue;
+                }
+                const { sub } = subAndDefault(el);
+                if (!sub || !isDestructurePattern(sub)) continue;
+                const initEl = lit.elements[i];
+                if (initEl && !ts.isOmittedExpression(initEl)) {
+                  flagPartialDestructure(sub, initEl);
+                }
               }
             }
           }
@@ -5992,9 +6031,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             (ts.isPropertyAccessExpression(leaf) ||
               ts.isElementAccessExpression(leaf)) &&
             accessedMemberName(leaf) === "apply" &&
-            ts.isIdentifier(unwrapErased(leaf.expression)) &&
-            unwrapErased(leaf.expression).text === "Reflect" &&
-            !context.localBindings.has("Reflect") &&
+            // Receiver Reflect value-transparente (`(0, Reflect).apply(setTimeout, …)`) → VT, no solo
+            // unwrapErased; paridad con los otros receiver paths (codex P2). Shadow-aware.
+            valueTransparentLeaves(leaf.expression).some(
+              (r) =>
+                ts.isIdentifier(r) &&
+                r.text === "Reflect" &&
+                !context.localBindings.has("Reflect"),
+            ) &&
             candidatesAt(node.arguments, 0).some((c) =>
               exprIsTimerValued(c, context),
             )

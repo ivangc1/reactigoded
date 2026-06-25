@@ -399,6 +399,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ['VT receiver .call ((0,globalThis).setTimeout).call(null,"x")', `((0, globalThis).setTimeout).call(null, "window.x");`],
     // codex P2 (372903e, #133): base de proyección [X][i] value-transparente.
     ['VT projection base (c?[setTimeout]:[setTimeout])[0]("x")', `const c = (0 as unknown as boolean); (c ? [setTimeout] : [setTimeout])[0]("window.x", 0);`],
+    // codex P2 (7614b51, #133): VT Reflect.apply receiver + alternativas de literal en alias estructural.
+    ['VT Reflect.apply receiver (0,Reflect).apply(setTimeout,null,["x"])', `(0, Reflect).apply(setTimeout, null, ["window.x"]);`],
+    ['literal-alt alias const {l}=c?{l:setTimeout}:{l:setInterval}; l("x")', `const c = (0 as unknown as boolean); const { l } = c ? { l: setTimeout } : { l: setInterval }; l("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -409,6 +412,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     ["param default function run(later=setTimeout)", `export function run(later: any = setTimeout){ return later("window.x", 0); }`],
     ["param default threaded run(a=setTimeout, b=a)", `export function run(a: any = setTimeout, b: any = a){ void a; return b("window.x", 0); }`],
     ["binding-element default run({later=setTimeout})", `export function run({ later = setTimeout }: any){ return later("window.x", 0); }`],
+    // codex P2 (7614b51, #133): CATCH-pattern default que aliasa un timer.
+    ["catch ({later=setTimeout}){ later(str) }", `export function run(){ try {} catch ({ later = setTimeout }: any) { return later("window.x", 0); } }`],
   ])("caza el timer aliasado por un DEFAULT de parámetro: %s", (_l, body) => {
     const v = checkSourceFile(`/** @server-safe */\n${body}`, "param-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -465,6 +470,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // receiver value-transparente NO-global / binding-element default seguro → exento (codex P2).
     expect(checkSourceFile(fixture(`const o: any = {}; (0, o).setTimeout("x", 0);`), "vt-recv-local.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(`/** @server-safe */\nexport function run({ now = performance.now }: any){ return now(); }`, "be-default-safe.fixture.tsx")).toEqual([]);
+    // catch con default seguro / alternativas de literal TODAS no-timer → exento (codex P2).
+    expect(checkSourceFile(fixture(`try {} catch ({ now = performance.now }: any) { void now(); }`), "catch-safe.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(fixture(`const c = (0 as unknown as boolean); const { l } = c ? { l: () => {} } : { l: () => {} }; void l("x");`), "alt-nontimer.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -2523,6 +2531,8 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: assignment-default ({R=React}={})", HD + `export function C(){ let R: any; ({ R = React } = {} as any); (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: rename-default ({x:R=React}={})", HD + `export function C(){ let R: any; ({ x: R = React } = {} as any); (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     ["familia: Object.assign(...(c?[React,{…}]:[]))", HD + `export function C(){ Object.assign(...((0 as unknown as boolean) ? [React, { useEffect:(cb:any)=>cb() }] : []) as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (7614b51, #133): receiver del mutador value-transparente.
+    ["familia: (0, Object).assign(React, {…})", HD + `export function C(){ (0, Object).assign(React, { useEffect:(cb:any)=>cb() }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -3183,6 +3193,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (372903e, #133): catch-pattern default + base de proyección partial value-transparente.
     ["catch ({x:{compile}=WebAssembly}){ compile() }", `/** @server-safe */\nexport function f() { try {} catch ({ x: { compile } = WebAssembly }: any) { return compile(new Uint8Array()); } }`],
     ["VT projection (c?[WebAssembly]:[WebAssembly])[0].compile()", `/** @server-safe */\nexport function f(c: boolean) { return (c ? [WebAssembly] : [WebAssembly])[0].compile(new Uint8Array()); }`],
+    // codex P2 (7614b51, #133): catch alias-default + alternativas de literal en el member-extract.
+    ["catch ({WA=WebAssembly}){ WA.compile() }", `/** @server-safe */\nexport function f() { try {} catch ({ WA = WebAssembly }: any) { return WA.compile(new Uint8Array()); } }`],
+    ["literal-alt const {x:{compile}}=c?{x:WebAssembly}:{x:WebAssembly}", `/** @server-safe */\nexport function f(c: boolean) { const { x: { compile } } = c ? { x: WebAssembly } : { x: WebAssembly }; return compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
