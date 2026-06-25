@@ -1926,10 +1926,10 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       if (om && MUTATORS[om[0]]?.has(om[1]) && node.arguments.length > 0) {
         // Object.assign(X,…) / Reflect.set(X,…) — X (1er arg) es el target. Value-transparent
         // (`Object.assign((0, React), …)` → React). El CALLEE (Object.assign) se resolvió
-        // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT. Args con
-        // SPREAD de array-literal aplanados (`Object.assign(...[React, …])`) (codex P2).
-        const mutArgs = flattenLiteralSpreadArgs(node.arguments);
-        if (mutArgs[0]) addReceiverRoots(mutArgs[0]);
+        // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT. El modelo
+        // de candidatos branch-aware cubre spread literal/ALTERNATIVAS (`Object.assign(...(c ?
+        // [React, …] : []))`) — taintea el target de TODAS las ramas (codex P2).
+        for (const cand of candidatesAt(node.arguments, 0)) addReceiverRoots(cand);
       }
     }
     ts.forEachChild(node, visit);
@@ -2041,21 +2041,37 @@ function gatherReactNamespaceFamily(sourceFile) {
     ) {
       const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
       for (const e of elems) {
-        let keyNode, sub;
+        // sub + DEFAULT del elemento, paridad con collectStructuralAliases: `{ R = React }` (shorthand
+        // -default, objectAssignmentInitializer), `{ x: R = React }` (rename-default, BinaryExpression),
+        // `{ x: R = React }` binding-default — el default provee el alias react cuando la key falta (codex P2).
+        let keyNode, sub, def;
+        def = null;
         if (ts.isBindingElement(e)) {
           keyNode = e.propertyName || e.name;
           sub = e.name;
+          def = e.initializer ?? null;
         } else if (ts.isPropertyAssignment(e)) {
           keyNode = e.name;
-          sub = e.initializer;
+          const v = e.initializer;
+          if (
+            v &&
+            ts.isBinaryExpression(v) &&
+            v.operatorToken.kind === ts.SyntaxKind.EqualsToken
+          ) {
+            sub = v.left;
+            def = v.right;
+          } else {
+            sub = v;
+          }
         } else if (ts.isShorthandPropertyAssignment(e)) {
           keyNode = e.name;
           sub = e.name;
+          def = e.objectAssignmentInitializer ?? null;
         } else continue;
         // Key COMPUTADA value-transparente (`{ ["a"]: A } = { a: React }`) → "a", como el resto del
         // gate (structuralKeyText), para no dejar `A` fuera de la familia react (codex P2).
         const key = structuralKeyText(keyNode);
-        if (!key) continue;
+        if (!key || !sub) continue;
         const ip = lit.properties.find(
           (p) =>
             ts.isPropertyAssignment(p) &&
@@ -2063,6 +2079,7 @@ function gatherReactNamespaceFamily(sourceFile) {
             structuralKeyText(p.name) === key,
         );
         if (ip) enrollBinding(sub, ip.initializer);
+        if (def) enrollBinding(sub, def);
       }
       return;
     }
@@ -3210,23 +3227,73 @@ function isValueTransparentParent(parent, child) {
 // (no produce un string-leaf, así que no flaggea). Usado para que el handler/target/string de un
 // sink (timer directo/.call/.apply/.bind, Reflect.apply, mutador react) no quede oculto tras un
 // spread literal (codex P2). Token-en-su-sitio: el array literal está a la vista.
-function flattenLiteralSpreadArgs(args) {
-  const out = [];
-  for (const a of args) {
+// Ramas array-literal que un arg-expr puede tomar value-transparentemente: array directo `["a"]` o
+// ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2). Fail-closed: cualquiera cuenta.
+function arrayLiteralAlternatives(expr) {
+  return valueTransparentLeaves(expr).filter((l) =>
+    ts.isArrayLiteralExpression(l),
+  );
+}
+
+// Enumera las listas de args APLANADAS posibles, RAMIFICANDO en cada spread de ALTERNATIVAS de
+// array-literal y reconstruyendo la lista COMPLETA por rama — incl. ramas de longitud DISTINTA que
+// desplazan los args trailing (`...(cond ? [] : [fn]), "x"` → ["x"] | [fn, "x"]), e inner-spreads
+// ANIDADOS (recursión: la rama se vuelve a expandir). Un spread OPACO (variable) TRUNCA la rama
+// (data-flow residual). Devuelve [{ nodes, truncated }]. codex P2.
+function expandArgLists(rawArgs) {
+  let lists = [{ nodes: [], truncated: false }];
+  for (const a of rawArgs) {
     if (ts.isSpreadElement(a)) {
-      const leaves = valueTransparentLeaves(a.expression);
-      const arr =
-        leaves.length === 1 && ts.isArrayLiteralExpression(leaves[0])
-          ? leaves[0]
-          : null;
-      if (arr) {
-        for (const el of arr.elements) out.push(el);
+      const alts = arrayLiteralAlternatives(a.expression);
+      if (alts.length === 0) {
+        lists = lists.map((l) => ({ ...l, truncated: true }));
         continue;
       }
+      const next = [];
+      for (const l of lists) {
+        if (l.truncated) {
+          next.push(l);
+          continue;
+        }
+        for (const alt of alts) {
+          for (const sub of expandArgLists(alt.elements)) {
+            next.push({
+              nodes: [...l.nodes, ...sub.nodes],
+              truncated: sub.truncated,
+            });
+          }
+        }
+      }
+      lists = next;
+    } else {
+      lists = lists.map((l) =>
+        l.truncated ? l : { ...l, nodes: [...l.nodes, a] },
+      );
     }
-    out.push(a);
   }
-  return out;
+  return lists;
+}
+
+// Candidatos al nodo en la posición lógica `idx` de `rawArgs` sobre TODAS las ramas posibles
+// (codex P2). Descarta los SpreadElement residuales (spread opaco → posición indeterminable).
+function candidatesAt(rawArgs, idx) {
+  const cands = [];
+  for (const l of expandArgLists(rawArgs)) {
+    const n = l.nodes[idx];
+    if (n && !ts.isSpreadElement(n)) cands.push(n);
+  }
+  return cands;
+}
+
+// Elemento [0] del array de args de `.apply`/`Reflect.apply` (`apply(thisArg, ["código"])`),
+// considerando alternativas del array Y inner-spreads/longitud-variable (codex P2).
+function applyHandlerCandidates(arg) {
+  if (!arg) return [];
+  const cands = [];
+  for (const alt of arrayLiteralAlternatives(arg)) {
+    cands.push(...candidatesAt(alt.elements, 0));
+  }
+  return cands;
 }
 
 // ¿`node` es un NODO operador value-transparente? Mismo SET de operadores que `valueTransparentChildren`
@@ -3488,23 +3555,27 @@ function isWeaponizedConstructorAccess(node) {
   //     es eval. El guard de receiver (arriba) ya descartó `Reflect.construct(({}).constructor,…)`
   //     (= new Object, no eval). DISTINTO del residual `Reflect.get(x,"constructor")` (ACCESO
   //     indirecto, sin nodo `.constructor` a la vista). dot O bracket-string. codex P1.
-  // El `.constructor` puede llegar como 1er arg DIRECTO o dentro de un SPREAD de array-literal
-  // (`Reflect.construct(...[F.constructor, […]])`): subir por el array+spread hasta el call y
-  // comparar contra el 1er arg APLANADO (codex P2). Token-en-su-sitio (el array está a la vista).
+  // El `.constructor` puede llegar como 1er arg DIRECTO o dentro de un array/spread/condicional
+  // (`Reflect.construct(...[F.constructor, […]])`, `...(c ? [F.constructor, […]] : [])`): subir por
+  // los wrappers array-literal / spread / value-transparentes hasta el call, y exigir que el
+  // `.constructor` sea un CANDIDATO de la posición 0 (modelo branch-aware) — token-en-su-sitio. codex P2.
   let callNode = parent;
-  if (
-    ts.isArrayLiteralExpression(parent) &&
-    parent.parent &&
-    ts.isSpreadElement(parent.parent) &&
-    parent.parent.parent &&
-    ts.isCallExpression(parent.parent.parent)
+  while (
+    callNode &&
+    (ts.isArrayLiteralExpression(callNode) ||
+      ts.isSpreadElement(callNode) ||
+      ts.isParenthesizedExpression(callNode) ||
+      isValueTransparentOperatorNode(callNode))
   ) {
-    callNode = parent.parent.parent;
+    callNode = callNode.parent;
   }
   if (
+    callNode &&
     ts.isCallExpression(callNode) &&
     callNode.arguments.length > 0 &&
-    flattenLiteralSpreadArgs(callNode.arguments)[0] === child
+    candidatesAt(callNode.arguments, 0).some(
+      (c) => c === child || valueTransparentLeaves(c).includes(child),
+    )
   ) {
     const callee = unwrapErased(callNode.expression);
     if (
@@ -5774,77 +5845,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           }
         }
       }
-      // Args con SPREAD de array-literal aplanados (`setTimeout(...["código", 0])` /
-      // `setTimeout.call(...[null,"c"])`) → el handler no queda oculto tras el spread (codex P2).
-      const effArgs = flattenLiteralSpreadArgs(node.arguments);
-      // Ramas array-literal que un arg-expr puede tomar value-transparentemente: array directo
-      // `["a"]` o ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2). Fail-closed: cualquiera cuenta.
-      const arrayLiteralAlternatives = (expr) =>
-        valueTransparentLeaves(expr).filter((l) =>
-          ts.isArrayLiteralExpression(l),
-        );
-      // Enumera las listas de args APLANADAS posibles, RAMIFICANDO en cada spread de ALTERNATIVAS
-      // de array-literal y reconstruyendo la lista COMPLETA por rama — incluidas ramas de longitud
-      // DISTINTA, que desplazan los args TRAILING (`...(cond ? [] : [fn]), "x"` → ["x"] | [fn, "x"]).
-      // Un spread de array único se aplana inline; un spread OPACO (variable) TRUNCA la rama (data-
-      // flow residual: posición indeterminable más allá). codex P2.
-      const expandArgLists = (rawArgs) => {
-        let lists = [{ nodes: [], truncated: false }];
-        for (const a of rawArgs) {
-          if (ts.isSpreadElement(a)) {
-            const alts = arrayLiteralAlternatives(a.expression);
-            if (alts.length === 0) {
-              lists = lists.map((l) => ({ ...l, truncated: true }));
-              continue;
-            }
-            const next = [];
-            for (const l of lists) {
-              if (l.truncated) {
-                next.push(l);
-                continue;
-              }
-              for (const alt of alts) {
-                next.push({
-                  nodes: [...l.nodes, ...flattenLiteralSpreadArgs(alt.elements)],
-                  truncated: false,
-                });
-              }
-            }
-            lists = next;
-          } else {
-            lists = lists.map((l) =>
-              l.truncated ? l : { ...l, nodes: [...l.nodes, a] },
-            );
-          }
-        }
-        return lists;
-      };
-      // Candidatos al nodo en la posición lógica `idx` de `rawArgs` sobre TODAS las ramas posibles.
-      const candidatesAt = (rawArgs, idx) => {
-        const cands = [];
-        for (const l of expandArgLists(rawArgs)) {
-          const n = l.nodes[idx];
-          if (n && !ts.isSpreadElement(n)) cands.push(n);
-        }
-        return cands;
-      };
-      const handlerCandidates = (rawArgs, idx) => candidatesAt(rawArgs, idx);
-      // Elemento [0] del array de args de `.apply`/`Reflect.apply` (`apply(thisArg, ["código"])`),
-      // considerando alternativas del array Y inner-spreads (incl. de longitud variable) (codex P2).
-      const applyHandlerCandidates = (arg) => {
-        if (!arg) return [];
-        const cands = [];
-        for (const alt of arrayLiteralAlternatives(arg)) {
-          cands.push(...candidatesAt(alt.elements, 0));
-        }
-        return cands;
-      };
-      // Posición del arg que debe ser string según la FORMA de invocación:
+      // Posición del arg que debe ser string según la FORMA de invocación, sobre el modelo de
+      // candidatos branch-aware (`expandArgLists`/`candidatesAt`, módulo-level): captura spread
+      // literal/alternativas/longitud-distinta/inner-spread; spread variable = residual. codex P2.
       //   directo  `<timer>("código", …)`           → arg[0]
       //   `.call`  `<timer>.call(thisArg, "c", …)`   → arg[1]
       //   `.apply` `<timer>.apply(thisArg, ["c", …])` → arg[1] es array-literal → su elemento [0]
       let stringArgCandidates =
-        timerName !== null ? handlerCandidates(node.arguments, 0) : [];
+        timerName !== null ? candidatesAt(node.arguments, 0) : [];
       if (timerName === null) {
         // `<timer>.call`/`.apply`/`.bind` — Function.prototype sobre el timer. El read del timer es
         // SAFE → no se flaggea aguas arriba; sin esto `setTimeout.call(null,"c")` bypassea (codex P2).
@@ -5863,8 +5871,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             timerName = `timer.${mn}`;
             stringArgCandidates =
               mn === "apply"
-                ? applyHandlerCandidates(effArgs[1])
-                : handlerCandidates(node.arguments, 1);
+                ? candidatesAt(node.arguments, 1).flatMap(
+                    applyHandlerCandidates,
+                  )
+                : candidatesAt(node.arguments, 1);
             break;
           }
         }
@@ -5872,7 +5882,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       if (timerName === null) {
         // `Reflect.apply(<timer>, thisArg, ["código"])` — el timer es arg[0], el handler es
         // arg[2] array-literal → su elemento [0]. Reflect/setTimeout son SAFE → no flaggea aguas
-        // arriba; misma clase que `.apply` (codex P2). Token-en-su-sitio.
+        // arriba; misma clase que `.apply`. Posiciones por el modelo de candidatos (codex P2).
         for (const leaf of valueTransparentLeaves(node.expression)) {
           if (
             (ts.isPropertyAccessExpression(leaf) ||
@@ -5881,11 +5891,14 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             ts.isIdentifier(unwrapErased(leaf.expression)) &&
             unwrapErased(leaf.expression).text === "Reflect" &&
             !context.localBindings.has("Reflect") &&
-            effArgs[0] &&
-            exprIsTimerValued(effArgs[0], context)
+            candidatesAt(node.arguments, 0).some((c) =>
+              exprIsTimerValued(c, context),
+            )
           ) {
             timerName = "Reflect.apply(timer)";
-            stringArgCandidates = applyHandlerCandidates(effArgs[2]);
+            stringArgCandidates = candidatesAt(node.arguments, 2).flatMap(
+              applyHandlerCandidates,
+            );
             break;
           }
         }

@@ -387,6 +387,10 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (0e1467a, #133): ramas de spread de LONGITUD DISTINTA desplazan los args trailing.
     ['diff-len ...(c?[]:[fn]), "código"', `const c = (0 as unknown as boolean); setTimeout(...(c ? [] : [() => {}]), "window.x");`],
     ['diff-len apply inner-spread [...(c?[]:[fn]), "código"]', `const c = (0 as unknown as boolean); setTimeout.apply(null, [...(c ? [] : [() => {}]), "window.x"]);`],
+    // codex P2 (4823f3a, #133): el modelo de candidatos branch-aware en TODAS las posiciones.
+    ['nested inner-spread setTimeout(...[...(c?["x"]:[])])', `const c = (0 as unknown as boolean); setTimeout(...[...(c ? ["window.x"] : [])]);`],
+    ['cond-spread .apply(...(c?[null,["x"]]:[]))', `const c = (0 as unknown as boolean); setTimeout.apply(...(c ? [null, ["window.x"]] : []));`],
+    ['cond-spread Reflect.apply(...(c?[setTimeout,u,["x"]]:[]))', `const c = (0 as unknown as boolean); Reflect.apply(...(c ? [setTimeout, undefined, ["window.x"]] : []));`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -499,6 +503,14 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     const v = checkSourceFile(
       fixture(`Reflect.construct(...[((() => {}) as any).constructor, ["return window"]])();`),
       "Reflect-construct-spread.fixture.tsx",
+    );
+    expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it("caza `Reflect.construct(...(c ? [F.constructor, [...]] : []))` con .constructor en cond-spread (codex P2)", () => {
+    const v = checkSourceFile(
+      fixture(`const c = (0 as unknown as boolean); Reflect.construct(...(c ? [((() => {}) as any).constructor, ["return window"]] : []) as any)();`),
+      "Reflect-construct-cond-spread.fixture.tsx",
     );
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
   });
@@ -2478,6 +2490,10 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: computed key {[\"a\"]:A}={a:React}", HD + `export function C(){ const { ["a"]: A } = { a: React }; (A as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     // codex P2 (3b7b6ba, #133): mutador con target vía SPREAD de array-literal.
     ["familia: Object.assign(...[React, {…}])", HD + `export function C(){ Object.assign(...[React, { useEffect(cb: any){ cb(); } }] as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (4823f3a, #133): default de assignment-destructure + mutador con cond-spread.
+    ["familia: assignment-default ({R=React}={})", HD + `export function C(){ let R: any; ({ R = React } = {} as any); (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: rename-default ({x:R=React}={})", HD + `export function C(){ let R: any; ({ x: R = React } = {} as any); (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: Object.assign(...(c?[React,{…}]:[]))", HD + `export function C(){ Object.assign(...((0 as unknown as boolean) ? [React, { useEffect:(cb:any)=>cb() }] : []) as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
