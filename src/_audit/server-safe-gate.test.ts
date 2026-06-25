@@ -394,6 +394,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (d4dfdd0, #133): receiver VALUE-TRANSPARENTE del timer.
     ['VT receiver (0, globalThis).setTimeout("x")', `(0, globalThis).setTimeout("window.x", 0);`],
     ['VT receiver (c?window:self).setTimeout("x")', `const c = (0 as unknown as boolean); (c ? window : self).setTimeout("window.x", 0);`],
+    // codex P2 (3e1b30e, #133): VT receiver vía ALIAS / .call / .bind (exprIsTimerValued, paridad).
+    ['VT receiver alias const l=(0,globalThis).setTimeout; l("x")', `const l = (0, globalThis).setTimeout; l("window.x", 0);`],
+    ['VT receiver .call ((0,globalThis).setTimeout).call(null,"x")', `((0, globalThis).setTimeout).call(null, "window.x");`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);

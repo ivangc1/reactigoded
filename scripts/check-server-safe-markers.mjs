@@ -2343,15 +2343,19 @@ function exprIsTimerValued(expr, context) {
       ts.isPropertyAccessExpression(leaf) ||
       ts.isElementAccessExpression(leaf)
     ) {
-      const root = unwrapErased(leaf.expression);
-      if (
-        ts.isIdentifier(root) &&
-        (root.text === "globalThis" ||
-          root.text === "window" ||
-          root.text === "self" ||
-          root.text === "global") &&
-        !context.localBindings.has(root.text)
-      ) {
+      // Receiver value-transparente (`(0, globalThis).setTimeout`, `(c ? window : self).setTimeout`)
+      // → resolver por valueTransparentLeaves, no solo unwrapErased; paridad con la rama de callee
+      // directo del string-timer (codex P2). Shadow-aware.
+      const receiverIsGlobalObj = valueTransparentLeaves(leaf.expression).some(
+        (r) =>
+          ts.isIdentifier(r) &&
+          (r.text === "globalThis" ||
+            r.text === "window" ||
+            r.text === "self" ||
+            r.text === "global") &&
+          !context.localBindings.has(r.text),
+      );
+      if (receiverIsGlobalObj) {
         const mn = accessedMemberName(leaf);
         if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
       }
