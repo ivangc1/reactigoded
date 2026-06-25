@@ -348,6 +348,12 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (c2eec1a, #133): key COMPUTADA value-transparente + default de array-assignment.
     ['const {["t"]:later}={t:setTimeout}; later(str)', `const { ["t"]: later } = { t: setTimeout } as any; later("window.x", 0);`],
     ['[later=setTimeout]=[]; later(str)', `let later: any; [later = setTimeout] = [] as any; later("window.x", 0);`],
+    // codex P2 / §141 (7350d2c, #133): assignment-EXPRESSION embebida en operadores value-transparentes
+    // (`=` dentro de `&&`/`,`/`||`/`??`/`?:`) — root intacto + operadores ya ratificados = lado CAZAR.
+    ['embedded && (later=setTimeout) && later(str)', `let later: any; void ((later = setTimeout) && later("window.x", 0));`],
+    ['embedded comma (later=setTimeout, later(str))', `let later: any; void ((later = setTimeout, later("window.x", 0)));`],
+    ['embedded || (later=setTimeout) || later(str)', `let later: any; void ((later = setTimeout) || later("window.x", 0));`],
+    ['embedded ?: c?(later=setTimeout)&&later(str):0', `let later: any; const c = (globalThis as any).c; void (c ? ((later = setTimeout) && later("window.x", 0)) : 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -356,6 +362,24 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it("NO flaggea setTimeout con callback función (no string)", () => {
     const v = checkSourceFile(fixture(`setTimeout(() => { let n = 0; n += 1; void n; }, 0);`), "fn-timer.fixture.tsx");
     expect(v).toEqual([]);
+  });
+
+  // §141 BOUNDARY del assignment-alias embebido: el set value-transparente EXCLUYE calls/IIFE — un
+  // RHS que exige evaluar un call es data-flow → RESIDUAL (no flag). Y un eval-sink embebido sigue
+  // cazándose por su propio path (el read de `Function`), no exento por el reconocimiento de alias.
+  it("NO flaggea (residual): el RHS de la asignación embebida atraviesa un call", () => {
+    const code = `/** @server-safe */\nexport function f() { let x: any; return (x = (() => setTimeout)()) && x("window.x", 0); }`;
+    expect(checkSourceFile(code, "embed-residual.fixture.tsx")).toEqual([]);
+  });
+
+  it("SÍ flaggea un eval-sink embebido `(F = Function) && F(...)()` (por el read de Function)", () => {
+    const code = `/** @server-safe */\nexport function f() { let F: any; return (F = Function) && F("return 1")(); }`;
+    expect(checkSourceFile(code, "embed-evalsink.fixture.tsx").some((x) => x.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
+  it("NO flaggea una asignación embebida que NO es un root (sin timer/partial)", () => {
+    const code = `/** @server-safe */\nexport function f() { let x: any; const y: any = (s: string) => s; return (x = 1) && y("s"); }`;
+    expect(checkSourceFile(code, "embed-fp.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -3009,6 +3033,8 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (c2eec1a, #133): key COMPUTADA + default de array-assignment.
     ['computed const {["wa"]:WA}={wa:WebAssembly}', `/** @server-safe */\nexport function f() { const { ["wa"]: WA } = { wa: WebAssembly } as any; return WA.compile(new Uint8Array()); }`],
     ["array-assign default [WA=WebAssembly]=[]", `/** @server-safe */\nexport function f() { let WA: any; [WA = WebAssembly] = [] as any; return WA.compile(new Uint8Array()); }`],
+    // codex P2 / §141: assignment-EXPRESSION embebida en operador value-transparente.
+    ["embedded (WA=WebAssembly) && WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; return (WA = WebAssembly) && WA.compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });

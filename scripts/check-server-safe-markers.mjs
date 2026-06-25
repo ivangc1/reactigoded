@@ -3135,6 +3135,126 @@ function isValueTransparentParent(parent, child) {
   return valueTransparentChildren(parent).indexOf(child) !== -1;
 }
 
+// ¿`node` es un NODO operador value-transparente? Mismo SET de operadores que `valueTransparentChildren`
+// (erased/await/?:/coma/&&/||/??/=) — si se añade uno allí, añadirlo aquí. Usado para detectar el TOP
+// de una cadena value-transparente (enrolar alias embebidos una sola vez).
+function isValueTransparentOperatorNode(node) {
+  if (!node) return false;
+  if (
+    isErasedOuterExpr(node) ||
+    ts.isAwaitExpression(node) ||
+    ts.isConditionalExpression(node)
+  ) {
+    return true;
+  }
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    return (
+      op === ts.SyntaxKind.CommaToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken ||
+      op === ts.SyntaxKind.EqualsToken
+    );
+  }
+  return false;
+}
+
+/**
+ * Twin SIDE-EFFECT de `valueTransparentChildren`: recorre los operandos EVALUADOS del MISMO set de
+ * operadores value-transparentes (no solo el value-child del `&&`/coma — también el operando lateral
+ * con efecto), llamando `visit(assignmentNode)` por cada assignment-expression embebida (`X = Y`,
+ * `X &&=/||=/??= Y`). NO atraviesa CALLS/IIFE — el caveat del §141: un RHS que exige evaluar un call
+ * es data-flow → residual. Cierra el under-catch de `(later = setTimeout) && later("…")`: el root está
+ * presente COMO UNIDAD y el alias se forma con operadores value-transparentes ya ratificados → lado
+ * CAZAR de la frontera, no el assembled/indirection residual.
+ */
+function eachEmbeddedAssignment(node, visit) {
+  if (!node) return;
+  if (isErasedOuterExpr(node) || ts.isAwaitExpression(node)) {
+    eachEmbeddedAssignment(node.expression, visit);
+    return;
+  }
+  if (ts.isConditionalExpression(node)) {
+    eachEmbeddedAssignment(node.condition, visit);
+    eachEmbeddedAssignment(node.whenTrue, visit);
+    eachEmbeddedAssignment(node.whenFalse, visit);
+    return;
+  }
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    if (
+      op === ts.SyntaxKind.EqualsToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
+    ) {
+      visit(node); // `X = Y` (o `X &&=/||=/??= Y` → X←Y condicional)
+      eachEmbeddedAssignment(node.right, visit); // cadena `a = b = root`
+      return;
+    }
+    if (
+      op === ts.SyntaxKind.CommaToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken
+    ) {
+      eachEmbeddedAssignment(node.left, visit);
+      eachEmbeddedAssignment(node.right, visit);
+      return;
+    }
+  }
+  // call / identifier / member / literal / arrow / etc. → STOP (no atravesar calls — caveat §141).
+}
+
+/**
+ * `context` enriquecido con los alias de timer/partial creados por assignment-expressions embebidas
+ * en `node` (operadores value-transparentes). Reusa `collectStructuralAliases` (un solo predicado, no
+ * un path paralelo). Order-INDEPENDENT fail-closed: un use-before-assign sobre-flaggea (seguro).
+ */
+function withEmbeddedAssignmentAliases(context, node) {
+  let timer = null;
+  let partial = null;
+  eachEmbeddedAssignment(node, (assign) => {
+    collectStructuralAliases(
+      assign.left,
+      assign.right,
+      context,
+      exprIsTimerValued,
+      (n) => (timer ||= new Set()).add(n),
+    );
+    collectStructuralAliases(
+      assign.left,
+      assign.right,
+      context,
+      exprPartialRoot,
+      (n, r) => (partial ||= new Map()).set(n, r),
+      true,
+    );
+  });
+  if (!timer && !partial) return context;
+  let out = context;
+  if (timer) {
+    out = {
+      ...out,
+      scopeTimerAliases: new Set([...(out.scopeTimerAliases ?? []), ...timer]),
+    };
+  }
+  if (partial) {
+    out = {
+      ...out,
+      scopePartialAliases: new Map([
+        ...(out.scopePartialAliases ?? []),
+        ...partial,
+      ]),
+    };
+  }
+  return out;
+}
+
 /**
  * ¿El valor de `node` ES (vía constructos value-transparentes, sin calls) un member access
  * `constructor`? ALGUNA hoja value-transparente es un `.constructor`. Cierra el anidamiento;
@@ -5494,6 +5614,17 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // bindear hacía ver `a` como global no-bound = FP (codex P2). Bindea cada declarador antes del
     // siguiente; el binding queda LOCAL al recorrido (la per-stmt loop sigue añadiéndolos al scope
     // que se propaga a los statements posteriores).
+    // Assignment-alias EMBEBIDO en un operador value-transparente (`(later = setTimeout) && later(…)`):
+    // enrolar antes de visitar los hijos para que un uso HERMANO lo reconozca (codex P2/§141 — root
+    // intacto + operadores ya ratificados = lado CAZAR). Solo en el TOP de la cadena (parent NO es
+    // VT-operator) para no re-escanear. Reusa el mismo unwrap; no atraviesa calls (RHS-call = residual).
+    if (
+      isValueTransparentOperatorNode(node) &&
+      !isValueTransparentOperatorNode(node.parent)
+    ) {
+      context = withEmbeddedAssignmentAliases(context, node);
+    }
+
     if (ts.isVariableDeclarationList(node)) {
       let declCtx = context;
       for (const decl of node.declarations) {
