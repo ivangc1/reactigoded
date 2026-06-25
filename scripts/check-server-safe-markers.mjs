@@ -1980,13 +1980,15 @@ function gatherReactNamespaceFamily(sourceFile) {
     for (const leaf of valueTransparentLeaves(expr)) {
       if (ts.isIdentifier(leaf) && family.has(leaf.text)) return true;
       if (ts.isElementAccessExpression(leaf)) {
-        const base = unwrapErased(leaf.expression);
+        // Base value-transparente (`(c ? [React] : [React])[0]`) → arrayLiteralAlternatives (codex P2).
         const idx = leaf.argumentExpression
           ? unwrapErased(leaf.argumentExpression)
           : null;
-        if (ts.isArrayLiteralExpression(base) && idx && ts.isNumericLiteral(idx)) {
-          const el = base.elements[Number(idx.text)];
-          if (el && exprIsFamilyValue(el)) return true;
+        if (idx && ts.isNumericLiteral(idx)) {
+          for (const arr of arrayLiteralAlternatives(leaf.expression)) {
+            const el = arr.elements[Number(idx.text)];
+            if (el && exprIsFamilyValue(el)) return true;
+          }
         }
       }
     }
@@ -2359,15 +2361,17 @@ function exprIsTimerValued(expr, context) {
         const mn = accessedMemberName(leaf);
         if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
       }
-      // Proyección array-literal-index `[setTimeout][0]` (token-en-su-sitio). codex P2.
+      // Proyección array-literal-index `[setTimeout][0]` (token-en-su-sitio). Base value-transparente
+      // (`(c ? [setTimeout] : [setTimeout])[0]`) → arrayLiteralAlternatives, no solo unwrapErased (codex P2).
       if (ts.isElementAccessExpression(leaf)) {
-        const base = unwrapErased(leaf.expression);
         const idx = leaf.argumentExpression
           ? unwrapErased(leaf.argumentExpression)
           : null;
-        if (ts.isArrayLiteralExpression(base) && idx && ts.isNumericLiteral(idx)) {
-          const el = base.elements[Number(idx.text)];
-          if (el && exprIsTimerValued(el, context)) return true;
+        if (idx && ts.isNumericLiteral(idx)) {
+          for (const arr of arrayLiteralAlternatives(leaf.expression)) {
+            const el = arr.elements[Number(idx.text)];
+            if (el && exprIsTimerValued(el, context)) return true;
+          }
         }
       }
     } else if (ts.isCallExpression(leaf)) {
@@ -2513,15 +2517,17 @@ function exprPartialRoot(expr, context) {
         return leaf.text;
       }
     } else if (ts.isElementAccessExpression(leaf)) {
-      // Proyección array-literal-index `[WebAssembly][0]`. codex P2.
-      const base = unwrapErased(leaf.expression);
+      // Proyección array-literal-index `[WebAssembly][0]`. Base value-transparente
+      // (`(c ? [WebAssembly] : [WebAssembly])[0]`) → arrayLiteralAlternatives (codex P2).
       const idx = leaf.argumentExpression
         ? unwrapErased(leaf.argumentExpression)
         : null;
-      if (ts.isArrayLiteralExpression(base) && idx && ts.isNumericLiteral(idx)) {
-        const el = base.elements[Number(idx.text)];
-        const r = el ? exprPartialRoot(el, context) : null;
-        if (r) return r;
+      if (idx && ts.isNumericLiteral(idx)) {
+        for (const arr of arrayLiteralAlternatives(leaf.expression)) {
+          const el = arr.elements[Number(idx.text)];
+          const r = el ? exprPartialRoot(el, context) : null;
+          if (r) return r;
+        }
       }
     }
   }
@@ -3586,11 +3592,15 @@ function isWeaponizedConstructorAccess(node) {
       ts.isPropertyAccessExpression(callee) ||
       ts.isElementAccessExpression(callee)
     ) {
-      const obj = unwrapErased(callee.expression);
+      // Receiver Reflect value-transparente (`(0, Reflect).construct(…)`, `(c ? Reflect : Reflect).
+      // apply(…)`) → resolver por valueTransparentLeaves, no solo unwrapErased; paridad con los
+      // receiver paths del timer (codex P2).
       const member = accessedMemberName(callee);
+      const receiverIsReflect = valueTransparentLeaves(callee.expression).some(
+        (o) => ts.isIdentifier(o) && o.text === "Reflect",
+      );
       if (
-        ts.isIdentifier(obj) &&
-        obj.text === "Reflect" &&
+        receiverIsReflect &&
         (member === "construct" || member === "apply")
       ) {
         return true;
@@ -5585,7 +5595,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         pattern = node;
         initExpr = node.parent.right;
       }
-      if (pattern && initExpr && !context.isInClientOnlyDeferredBody) {
+      // Correr aunque NO haya init ENTERO: un catch-pattern (`catch ({ x: { compile } = WebAssembly })`)
+      // y un param-pattern sin default nunca tienen init, pero sus binding-element DEFAULTS sí ejecutan
+      // (cuando la key/índice falta) → flagPartialDestructure escanea los defaults con init undefined (codex P2).
+      if (pattern && !context.isInClientOnlyDeferredBody) {
         const keyTextOf = (kn) => {
           if (!kn) return null;
           if (ts.isComputedPropertyName(kn)) {
@@ -5620,7 +5633,8 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           const elems = ts.isObjectLiteralExpression(pat)
             ? pat.properties
             : pat.elements;
-          const partialRootName = exprPartialRoot(init, context);
+          // init puede ser undefined (catch-pattern / param sin default) → solo el default-scan corre.
+          const partialRootName = init ? exprPartialRoot(init, context) : null;
           if (partialRootName) {
             // Solo un OBJECT pattern extrae un MIEMBRO por key; un array pattern sobre el root es
             // iteración (no member-access). init ES el root → sin literal anidado que recursar.
@@ -5711,7 +5725,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // RECURSIÓN ESTRUCTURAL por VALOR MATCHEADO: solo si init es un object/array LITERAL →
           // matchear sub-patrones (por key / por índice) y bajar. Cubre object, array y mezclas
           // (`{ x: [{ compile }] } = { x: [WebAssembly] }`) — paridad con collectStructuralAliases.
-          const lit = singleLiteralLeaf(init);
+          const lit = init ? singleLiteralLeaf(init) : null;
           if (!lit) return;
           if (isObjPat && ts.isObjectLiteralExpression(lit)) {
             for (const el of elems) {

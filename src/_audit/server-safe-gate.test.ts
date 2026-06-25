@@ -397,6 +397,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (3e1b30e, #133): VT receiver vía ALIAS / .call / .bind (exprIsTimerValued, paridad).
     ['VT receiver alias const l=(0,globalThis).setTimeout; l("x")', `const l = (0, globalThis).setTimeout; l("window.x", 0);`],
     ['VT receiver .call ((0,globalThis).setTimeout).call(null,"x")', `((0, globalThis).setTimeout).call(null, "window.x");`],
+    // codex P2 (372903e, #133): base de proyección [X][i] value-transparente.
+    ['VT projection base (c?[setTimeout]:[setTimeout])[0]("x")', `const c = (0 as unknown as boolean); (c ? [setTimeout] : [setTimeout])[0]("window.x", 0);`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -3178,6 +3180,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (d4dfdd0, #133): binding-element default (sin default entero) + default sobre init OPACO.
     ["binding-element default run({WA=WebAssembly})", `/** @server-safe */\nexport function run({ WA = WebAssembly }: any){ return WA.compile(new Uint8Array()); }`],
     ["default sobre init opaco const {x:{compile}=WebAssembly}=props", `/** @server-safe */\nexport function f(props: any) { const { x: { compile } = WebAssembly } = props; return compile(new Uint8Array()); }`],
+    // codex P2 (372903e, #133): catch-pattern default + base de proyección partial value-transparente.
+    ["catch ({x:{compile}=WebAssembly}){ compile() }", `/** @server-safe */\nexport function f() { try {} catch ({ x: { compile } = WebAssembly }: any) { return compile(new Uint8Array()); } }`],
+    ["VT projection (c?[WebAssembly]:[WebAssembly])[0].compile()", `/** @server-safe */\nexport function f(c: boolean) { return (c ? [WebAssembly] : [WebAssembly])[0].compile(new Uint8Array()); }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
