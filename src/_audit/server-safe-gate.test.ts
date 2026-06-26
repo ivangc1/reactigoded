@@ -446,6 +446,40 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(code, "embed-fp.fixture.tsx")).toEqual([]);
   });
 
+  // codex P2 (review genérico): import.meta es un namespace host/build con whitelist fail-closed de
+  // miembros (estándar ∪ Vite); dirname/filename Node-only se deniegan, env/url/hot/glob se permiten.
+  it("partición de miembros de `import.meta` (allow url/env/hot/glob; deny dirname/filename/resolve)", () => {
+    const any = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const f = (c: boolean) => ${b};`, "im.fixture.tsx").length > 0;
+    // DENY (Node-only / incertidumbre-Edge), dot + bracket-literal + alternativa:
+    expect(any(`import.meta.dirname`)).toBe(true);
+    expect(any(`import.meta.filename`)).toBe(true);
+    expect(any(`(import.meta as any).resolve("x")`)).toBe(true);
+    expect(any(`(import.meta as any)["dirname"]`)).toBe(true);
+    expect(any(`(import.meta as any)[c ? "url" : "dirname"]`)).toBe(true);
+    // ALLOW (estándar ∪ Vite):
+    expect(any(`import.meta.url`)).toBe(false);
+    expect(any(`(import.meta as any).env.DEV`)).toBe(false);
+    expect(any(`(import.meta as any).hot`)).toBe(false);
+    expect(any(`(import.meta as any).glob("./*")`)).toBe(false);
+    // §141 residual: bracket dinámico.
+    expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
+  });
+
+  // codex P2 (review genérico): `process` denegado, pero `process.env` lo expone Vercel Edge —
+  // miembro seguro de raíz denegada (trato uniforme con import.meta.env).
+  it("partición de `process` (allow process.env; deny bare/cwd/binding/dynKey)", () => {
+    const any = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const f = (c: boolean) => ${b};`, "pr.fixture.tsx").length > 0;
+    expect(any(`process.env.NODE_ENV`)).toBe(false);
+    expect(any(`process["env"]`)).toBe(false);
+    expect(any(`process.cwd()`)).toBe(true);
+    expect(any(`(process as any).binding("fs")`)).toBe(true);
+    expect(any(`process`)).toBe(true);
+    expect(any(`(process as any)[c ? "env" : "cwd"]`)).toBe(true);
+    expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (process as any)[k];`, "pr2.fixture.tsx").length > 0).toBe(true);
+  });
+
   it("caza `import(<literal builtin>)` dinámico; deja residual el variable/createRequire (codex P1)", () => {
     const has = (body: string) =>
       checkSourceFile(`/** @server-safe */\n${body}`, "dynimp.fixture.tsx").some(

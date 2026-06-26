@@ -530,6 +530,26 @@ const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly"]);
 // con eval/Function NO se puede "guard con typeof" — hay que refactor.
 const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 
+// Whitelist fail-closed de miembros de `import.meta` disponibles en el baseline Edge — MISMA forma
+// que SAFE_GLOBALS (un namespace paralelo poblado por el host/build, no un global). REGLA de
+// mantenimiento (checkeable, NO juicio): ALLOW = ESTÁNDAR (∈ spec TC39 import-meta, poblado por el
+// host: `url`) ∪ VITE (transformado/borrado en build antes de runtime: `env`, `hot`, `glob`). El
+// DENY es el COMPLEMENTO por construcción → `dirname`/`filename` (Node-only) y cualquier miembro
+// Node-only futuro caen sin enumerarlos. `resolve` se EXCLUYE pero por INCERTIDUMBRE-Edge (es
+// estándar — Node 20.6+/browsers — pero lo puebla el host y V8-a-pelo no lo provee; Vercel/CF Edge
+// dudoso en deploy bundled donde la resolución ya ocurrió en build) → pendiente de confirmar en #190,
+// NO Node-only. La lista se pudre solo con un EVENTO VERSIONADO (sube spec / sube Vite), no con cada
+// release de Node. Whitelist-sobre-denylist = la misma ratificación de SAFE_GLOBALS (codex P2 review
+// genérico). El subset definitivo Edge se deriva del baseline real en #190.
+const SAFE_IMPORT_META_MEMBERS = new Set(["url", "env", "hot", "glob"]);
+
+// `process` es UN GLOBAL DENEGADO (ausente/stub en el edge baseline; ver CLIENT/denied set), PERO
+// `process.env` SÍ lo expone Vercel Edge (env vars). Estructura inversa a PARTIAL_SAFE_GLOBAL_MEMBERS
+// (raíz denegada, miembro SEGURO): allow `process.env`, deny bare `process` y el resto (`cwd`,
+// `binding`, …). Trato UNIFORME con import.meta.env (mismo idiom host-env-var Edge-safe) — sin esto
+// hay incoherencia entre dos objetos que hacen lo mismo. codex P2 (review genérico). #190 refina.
+const SAFE_MEMBERS_OF_DENIED_ROOT = { process: new Set(["env"]) };
+
 // Denegaciones para las que un guard `typeof X !== "undefined"` NO hace el
 // body safe — el typeof-guard NO se reconoce para ellas:
 //   - `eval`/`Function`/`globalThis`/`global`/`self`: sinks de eval / raíz de
@@ -3990,6 +4010,7 @@ function isNonReferencePosition(node, declaredNames) {
     return true;
   }
 
+
   // 14. Labels: `outer: for (...)` y los targets de `break outer` /
   //     `continue outer`. El identificador es el NOMBRE del label (en
   //     `parent.label`, no `parent.name`), metadata de control de flujo, no
@@ -4836,6 +4857,33 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         });
       }
     }
+    // `import.meta.<member>` — namespace ESM poblado por el host/build; sus miembros se whitelistean
+    // fail-closed (SAFE_IMPORT_META_MEMBERS). `dirname`/`filename` son Node-only → ausentes en Edge →
+    // leer/derefenciarlos lanza en SSR/render. Forma dot Y bracket-LITERAL (`import.meta["dirname"]`,
+    // fold del literal vía accessedMemberNames); `import.meta[dynamicKey]` = §141 residual (data-flow).
+    // codex P2 (review genérico). `new.target` NO es vector (no poblado por host, sin miembros Node-only).
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)) &&
+      ts.isMetaProperty(unwrapErased(node.expression)) &&
+      unwrapErased(node.expression).keywordToken ===
+        ts.SyntaxKind.ImportKeyword &&
+      !context.isInClientOnlyDeferredBody
+    ) {
+      const members = accessedMemberNames(node);
+      const unsafe = members.find((mm) => !SAFE_IMPORT_META_MEMBERS.has(mm));
+      if (members.length > 0 && unsafe !== undefined) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail: `\`import.meta.${unsafe}\` — miembro Node-only, ausente del \`import.meta\` del baseline Edge/web-standard → lanza en SSR/render. Disponible-en-Edge: ${[...SAFE_IMPORT_META_MEMBERS].join("/")} (subset definitivo en #190): ${lineText}`,
+        });
+      }
+    }
     // (a) Detectar typeof guards en if-statements: el then-branch
     // hereda el guard activo. El else-branch NO (en else, X está
     // undefined per la negación de la condición positiva).
@@ -5603,9 +5651,20 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           // Exención en body diferido: política única (NON_ABSENCE_DENIALS solo en
           // client-only; el resto en cualquier deferred). Ver isExemptInDeferredBody.
           const deferredExempt = isExemptInDeferredBody(api, context);
+          // MIEMBRO SEGURO de una raíz DENEGADA: `process.env` — `process` denegado pero `process.env`
+          // lo expone Vercel Edge. Eximir SOLO el acceso a un miembro seguro (`env`, dot o bracket-
+          // LITERAL, todas las ramas seguras); `process.cwd()`/`process[dynKey]` siguen flaggeando.
+          // Trato uniforme con import.meta.env. codex P2 (review genérico). #190 refina el subset.
+          const safeRootMembers = SAFE_MEMBERS_OF_DENIED_ROOT[api];
+          const memberCands = safeRootMembers ? accessedMemberNames(node) : [];
+          const isSafeMemberOfDeniedRoot =
+            safeRootMembers &&
+            memberCands.length > 0 &&
+            memberCands.every((mm) => safeRootMembers.has(mm));
           if (
             !context.localBindings.has(api) &&
             !deferredExempt &&
+            !isSafeMemberOfDeniedRoot &&
             // Nombre declarado a nivel de módulo leído DENTRO de una función (call-
             // time) = local inicializado, no un global — independiente del orden
             // textual (F4: forward value-read). El espejo JSX (regla 9) ya lo hacía.
