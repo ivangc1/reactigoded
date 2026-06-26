@@ -5716,6 +5716,18 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ) {
         pattern = node;
         initExpr = node.parent.right;
+      } else if (
+        (ts.isObjectLiteralExpression(node) ||
+          ts.isArrayLiteralExpression(node)) &&
+        (ts.isForOfStatement(node.parent) ||
+          ts.isForInStatement(node.parent)) &&
+        node.parent.initializer === node
+      ) {
+        // for-OF/for-IN assignment-PATTERN (`for ({ x: { compile } = WebAssembly } of rows)`): el
+        // valor viene de la iteración (sin init), pero los binding-element DEFAULTS sí ejecutan →
+        // member-extract via default-scan (init undefined). Paridad con el alias-enroll del for-of (codex P2).
+        pattern = node;
+        initExpr = undefined;
       }
       // Correr aunque NO haya init ENTERO: un catch-pattern (`catch ({ x: { compile } = WebAssembly })`)
       // y un param-pattern sin default nunca tienen init, pero sus binding-element DEFAULTS sí ejecutan

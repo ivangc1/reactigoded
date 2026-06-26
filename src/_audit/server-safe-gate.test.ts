@@ -476,6 +476,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // catch con default seguro / alternativas de literal TODAS no-timer → exento (codex P2).
     expect(checkSourceFile(fixture(`try {} catch ({ now = performance.now }: any) { void now(); }`), "catch-safe.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(fixture(`const c = (0 as unknown as boolean); const { l } = c ? { l: () => {} } : { l: () => {} }; void l("x");`), "alt-nontimer.fixture.tsx")).toEqual([]);
+    // for-of member-extract con default a miembro SAFE (performance.now) → exento (codex P2).
+    expect(checkSourceFile(`/** @server-safe */\nexport function f() { let now: any; for ({ x: { now } = performance } of [] as any[]) { now(); } }`, "forof-safe-member.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -3218,6 +3220,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["computed member-key WebAssembly[c?'compile':'validate']", `/** @server-safe */\nexport function f(c: boolean) { return (WebAssembly as any)[c ? "compile" : "validate"](new Uint8Array()); }`],
     ["computed destr-key const {[c?'compile':'validate']:f}=WebAssembly", `/** @server-safe */\nexport function f(c: boolean) { const { [c ? "compile" : "validate"]: g } = WebAssembly as any; return g(new Uint8Array()); }`],
     ["for-of pattern default for ({WA=WebAssembly} of rows)", `/** @server-safe */\nexport function f() { let WA: any; for ({ WA = WebAssembly } of [] as any[]) { WA.compile(new Uint8Array()); } }`],
+    // codex P2 (e1a7995, #133): for-of/for-in member-EXTRACT vía default (paridad con el alias-enroll).
+    ["for-of member-extract for ({x:{compile}=WebAssembly} of rows)", `/** @server-safe */\nexport function f() { let compile: any; for ({ x: { compile } = WebAssembly } of [] as any[]) { compile(new Uint8Array()); } }`],
+    ["for-of array member-extract for ([{compile}=WebAssembly] of rows)", `/** @server-safe */\nexport function f() { let compile: any; for ([{ compile } = WebAssembly] of [] as any[]) { compile(new Uint8Array()); } }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
