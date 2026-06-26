@@ -2000,15 +2000,6 @@ function gatherReactNamespaceFamily(sourceFile) {
     }
     return false;
   };
-  // La única hoja value-transparente de `expr` SI es un literal object/array (para matchear
-  // patrones de destructuring contra `{a: React}` / `[React]`).
-  const literalInit = (expr) => {
-    if (!expr) return null;
-    const leaves = valueTransparentLeaves(expr);
-    if (leaves.length !== 1) return null;
-    const l = leaves[0];
-    return ts.isObjectLiteralExpression(l) || ts.isArrayLiteralExpression(l) ? l : null;
-  };
   // Enrola los identifiers de `target` ligados a un valor react de `init`. Cubre: identifier
   // (`A = React`), object/array binding-pattern (decl `const {a:A}=…`) y object/array literal
   // como target de assignment (`({a:A}={a:React})`, `[A]=[React]`). Match ESTRUCTURAL para no
@@ -2041,10 +2032,11 @@ function gatherReactNamespaceFamily(sourceFile) {
         }
       }
     }
-    const lit = literalInit(init);
+    // Iterar TODAS las alternativas literal de init (`c ? { R: React } : { R: React }`), fail-closed
+    // — paridad con collectStructuralAliases (codex P2).
+    for (const lit of literalLeaves(init)) {
     if (
       (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
-      lit &&
       ts.isObjectLiteralExpression(lit)
     ) {
       const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
@@ -2078,22 +2070,19 @@ function gatherReactNamespaceFamily(sourceFile) {
         } else continue;
         // Key COMPUTADA value-transparente (`{ ["a"]: A } = { a: React }`) → "a", como el resto del
         // gate (structuralKeyText), para no dejar `A` fuera de la familia react (codex P2).
-        const key = structuralKeyText(keyNode);
-        if (!key || !sub) continue;
+        if (structuralKeyTexts(keyNode).length === 0 || !sub) continue;
         const ip = lit.properties.find(
           (p) =>
             ts.isPropertyAssignment(p) &&
             p.name &&
-            structuralKeyText(p.name) === key,
+            structuralKeysOverlap(p.name, keyNode),
         );
         if (ip) enrollBinding(sub, ip.initializer);
         if (def) enrollBinding(sub, def);
       }
-      return;
     }
     if (
       (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
-      lit &&
       ts.isArrayLiteralExpression(lit)
     ) {
       const elems = t.elements;
@@ -2102,6 +2091,7 @@ function gatherReactNamespaceFamily(sourceFile) {
         const sub = ts.isBindingElement(e) ? e.name : e;
         enrollBinding(sub, lit.elements[i]);
       });
+    }
     }
   };
   while (changed) {
@@ -2192,17 +2182,26 @@ function literalLeaves(expr) {
 // Texto de una key de propiedad/binding, foldeando keys COMPUTADAS value-transparentes
 // (`["wa"]`, `[1 && "wa"]` → "wa"), como el resto de paths del gate (codex P2). null si no es
 // estáticamente conocible.
-function structuralKeyText(keyNode) {
-  if (!keyNode) return null;
+// TODAS las candidatas string de una key de pattern/propiedad — incluye ALTERNATIVAS de una key
+// COMPUTADA value-transparente (`[c ? "a" : "b"]` → ["a","b"]); fail-closed, cualquiera cuenta
+// (codex P2). Operador no-VT (concat) = ensamblaje §141 residual (no produce string-literal leaf).
+function structuralKeyTexts(keyNode) {
+  if (!keyNode) return [];
   if (ts.isComputedPropertyName(keyNode)) {
-    const leaves = valueTransparentLeaves(keyNode.expression);
-    const lit =
-      leaves.length === 1 && ts.isStringLiteralLike(leaves[0]) ? leaves[0] : null;
-    return lit ? lit.text : null;
+    return valueTransparentLeaves(keyNode.expression)
+      .filter((l) => ts.isStringLiteralLike(l))
+      .map((l) => l.text);
   }
   return ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode)
-    ? keyNode.text
-    : null;
+    ? [keyNode.text]
+    : [];
+}
+
+// ¿comparten las keys `a` y `b` alguna candidata? (match estructural fail-closed entre alternativas).
+function structuralKeysOverlap(a, b) {
+  const sa = structuralKeyTexts(a);
+  const sb = structuralKeyTexts(b);
+  return sa.some((k) => sb.includes(k));
 }
 
 function collectStructuralAliases(target, init, context, resolve, emit, enrollRest = false) {
@@ -2254,6 +2253,36 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
       }
     }
   }
+  // DEFAULTS de un object/array-LITERAL target (assignment-destructure `({ X = setTimeout } = …)`,
+  // for-of `for ({ X = setTimeout } of …)`) — INDEPENDIENTES del init, como los binding-element
+  // defaults de arriba; el default ejecuta cuando la prop/índice falta (codex P2).
+  if (ts.isObjectLiteralExpression(t)) {
+    for (const e of t.properties) {
+      if (
+        ts.isShorthandPropertyAssignment(e) &&
+        e.objectAssignmentInitializer
+      ) {
+        collectStructuralAliases(e.name, e.objectAssignmentInitializer, context, resolve, emit, enrollRest);
+      } else if (
+        ts.isPropertyAssignment(e) &&
+        e.initializer &&
+        ts.isBinaryExpression(e.initializer) &&
+        e.initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        collectStructuralAliases(e.initializer.left, e.initializer.right, context, resolve, emit, enrollRest);
+      }
+    }
+  }
+  if (ts.isArrayLiteralExpression(t)) {
+    for (const e of t.elements) {
+      if (
+        ts.isBinaryExpression(e) &&
+        e.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        collectStructuralAliases(e.left, e.right, context, resolve, emit, enrollRest);
+      }
+    }
+  }
   // Iterar TODAS las alternativas literal (`cond ? {a:X} : {a:Y}`): el match estructural corre
   // contra cada rama, fail-closed (codex P2).
   for (const lit of literalLeaves(init)) {
@@ -2299,13 +2328,12 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
           );
         }
       } else continue;
-      const key = structuralKeyText(keyNode);
-      if (!key) continue;
+      if (structuralKeyTexts(keyNode).length === 0) continue;
       const ip = lit.properties.find(
         (p) =>
           ts.isPropertyAssignment(p) &&
           p.name &&
-          structuralKeyText(p.name) === key,
+          structuralKeysOverlap(p.name, keyNode),
       );
       if (ip) {
         collectStructuralAliases(sub, ip.initializer, context, resolve, emit, enrollRest);
@@ -3077,6 +3105,20 @@ function accessedMemberName(node) {
     if (leaves.length === 1 && literals.length === 1) return literals[0];
   }
   return undefined;
+}
+
+// TODAS las candidatas del member-name accedido — incluye ALTERNATIVAS de una key computada
+// (`WebAssembly[c ? "compile" : "validate"]` → ["compile","validate"]); fail-closed, cualquiera
+// cuenta para el chequeo partial-member (codex P2). `accessedMemberName` (singular) prioriza el
+// weaponizable para el eval-sink; ésta enumera para el set partial.
+function accessedMemberNames(node) {
+  if (ts.isPropertyAccessExpression(node)) return [node.name.text];
+  if (ts.isElementAccessExpression(node)) {
+    return valueTransparentLeaves(node.argumentExpression)
+      .map(foldConstString)
+      .filter((s) => s !== undefined);
+  }
+  return [];
 }
 
 /**
@@ -5372,9 +5414,44 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // setTimeout; later(…); )`) ejecutan ANTES de la condición/body → enrolar (codex P2).
       const forExprInit =
         init && !ts.isVariableDeclarationList(init) ? init : null;
-      const baseFromExpr = forExprInit
+      let baseFromExpr = forExprInit
         ? withEmbeddedAssignmentAliases(context, forExprInit)
         : context;
+      // for-OF/for-IN con assignment-PATTERN (`for ({ later = setTimeout } of rows)`): los DEFAULTS
+      // de binding-element del pattern ejecutan antes del body → enrolar via collectStructuralAliases
+      // (withEmbeddedAssignmentAliases no los ve: no son `=` embebidos sino un pattern) (codex P2).
+      if (
+        forExprInit &&
+        (ts.isObjectLiteralExpression(forExprInit) ||
+          ts.isArrayLiteralExpression(forExprInit))
+      ) {
+        const tA = new Set();
+        collectStructuralAliases(forExprInit, undefined, context, exprIsTimerValued, (n) =>
+          tA.add(n),
+        );
+        const pA = new Map();
+        collectStructuralAliases(forExprInit, undefined, context, exprPartialRoot, (n, r) =>
+          pA.set(n, r), true,
+        );
+        if (tA.size > 0) {
+          baseFromExpr = {
+            ...baseFromExpr,
+            scopeTimerAliases: new Set([
+              ...(baseFromExpr.scopeTimerAliases ?? []),
+              ...tA,
+            ]),
+          };
+        }
+        if (pA.size > 0) {
+          baseFromExpr = {
+            ...baseFromExpr,
+            scopePartialAliases: new Map([
+              ...(baseFromExpr.scopePartialAliases ?? []),
+              ...pA,
+            ]),
+          };
+        }
+      }
       const hasExprAliases = baseFromExpr !== context;
       const cond = ts.isWhileStatement(node) ? node.expression : node.condition;
       const bodyGuards = new Set();
@@ -5482,19 +5559,24 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     ) {
       // El RECEIVER se desenvuelve VALUE-TRANSPARENTE: `(performance as any).x`, `(0,
       // performance).x` — el cast a `any` es PROBABLE para un método no-estándar (codex P1).
-      const partialMember = accessedMemberName(node);
+      // Key con ALTERNATIVAS (`WebAssembly[c ? "compile" : "validate"]`) → enumerar candidatas y
+      // cazar si CUALQUIERA es un miembro denegado, fail-closed (codex P2).
+      const memberCandidates = accessedMemberNames(node);
       // El receiver resuelve a un root parcial-safe DIRECTO (`performance`/`WebAssembly` no
       // sombreado) o vía ALIAS scope-aware (`const WA = WebAssembly; WA.compile()` — el root está en
       // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). exprPartialRoot ya respeta
       // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
-      const resolvedPartialRoot = partialMember
-        ? exprPartialRoot(node.expression, context)
-        : null;
-      const partialRootName =
-        resolvedPartialRoot &&
-        PARTIAL_SAFE_GLOBAL_MEMBERS[resolvedPartialRoot]?.has(partialMember)
-          ? resolvedPartialRoot
+      const resolvedPartialRoot =
+        memberCandidates.length > 0
+          ? exprPartialRoot(node.expression, context)
           : null;
+      const partialSet = resolvedPartialRoot
+        ? PARTIAL_SAFE_GLOBAL_MEMBERS[resolvedPartialRoot]
+        : null;
+      const partialMember = partialSet
+        ? (memberCandidates.find((m) => partialSet.has(m)) ?? null)
+        : null;
+      const partialRootName = partialMember ? resolvedPartialRoot : null;
       // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
       // (`typeof performance.x` → "undefined", no lee); (2) short-circuit opcional (`x?.()`,
       // `x?.foo`, `x?.[i]` → undefined si el miembro falta). Reading el miembro ausente da
@@ -5636,24 +5718,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // y un param-pattern sin default nunca tienen init, pero sus binding-element DEFAULTS sí ejecutan
       // (cuando la key/índice falta) → flagPartialDestructure escanea los defaults con init undefined (codex P2).
       if (pattern && !context.isInClientOnlyDeferredBody) {
-        const keyTextOf = (kn) => {
-          if (!kn) return null;
-          if (ts.isComputedPropertyName(kn)) {
-            // Key computada VALUE-TRANSPARENTE: `[1 && "M"]`, `[(0,"M")]`, `["M" as const]`
-            // → "M". Mismo fold que el property-access path (accessedMemberName), para no
-            // dejar un hueco que la rama (c.1b) ya normaliza (codex P2). Operador no-value-
-            // transparente (concat `"a"+"b"`) = §141 residual, igual que el eval-sink.
-            const leaves = valueTransparentLeaves(kn.expression);
-            const lit =
-              leaves.length === 1 && ts.isStringLiteralLike(leaves[0])
-                ? leaves[0]
-                : null;
-            return lit ? lit.text : null;
-          }
-          return ts.isIdentifier(kn) || ts.isStringLiteralLike(kn)
-            ? kn.text
-            : null;
-        };
         // El root resuelve DIRECTO (no sombreado / forward) o vía ALIAS scope-aware (`const WA =
         // WebAssembly; const { compile } = WA`) — exprPartialRoot lo cubre. Y RECURSE por las mismas
         // formas estructurales que `collectStructuralAliases` (`const { x: { compile } } = { x:
@@ -5684,7 +5748,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                     ts.isShorthandPropertyAssignment(el)
                   ? el.name
                   : null;
-              const key = keyTextOf(kn);
+              // Key con ALTERNATIVAS (`[c ? "compile" : "validate"]`) → cualquier rama denegada
+              // cuenta, fail-closed (codex P2).
+              const key = structuralKeyTexts(kn).find((k) => set.has(k)) ?? null;
               // ¿DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` / `{ x: y = d }` (assign).
               // Miembro AUSENTE (performance.measure undefined) → default SE ACTIVA → seguro. Root
               // PRESENT-throws (WebAssembly.compile EXISTE) → default NO se activa → sigue lanzando.
@@ -5699,13 +5765,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                     ts.SyntaxKind.EqualsToken);
               if (
                 key &&
-                set.has(key) &&
                 hasDefault &&
                 !PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
               ) {
                 continue; // miembro ausente con default → seguro
               }
-              if (key && set.has(key)) {
+              if (key) {
                 const start = el.getStart(sourceFile);
                 const { line } =
                   sourceFile.getLineAndCharacterOfPosition(start);
@@ -5770,14 +5835,19 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                   : ts.isPropertyAssignment(el)
                     ? el.name
                     : null;
-                const key = keyTextOf(kn);
                 const { sub } = subAndDefault(el);
-                if (!key || !sub || !isDestructurePattern(sub)) continue;
+                if (
+                  structuralKeyTexts(kn).length === 0 ||
+                  !sub ||
+                  !isDestructurePattern(sub)
+                ) {
+                  continue;
+                }
                 const ip = lit.properties.find(
                   (p) =>
                     ts.isPropertyAssignment(p) &&
                     p.name &&
-                    structuralKeyText(p.name) === key,
+                    structuralKeysOverlap(p.name, kn),
                 );
                 if (ip) flagPartialDestructure(sub, ip.initializer);
               }

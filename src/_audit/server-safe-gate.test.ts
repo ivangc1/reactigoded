@@ -402,6 +402,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // codex P2 (7614b51, #133): VT Reflect.apply receiver + alternativas de literal en alias estructural.
     ['VT Reflect.apply receiver (0,Reflect).apply(setTimeout,null,["x"])', `(0, Reflect).apply(setTimeout, null, ["window.x"]);`],
     ['literal-alt alias const {l}=c?{l:setTimeout}:{l:setInterval}; l("x")', `const c = (0 as unknown as boolean); const { l } = c ? { l: setTimeout } : { l: setInterval }; l("window.x", 0);`],
+    // codex P2 (79b8fc1, #133): keys con ALTERNATIVAS + for-of pattern default.
+    ['computed-key alt const {[c?"l":"n"]:l}={l:setTimeout,n:fn}; l("x")', `const c = (0 as unknown as boolean); const { [c ? "l" : "n"]: l } = { l: setTimeout, n: () => {} } as any; l("window.x", 0);`],
+    ['for-of pattern default for ({l=setTimeout} of rows){ l("x") }', `let l: any; for ({ l = setTimeout } of [] as any[]) { l("window.x", 0); }`],
   ])("caza el string-handler de timer como eval-sink: %s", (_label, body) => {
     const v = checkSourceFile(fixture(body), "str-timer.fixture.tsx");
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
@@ -2533,6 +2536,8 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: Object.assign(...(c?[React,{…}]:[]))", HD + `export function C(){ Object.assign(...((0 as unknown as boolean) ? [React, { useEffect:(cb:any)=>cb() }] : []) as any); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     // codex P2 (7614b51, #133): receiver del mutador value-transparente.
     ["familia: (0, Object).assign(React, {…})", HD + `export function C(){ (0, Object).assign(React, { useEffect:(cb:any)=>cb() }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P2 (79b8fc1, #133): familia react vía alternativas de literal.
+    ["familia: const {R}=c?{R:React}:{R:React}", HD + `export function C(){ const { R } = (0 as unknown as boolean) ? { R: React } : { R: React }; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -3196,6 +3201,10 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (7614b51, #133): catch alias-default + alternativas de literal en el member-extract.
     ["catch ({WA=WebAssembly}){ WA.compile() }", `/** @server-safe */\nexport function f() { try {} catch ({ WA = WebAssembly }: any) { return WA.compile(new Uint8Array()); } }`],
     ["literal-alt const {x:{compile}}=c?{x:WebAssembly}:{x:WebAssembly}", `/** @server-safe */\nexport function f(c: boolean) { const { x: { compile } } = c ? { x: WebAssembly } : { x: WebAssembly }; return compile(new Uint8Array()); }`],
+    // codex P2 (79b8fc1, #133): computed member-key + destructuring-key con ALTERNATIVAS + for-of pattern.
+    ["computed member-key WebAssembly[c?'compile':'validate']", `/** @server-safe */\nexport function f(c: boolean) { return (WebAssembly as any)[c ? "compile" : "validate"](new Uint8Array()); }`],
+    ["computed destr-key const {[c?'compile':'validate']:f}=WebAssembly", `/** @server-safe */\nexport function f(c: boolean) { const { [c ? "compile" : "validate"]: g } = WebAssembly as any; return g(new Uint8Array()); }`],
+    ["for-of pattern default for ({WA=WebAssembly} of rows)", `/** @server-safe */\nexport function f() { let WA: any; for ({ WA = WebAssembly } of [] as any[]) { WA.compile(new Uint8Array()); } }`],
   ])("FLAGGEA el acceso a un miembro parcial vía ALIAS del root: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-alias.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
