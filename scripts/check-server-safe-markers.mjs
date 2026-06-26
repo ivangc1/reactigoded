@@ -490,12 +490,12 @@ const PARTIAL_SAFE_GLOBAL_MEMBERS = {
   //   el gate renuncia por diseño (§141): `instantiate(bufferSource)` queda RESIDUAL de data-flow,
   //   junto al resto de renuncias de provenance, NO un bypass.
   // SAFE — `Memory`/`Table`/`Global`/`Instance`/`validate` no compilan.
-  WebAssembly: new Set([
-    "compile",
-    "compileStreaming",
-    "instantiateStreaming",
-    "Module",
-  ]),
+  // `Module` NO va aquí (member-read ban): `WebAssembly.Module` como VALOR no compila — `wasm
+  // instanceof WebAssembly.Module`, `WebAssembly.Module.imports(m)`/`.exports(m)` (inspección de un
+  // módulo ya importado), `const M = WebAssembly.Module` son Edge-safe. El ÚNICO hazard es la
+  // CONSTRUCCIÓN `new WebAssembly.Module(bytes)` (compila bytes SIEMPRE — sin overload estático, a
+  // diferencia de `instantiate(Module)`), que se caza en posición `new` aparte. codex P2 (review genérico).
+  WebAssembly: new Set(["compile", "compileStreaming", "instantiateStreaming"]),
 };
 
 // Roots de PARTIAL_SAFE_GLOBAL_MEMBERS cuyos miembros están PRESENTES en el floor pero LANZAN al
@@ -550,9 +550,30 @@ const SAFE_PARTIAL_MEMBERS = {
   crypto: new Set(["subtle", "randomUUID", "getRandomValues"]),
 };
 
-// ¿`root` tiene política de miembro (denylist bucket-2 O allowlist bucket-1)? Predicado CENTRAL.
+// BUCKET 2, SEPARADO POR TIPO DE OPERACIÓN PELIGROSA (no por nombre): el member-read-ban de
+// PARTIAL_SAFE_GLOBAL_MEMBERS es correcto SOLO cuando la operación peligrosa es la LLAMADA al método
+// y no hay forma segura de leer el nombre (`compile`/`compileStreaming`/`instantiateStreaming` —
+// leerlos es para llamarlos). Para un CONSTRUCTOR que compila bytes (`new WebAssembly.Module(bytes)`)
+// la operación peligrosa es la CONSTRUCCIÓN, NO leer `WebAssembly.Module` — el valor se necesita
+// Edge-safe (`wasm instanceof WebAssembly.Module`, `WebAssembly.Module.imports(m)`, mismo flujo que
+// `instantiate(Module)`). Mezclarlos bajo member-read-ban sobre-captura del valor a la construcción
+// (FP). Mecanismo separado: ban-de-CONSTRUCCIÓN, cazado SOLO en posición `new`. codex P2 (review
+// genérico — error de origen en el teardown que metió `Module` en el read-ban).
+const CONSTRUCTION_DENIED_MEMBERS = {
+  WebAssembly: new Set(["Module"]),
+};
+function isConstructionDeniedMember(root, member) {
+  return Boolean(CONSTRUCTION_DENIED_MEMBERS[root]?.has(member));
+}
+
+// ¿`root` tiene política de miembro (denylist bucket-2 O allowlist bucket-1 O constructor-ban)?
+// Predicado CENTRAL (exprPartialRoot lo consulta para resolver el root + sus aliases).
 function isPartialMemberRoot(root) {
-  return Boolean(PARTIAL_SAFE_GLOBAL_MEMBERS[root] || SAFE_PARTIAL_MEMBERS[root]);
+  return Boolean(
+    PARTIAL_SAFE_GLOBAL_MEMBERS[root] ||
+      SAFE_PARTIAL_MEMBERS[root] ||
+      CONSTRUCTION_DENIED_MEMBERS[root],
+  );
 }
 // ¿`member` está DENEGADO para `root`? denylist (bucket 2): ∈ set. allowlist (bucket 1): ∉ set.
 // wholesale-safe (bucket 3): nunca. Predicado CENTRAL que TODOS los colectores consultan.
@@ -4913,6 +4934,37 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           line: line + 1,
           detail: `import() dinámico de \`${litSpec}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
         });
+      }
+    }
+    // CONSTRUCCIÓN denegada: `new WebAssembly.Module(bytes)` compila bytes SIEMPRE (sin overload
+    // estático) → dynamic codegen deshabilitado en Edge. Bucket-2-por-OPERACIÓN: se caza SOLO en
+    // posición `new`, NO como member-read (`WebAssembly.Module` valor / instanceof / static-methods son
+    // Edge-safe). Root directo o vía ALIAS de WebAssembly (`new WA.Module(...)`). `new M(bytes)` con M =
+    // member-alias de `WebAssembly.Module` = indirección §141 residual (el token Module no está en-sitio).
+    // codex P2 (review genérico).
+    if (ts.isNewExpression(node) && !context.isInClientOnlyDeferredBody) {
+      const newCallee = unwrapErased(node.expression);
+      if (
+        ts.isPropertyAccessExpression(newCallee) ||
+        ts.isElementAccessExpression(newCallee)
+      ) {
+        const ctorRoot = exprPartialRoot(newCallee.expression, context);
+        const ctorMember =
+          ctorRoot &&
+          accessedMemberNames(newCallee).find((mm) =>
+            isConstructionDeniedMember(ctorRoot, mm),
+          );
+        if (ctorMember) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail: `\`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render. El VALOR \`${ctorRoot}.${ctorMember}\` (instanceof, static methods) es Edge-safe: ${lineText}`,
+          });
+        }
       }
     }
     // `import.meta.<member>` — namespace ESM poblado por el host/build; sus miembros se whitelistean

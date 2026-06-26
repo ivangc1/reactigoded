@@ -510,6 +510,27 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`WebAssembly.validate(new Uint8Array())`)).toBe(false);
   });
 
+  // codex P2 (review genérico): bucket 2 separado por OPERACIÓN — `WebAssembly.Module` ban-de-
+  // CONSTRUCCIÓN (`new`), NO member-read (el valor es Edge-safe). Era FP sobre instanceof/static-methods.
+  it("WebAssembly.Module: construcción denegada, valor Edge-safe (codex P2)", () => {
+    const any = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport function C(wasm: any){ ${b} }`, "wam.fixture.tsx").length > 0;
+    // VALOR Edge-safe — NO flaggea (los casos exactos de codex):
+    expect(any(`return wasm instanceof WebAssembly.Module;`)).toBe(false);
+    expect(any(`return WebAssembly.Module.imports(wasm);`)).toBe(false);
+    expect(any(`return WebAssembly.Module.exports(wasm);`)).toBe(false);
+    expect(any(`const M = WebAssembly.Module; return M;`)).toBe(false);
+    // CONSTRUCCIÓN sigue cazada — el FP-fix NO abrió fail-open:
+    expect(any(`return new WebAssembly.Module(new Uint8Array());`)).toBe(true);
+    expect(any(`return new (WebAssembly as any)["Module"](new Uint8Array());`)).toBe(true);
+    expect(any(`const WA = WebAssembly; return new WA.Module(new Uint8Array());`)).toBe(true);
+    // Auditoría otros constructores — Edge-safe (no compilan bytes):
+    expect(any(`return new WebAssembly.Memory({ initial: 1 });`)).toBe(false);
+    expect(any(`return new WebAssembly.Instance(wasm);`)).toBe(false);
+    // §141 residual: member-alias de Module → construcción por indirección, no cazada.
+    expect(any(`const M = WebAssembly.Module; return new M(new Uint8Array());`)).toBe(false);
+  });
+
   it("caza `import(<literal builtin>)` dinámico; deja residual el variable/createRequire (codex P1)", () => {
     const has = (body: string) =>
       checkSourceFile(`/** @server-safe */\n${body}`, "dynimp.fixture.tsx").some(
