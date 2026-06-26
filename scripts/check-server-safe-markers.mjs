@@ -198,6 +198,18 @@
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { isBuiltin } from "node:module";
+
+// ¿`specifier` resuelve a un builtin de Node (bare `fs`, prefijado `node:fs`, subpath `fs/promises`)?
+// ORÁCULO = `module.isBuiltin` (la enumeración canónica del runtime, NO una lista a mano → sin la
+// deriva de denylist que motivó #173). Subsume el check de esquema `node:`: isBuiltin('node:test')=true,
+// isBuiltin('test')=false (prefix-only → bare `test` NO es builtin, no se deniega). Normaliza el subpath
+// (corta por el 1er `/` tras quitar `node:`) por si una versión de Node no resuelve `fs/promises` directo.
+function isNodeBuiltinSpecifier(specifier) {
+  if (isBuiltin(specifier)) return true;
+  const base = specifier.replace(/^node:/, "").split("/")[0];
+  return base !== specifier && isBuiltin(base);
+}
 import {
   dirname,
   resolve,
@@ -4320,13 +4332,17 @@ function resolveImportPath(
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
-    // `node:*` es el ESQUEMA de builtins de Node — Node-only POR CONSTRUCCIÓN, fuera de la
-    // intersección cross-runtime. En el baseline Edge (Vercel/Workers) la mayoría no existen → un
-    // import `@server-safe` de `node:fs` etc. lanza en render/SSR (igual clase que `setImmediate`: algo
-    // Node-only clasificado como seguro). Blanket-deny del ESQUEMA (no entradas a mano = deriva de
-    // denylist que mató #173); el allowlist del subset disponible-en-Edge (`node:buffer`, …) es #190.
-    // codex P2 (review genérico). El `import type` ya se salta antes (type-only, erased).
-    if (specifier === "node:" || specifier.startsWith("node:")) {
+    // Builtin de Node (bare `fs`/`path`, prefijado `node:fs`, subpath `fs/promises`) — Node-only POR
+    // CONSTRUCCIÓN, fuera de la intersección cross-runtime. En el baseline Edge (Vercel/Workers) la
+    // mayoría no existen → un import `@server-safe` lanza en bundle/render (igual clase que
+    // `setImmediate`: algo Node-only clasificado como seguro). El bare `fs` es el caso COMÚN, no el
+    // exótico — y "¿es fs un builtin?" es un lookup ESTÁTICO contra el oráculo (`isBuiltin`), no
+    // data-flow → cazable, NO un residual §141. Blanket-deny vía el oráculo (sin lista a mano); el
+    // allowlist del subset disponible-en-Edge (`node:buffer`, …) es #190. La ambigüedad bare-shim-vs-
+    // builtin (`import {Buffer} from "buffer"` = builtin o npm-shim según el bundler) SÍ es resolución/
+    // provenance que el gate renuncia (§141) → deny-conservador-ahora + allowlist-#190. codex P1/P2
+    // (review genérico). El `import type` ya se salta antes (type-only, erased).
+    if (isNodeBuiltinSpecifier(specifier)) {
       return { kind: "edge-denied", specifier };
     }
     for (const { prefix, targetPrefix } of tsconfigPaths) {
@@ -4791,6 +4807,34 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         ? node.tag
         : node.expression;
       context = withEmbeddedAssignmentAliases(context, head);
+    }
+    // `import(<literal builtin>)` — import() DINÁMICO con specifier LITERAL (`import("fs")`,
+    // `import("node:fs")`, value-transparent `import((0, "fs"))`): el string está EN-SITIO (no
+    // data-flow) → cazable, rompe en Edge igual que el import estático. `extractModuleReferences`
+    // (grafo) solo ve declaraciones estáticas → este es el hueco de dynamic-import. `import(variable)`
+    // = data-flow residual; `createRequire(...)("fs")` = indirección residual (ambos §141). codex P1.
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0 &&
+      !context.isInClientOnlyDeferredBody
+    ) {
+      const argLeaves = valueTransparentLeaves(node.arguments[0]);
+      const litSpec =
+        argLeaves.length === 1 && ts.isStringLiteralLike(argLeaves[0])
+          ? argLeaves[0].text
+          : null;
+      if (litSpec && isNodeBuiltinSpecifier(litSpec)) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-node-builtin",
+          line: line + 1,
+          detail: `import() dinámico de \`${litSpec}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
+        });
+      }
     }
     // (a) Detectar typeof guards en if-statements: el then-branch
     // hereda el guard activo. El else-branch NO (en else, X está

@@ -28,6 +28,7 @@ import {
   DYNAMIC_EVAL_SINKS,
   checkSourceFile,
   checkFileWithImports,
+  resolveImportPath,
   isContentServerSafeMarked,
 } from "../../scripts/check-server-safe-markers.mjs";
 
@@ -443,6 +444,38 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it("NO flaggea una asignación embebida que NO es un root (sin timer/partial)", () => {
     const code = `/** @server-safe */\nexport function f() { let x: any; const y: any = (s: string) => s; return (x = 1) && y("s"); }`;
     expect(checkSourceFile(code, "embed-fp.fixture.tsx")).toEqual([]);
+  });
+
+  it("caza `import(<literal builtin>)` dinámico; deja residual el variable/createRequire (codex P1)", () => {
+    const has = (body: string) =>
+      checkSourceFile(`/** @server-safe */\n${body}`, "dynimp.fixture.tsx").some(
+        (v) => v.rule === "no-node-builtin",
+      );
+    expect(has(`export async function f(){ return await import("fs"); }`)).toBe(true);
+    expect(has(`export async function f(){ return await import("node:fs"); }`)).toBe(true);
+    expect(has(`export async function f(){ return await import("fs/promises"); }`)).toBe(true);
+    expect(has(`export async function f(){ return await import((0, "fs")); }`)).toBe(true);
+    // residuales §141 / exentos:
+    expect(has(`export async function f(s: string){ return await import(s); }`)).toBe(false);
+    expect(has(`export async function f(){ return await import("./local"); }`)).toBe(false);
+    expect(has(`export async function f(){ return await import("react"); }`)).toBe(false);
+  });
+
+  it("NO deniega un bare `test` (prefix-only: solo `node:test` es builtin) (codex P1)", () => {
+    // `import "test"` no es un builtin (solo `node:test`) → resolver no lo marca edge-denied; aquí
+    // basta confirmar que el specifier bare `test` NO se clasifica como builtin.
+    expect(
+      resolveImportPath("test", "/repo/src/c.tsx", [], () => false, {
+        repoRoot: "/repo",
+        srcRoot: "/repo/src",
+      }).kind,
+    ).not.toBe("edge-denied");
+    expect(
+      resolveImportPath("node:test", "/repo/src/c.tsx", [], () => false, {
+        repoRoot: "/repo",
+        srcRoot: "/repo/src",
+      }).kind,
+    ).toBe("edge-denied");
   });
 
   it("NO flaggea spread de timer con callback función o variable (codex P2)", () => {
@@ -1111,6 +1144,25 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     });
     const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
     expect(violations.find((v) => v.rule === "no-node-builtin")).toBeUndefined();
+  });
+
+  // codex P1 (review genérico): el oráculo `module.isBuiltin` cubre el BARE specifier (`fs`, el caso
+  // COMÚN) y los subpaths (`fs/promises`), no solo el esquema `node:`.
+  it.each([
+    ["bare fs", `import { readFileSync } from "fs";`],
+    ["bare path", `import { join } from "path";`],
+    ["subpath fs/promises", `import { readFile } from "fs/promises";`],
+    ["prefijado node:crypto", `import { randomUUID } from "node:crypto";`],
+  ])("import de builtin Node `%s` emite `no-node-builtin`", (_l, imp) => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        ${imp}
+        export function Probe() { return <span/>; }
+      `,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations.some((v) => v.rule === "no-node-builtin")).toBe(true);
   });
 
   it("import relativo no resoluble emite `unresolved-import` (no skip silencioso)", () => {
