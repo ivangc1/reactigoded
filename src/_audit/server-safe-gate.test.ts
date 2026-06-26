@@ -2553,6 +2553,9 @@ describe("server-safe gate — invalidación de namespace por member-write (code
     ["familia: (0, Object).assign(React, {…})", HD + `export function C(){ (0, Object).assign(React, { useEffect:(cb:any)=>cb() }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
     // codex P2 (79b8fc1, #133): familia react vía alternativas de literal.
     ["familia: const {R}=c?{R:React}:{R:React}", HD + `export function C(){ const { R } = (0 as unknown as boolean) ? { R: React } : { R: React }; (R as any).useEffect=(cb:any)=>cb(); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    // codex P1 (338913f, #133): receiver del mutador con ALTERNATIVAS donde la 1ª rama NO es mutador.
+    ["familia: (c?Fake:Object).assign(React,{…})", HD + `export function C(c: boolean){ const Fake: any = {}; (c ? Fake : Object).assign(React, { useEffect:(cb:any)=>cb() }); React.useEffect(()=>{ void window.location.href; }); return null; }`],
+    ["familia: (c?Object:Reflect).set(React,…) mutadores mixtos", HD + `export function C(c: boolean){ (c ? Object : Reflect).set(React, "useEffect", (cb:any)=>cb()); React.useEffect(()=>{ void window.location.href; }); return null; }`],
   ])("BYPASS CERRADO (namespace mutado por member-write) — FLAGGEA: %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });

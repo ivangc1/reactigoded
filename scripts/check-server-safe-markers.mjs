@@ -1866,21 +1866,22 @@ function gatherMutatedNamespaceRoots(sourceFile) {
   };
   // `[obj, member]` de un callee `Obj.m(…)` (dot) o `Obj["m"](…)` (bracket string literal) — misma
   // normalización dot/bracket que el resto del gate (codex P1: el bracket-form se colaba).
-  // Receiver del mutador value-transparente (`(0, Object).assign(React, …)`, `(c ? Reflect : Reflect)
-  // .set(React, …)`) → resolver por el primer identifier-leaf VT, no solo unwrapErased; paridad con
-  // los otros receiver paths (codex P2).
-  const mutatorReceiverIdent = (recv) =>
-    valueTransparentLeaves(recv).find((o) => ts.isIdentifier(o)) ??
-    unwrapErased(recv);
+  // Receiver del mutador value-transparente (`(0, Object).assign(React, …)`, `(c ? Fake : Object).
+  // assign(…)`) → TODAS las hojas identifier VT (ALTERNATIVAS), no solo la primera; el caller
+  // taintea si CUALQUIERA es un mutador para el member, fail-closed (codex P1).
+  const mutatorReceiverIdents = (recv) =>
+    valueTransparentLeaves(recv)
+      .filter((o) => ts.isIdentifier(o))
+      .map((o) => o.text);
   const calleeObjMember = (callee) => {
     if (ts.isPropertyAccessExpression(callee)) {
-      const obj = mutatorReceiverIdent(callee.expression);
-      if (ts.isIdentifier(obj) && ts.isIdentifier(callee.name)) {
-        return [obj.text, callee.name.text];
+      const objs = mutatorReceiverIdents(callee.expression);
+      if (objs.length > 0 && ts.isIdentifier(callee.name)) {
+        return [objs, callee.name.text];
       }
     }
     if (ts.isElementAccessExpression(callee)) {
-      const obj = mutatorReceiverIdent(callee.expression);
+      const objs = mutatorReceiverIdents(callee.expression);
       // Desenvolver la KEY: `Object[("assign")]` (paréntesis), `Object["assign" as const]`
       // (as) — nodos ERASED en runtime → misma normalización que los otros member-name paths
       // (codex P1: la key envuelta se colaba). NO se foldea una key COMPUTADA por un OPERADOR
@@ -1894,8 +1895,8 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       const key = callee.argumentExpression
         ? unwrapErased(callee.argumentExpression)
         : null;
-      if (ts.isIdentifier(obj) && key && ts.isStringLiteralLike(key)) {
-        return [obj.text, key.text];
+      if (objs.length > 0 && key && ts.isStringLiteralLike(key)) {
+        return [objs, key.text];
       }
     }
     return null;
@@ -1929,7 +1930,11 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       addIfMemberAccess(node.expression); // delete X.m
     } else if (ts.isCallExpression(node)) {
       const om = calleeObjMember(unwrapErased(node.expression));
-      if (om && MUTATORS[om[0]]?.has(om[1]) && node.arguments.length > 0) {
+      if (
+        om &&
+        om[0].some((o) => MUTATORS[o]?.has(om[1])) &&
+        node.arguments.length > 0
+      ) {
         // Object.assign(X,…) / Reflect.set(X,…) — X (1er arg) es el target. Value-transparent
         // (`Object.assign((0, React), …)` → React). El CALLEE (Object.assign) se resolvió
         // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT. El modelo
