@@ -461,15 +461,27 @@ const SAFE_GLOBALS = new Set(
 // Node); extensible al auditar más browser-only de performance/Intl/crypto. beta.27 BLOCKER-1.
 const PARTIAL_SAFE_GLOBAL_MEMBERS = {
   performance: new Set(["measureUserAgentSpecificMemory"]),
-  // `WebAssembly` existe como namespace en el baseline Edge (Vercel/Workers) → root SAFE, pero sus
-  // APIs de COMPILACIÓN/INSTANCIACIÓN DINÁMICA están deshabilitadas igual que eval/Function (dynamic
-  // code generation): `WebAssembly.compile(bytes)`, `instantiate(bytes)`, `*Streaming`, `new
-  // WebAssembly.Module(bytes)` LANZAN en render. (codex P2. `Memory`/`Table`/`Global`/`Instance`(de
-  // un módulo pre-compilado importado estáticamente)/`validate` NO compilan → siguen SAFE.)
+  // `WebAssembly` existe como namespace en el baseline Edge (Vercel/Workers) → root SAFE, pero la
+  // COMPILACIÓN DE BYTES está deshabilitada igual que eval/Function (dynamic code generation). La
+  // partición se deriva del semántico de cada API, NO del framing simplificado "WebAssembly
+  // deshabilitado" (los docs de Vercel se contradicen; la verdad fina es: el ÚNICO camino Wasm
+  // soportado en Edge es `instantiate(<Module importado vía ?module>)`; todo lo que compila bytes
+  // lanza — confirmado: `new WebAssembly.Module(bytes)` e `instantiate(bytes)` petan, solo
+  // `instantiate(Module)` corre). codex P2 (review genérico).
+  //
+  // DENY — no tienen forma estática, SIEMPRE compilan bytes → true positive:
+  //   `compile`, `compileStreaming`, `instantiateStreaming` (solo toma Response/stream, sin overload
+  //   de Module), y el constructor `new WebAssembly.Module(bytes)`.
+  // ALLOW — `instantiate`: tiene la forma estática soportada `instantiate(Module)` (el único Wasm
+  //   bendecido en Edge para RSC/SSR — highlighter/codec/sanitizer Wasm). Denegarla sería FALSE
+  //   positive sobre código que Vercel documenta como soportado, NO "fallar cerrado ante duda". La
+  //   incertidumbre real (¿el arg es un buffer o un Module importado?) es PROVENANCE = data-flow, que
+  //   el gate renuncia por diseño (§141): `instantiate(bufferSource)` queda RESIDUAL de data-flow,
+  //   junto al resto de renuncias de provenance, NO un bypass.
+  // SAFE — `Memory`/`Table`/`Global`/`Instance`/`validate` no compilan.
   WebAssembly: new Set([
     "compile",
     "compileStreaming",
-    "instantiate",
     "instantiateStreaming",
     "Module",
   ]),
@@ -4308,6 +4320,15 @@ function resolveImportPath(
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
+    // `node:*` es el ESQUEMA de builtins de Node — Node-only POR CONSTRUCCIÓN, fuera de la
+    // intersección cross-runtime. En el baseline Edge (Vercel/Workers) la mayoría no existen → un
+    // import `@server-safe` de `node:fs` etc. lanza en render/SSR (igual clase que `setImmediate`: algo
+    // Node-only clasificado como seguro). Blanket-deny del ESQUEMA (no entradas a mano = deriva de
+    // denylist que mató #173); el allowlist del subset disponible-en-Edge (`node:buffer`, …) es #190.
+    // codex P2 (review genérico). El `import type` ya se salta antes (type-only, erased).
+    if (specifier === "node:" || specifier.startsWith("node:")) {
+      return { kind: "edge-denied", specifier };
+    }
     for (const { prefix, targetPrefix } of tsconfigPaths) {
       if (specifier.startsWith(prefix)) {
         const tail = specifier.slice(prefix.length);
@@ -4602,6 +4623,15 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       { repoRoot: effectiveRepoRoot, srcRoot: effectiveSrcRoot },
     );
     if (resolution.kind === "external") continue;
+    if (resolution.kind === "edge-denied") {
+      violations.push({
+        file: relPath,
+        rule: "no-node-builtin",
+        detail: `import de \`${resolution.specifier}\` — builtin \`node:*\`, Node-only y ausente del baseline Edge (Vercel/Workers) → lanza en render/SSR. El subset disponible-en-Edge (\`node:buffer\`, …) se allowlistará en #190.`,
+        ...(fullChain ? { chain: fullChain } : {}),
+      });
+      continue;
+    }
     if (resolution.kind === "unresolvable") {
       violations.push({
         file: relPath,

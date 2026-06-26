@@ -1087,6 +1087,32 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     ]);
   });
 
+  it("import de `node:*` emite `no-node-builtin` (Node-only, ausente en Edge) (codex P2)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import { readFileSync } from "node:fs";
+        export function Probe() { return <span>{readFileSync("/tmp/x", "utf8")}</span>; }
+      `,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    const nodeBuiltin = violations.find((v) => v.rule === "no-node-builtin");
+    expect(nodeBuiltin).toBeDefined();
+    expect(nodeBuiltin?.detail).toContain("node:fs");
+  });
+
+  it("`import type` de `node:*` NO emite (erased) (codex P2)", () => {
+    const files = vfs({
+      "/repo/src/components/Probe/Probe.tsx": `
+        /** @server-safe */
+        import type { Stats } from "node:fs";
+        export function Probe() { const s = null as unknown as Stats; return <span>{String(s)}</span>; }
+      `,
+    });
+    const violations = runWithVfs("/repo/src/components/Probe/Probe.tsx", files);
+    expect(violations.find((v) => v.rule === "no-node-builtin")).toBeUndefined();
+  });
+
   it("import relativo no resoluble emite `unresolved-import` (no skip silencioso)", () => {
     const files = vfs({
       "/repo/src/components/Probe/Probe.tsx": `
@@ -3250,7 +3276,9 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
   // igual que eval/Function → lanzan en render. PRESENT-but-throws: el optional-CALL también flaggea.
   it.each([
     ["compile(bytes)", `/** @server-safe */\nexport function f() { return WebAssembly.compile(new Uint8Array()); }`],
-    ["instantiate(bytes)", `/** @server-safe */\nexport function f() { return WebAssembly.instantiate(new Uint8Array()); }`],
+    // codex P2 (review genérico): instantiateStreaming NO tiene overload de Module (solo Response/stream
+    // → compila) → SIGUE denegado. (`instantiate` SÍ tiene forma estática `instantiate(Module)` → se movió
+    // a ALLOW; ver el bloque exento de abajo.)
     ["instantiateStreaming", `/** @server-safe */\nexport function f() { return WebAssembly.instantiateStreaming(fetch("x")); }`],
     ["compileStreaming", `/** @server-safe */\nexport function f() { return WebAssembly.compileStreaming(fetch("x")); }`],
     ["new Module(bytes)", `/** @server-safe */\nexport function f() { return new WebAssembly.Module(new Uint8Array()); }`],
@@ -3273,6 +3301,11 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["optional-ACCESS compile?.name (no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.name; }`],
     ["new WebAssembly.Memory (no compila)", `/** @server-safe */\nexport function f() { return new WebAssembly.Memory({ initial: 1 }); }`],
     ["WebAssembly.validate (no compila a ejecutable)", `/** @server-safe */\nexport function f() { return WebAssembly.validate(new Uint8Array()); }`],
+    // codex P2 (review genérico): `instantiate` tiene forma estática soportada `instantiate(Module)` —
+    // el ÚNICO camino Wasm bendecido en Edge (RSC/SSR). Denegarla = FP. `instantiate(bufferSource)` es
+    // residual de data-flow §141 (provenance del arg, fuera de scope parser-puro).
+    ["WebAssembly.instantiate (forma estática soportada en Edge)", `/** @server-safe */\nexport function f() { return WebAssembly.instantiate(0 as any, {} as any); }`],
+    ["WebAssembly.Instance (módulo pre-compilado)", `/** @server-safe */\nexport function f() { return new WebAssembly.Instance(0 as any); }`],
     ["typeof WebAssembly (namespace existe en Edge)", `/** @server-safe */\nexport function f() { return typeof WebAssembly; }`],
     // codex P1 (3ae4423): optional-access a METADATA (no invoca) sigue siendo probe seguro.
     ["compile?.name (metadata, no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.name; }`],
