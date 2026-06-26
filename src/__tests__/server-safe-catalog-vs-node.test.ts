@@ -50,6 +50,9 @@ import {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
   EDGE_MISSING_GLOBALS,
+  SAFE_PARTIAL_MEMBERS,
+  PARTIAL_SAFE_GLOBAL_MEMBERS,
+  CONSTRUCTION_DENIED_MEMBERS,
 } from "../../scripts/check-server-safe-markers.mjs";
 
 /** ¿`name` resuelve como binding global en el runtime actual? Usamos `in`
@@ -217,5 +220,49 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     // los nombres que el floor no provee no deben estar en la whitelist.
     const leaked = GLOBALS_OVERCLAIMS.filter((name) => SAFE_GLOBALS.has(name));
     expect(leaked).toEqual([]);
+  });
+
+  // G. PIN de contenido de los allowlists bucket-1/2 (snapshot del barrido contra @edge-runtime/vm).
+  // El barrido conductual de las 96 filas vive en #190 (requiere @edge-runtime/vm como devDep — choca
+  // con peers, #184). Aquí se PINEA el RESULTADO derivado (los Sets exactos) sin el VM, igual que §150
+  // pinea SAFE_GLOBALS sin el runtime: si Node/Edge/VM cambian, se regenera y este pin revienta primero.
+  // REGENERAR (post-#184): correr el barrido del scratchpad —`new EdgeVM()` + enumerar miembros de cada
+  // root host-populated, intersección Node∩Edge para bucket-1, test de contaminación con un miembro
+  // Node-only (performance: eventLoopUtilization presente = VM contaminado → convergencia)— y re-fijar.
+  it("G. SAFE_PARTIAL_MEMBERS (bucket-1 allowlist) = snapshot VM-derivado exacto", () => {
+    const dump = Object.fromEntries(
+      Object.entries(SAFE_PARTIAL_MEMBERS).map(
+        ([k, v]) => [k, [...v].sort()],
+      ),
+    );
+    expect(dump).toEqual({
+      // performance: VM contaminado para miembros → solo convergencia {now,timeOrigin}, resto complemento.
+      performance: ["now", "timeOrigin"],
+      // crypto: VM-fiel (node:crypto undefined) → interfaz Crypto del global.
+      crypto: ["getRandomValues", "randomUUID", "subtle"],
+      // console: VM-fiel (table/Console undefined aunque Node los tiene) → los 12 Edge-present.
+      console: [
+        "assert", "count", "debug", "dir", "error", "info",
+        "log", "time", "timeEnd", "timeLog", "trace", "warn",
+      ],
+    });
+  });
+
+  it("G. PARTIAL_SAFE_GLOBAL_MEMBERS (bucket-2 denylist) + CONSTRUCTION_DENIED_MEMBERS = snapshot exacto", () => {
+    const deny = Object.fromEntries(
+      Object.entries(
+        PARTIAL_SAFE_GLOBAL_MEMBERS,
+      ).map(([k, v]) => [k, [...v].sort()]),
+    );
+    expect(deny).toEqual({
+      // WebAssembly: ban-de-LLAMADA (los que compilan bytes); `Module` va en construction-ban aparte.
+      WebAssembly: ["compile", "compileStreaming", "instantiateStreaming"],
+    });
+    const ctor = Object.fromEntries(
+      Object.entries(
+        CONSTRUCTION_DENIED_MEMBERS,
+      ).map(([k, v]) => [k, [...v].sort()]),
+    );
+    expect(ctor).toEqual({ WebAssembly: ["Module"] });
   });
 });

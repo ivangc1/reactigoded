@@ -156,6 +156,24 @@ export declare const EDGE_MISSING_GLOBALS: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
 
 /**
+ * Bucket-1 allowlist member-level: por root host-populated (`performance`/`crypto`/`console`),
+ * los miembros confirmados Edge-present contra `@edge-runtime/vm` (member ∉ set → denegado por
+ * complemento). Pin de contenido en `server-safe-catalog-vs-node.test.ts` Test G; #190 lo re-deriva
+ * vivo contra el VM. Ver ADR D1-P1 ("Namespaces host-populated").
+ */
+export declare const SAFE_PARTIAL_MEMBERS: Readonly<
+  Record<string, ReadonlySet<string>>
+>;
+/** Bucket-2 denylist member-level: ops prohibidas por root (`WebAssembly` compile-family). */
+export declare const PARTIAL_SAFE_GLOBAL_MEMBERS: Readonly<
+  Record<string, ReadonlySet<string>>
+>;
+/** Ban-de-construcción (`new <root>.<member>(...)`): `WebAssembly.Module`. */
+export declare const CONSTRUCTION_DENIED_MEMBERS: Readonly<
+  Record<string, ReadonlySet<string>>
+>;
+
+/**
  * Detección AST del marker `@server-safe`. Recorre el AST completo: cuenta
  * el marker como presente solo si aparece en el JSDoc de un statement
  * top-level. FALLA RUIDOSO (throw) si aparece en posición ANIDADA (función
