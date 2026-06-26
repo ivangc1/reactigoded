@@ -431,6 +431,10 @@ const EDGE_MISSING_GLOBALS = new Set([
   "MessageEvent",
   "MessagePort",
   "Navigator",
+  // SOLO los CONSTRUCTORES `Performance*` son Edge-missing (no se instancian en el isolate). La
+  // INSTANCIA `performance` (lowercase) SÍ está en Edge — verificado conductualmente en @edge-runtime/vm
+  // (`typeof performance === "object"`, `performance.now()` corre) + ADR D1-P1 §270. NO sale de
+  // SAFE_GLOBALS (es bucket-1 en SAFE_PARTIAL_MEMBERS). Quitar la instancia fue un error contra §270.
   "Performance",
   "PerformanceEntry",
   "PerformanceMark",
@@ -509,7 +513,7 @@ const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly"]);
 // lo determina la relación; test checkeable):
 //   (1) El runtime expone un SUBSET LIMITADO (el host omite miembros, o Node AÑADE no-estándar) →
 //       default DENY, ALLOWLIST de lo confirmado-Edge-present. Complemento (Node-only/browser-only +
-//       futuros) denegado por construcción. → `performance`, `crypto`, `process`, `import.meta`.
+//       futuros) denegado por construcción. → `performance`, `crypto`, `console`, `process`, `import.meta`.
 //   (2) Superficie estándar COMPLETA pero PROHÍBE ops concretas (seguridad) → default ALLOW, DENYLIST
 //       de lo prohibido. → `WebAssembly` (PARTIAL_SAFE_GLOBAL_MEMBERS). Forzarlo a allowlist sería FP
 //       sobre miembros estándar NUEVOS (`WebAssembly.Tag`/`Exception` del exception-handling, ya en el
@@ -525,29 +529,48 @@ const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly"]);
 // `Promise.withResolvers`, `Object.groupBy`…) — skew de versión Node-V8 vs Edge-V8, NO "Node-only", sin
 // oráculo limpio; la clase es presencia-de-miembro-Node-vs-estándar, no version-skew.
 const SAFE_PARTIAL_MEMBERS = {
-  // Edge `performance` = la interfaz `Performance` de la Web Performance API (V8/Edge). Node AÑADE
-  // perf_hooks (`eventLoopUtilization`/`timerify`/`nodeTiming` → ausentes en Edge → lanzan). ALLOW =
-  // núcleo confirmado-Edge-present; `eventCounts` (Event Timing, input del navegador) y el cluster
-  // Resource Timing (`clearResourceTimings`/`setResourceTimingBufferSize`/`markResourceTiming`) NO
-  // entran sin confirmación positiva (posibles falsos-ALLOW); `measureUserAgentSpecificMemory`
-  // (browser-only) cae al complemento denegado por construcción.
-  performance: new Set([
-    "now",
-    "mark",
-    "measure",
-    "clearMarks",
-    "clearMeasures",
-    "getEntries",
-    "getEntriesByName",
-    "getEntriesByType",
-    "timeOrigin",
-    "toJSON",
-  ]),
-  // Edge `crypto` = Web Crypto (subset): `subtle`/`randomUUID`/`getRandomValues` presentes; los
-  // miembros de node:crypto (`createHash`/`timingSafeEqual`/`randomBytes`/`createHmac`/…) NO existen
-  // en el isolate Edge → llamarlos lanza. Bucket 1, FAIL-OPEN antes de este fix (era safe root sin
-  // tabla). ALLOW = Web Crypto confirmado-Edge-present; el resto al complemento denegado.
+  // `performance` ES bucket-1: la INSTANCIA existe en Edge (VM: `typeof performance==="object"`,
+  // `now()` corre; ADR §270). PERO el allowlist de MIEMBROS no se puede derivar de un oráculo: las 3
+  // fuentes locales están CONTAMINADAS para performance — doc Vercel OMITE (omisión≠ausencia),
+  // @edge-runtime/primitives es passthrough, y @edge-runtime/vm HEREDA el performance de Node (da
+  // `eventLoopUtilization → "function"`, que es perf_hooks Node-only → el VM no es fiel a Edge para
+  // performance). Bajo INCIERTO=deny, ALLOW = SOLO lo confirmable por CONVERGENCIA-de-fuentes sin
+  // depender de fidelidad perf_hooks: `now`/`timeOrigin` (Web-Performance-core; VM+WHATWG+Cloudflare
+  // coinciden, no son artefacto de perf_hooks). TODO lo demás —mark/measure/getEntries*/clearMarks/
+  // clearMeasures/toJSON (probablemente Edge-present pero SIN fuente fiable) Y eventLoopUtilization/
+  // timerify/nodeTiming (Node-only)— al COMPLEMENTO denegado. eventLoopUtilization se cierra por
+  // CONSTRUCCIÓN (complemento), NO por denylist → resiste que el VM mienta sobre él. Refinar contra
+  // introspección de PRODUCCIÓN (no otro oráculo local) en #190. codex P2 (review genérico).
+  performance: new Set(["now", "timeOrigin"]),
+  // Edge `crypto` = Web Crypto. Doc Vercel CONFIRMA `crypto`/`SubtleCrypto`/`CryptoKey`; los 3
+  // miembros de la interfaz Crypto (`subtle`/`randomUUID`/`getRandomValues`) son la superficie
+  // COMPLETA del global → no hay falso-ALLOW ni FP. (Oráculo passthrough para crypto, pero benigno:
+  // el `crypto` global de Node ES la Web Crypto = la de Edge; diff = 0 false-allows.) Lo que la gente
+  // confunde con node:crypto (`createHash`/`timingSafeEqual`/…) vive en el MÓDULO `node:crypto`, no en
+  // el global → denegado por complemento. Verificado doc Vercel (review genérico).
   crypto: new Set(["subtle", "randomUUID", "getRandomValues"]),
+  // Edge `console` = consola de debugging MÍNIMA (NO la interfaz WHATWG completa). Set DERIVADO del
+  // ORÁCULO `@edge-runtime/primitives` (su `console` es subset propio, NO passthrough del de Node —
+  // verificado `=== globalThis.console` → false), intersección Node∩Edge. La spec WHATWG NO sirve de
+  // bar: `clear`/`table`/`group*`/`dirxml`/`countReset` están en la spec pero AUSENTES en el isolate
+  // Edge → meterlos sería FALSO-ALLOW = fail-open (pasarían el gate y reventarían en SSR). DENY por
+  // complemento: `Console` (constructor Node-only) + lo no-confirmado-Edge-present. El DS solo usa
+  // `console.error`/`console.warn` (ambos ∈ set) → FP=0. El subset se re-deriva del oráculo en #190.
+  // codex P2 (review genérico — corregido: spec→oráculo).
+  console: new Set([
+    "assert",
+    "count",
+    "debug",
+    "dir",
+    "error",
+    "info",
+    "log",
+    "time",
+    "timeEnd",
+    "timeLog",
+    "trace",
+    "warn",
+  ]),
 };
 
 // BUCKET 2, SEPARADO POR TIPO DE OPERACIÓN PELIGROSA (no por nombre): el member-read-ban de

@@ -480,9 +480,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (process as any)[k];`, "pr2.fixture.tsx").length > 0).toBe(true);
   });
 
-  // codex P2 (review genérico): TRES buckets. crypto/performance = bucket 1 (allowlist Edge-present,
+  // codex P2 (review genérico): TRES buckets. crypto/console = bucket 1 (allowlist Edge-present,
   // eran FAIL-OPEN); WebAssembly = bucket 2 (denylist, sin tocar); Intl = bucket 3 (wholesale, sin tabla).
-  it("buckets de namespaces host-populated (crypto/performance allowlist; Intl wholesale)", () => {
+  it("buckets de namespaces host-populated (crypto/console allowlist; Intl wholesale)", () => {
     const any = (b: string) =>
       checkSourceFile(`/** @server-safe */\nexport const f = () => ${b};`, "bk.fixture.tsx").length > 0;
     // crypto bucket 1 — DENY node:crypto (era fail-open), ALLOW Web Crypto:
@@ -491,23 +491,48 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`crypto.randomUUID()`)).toBe(false);
     expect(any(`crypto.subtle`)).toBe(false);
     expect(any(`crypto.getRandomValues(new Uint8Array(8))`)).toBe(false);
+    // console bucket 1 — set DERIVADO del oráculo @edge-runtime/primitives (12 Edge-present). DENY el
+    // constructor Node-only `Console` + los que están en spec WHATWG pero AUSENTES en Edge (era fail-open):
+    expect(any(`new (console as any).Console({ write() {} }, { write() {} })`)).toBe(true);
+    expect(any(`(console as any).profile("x")`)).toBe(true);
+    expect(any(`(console as any).table([])`)).toBe(true); // spec WHATWG pero NO Edge-present
+    expect(any(`(console as any).group("g")`)).toBe(true);
+    expect(any(`(console as any).clear()`)).toBe(true);
+    expect(any(`console.log("x")`)).toBe(false);
+    expect(any(`console.warn("x")`)).toBe(false);
+    expect(any(`console.error("x")`)).toBe(false);
+    expect(any(`console.info("x"); console.debug("y"); console.trace("z")`)).toBe(false);
     // crypto alias + destructure flow through the central predicate:
     expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { createHash } = crypto as any; return createHash("x"); }`, "bk2.fixture.tsx").length > 0).toBe(true);
     expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { randomUUID } = crypto; return randomUUID(); }`, "bk3.fixture.tsx")).toEqual([]);
-    // performance bucket 1 — DENY perf_hooks/browser-only (era fail-open), ALLOW Web Performance:
-    expect(any(`(performance as any).eventLoopUtilization()`)).toBe(true);
-    expect(any(`(performance as any).timerify(() => {})`)).toBe(true);
-    expect(any(`(performance as any).nodeTiming`)).toBe(true);
-    expect(any(`(performance as any).eventCounts`)).toBe(true);
-    expect(any(`performance.now()`)).toBe(false);
-    expect(any(`performance.mark("x")`)).toBe(false);
-    expect(any(`performance.getEntriesByType("mark")`)).toBe(false);
     // Intl bucket 3 — wholesale (NO allowlist; DurationFormat allowed = correcto):
     expect(any(`new Intl.NumberFormat()`)).toBe(false);
     expect(any(`new (Intl as any).DurationFormat()`)).toBe(false);
     // WebAssembly bucket 2 — denylist intacto:
     expect(any(`WebAssembly.compile(new Uint8Array())`)).toBe(true);
     expect(any(`WebAssembly.validate(new Uint8Array())`)).toBe(false);
+  });
+
+  // codex P2 (review genérico): `performance` ES bucket-1 — la INSTANCIA existe en Edge (VM:
+  // typeof==="object", now() corre; ADR §270). El allowlist NO se deriva de oráculo (las 3 fuentes
+  // locales están contaminadas para performance: doc omite, primitives passthrough, VM hereda perf_hooks).
+  // ALLOW = solo lo confirmable por CONVERGENCIA sin fidelidad-perf_hooks: {now, timeOrigin}. El resto al
+  // complemento denegado bajo INCIERTO=deny (#190 producción). eventLoopUtilization cerrado por
+  // CONSTRUCCIÓN (complemento), no por denylist → resiste que el VM lo dé como "function".
+  it("performance bucket-1 — root Edge-present, allowlist {now,timeOrigin}, resto deny por complemento (codex P2)", () => {
+    const flag = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const f = () => ${b};`, "perf-b1.fixture.tsx").some((x) => x.rule === "no-bare-dom-access");
+    // ALLOW (Web-core, convergencia) — corrige el FP de tratar performance como denied-root:
+    expect(flag(`performance.now()`)).toBe(false);
+    expect(flag(`performance.timeOrigin`)).toBe(false);
+    // DENY por complemento — el fail-open original (Node-only) cerrado por construcción:
+    expect(flag(`performance.eventLoopUtilization()`)).toBe(true);
+    expect(flag(`performance.timerify(() => {})`)).toBe(true);
+    // DENY conservador bajo incierto (mark/measure probablemente Edge-present, SIN fuente fiable → #190):
+    expect(flag(`performance.mark("x")`)).toBe(true);
+    expect(flag(`performance.getEntriesByType("mark")`)).toBe(true);
+    // bare root sigue safe (la instancia existe en Edge):
+    expect(checkSourceFile(`/** @server-safe */\nexport const c = performance;`, "perf-bare.fixture.tsx")).toEqual([]);
   });
 
   // codex P2 (review genérico): bucket 2 separado por OPERACIÓN — `WebAssembly.Module` ban-de-
@@ -578,8 +603,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(fixture(`const args: any[] = []; setTimeout(...args, "x");`), "var-spread-trailing.fixture.tsx")).toEqual([]);
   });
 
-  it("NO flaggea destructuring ARRAY/anidado de un miembro SAFE (now) (codex P2)", () => {
-    expect(checkSourceFile(fixture(`const [{ now }] = [performance]; void now();`), "arr-safe-member.fixture.tsx")).toEqual([]);
+  it("NO flaggea destructuring ARRAY/anidado de un miembro SAFE (log) (codex P2)", () => {
+    expect(checkSourceFile(fixture(`const [{ log }] = [console]; void log();`), "arr-safe-member.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea parámetro SIN default ni con default seguro (param es opaco en runtime) (codex P2)", () => {
@@ -587,15 +612,15 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport function run(later: any){ return later("x", 0); }`, "param-nodefault.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(`/** @server-safe */\nexport function run({ compile }: any){ return compile(new Uint8Array()); }`, "param-pat-nodefault.fixture.tsx")).toEqual([]);
     // default a miembro SAFE / no-root → exento.
-    expect(checkSourceFile(`/** @server-safe */\nexport function run(now: any = performance.now){ return now(); }`, "param-safe.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(`/** @server-safe */\nexport function run(log: any = console.log){ return log(); }`, "param-safe.fixture.tsx")).toEqual([]);
     // receiver value-transparente NO-global / binding-element default seguro → exento (codex P2).
     expect(checkSourceFile(fixture(`const o: any = {}; (0, o).setTimeout("x", 0);`), "vt-recv-local.fixture.tsx")).toEqual([]);
-    expect(checkSourceFile(`/** @server-safe */\nexport function run({ now = performance.now }: any){ return now(); }`, "be-default-safe.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(`/** @server-safe */\nexport function run({ log = console.log }: any){ return log(); }`, "be-default-safe.fixture.tsx")).toEqual([]);
     // catch con default seguro / alternativas de literal TODAS no-timer → exento (codex P2).
-    expect(checkSourceFile(fixture(`try {} catch ({ now = performance.now }: any) { void now(); }`), "catch-safe.fixture.tsx")).toEqual([]);
+    expect(checkSourceFile(fixture(`try {} catch ({ log = console.log }: any) { void log(); }`), "catch-safe.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(fixture(`const c = (0 as unknown as boolean); const { l } = c ? { l: () => {} } : { l: () => {} }; void l("x");`), "alt-nontimer.fixture.tsx")).toEqual([]);
-    // for-of member-extract con default a miembro SAFE (performance.now) → exento (codex P2).
-    expect(checkSourceFile(`/** @server-safe */\nexport function f() { let now: any; for ({ x: { now } = performance } of [] as any[]) { now(); } }`, "forof-safe-member.fixture.tsx")).toEqual([]);
+    // for-of member-extract con default a miembro SAFE (console.log) → exento (codex P2).
+    expect(checkSourceFile(`/** @server-safe */\nexport function f() { let log: any; for ({ x: { log } = console } of [] as any[]) { log(); } }`, "forof-safe-member.fixture.tsx")).toEqual([]);
   });
 
   it("NO flaggea setTimeout.bind con callback función (no string)", () => {
@@ -603,12 +628,12 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(v).toEqual([]);
   });
 
-  // codex P2 (b22a600, #133): destructuring con DEFAULT de un miembro AUSENTE (performance.measure
+  // codex P2 (b22a600, #133): destructuring con DEFAULT de un miembro AUSENTE (console.measure
   // es undefined en el floor → el default se activa → seguro). Para un root PRESENT-throws el
   // miembro EXISTE → el default no se activa → sigue lanzando.
   it.each([
-    ["perf.measure con default (rename)", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory: m = () => 0 } = performance; return m(); }`],
-    ["perf.measure con default (shorthand)", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory = () => 0 } = performance as any; return measureUserAgentSpecificMemory(); }`],
+    ["perf.measure con default (rename)", `/** @server-safe */\nexport function f() { const { table: m = () => 0 } = console; return m(); }`],
+    ["perf.measure con default (shorthand)", `/** @server-safe */\nexport function f() { const { table = () => 0 } = console as any; return table(); }`],
   ])("NO flaggea destructuring de un miembro AUSENTE con default seguro: %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-default.fixture.tsx")).toEqual([]);
   });
@@ -3232,79 +3257,79 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     expect(checkSourceFile(code, "deps-ok.fixture.tsx")).toEqual([]);
   });
 
-  // deepest re-hunt #7: miembro browser-only de un SAFE global (performance.measureUserAgent
+  // deepest re-hunt #7: miembro browser-only de un SAFE global (console.measureUserAgent
   // SpecificMemory) — el root existe pero el método falta en Node → la llamada lanza. typeof-
   // guard del root no protege; solo exento en client-only.
   it.each([
-    ["render", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory(); }`],
-    ["bajo typeof guard", `/** @server-safe */\nexport function f() { if (typeof performance !== "undefined") return performance.measureUserAgentSpecificMemory(); return null; }`],
+    ["render", `/** @server-safe */\nexport function f() { return console.table(); }`],
+    ["bajo typeof guard", `/** @server-safe */\nexport function f() { if (typeof console !== "undefined") return console.table(); return null; }`],
     // codex P1: el receiver se desenvuelve value-transparente (el cast a `any` es probable).
-    ["(performance as any).measure...", `/** @server-safe */\nexport function f() { return (performance as any).measureUserAgentSpecificMemory(); }`],
-    ["(0, performance).measure...", `/** @server-safe */\nexport function f() { return (0, performance).measureUserAgentSpecificMemory(); }`],
+    ["(console as any).measure...", `/** @server-safe */\nexport function f() { return (console as any).table(); }`],
+    ["(0, console).measure...", `/** @server-safe */\nexport function f() { return (0, console).table(); }`],
     // codex P2 (e3418ee): el PARÉNTESIS rompe la cadena opcional → el undefined se derefencia y
     // crashea. `(x?.()).foo` NO es un probe seguro (a diferencia de `x?.().foo` sin paréntesis).
-    ["grouped optional deref (M?.()).foo", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any).foo; }`],
-    ["grouped optional deref (M?.())[0]", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)[0]; }`],
-    ["grouped optional call (M?.())()", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)(); }`],
-    ["grouped optional access (M?.name).x", `/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.name) as any).x; }`],
-    ["grouped optional + non-null (M?.())!.foo", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory?.())!.foo; }`],
+    ["grouped optional deref (M?.()).foo", `/** @server-safe */\nexport function f() { return ((console.table?.()) as any).foo; }`],
+    ["grouped optional deref (M?.())[0]", `/** @server-safe */\nexport function f() { return ((console.table?.()) as any)[0]; }`],
+    ["grouped optional call (M?.())()", `/** @server-safe */\nexport function f() { return ((console.table?.()) as any)(); }`],
+    ["grouped optional access (M?.name).x", `/** @server-safe */\nexport function f() { return ((console.table?.name) as any).x; }`],
+    ["grouped optional + non-null (M?.())!.foo", `/** @server-safe */\nexport function f() { return (console.table?.())!.foo; }`],
     // codex P2 (058b1f6): TaggedTemplate guarda el callee en \`.tag\`, no \`.expression\` →
     // \`(M?.())\\\`x\\\`\` ejecuta \`undefined\\\`x\\\`\` (TypeError). Antes escapaba el branch.
-    ["grouped optional tagged-template (M?.())`x`", "/** @server-safe */\nexport function f() { return ((performance.measureUserAgentSpecificMemory?.()) as any)`x`; }"],
-  ])("FLAGGEA performance.measureUserAgentSpecificMemory (partial SAFE-global member): %s", (_l, code) => {
+    ["grouped optional tagged-template (M?.())`x`", "/** @server-safe */\nexport function f() { return ((console.table?.()) as any)`x`; }"],
+  ])("FLAGGEA console.table (partial SAFE-global member): %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-partial.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
-  it("NO flaggea performance.now() (presente en Node)", () => {
-    expect(checkSourceFile(`/** @server-safe */\nexport function f() { return performance.now(); }`, "perf-now.fixture.tsx")).toEqual([]);
+  it("NO flaggea console.log() (presente en Node)", () => {
+    expect(checkSourceFile(`/** @server-safe */\nexport function f() { return console.log(); }`, "perf-log.fixture.tsx")).toEqual([]);
   });
 
   // codex P2: un PROBE SEGURO del miembro parcial no crashea → no se flaggea (feature-detection).
   it.each([
-    ["optional call ?.()", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.(); }`],
-    ["typeof operand", `/** @server-safe */\nexport function f() { return typeof performance.measureUserAgentSpecificMemory === "function"; }`],
-    ["optional access ?.name", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.name; }`],
+    ["optional call ?.()", `/** @server-safe */\nexport function f() { return console.table?.(); }`],
+    ["typeof operand", `/** @server-safe */\nexport function f() { return typeof console.table === "function"; }`],
+    ["optional access ?.name", `/** @server-safe */\nexport function f() { return console.table?.name; }`],
     // codex P2: el probe envuelto en parens/cast también es seguro (ascenso value-transparent).
-    ["typeof (parenthesized)", `/** @server-safe */\nexport function f() { return typeof (performance.measureUserAgentSpecificMemory) === "function"; }`],
-    ["(cast as any)?.()", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory as any)?.(); }`],
+    ["typeof (parenthesized)", `/** @server-safe */\nexport function f() { return typeof (console.table) === "function"; }`],
+    ["(cast as any)?.()", `/** @server-safe */\nexport function f() { return (console.table as any)?.(); }`],
     // codex P2 (e3418ee): SIN paréntesis la cadena opcional corta entera → seguro. Contraste
     // con el caso `(x?.()).foo` agrupado (que SÍ flaggea, arriba).
-    ["optional chain M?.().foo (sin paréntesis)", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.().foo; }`],
-    ["optional chain M?.()!.foo (non-null, sin paréntesis)", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.()!.foo; }`],
-    ["optional consumer (M?.())?.foo (consumer opcional)", `/** @server-safe */\nexport function f() { return (performance.measureUserAgentSpecificMemory?.())?.foo; }`],
+    ["optional chain M?.().foo (sin paréntesis)", `/** @server-safe */\nexport function f() { return console.table?.().foo; }`],
+    ["optional chain M?.()!.foo (non-null, sin paréntesis)", `/** @server-safe */\nexport function f() { return console.table?.()!.foo; }`],
+    ["optional consumer (M?.())?.foo (consumer opcional)", `/** @server-safe */\nexport function f() { return (console.table?.())?.foo; }`],
   ])("NO flaggea un probe seguro del miembro parcial: %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-probe.fixture.tsx")).toEqual([]);
   });
 
   // codex P2: el miembro parcial extraído por DESTRUCTURING (`const { measure...: m } =
-  // performance; m()`) escapaba al check de property-access. Fail-closed: flaggear la extracción.
+  // console; m()`) escapaba al check de property-access. Fail-closed: flaggear la extracción.
   it.each([
-    ["destr renombrado", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory: m } = performance as any; return m(); }`],
-    ["destr shorthand", `/** @server-safe */\nexport function f() { const { measureUserAgentSpecificMemory } = performance as any; return measureUserAgentSpecificMemory; }`],
-    ["destr computed string", `/** @server-safe */\nexport function f() { const { ["measureUserAgentSpecificMemory"]: m } = performance as any; return m; }`],
+    ["destr renombrado", `/** @server-safe */\nexport function f() { const { table: m } = console as any; return m(); }`],
+    ["destr shorthand", `/** @server-safe */\nexport function f() { const { table } = console as any; return table; }`],
+    ["destr computed string", `/** @server-safe */\nexport function f() { const { ["table"]: m } = console as any; return m; }`],
     // codex P2 (e3418ee): key computada VALUE-TRANSPARENTE — el property-access path ya la
-    // normaliza (`performance[1 && "M"]` flaggea), el destructuring debe ser consistente.
-    ["destr computed [1 && M]", `/** @server-safe */\nexport function f() { const { [1 && "measureUserAgentSpecificMemory"]: m } = performance as any; return m(); }`],
-    ["destr computed [(0, M)]", `/** @server-safe */\nexport function f() { const { [(0, "measureUserAgentSpecificMemory")]: m } = performance as any; return m(); }`],
-    ["assignment-destr", `/** @server-safe */\nexport function f() { let m: any; ({ measureUserAgentSpecificMemory: m } = performance as any); return m; }`],
+    // normaliza (`console[1 && "M"]` flaggea), el destructuring debe ser consistente.
+    ["destr computed [1 && M]", `/** @server-safe */\nexport function f() { const { [1 && "table"]: m } = console as any; return m(); }`],
+    ["destr computed [(0, M)]", `/** @server-safe */\nexport function f() { const { [(0, "table")]: m } = console as any; return m(); }`],
+    ["assignment-destr", `/** @server-safe */\nexport function f() { let m: any; ({ table: m } = console as any); return m; }`],
   ])("FLAGGEA el destructuring de un miembro parcial: %s", (_l, code) => {
     expect(checkSourceFile(code, "perf-destr.fixture.tsx").some((x) => x.rule === "no-bare-dom-access")).toBe(true);
   });
 
-  it("NO flaggea import-equals de un miembro SAFE (performance.now) ni type-only", () => {
-    expect(checkSourceFile(`/** @server-safe */\nimport now = performance.now;\nexport function f() { return now(); }`, "ie-safe.fixture.tsx")).toEqual([]);
+  it("NO flaggea import-equals de un miembro SAFE (console.log) ni type-only", () => {
+    expect(checkSourceFile(`/** @server-safe */\nimport log = console.log;\nexport function f() { return log(); }`, "ie-safe.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(`/** @server-safe */\nimport type compile = WebAssembly.compile;\nexport function f() { return 1; }`, "ie-typeonly.fixture.tsx")).toEqual([]);
   });
 
-  it("NO flaggea destructuring de un miembro PRESENTE (now)", () => {
-    expect(checkSourceFile(`/** @server-safe */\nexport function f() { const { now } = performance; return now; }`, "perf-now-destr.fixture.tsx")).toEqual([]);
+  it("NO flaggea destructuring de un miembro PRESENTE (log)", () => {
+    expect(checkSourceFile(`/** @server-safe */\nexport function f() { const { log } = console; return log; }`, "perf-log-destr.fixture.tsx")).toEqual([]);
   });
 
   // codex P3 (fd84c07): el path de destructuring debe respetar el forward value-read igual que el
   // de property-access — un binding MODULE-LEVEL declarado DESPUÉS de la función (leído a call-time
   // = el local, no el global) no debe flaggearse.
   it.each([
-    ["destr performance module-local (decl después)", `/** @server-safe */\nexport function C() { const { measureUserAgentSpecificMemory: x } = performance; return x; }\nconst performance: any = { measureUserAgentSpecificMemory: () => 0 };`],
+    ["destr console module-local (decl después)", `/** @server-safe */\nexport function C() { const { table: x } = console; return x; }\nconst console: any = { table: () => 0 };`],
     ["destr WebAssembly module-local (decl después)", `/** @server-safe */\nexport function C() { const { compile } = WebAssembly; return compile; }\nconst WebAssembly: any = { compile: () => 0 };`],
   ])("NO flaggea destructuring de un shadow MODULE-LEVEL (forward value-read): %s", (_l, code) => {
     expect(checkSourceFile(code, "partial-fwd.fixture.tsx")).toEqual([]);
@@ -3314,7 +3339,7 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
   // así que `const WA = WebAssembly; WA.compile()` era invisible aguas arriba = bypass.
   it.each([
     ["alias WA.compile()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.compile(new Uint8Array()); }`],
-    ["alias perf.measure()", `/** @server-safe */\nexport function f() { const perf = performance; return perf.measureUserAgentSpecificMemory(); }`],
+    ["alias perf.measure()", `/** @server-safe */\nexport function f() { const perf = console; return perf.table(); }`],
     ["alias multi-hop b.compile()", `/** @server-safe */\nexport function f() { const a = WebAssembly; const b = a; return b.compile(new Uint8Array()); }`],
     ["alias destructure const {compile}=WA", `/** @server-safe */\nexport function f() { const WA = WebAssembly as any; const { compile } = WA; return compile(new Uint8Array()); }`],
     ["alias value-transparent (0,WebAssembly)", `/** @server-safe */\nexport function f() { const WA = (0, WebAssembly); return WA.compile(new Uint8Array()); }`],
@@ -3338,7 +3363,7 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (8296ebc, #133): OBJECT-REST copia el partial-root → alias (el miembro va con él o
     // falta igual). Solo partial (un timer-rest da un objeto no invocable, no es alias de timer).
     ["object-rest const {...WA}=WebAssembly", `/** @server-safe */\nexport function f() { const { ...WA } = WebAssembly as any; return WA.compile(new Uint8Array()); }`],
-    ["object-rest const {...perf}=performance", `/** @server-safe */\nexport function f() { const { ...perf } = performance as any; return perf.measureUserAgentSpecificMemory(); }`],
+    ["object-rest const {...perf}=console", `/** @server-safe */\nexport function f() { const { ...perf } = console as any; return perf.table(); }`],
     ["object-rest parcial {len, ...WA}=WebAssembly", `/** @server-safe */\nexport function f() { const { length: len, ...WA } = WebAssembly as any; void len; return WA.compile(new Uint8Array()); }`],
     // codex P2 (c2eec1a, #133): key COMPUTADA + default de array-assignment.
     ['computed const {["wa"]:WA}={wa:WebAssembly}', `/** @server-safe */\nexport function f() { const { ["wa"]: WA } = { wa: WebAssembly } as any; return WA.compile(new Uint8Array()); }`],
@@ -3350,7 +3375,7 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     // codex P2 (eb9d71c, #133): chain embebida + import-equals de un miembro partial-denied.
     ["chain embebida (WA=WebAssembly, A=WA, A).compile()", `/** @server-safe */\nexport function f() { let WA: any; let A: any; return (WA = WebAssembly, A = WA, A).compile(new Uint8Array()); }`],
     ["import-equals WebAssembly.compile", `/** @server-safe */\nimport compile = WebAssembly.compile;\nexport function f() { return compile(new Uint8Array()); }`],
-    ["import-equals performance.measure...", `/** @server-safe */\nimport m = performance.measureUserAgentSpecificMemory;\nexport function f() { return m(); }`],
+    ["import-equals console.measure...", `/** @server-safe */\nimport m = console.table;\nexport function f() { return m(); }`],
     // codex P2 (069d4c8, #133): embedded assignment cross-statement (persiste al siguiente stmt).
     ["cross-stmt (WA=WebAssembly, 0); WA.compile()", `/** @server-safe */\nexport function f() { let WA: any; (WA = WebAssembly, 0); return WA.compile(new Uint8Array()); }`],
     // codex P2 (9d5ba3a, #133, exhaustive): embedded-en-declarador / for-init expr / import-equals
@@ -3361,7 +3386,7 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["object-rest assignment ({...WA}=WebAssembly)", `/** @server-safe */\nexport function f() { let WA: any; ({ ...WA } = WebAssembly as any); return WA.compile(new Uint8Array()); }`],
     // codex P2 (3b7b6ba, #133): destructuring ANIDADO contra un object-literal (recursión estructural).
     ["nested destructure const {x:{compile}}={x:WebAssembly}", `/** @server-safe */\nexport function f() { const { x: { compile } } = { x: WebAssembly }; return compile(new Uint8Array()); }`],
-    ["nested destructure const {x:{measure}}={x:performance}", `/** @server-safe */\nexport function f() { const { x: { measureUserAgentSpecificMemory: m } } = { x: performance }; return m(); }`],
+    ["nested destructure const {x:{measure}}={x:console}", `/** @server-safe */\nexport function f() { const { x: { table: m } } = { x: console }; return m(); }`],
     // codex P2 (5eee12d, #133): destructuring ARRAY + mezclas obj/array (recursión estructural).
     ["array nested const [{compile}]=[WebAssembly]", `/** @server-safe */\nexport function f() { const [{ compile }] = [WebAssembly]; return compile(new Uint8Array()); }`],
     ["mixed const {x:[{compile}]}={x:[WebAssembly]}", `/** @server-safe */\nexport function f() { const { x: [{ compile }] } = { x: [WebAssembly] }; return compile(new Uint8Array()); }`],
@@ -3394,7 +3419,7 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
   });
 
   it.each([
-    ["alias de miembro SAFE perf.now()", `/** @server-safe */\nexport function f() { const perf = performance; return perf.now(); }`],
+    ["alias de miembro SAFE perf.log()", `/** @server-safe */\nexport function f() { const perf = console; return perf.log(); }`],
     ["alias de miembro SAFE WA.validate()", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return WA.validate(new Uint8Array()); }`],
     ["typeof sobre alias", `/** @server-safe */\nexport function f() { const WA = WebAssembly; return typeof WA.compile; }`],
     // codex P2 (8296ebc): object-rest de un TIMER da un objeto NO invocable → no es timer-alias
@@ -3448,7 +3473,7 @@ describe("server-safe gate — global de cliente en timer deferido NO se exime",
     ["compile?.name (metadata, no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.name; }`],
     ["compile?.length (metadata, no invoca)", `/** @server-safe */\nexport function f() { return WebAssembly.compile?.length; }`],
     // miembro AUSENTE: `?.call` corta a undefined (measure es undefined) → seguro.
-    ["perf.measure?.call(null) ausente (short-circuit)", `/** @server-safe */\nexport function f() { return performance.measureUserAgentSpecificMemory?.call(null); }`],
+    ["perf.measure?.call(null) ausente (short-circuit)", `/** @server-safe */\nexport function f() { return console.table?.call(null); }`],
   ])("NO flaggea miembros/probes seguros de WebAssembly: %s", (_l, code) => {
     expect(checkSourceFile(code, "wasm-ok.fixture.tsx")).toEqual([]);
   });
