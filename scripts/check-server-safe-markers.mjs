@@ -3636,14 +3636,17 @@ function isWeaponizedConstructorAccess(node) {
       (c) => c === child || valueTransparentLeaves(c).includes(child),
     )
   ) {
-    const callee = unwrapErased(callNode.expression);
-    if (
-      ts.isPropertyAccessExpression(callee) ||
-      ts.isElementAccessExpression(callee)
-    ) {
-      // Receiver Reflect value-transparente (`(0, Reflect).construct(…)`, `(c ? Reflect : Reflect).
-      // apply(…)`) → resolver por valueTransparentLeaves, no solo unwrapErased; paridad con los
-      // receiver paths del timer (codex P2).
+    // El CALLEE entero puede ir VALUE-TRANSPARENTE: receiver Reflect (`(0, Reflect).apply(…)`) Y/O
+    // la member-access completa (`(0, Reflect.apply)(…)`, `(c ? Reflect.apply : Reflect.apply)(…)`).
+    // Resolver AMBOS por valueTransparentLeaves: una hoja member-access `Reflect.construct`/`.apply`
+    // cuyo receiver resuelve VT a `Reflect` (codex P2). No solo unwrapErased.
+    for (const callee of valueTransparentLeaves(callNode.expression)) {
+      if (
+        !ts.isPropertyAccessExpression(callee) &&
+        !ts.isElementAccessExpression(callee)
+      ) {
+        continue;
+      }
       const member = accessedMemberName(callee);
       const receiverIsReflect = valueTransparentLeaves(callee.expression).some(
         (o) => ts.isIdentifier(o) && o.text === "Reflect",

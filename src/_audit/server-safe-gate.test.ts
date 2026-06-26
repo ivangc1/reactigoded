@@ -555,6 +555,19 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(v.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
   });
 
+  it("caza el CALLEE Reflect value-transparente `(0, Reflect.apply)(F.constructor, …)` (codex P2)", () => {
+    const apply = checkSourceFile(
+      fixture(`(0, Reflect.apply)(((() => {}) as any).constructor, null, ["return window"]);`),
+      "Reflect-apply-vt-callee.fixture.tsx",
+    );
+    expect(apply.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
+    const construct = checkSourceFile(
+      fixture(`(0, Reflect.construct)(((() => {}) as any).constructor, ["return window"])();`),
+      "Reflect-construct-vt-callee.fixture.tsx",
+    );
+    expect(construct.some((it) => it.rule === "no-dynamic-eval-sink")).toBe(true);
+  });
+
   it("caza `globalThis.constructor.constructor(...)` (vía globalThis access)", () => {
     const v = checkSourceFile(
       fixture(`const w = globalThis.constructor.constructor("return window")();`),
