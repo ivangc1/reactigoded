@@ -472,7 +472,6 @@ const SAFE_GLOBALS = new Set(
 // MÍNIMA + verificada (deepest re-hunt: performance.measureUserAgentSpecificMemory revienta en
 // Node); extensible al auditar más browser-only de performance/Intl/crypto. beta.27 BLOCKER-1.
 const PARTIAL_SAFE_GLOBAL_MEMBERS = {
-  performance: new Set(["measureUserAgentSpecificMemory"]),
   // `WebAssembly` existe como namespace en el baseline Edge (Vercel/Workers) → root SAFE, pero la
   // COMPILACIÓN DE BYTES está deshabilitada igual que eval/Function (dynamic code generation). La
   // partición se deriva del semántico de cada API, NO del framing simplificado "WebAssembly
@@ -505,6 +504,65 @@ const PARTIAL_SAFE_GLOBAL_MEMBERS = {
 // lanza, así que el optional-CALL NO es probe seguro (sí lo siguen siendo `typeof` y el optional-
 // ACCESS `?.name`, que no compilan). Para los AUSENTES, `?.()` corta a undefined = seguro.
 const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly"]);
+
+// NAMESPACES HOST-POPULATED — TRES BUCKETS por la relación runtime↔namespace (el bucket NO se elige,
+// lo determina la relación; test checkeable):
+//   (1) El runtime expone un SUBSET LIMITADO (el host omite miembros, o Node AÑADE no-estándar) →
+//       default DENY, ALLOWLIST de lo confirmado-Edge-present. Complemento (Node-only/browser-only +
+//       futuros) denegado por construcción. → `performance`, `crypto`, `process`, `import.meta`.
+//   (2) Superficie estándar COMPLETA pero PROHÍBE ops concretas (seguridad) → default ALLOW, DENYLIST
+//       de lo prohibido. → `WebAssembly` (PARTIAL_SAFE_GLOBAL_MEMBERS). Forzarlo a allowlist sería FP
+//       sobre miembros estándar NUEVOS (`WebAssembly.Tag`/`Exception` del exception-handling, ya en el
+//       V8 de Edge) = allowlist-rot. Por eso NO se unifica.
+//   (3) Superficie completa SIN prohibiciones → allow wholesale, sin tabla. → `Intl`, `Math`, `JSON`.
+//       Ponerles allowlist = allowlist-rot (FP sobre `Intl.DurationFormat`/`Segmenter` nuevos).
+// BAR DE ALLOW = **Edge-present** (NO Web-standard: hay miembros standard ausentes en el isolate
+// server — browser-only). Un falso-ALLOW es FAIL-OPEN; un falso-DENY es FP corregible → el rigor va
+// entero en los ALLOW. INCIERTO = DENY por construcción (la carga de prueba está en ALLOW: demostrar
+// presencia-Edge-y-funcional). Oráculo de la superficie Edge = `@edge-runtime/primitives` (cuando esté
+// disponible; hoy ABSENTE → confirmación manual contra la API documentada del Edge Runtime). El subset
+// REAL se refina en #190. codex P2 (review genérico). FUERA DE SCOPE: V8-version-drift (`Array.fromAsync`,
+// `Promise.withResolvers`, `Object.groupBy`…) — skew de versión Node-V8 vs Edge-V8, NO "Node-only", sin
+// oráculo limpio; la clase es presencia-de-miembro-Node-vs-estándar, no version-skew.
+const SAFE_PARTIAL_MEMBERS = {
+  // Edge `performance` = la interfaz `Performance` de la Web Performance API (V8/Edge). Node AÑADE
+  // perf_hooks (`eventLoopUtilization`/`timerify`/`nodeTiming` → ausentes en Edge → lanzan). ALLOW =
+  // núcleo confirmado-Edge-present; `eventCounts` (Event Timing, input del navegador) y el cluster
+  // Resource Timing (`clearResourceTimings`/`setResourceTimingBufferSize`/`markResourceTiming`) NO
+  // entran sin confirmación positiva (posibles falsos-ALLOW); `measureUserAgentSpecificMemory`
+  // (browser-only) cae al complemento denegado por construcción.
+  performance: new Set([
+    "now",
+    "mark",
+    "measure",
+    "clearMarks",
+    "clearMeasures",
+    "getEntries",
+    "getEntriesByName",
+    "getEntriesByType",
+    "timeOrigin",
+    "toJSON",
+  ]),
+  // Edge `crypto` = Web Crypto (subset): `subtle`/`randomUUID`/`getRandomValues` presentes; los
+  // miembros de node:crypto (`createHash`/`timingSafeEqual`/`randomBytes`/`createHmac`/…) NO existen
+  // en el isolate Edge → llamarlos lanza. Bucket 1, FAIL-OPEN antes de este fix (era safe root sin
+  // tabla). ALLOW = Web Crypto confirmado-Edge-present; el resto al complemento denegado.
+  crypto: new Set(["subtle", "randomUUID", "getRandomValues"]),
+};
+
+// ¿`root` tiene política de miembro (denylist bucket-2 O allowlist bucket-1)? Predicado CENTRAL.
+function isPartialMemberRoot(root) {
+  return Boolean(PARTIAL_SAFE_GLOBAL_MEMBERS[root] || SAFE_PARTIAL_MEMBERS[root]);
+}
+// ¿`member` está DENEGADO para `root`? denylist (bucket 2): ∈ set. allowlist (bucket 1): ∉ set.
+// wholesale-safe (bucket 3): nunca. Predicado CENTRAL que TODOS los colectores consultan.
+function isDeniedPartialMember(root, member) {
+  const deny = PARTIAL_SAFE_GLOBAL_MEMBERS[root];
+  if (deny) return deny.has(member);
+  const allow = SAFE_PARTIAL_MEMBERS[root];
+  if (allow) return !allow.has(member);
+  return false;
+}
 
 // Sinks de evaluación dinámica. NO son "browser globals" — existen
 // también en Node — pero PERMITEN bypassear el análisis estático del
@@ -2591,7 +2649,7 @@ function exprPartialRoot(expr, context) {
     if (ts.isIdentifier(leaf)) {
       if (known && known.has(leaf.text)) return known.get(leaf.text);
       if (
-        PARTIAL_SAFE_GLOBAL_MEMBERS[leaf.text] &&
+        isPartialMemberRoot(leaf.text) &&
         !context.localBindings.has(leaf.text) &&
         !(
           context.isInFunctionBody &&
@@ -5711,11 +5769,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         memberCandidates.length > 0
           ? exprPartialRoot(node.expression, context)
           : null;
-      const partialSet = resolvedPartialRoot
-        ? PARTIAL_SAFE_GLOBAL_MEMBERS[resolvedPartialRoot]
-        : null;
-      const partialMember = partialSet
-        ? (memberCandidates.find((m) => partialSet.has(m)) ?? null)
+      // Predicado CENTRAL: denylist (WebAssembly) → miembro ∈ set; allowlist (performance/crypto) →
+      // miembro ∉ set. Cualquier candidato denegado (fail-closed sobre las alternativas).
+      const partialMember = resolvedPartialRoot
+        ? (memberCandidates.find((m) =>
+            isDeniedPartialMember(resolvedPartialRoot, m),
+          ) ?? null)
         : null;
       const partialRootName = partialMember ? resolvedPartialRoot : null;
       // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
@@ -5893,7 +5952,6 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             // Solo un OBJECT pattern extrae un MIEMBRO por key; un array pattern sobre el root es
             // iteración (no member-access). init ES el root → sin literal anidado que recursar.
             if (!isObjPat) return;
-            const set = PARTIAL_SAFE_GLOBAL_MEMBERS[partialRootName];
             for (const el of elems) {
               const kn = ts.isBindingElement(el)
                 ? el.propertyName || el.name
@@ -5902,8 +5960,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                   ? el.name
                   : null;
               // Key con ALTERNATIVAS (`[c ? "compile" : "validate"]`) → cualquier rama denegada
-              // cuenta, fail-closed (codex P2).
-              const key = structuralKeyTexts(kn).find((k) => set.has(k)) ?? null;
+              // cuenta, fail-closed; predicado central (denylist O allowlist) (codex P2).
+              const key =
+                structuralKeyTexts(kn).find((k) =>
+                  isDeniedPartialMember(partialRootName, k),
+                ) ?? null;
               // ¿DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` / `{ x: y = d }` (assign).
               // Miembro AUSENTE (performance.measure undefined) → default SE ACTIVA → seguro. Root
               // PRESENT-throws (WebAssembly.compile EXISTE) → default NO se activa → sigue lanzando.
@@ -6041,7 +6102,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // import compile = WA.compile`) — exprPartialRoot ya pliega shadow/forward/alias (codex P2).
       const ieRootName = exprPartialRoot(node.moduleReference.left, context);
       const ieMember = node.moduleReference.right.text;
-      if (ieRootName && PARTIAL_SAFE_GLOBAL_MEMBERS[ieRootName]?.has(ieMember)) {
+      if (ieRootName && isDeniedPartialMember(ieRootName, ieMember)) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
         const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";

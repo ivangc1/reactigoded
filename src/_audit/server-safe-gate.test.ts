@@ -480,6 +480,36 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (process as any)[k];`, "pr2.fixture.tsx").length > 0).toBe(true);
   });
 
+  // codex P2 (review genérico): TRES buckets. crypto/performance = bucket 1 (allowlist Edge-present,
+  // eran FAIL-OPEN); WebAssembly = bucket 2 (denylist, sin tocar); Intl = bucket 3 (wholesale, sin tabla).
+  it("buckets de namespaces host-populated (crypto/performance allowlist; Intl wholesale)", () => {
+    const any = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const f = () => ${b};`, "bk.fixture.tsx").length > 0;
+    // crypto bucket 1 — DENY node:crypto (era fail-open), ALLOW Web Crypto:
+    expect(any(`(crypto as any).timingSafeEqual(0 as any, 0 as any)`)).toBe(true);
+    expect(any(`(crypto as any).createHash("sha256")`)).toBe(true);
+    expect(any(`crypto.randomUUID()`)).toBe(false);
+    expect(any(`crypto.subtle`)).toBe(false);
+    expect(any(`crypto.getRandomValues(new Uint8Array(8))`)).toBe(false);
+    // crypto alias + destructure flow through the central predicate:
+    expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { createHash } = crypto as any; return createHash("x"); }`, "bk2.fixture.tsx").length > 0).toBe(true);
+    expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { randomUUID } = crypto; return randomUUID(); }`, "bk3.fixture.tsx")).toEqual([]);
+    // performance bucket 1 — DENY perf_hooks/browser-only (era fail-open), ALLOW Web Performance:
+    expect(any(`(performance as any).eventLoopUtilization()`)).toBe(true);
+    expect(any(`(performance as any).timerify(() => {})`)).toBe(true);
+    expect(any(`(performance as any).nodeTiming`)).toBe(true);
+    expect(any(`(performance as any).eventCounts`)).toBe(true);
+    expect(any(`performance.now()`)).toBe(false);
+    expect(any(`performance.mark("x")`)).toBe(false);
+    expect(any(`performance.getEntriesByType("mark")`)).toBe(false);
+    // Intl bucket 3 — wholesale (NO allowlist; DurationFormat allowed = correcto):
+    expect(any(`new Intl.NumberFormat()`)).toBe(false);
+    expect(any(`new (Intl as any).DurationFormat()`)).toBe(false);
+    // WebAssembly bucket 2 — denylist intacto:
+    expect(any(`WebAssembly.compile(new Uint8Array())`)).toBe(true);
+    expect(any(`WebAssembly.validate(new Uint8Array())`)).toBe(false);
+  });
+
   it("caza `import(<literal builtin>)` dinámico; deja residual el variable/createRequire (codex P1)", () => {
     const has = (body: string) =>
       checkSourceFile(`/** @server-safe */\n${body}`, "dynimp.fixture.tsx").some(
