@@ -4996,34 +4996,83 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // INVOCADO en-sitio; el detach NO-invocado (`const f=(0,X.m)`) y el var-extract (`const r=X.m; r()`)
     // = indirección/data-flow §141 residual (el receiver se pierde por seguimiento de valor, no en-sitio).
     if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
-      const calleeStripped = unwrapErased(node.expression);
-      if (valueTransparentChildren(calleeStripped).length > 0) {
-        for (const leaf of valueTransparentLeaves(calleeStripped)) {
-          const lu = unwrapErased(leaf);
+      // ¿`expr` resuelve a un método ∈ RECEIVER_BOUND con el receiver DESLIGADO en-sitio? → {r, member}.
+      // Robusto a wrapper VT (resuelve por las hojas this-detaching) y a alias del root (exprPartialRoot).
+      const boundMemberOf = (expr) => {
+        const lu = unwrapErased(expr);
+        const candidates =
+          ts.isPropertyAccessExpression(lu) || ts.isElementAccessExpression(lu)
+            ? [lu]
+            : valueTransparentChildren(lu).length > 0
+              ? valueTransparentLeaves(lu).map(unwrapErased)
+              : [];
+        for (const c of candidates) {
           if (
-            !ts.isPropertyAccessExpression(lu) &&
-            !ts.isElementAccessExpression(lu)
+            !ts.isPropertyAccessExpression(c) &&
+            !ts.isElementAccessExpression(c)
           ) {
             continue;
           }
-          const r = exprPartialRoot(lu.expression, context);
+          const r = exprPartialRoot(c.expression, context);
           const bound = r ? RECEIVER_BOUND_MEMBERS[r] : null;
           const member = bound
-            ? accessedMemberNames(lu).find((mm) => bound.has(mm))
+            ? accessedMemberNames(c).find((mm) => bound.has(mm))
             : null;
-          if (member) {
-            const start = node.getStart(sourceFile);
-            const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-            const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-            violations.push({
-              file: relPath,
-              rule: "no-bare-dom-access",
-              line: line + 1,
-              detail: `llamada UNBOUND de \`${r}.${member}\` — método branded host DESLIGADO de su receiver (operador this-detaching) → \`this\` no es el objeto ${r} → TypeError en Edge/SSR. La llamada LIGADA (\`${r}.${member}(…)\`, o envuelta en parens/cast) es Edge-safe: ${lineText}`,
-            });
-            break;
+          if (member) return { r, member };
+        }
+        return null;
+      };
+      const calleeStripped = unwrapErased(node.expression);
+      let hit = null;
+      let via = null;
+      // (a) DETACH por operador this-detaching: `(0, X.m)()`, `(X.m||y)()`, ternario, alias de root.
+      if (valueTransparentChildren(calleeStripped).length > 0) {
+        hit = boundMemberOf(calleeStripped);
+        via = "operador this-detaching";
+      }
+      // (b) DETACH por `Function.prototype.call/apply/bind` invocado EN-SITIO (simétrico con `.constructor.call`).
+      // `X.m.call(recv,…)` / `.apply` / `.bind(…)()` invocan el método con `this` controlado, contiguo → la
+      // MISMA divergencia-Edge que (a) (OK-Node / throws-Edge). Cubre dotted + bracket-literal (`X.m["call"]`)
+      // + optional (`X.m?.call?.()`) vía accessedMemberNames. NO se cazan (residual data-flow §141): `.bind(…)`
+      // cuyo resultado NO se invoca aquí (crea fn, no llama el método) ni el bind-extraído cross-statement
+      // (`const f=X.m.bind(null); f(b)`). `.call(<receiver-correcto>,…)` no diverge pero es indistinguible sin
+      // data-flow del 1er arg → flag-all fail-closed (over-strict-FP aceptado: nadie escribe `.call(crypto,…)`).
+      if (!hit) {
+        let detachTarget = null;
+        if (
+          ts.isPropertyAccessExpression(calleeStripped) ||
+          ts.isElementAccessExpression(calleeStripped)
+        ) {
+          const fm = accessedMemberNames(calleeStripped);
+          if (fm.includes("call") || fm.includes("apply")) {
+            detachTarget = calleeStripped.expression;
+          }
+        } else if (ts.isCallExpression(calleeStripped)) {
+          // `X.m.bind(…)()`: el callee de la call externa (este `node`) es la call a `X.m.bind`.
+          const innerCallee = unwrapErased(calleeStripped.expression);
+          if (
+            (ts.isPropertyAccessExpression(innerCallee) ||
+              ts.isElementAccessExpression(innerCallee)) &&
+            accessedMemberNames(innerCallee).includes("bind")
+          ) {
+            detachTarget = innerCallee.expression;
           }
         }
+        if (detachTarget) {
+          hit = boundMemberOf(detachTarget);
+          via = "Function.prototype.call/apply/bind";
+        }
+      }
+      if (hit) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail: `llamada UNBOUND de \`${hit.r}.${hit.member}\` — método branded host DESLIGADO de su receiver (${via}) → \`this\` no es el objeto ${hit.r} → TypeError en Edge/SSR. La llamada LIGADA (\`${hit.r}.${hit.member}(…)\`, o envuelta en parens/cast) es Edge-safe: ${lineText}`,
+        });
       }
     }
     // CONSTRUCCIÓN denegada: `new WebAssembly.Module(bytes)` compila bytes SIEMPRE (sin overload

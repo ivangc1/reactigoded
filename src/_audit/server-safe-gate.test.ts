@@ -548,7 +548,15 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     //      es por wholesale, NO porque `as any` rompa la resolución del root (si lo rompiera, esto = PASA):
     expect(F(`(0, (crypto as any).getRandomValues)(new Uint8Array(4))`)).toBe(true);
     // DIVERGENCIA (browser O Node sí, Edge no) → in-mandate → FLAG:
-    expect(F(`(0, crypto.getRandomValues)(new Uint8Array(4))`)).toBe(true); // Node-OK/Edge-throws
+    expect(F(`(0, crypto.getRandomValues)(new Uint8Array(4))`)).toBe(true); // Node-OK/Edge-throws (detach por operador)
+    // unbound vía Function.prototype.call/apply/bind (codex P1 @159148b) — MISMA divergencia que el operador,
+    // contiguo en-sitio (no data-flow). Espectro {call/apply/bind}×{dotted,bracket,optional} verificado 3-runtime
+    // (Node-OK/Edge-throws). Simétrico con `.constructor.call/.apply/.bind` (rama eval-sink).
+    expect(F(`crypto.getRandomValues.call(null, new Uint8Array(4))`)).toBe(true);
+    expect(F(`crypto.randomUUID.apply(null, [])`)).toBe(true);
+    expect(F(`crypto.getRandomValues.bind(null)(new Uint8Array(4))`)).toBe(true); // bind invocado en-sitio
+    expect(F(`crypto.getRandomValues["call"](null, new Uint8Array(4))`)).toBe(true); // bracket-literal
+    expect(F(`crypto.getRandomValues?.call?.(null, new Uint8Array(4))`)).toBe(true); // optional
     expect(F(`(performance as any).measureUserAgentSpecificMemory()`)).toBe(true); // browser-only
     expect(F(`(navigator as any).geolocation`)).toBe(true); // browser-only (navigator denied root)
     expect(F(`(console as any).table([])`)).toBe(true); // Node-present/Edge-absent
@@ -556,6 +564,11 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(
       checkSourceFile(`/** @server-safe */\nexport const C = () => { setTimeout("code", 0); };`, "h2.fixture.tsx").length > 0,
     ).toBe(true); // browser-evals, Node/Edge throw → eval-sink
+    // Controles del detach call/apply/bind — NO deben flaggear (frontera correcta):
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const C = () => { const f = crypto.getRandomValues.bind(null); return f(new Uint8Array(4)); };`, "h3.fixture.tsx").length > 0,
+    ).toBe(false); // bind-extraído cross-statement = data-flow §141 residual
+    expect(F(`console.log.call(null, "x")`)).toBe(false); // .call sobre método NO receiver-bound (console no brand-checkea)
     // Línea base allowed (no candidatos):
     expect(F(`crypto.getRandomValues(new Uint8Array(4))`)).toBe(false); // bound
     expect(F(`performance.now()`)).toBe(false); // bound
