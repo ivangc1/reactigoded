@@ -589,18 +589,20 @@ function isConstructionDeniedMember(root, member) {
   return Boolean(CONSTRUCTION_DENIED_MEMBERS[root]?.has(member));
 }
 
-// MÉTODOS bucket-1 ALLOWED que son RECEIVER-BOUND (brand-check): seguros llamados LIGADOS
-// (`crypto.getRandomValues(b)`) pero LANZAN llamados DESLIGADOS (`(0, crypto.getRandomValues)(b)` →
-// `this` ya no es el objeto host → TypeError). El allowlist confirma "miembro Edge-present", NO
-// "seguro llamado sin receiver" — son ejes distintos. Set DERIVADO del oráculo conductual
-// `@edge-runtime/vm` (member a member: `(0, X.m)()` ¿lanza?): crypto.{randomUUID,getRandomValues} y
-// performance.now LANZAN; `console.*` son CALLABLE-UNBOUND (escriben a un stream, sin brand) → EXCLUIDOS
-// (flaggearlos sería FP). crypto/performance unbound: OK-Node pero THROW-Edge (crypto) o THROW-ambos
-// (performance, over-strict-consciente — código roto en todos lados). El subset se re-deriva en #190
-// contra producción. codex P1 (review genérico: "deny unbound calls to branded host methods").
+// MÉTODOS bucket-1 ALLOWED RECEIVER-BOUND Y EDGE-ESPECÍFICOS: seguros LIGADOS (`crypto.getRandomValues(b)`)
+// pero llamados DESLIGADOS (`(0, crypto.getRandomValues)(b)`) van OK en Node pero LANZAN en Edge (el `this`
+// ya no es el objeto Crypto). La REGLA es receiver-bound **Y Edge-específico**, NO "todo receiver-bound":
+// el mandato del gate es DIVERGENCIA-Edge (pasa en el entorno del contributor, revienta en producción
+// Edge — el gate es la ÚNICA defensa porque su `npm test` en Node NO lo caza), NO corrección-JS-universal.
+// Derivado del VM member-a-member por el discriminador "¿funciona en Node?": `getRandomValues`/`randomUUID`
+// = OK-Node/throw-Edge → Edge-específico → AQUÍ. EXCLUIDOS (out-of-mandate, NO fail-open — el contributor
+// los ve en su propio test, misma categoría que el TDZ universal §"hunt final" — crash idéntico cliente/
+// servidor que tsc casi caza): `performance.now` (sync-throw en Node TAMBIÉN = universal) y `crypto.subtle.*`
+// (async-reject ERR_INVALID_THIS en Node TAMBIÉN = universal; nested, cubierto por la MISMA regla universal→
+// fuera, no como caso aparte). `console.*` = callable-unbound (sin brand) → tampoco aplica. El subset se
+// re-deriva en #190 contra producción. codex P1/P2 (review genérico: "branded host methods unbound").
 const RECEIVER_BOUND_MEMBERS = {
   crypto: new Set(["randomUUID", "getRandomValues"]),
-  performance: new Set(["now"]),
 };
 
 // ¿`root` tiene política de miembro (denylist bucket-2 O allowlist bucket-1 O constructor-ban)?

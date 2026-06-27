@@ -570,8 +570,12 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`(true ? crypto.randomUUID : (() => ""))()`)).toBe(true);
     expect(any(`(0, (crypto as any)["randomUUID"])()`)).toBe(true);
     expect(stmt(`const c = crypto; return (0, c.getRandomValues)(new Uint8Array(4));`)).toBe(true);
-    // performance.now: over-strict consciente (lanza unbound en TODOS los runtimes, no solo Edge):
-    expect(any(`(0, performance.now)()`)).toBe(true);
+    // REGLA = receiver-bound Y EDGE-ESPECÍFICO (OK-Node/throw-Edge). UNIVERSAL (throw/reject en Node
+    // TAMBIÉN) = out-of-mandate F4 (el contributor lo caza en su npm test, no es divergencia-Edge):
+    expect(any(`(0, performance.now)()`)).toBe(false); // sync-throw en Node → universal → PASA
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport async function C(){ return await (0, crypto.subtle.digest)("SHA-256", new Uint8Array()); }`, "ubn.fixture.tsx").length > 0,
+    ).toBe(false); // crypto.subtle.* async-reject ERR_INVALID_THIS en Node → universal → PASA (nested, MISMA regla)
     // BOUND (receiver en-sitio; parens/cast preservan `this`) — PASA, 0-FP:
     expect(any(`crypto.getRandomValues(new Uint8Array(4))`)).toBe(false);
     expect(any(`(crypto.getRandomValues)(new Uint8Array(4))`)).toBe(false);
