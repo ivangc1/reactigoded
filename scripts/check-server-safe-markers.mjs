@@ -3459,6 +3459,22 @@ function isValueTransparentParent(parent, child) {
   return valueTransparentChildren(parent).indexOf(child) !== -1;
 }
 
+// VALUE-SURVIVAL: las hojas a las que se reduce el VALOR de `expr` saltando erased (parens/as/!/satisfies)
+// Y operadores value-transparent (ternario/coma/`&&`/`||`/`??`/`=`), o `[expr-erased]` si no hay wrapper VT.
+// Helper CENTRALIZADO del eje value-survival ("¿el token/valor peligroso llega a la operación a través de
+// wrappers?"), consultado por TODOS los checks value-survival: eval-sink (`.constructor`), construcción
+// (`new <root>.Module`), `import.meta.<member>`. Cierra la clase "olvido-VT sobre operación-en-sitio" POR
+// CONSTRUCCIÓN: un check value-survival nuevo reusa esto en vez de re-implementar/olvidar el VT-skip.
+// ⚠️ NO es para el eje RECEIVER-DETACH (unbound branded methods): ese usa el set VT SPLIT (this-detaching
+// detecta / this-preserving preserva el bound) — pregunta ortogonal, fusionarla aquí re-crearía el bug
+// "ejes ortogonales bajo predicado compartido". value-survival = set UNIFORME; receiver-detach = set SPLIT.
+function valueSurvivalLeaves(expr) {
+  const u = unwrapErased(expr);
+  return valueTransparentChildren(u).length > 0
+    ? valueTransparentLeaves(u).map(unwrapErased)
+    : [u];
+}
+
 // Aplana los SPREAD de ARRAY-LITERAL en una lista de args: `f(...["a", b], c)` → ["a", b, c]. Un
 // spread de VARIABLE (`...args`) NO se aplana (data-flow residual): se conserva como SpreadElement
 // (no produce un string-leaf, así que no flaggea). Usado para que el handler/target/string de un
@@ -4958,23 +4974,24 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         : node.expression;
       context = withEmbeddedAssignmentAliases(context, head);
     }
-    // `import(<literal builtin>)` — import() DINÁMICO con specifier LITERAL (`import("fs")`,
-    // `import("node:fs")`, value-transparent `import((0, "fs"))`): el string está EN-SITIO (no
-    // data-flow) → cazable, rompe en Edge igual que el import estático. `extractModuleReferences`
-    // (grafo) solo ve declaraciones estáticas → este es el hueco de dynamic-import. `import(variable)`
-    // = data-flow residual; `createRequire(...)("fs")` = indirección residual (ambos §141). codex P1.
+    // `import(<literal builtin>)` — import() DINÁMICO con specifier LITERAL EN-SITIO (`import("fs")`,
+    // `import("node:fs")`): no data-flow → cazable, rompe en Edge igual que el import estático.
+    // `extractModuleReferences` (grafo) solo ve estáticos → este es el hueco de dynamic-import.
+    // VALUE-survival: el specifier puede llegar por operadores VT (`import((0,"fs"))` coma,
+    // `import(c?"fs":"x")` ternario MULTI-hoja) → se resuelve por `valueSurvivalLeaves` (helper
+    // compartido) y se flaggea FAIL-CLOSED si CUALQUIER hoja es un builtin literal (paridad con
+    // construcción: una rama builtin basta). `import(variable)` = data-flow residual; `createRequire(
+    // ...)("fs")` = indirección residual (ambos §141). codex P1 + barrido VT (gap del ternario multi-hoja).
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length > 0 &&
       !context.isInClientOnlyDeferredBody
     ) {
-      const argLeaves = valueTransparentLeaves(node.arguments[0]);
-      const litSpec =
-        argLeaves.length === 1 && ts.isStringLiteralLike(argLeaves[0])
-          ? argLeaves[0].text
-          : null;
-      if (litSpec && isNodeBuiltinSpecifier(litSpec)) {
+      const litNode = valueSurvivalLeaves(node.arguments[0]).find(
+        (l) => ts.isStringLiteralLike(l) && isNodeBuiltinSpecifier(l.text),
+      );
+      if (litNode) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
         const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -4982,7 +4999,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           file: relPath,
           rule: "no-node-builtin",
           line: line + 1,
-          detail: `import() dinámico de \`${litSpec}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
+          detail: `import() dinámico de \`${litNode.text}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
         });
       }
     }
@@ -5082,15 +5099,26 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // member-alias de `WebAssembly.Module` = indirección §141 residual (el token Module no está en-sitio).
     // codex P2 (review genérico).
     if (ts.isNewExpression(node) && !context.isInClientOnlyDeferredBody) {
-      const newCallee = unwrapErased(node.expression);
-      if (
-        ts.isPropertyAccessExpression(newCallee) ||
-        ts.isElementAccessExpression(newCallee)
-      ) {
-        const ctorRoot = exprPartialRoot(newCallee.expression, context);
+      // VALUE-survival: el callee del `new` puede alcanzar el constructor a través de operadores
+      // value-transparent (ternario/coma/`&&`/`||`/`??`/`=`) — el VALOR construido es el mismo, sigue
+      // compilando bytes. MISMA resolución value-survival que el eval-sink (`.constructor`): se resuelve
+      // por las hojas vía `valueSurvivalLeaves` (helper value-survival CENTRALIZADO), NO solo el callee
+      // directo/erased (codex P1 @fdd3fe5: `new (c?WebAssembly.Module:X)(bytes)` se saltaba). NOTA: bracket
+      // (`new WebAssembly["Module"]`) y cast (`new (… as any)`) YA estaban cubiertos (ElementAccess /
+      // unwrapErased); el gap era SOLO los operadores VT. El member-alias (`const M=WebAssembly.Module;
+      // new M(bytes)`) sigue residual §141 (token no en-sitio). Eje VALUE-survival (compartido con
+      // eval-sink/import.meta), DISTINTO del eje receiver-detach del unbound (set VT SPLIT, no fusionar).
+      for (const leaf of valueSurvivalLeaves(node.expression)) {
+        if (
+          !ts.isPropertyAccessExpression(leaf) &&
+          !ts.isElementAccessExpression(leaf)
+        ) {
+          continue;
+        }
+        const ctorRoot = exprPartialRoot(leaf.expression, context);
         const ctorMember =
           ctorRoot &&
-          accessedMemberNames(newCallee).find((mm) =>
+          accessedMemberNames(leaf).find((mm) =>
             isConstructionDeniedMember(ctorRoot, mm),
           );
         if (ctorMember) {
@@ -5103,6 +5131,7 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
             line: line + 1,
             detail: `\`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render. El VALOR \`${ctorRoot}.${ctorMember}\` (instanceof, static methods) es Edge-safe: ${lineText}`,
           });
+          break;
         }
       }
     }
@@ -5110,13 +5139,18 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // fail-closed (SAFE_IMPORT_META_MEMBERS). `dirname`/`filename` son Node-only → ausentes en Edge →
     // leer/derefenciarlos lanza en SSR/render. Forma dot Y bracket-LITERAL (`import.meta["dirname"]`,
     // fold del literal vía accessedMemberNames); `import.meta[dynamicKey]` = §141 residual (data-flow).
-    // codex P2 (review genérico). `new.target` NO es vector (no poblado por host, sin miembros Node-only).
+    // El ROOT `import.meta` puede llegar por operadores VT value-survival (`(c?import.meta:x).dirname`) →
+    // se resuelve por `valueSurvivalLeaves` (helper compartido), NO solo MetaProperty directo/erased
+    // (codex P1 @fdd3fe5, familia value-survival, simétrico con el constructor-Module). `import.meta[dynKey]`
+    // sigue §141 residual. `new.target` NO es vector (no poblado por host, sin miembros Node-only).
     if (
       (ts.isPropertyAccessExpression(node) ||
         ts.isElementAccessExpression(node)) &&
-      ts.isMetaProperty(unwrapErased(node.expression)) &&
-      unwrapErased(node.expression).keywordToken ===
-        ts.SyntaxKind.ImportKeyword &&
+      valueSurvivalLeaves(node.expression).some(
+        (l) =>
+          ts.isMetaProperty(l) &&
+          l.keywordToken === ts.SyntaxKind.ImportKeyword,
+      ) &&
       !context.isInClientOnlyDeferredBody
     ) {
       const members = accessedMemberNames(node);

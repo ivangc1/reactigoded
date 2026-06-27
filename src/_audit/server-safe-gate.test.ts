@@ -564,6 +564,20 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(
       checkSourceFile(`/** @server-safe */\nexport const C = () => { setTimeout("code", 0); };`, "h2.fixture.tsx").length > 0,
     ).toBe(true); // browser-evals, Node/Edge throw → eval-sink
+    // FAMILIA VALUE-SURVIVAL — el VALOR peligroso alcanza la operación a través de operadores VT
+    // (ternario/coma/&&/||), resuelto por `valueSurvivalLeaves`/`valueTransparentLeaves`. CADA fila
+    // PROBADA conductualmente VT-envuelta (no por lectura). Gaps cerrados: construcción (codex P1
+    // @fdd3fe5), import.meta + dynamic-import-ternario (barrido VT). Distinto del eje receiver-detach (split).
+    expect(F(`new (c ? WebAssembly.Module : WebAssembly.Module)(b)`)).toBe(true); // new-Module VT-envuelto
+    expect(F(`new (0, WebAssembly.Module)(b)`)).toBe(true); // coma
+    expect(F(`(c ? import.meta : ({} as any)).dirname`)).toBe(true); // import.meta root VT-envuelto
+    expect(F(`(0, import.meta).filename`)).toBe(true); // import.meta coma
+    expect(F(`(0, [].constructor.constructor)("x")()`)).toBe(true); // .constructor weaponizado VT-envuelto
+    expect(F(`setTimeout("code", 0)`)).toBe(true); // string-timer eval-sink
+    expect(F(`(0, setTimeout)("code", 0)`)).toBe(true); // string-timer callee VT-envuelto
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const C = async (c: boolean) => await import(c ? "fs" : "other");`, "h4.fixture.tsx").length > 0,
+    ).toBe(true); // dynamic-import specifier ternario MULTI-hoja (gap del barrido: length===1 → fail-closed any-leaf)
     // Controles del detach call/apply/bind — NO deben flaggear (frontera correcta):
     expect(
       checkSourceFile(`/** @server-safe */\nexport const C = () => { const f = crypto.getRandomValues.bind(null); return f(new Uint8Array(4)); };`, "h3.fixture.tsx").length > 0,
