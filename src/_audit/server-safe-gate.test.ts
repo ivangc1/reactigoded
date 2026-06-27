@@ -555,6 +555,7 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(F(`crypto.getRandomValues.call(null, new Uint8Array(4))`)).toBe(true);
     expect(F(`crypto.randomUUID.apply(null, [])`)).toBe(true);
     expect(F(`crypto.getRandomValues.bind(null)(new Uint8Array(4))`)).toBe(true); // bind invocado en-sitio
+    expect(F(`crypto.getRandomValues.bind(null).bind(null)(new Uint8Array(4))`)).toBe(true); // .bind ENCADENADO (unwrapBindChain, simétrico con construcción)
     expect(F(`crypto.getRandomValues["call"](null, new Uint8Array(4))`)).toBe(true); // bracket-literal
     expect(F(`crypto.getRandomValues?.call?.(null, new Uint8Array(4))`)).toBe(true); // optional
     expect(F(`(performance as any).measureUserAgentSpecificMemory()`)).toBe(true); // browser-only
@@ -570,6 +571,9 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // @fdd3fe5), import.meta + dynamic-import-ternario (barrido VT). Distinto del eje receiver-detach (split).
     expect(F(`new (c ? WebAssembly.Module : WebAssembly.Module)(b)`)).toBe(true); // new-Module VT-envuelto
     expect(F(`new (0, WebAssembly.Module)(b)`)).toBe(true); // coma
+    expect(F(`new ((WebAssembly.Module as any).bind(null, b))()`)).toBe(true); // .bind → constructor ligado construye el original (codex P1 @c4d8176)
+    expect(F(`new ((WebAssembly.Module as any).bind(null).bind(null))()`)).toBe(true); // .bind encadenado
+    expect(F(`new ((c ? WebAssembly.Module : (X as any)).bind(null, b))()`)).toBe(true); // VT-antes-del-bind
     expect(F(`(c ? import.meta : ({} as any)).dirname`)).toBe(true); // import.meta root VT-envuelto
     expect(F(`(0, import.meta).filename`)).toBe(true); // import.meta coma
     expect(F(`(0, [].constructor.constructor)("x")()`)).toBe(true); // .constructor weaponizado VT-envuelto

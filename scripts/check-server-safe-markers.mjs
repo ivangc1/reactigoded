@@ -3475,6 +3475,29 @@ function valueSurvivalLeaves(expr) {
     : [u];
 }
 
+// Desliga una cadena de `.bind(...)` al receiver subyacente: `X.bind(a).bind(b)` → X. Un bound function,
+// al hacer `new` o llamarse, construye/invoca el ORIGINAL (`new (X.bind(t,...a))()` ≡ `new X(...a)`;
+// `(X.m.bind(t))()` ≡ `X.m.call(t)`). RESOLUCIÓN axis-agnóstica (no política) COMPARTIDA por las DOS ramas
+// de detach-por-bind — construcción (constructor ligado) y unbound (método branded ligado) — para que la
+// forma `.bind` ENCADENADA esté cubierta con la MISMA exhaustividad en ambas (el sub-hueco simétrico que
+// si no reaparece de rama en rama). dotted/bracket(`["bind"]`)/optional vía accessedMemberNames; el caller
+// aplica DESPUÉS su política (isConstructionDeniedMember / RECEIVER_BOUND) → desligar un `.bind` inocuo es
+// inerte (se filtra después). depth-guard anti-runaway. Devuelve el expr erased si no hay `.bind`.
+function unwrapBindChain(expr, depth = 0) {
+  const u = unwrapErased(expr);
+  if (depth > 8) return u;
+  if (ts.isCallExpression(u)) {
+    const ic = unwrapErased(u.expression);
+    if (
+      (ts.isPropertyAccessExpression(ic) || ts.isElementAccessExpression(ic)) &&
+      accessedMemberNames(ic).includes("bind")
+    ) {
+      return unwrapBindChain(ic.expression, depth + 1);
+    }
+  }
+  return u;
+}
+
 // Aplana los SPREAD de ARRAY-LITERAL en una lista de args: `f(...["a", b], c)` → ["a", b, c]. Un
 // spread de VARIABLE (`...args`) NO se aplana (data-flow residual): se conserva como SpreadElement
 // (no produce un string-leaf, así que no flaggea). Usado para que el handler/target/string de un
@@ -5072,7 +5095,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               ts.isElementAccessExpression(innerCallee)) &&
             accessedMemberNames(innerCallee).includes("bind")
           ) {
-            detachTarget = innerCallee.expression;
+            // `unwrapBindChain` (helper COMPARTIDO con construcción): desliga `.bind` ENCADENADO
+            // (`X.m.bind(a).bind(b)()`) con la misma exhaustividad que el detach-por-bind de construcción
+            // (simetría de las dos ramas). `boundMemberOf` resuelve después el VT-antes-del-bind multi-hoja.
+            detachTarget = unwrapBindChain(innerCallee.expression);
           }
         }
         if (detachTarget) {
@@ -5108,17 +5134,34 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // unwrapErased); el gap era SOLO los operadores VT. El member-alias (`const M=WebAssembly.Module;
       // new M(bytes)`) sigue residual §141 (token no en-sitio). Eje VALUE-survival (compartido con
       // eval-sink/import.meta), DISTINTO del eje receiver-detach del unbound (set VT SPLIT, no fusionar).
-      for (const leaf of valueSurvivalLeaves(node.expression)) {
+      // Targets de construcción: hojas value-survival, DESLIGANDO `.bind(...)` — un constructor LIGADO,
+      // al hacer `new`, construye el ORIGINAL (`new (X.Module.bind(thisArg,...args))()` ≡ `new X.Module(
+      // ...args)`: `new` ignora el this ligado, los args se prepend). codex P1 @c4d8176. Recursivo →
+      // cubre `.bind` encadenado y VT-antes-del-bind (`new ((c?X.Module:Y).bind(...))()`), dotted/bracket/
+      // optional vía accessedMemberNames. `.call/.apply` NO aplican a construcción (invocan, no devuelven
+      // constructor). depth-guard anti-runaway. El member-alias (`const M=X.Module; new M(b)`) sigue residual.
+      const constructionTargets = (expr, depth) => {
+        if (depth > 8) return [];
+        return valueSurvivalLeaves(expr).flatMap((leaf) => {
+          // `unwrapBindChain` (helper COMPARTIDO con el unbound) desliga `.bind` encadenado; si la hoja
+          // era una cadena `.bind`, su receiver puede ser multi-hoja VT → recurse value-survival.
+          const receiver = unwrapBindChain(leaf);
+          return receiver === leaf
+            ? [leaf]
+            : constructionTargets(receiver, depth + 1);
+        });
+      };
+      for (const target of constructionTargets(node.expression, 0)) {
         if (
-          !ts.isPropertyAccessExpression(leaf) &&
-          !ts.isElementAccessExpression(leaf)
+          !ts.isPropertyAccessExpression(target) &&
+          !ts.isElementAccessExpression(target)
         ) {
           continue;
         }
-        const ctorRoot = exprPartialRoot(leaf.expression, context);
+        const ctorRoot = exprPartialRoot(target.expression, context);
         const ctorMember =
           ctorRoot &&
-          accessedMemberNames(leaf).find((mm) =>
+          accessedMemberNames(target).find((mm) =>
             isConstructionDeniedMember(ctorRoot, mm),
           );
         if (ctorMember) {
