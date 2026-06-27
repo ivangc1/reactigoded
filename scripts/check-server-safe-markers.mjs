@@ -3483,19 +3483,86 @@ function valueSurvivalLeaves(expr) {
 // si no reaparece de rama en rama). dotted/bracket(`["bind"]`)/optional vía accessedMemberNames; el caller
 // aplica DESPUÉS su política (isConstructionDeniedMember / RECEIVER_BOUND) → desligar un `.bind` inocuo es
 // inerte (se filtra después). depth-guard anti-runaway. Devuelve el expr erased si no hay `.bind`.
-function unwrapBindChain(expr, depth = 0) {
-  const u = unwrapErased(expr);
-  if (depth > 8) return u;
-  if (ts.isCallExpression(u)) {
+function unwrapBindChain(expr) {
+  // ITERATIVO (no recursivo) → SIN cap de profundidad: la PROFUNDIDAD de `.bind` encadenado tiene final
+  // (el member base) y el bucle TERMINA por descenso estricto del AST (`ic.expression` es un sub-nodo).
+  // Un cap numérico sería una frontera-FALSA (dejaría pasar 9+ niveles); la profundidad es decidible
+  // hasta el fondo, así que se cierra hasta el fondo. (codex P1 + barra "no-residual-si-tiene-final".)
+  let u = unwrapErased(expr);
+  while (ts.isCallExpression(u)) {
     const ic = unwrapErased(u.expression);
     if (
       (ts.isPropertyAccessExpression(ic) || ts.isElementAccessExpression(ic)) &&
       accessedMemberNames(ic).includes("bind")
     ) {
-      return unwrapBindChain(ic.expression, depth + 1);
+      u = unwrapErased(ic.expression);
+      continue;
     }
+    break;
   }
   return u;
+}
+
+// Pela la CADENA DE RECEIVER completa hasta el member base: `.bind(...)` calls (constructor/método LIGADO
+// construye/invoca el receiver → `unwrapBindChain`) Y `.call`/`.apply` members (INVOCAN el receiver `Y` →
+// ver a través a `Y`). Iterativo, sin cap (profundidad e INTERLEAVING arbitrarios `.bind(a).call(b)`,
+// `.call.bind(c)()`, etc. cierran hasta el fondo por construcción). El branded method está en la cadena de
+// RECEIVER (resoluble sin ejecutar). NO pela cuando el branded llega por ARGUMENTO (`.bind.call(X,…)`: `X`
+// es el arg de `.call`, no el receiver → requiere data-flow del arg = §141 residual, eval, no estructural).
+function peelReceiverChain(expr) {
+  let u = unwrapBindChain(expr);
+  while (
+    (ts.isPropertyAccessExpression(u) || ts.isElementAccessExpression(u)) &&
+    accessedMemberNames(u).some((m) => m === "call" || m === "apply")
+  ) {
+    u = unwrapBindChain(u.expression);
+  }
+  return u;
+}
+
+// ¿`n` es `Reflect.construct(T,…)` o `Reflect.apply(T,…)`? → {method, target=arg0}. `Reflect` construye/
+// invoca FUERA del universo `new`/`.call/.apply/.bind` (`Reflect.construct(T,a)≡new T(...a)`,
+// `Reflect.apply(T,t,a)≡T.apply(t,a)`) → salta los checks NewExpression/detach. PERO el TARGET es el arg0
+// EN-SITIO (decidible con los MISMOS resolvers, NO data-flow) → gap a cerrar, no residual. El gate ya
+// modela esto para el eval-sink (`.constructor→Function`); aquí se extiende a construcción-denegada
+// (WebAssembly.Module) y receiver-bound (crypto). El callee resuelve value-transparent (`(0,Reflect).apply`,
+// `(0,Reflect.apply)(…)`). RESIDUAL (target NO-en-sitio): `Reflect.get(x,"k")()` (key-string→getter),
+// alias (`const rc=Reflect.construct; rc(T,a)`), `Reflect.construct.bind(…)()` = data-flow/value-passing.
+function reflectCallTarget(n) {
+  if (!ts.isCallExpression(n) || n.arguments.length === 0) return null;
+  for (const callee of valueTransparentLeaves(unwrapErased(n.expression))) {
+    const c = unwrapErased(callee);
+    if (
+      !ts.isPropertyAccessExpression(c) &&
+      !ts.isElementAccessExpression(c)
+    ) {
+      continue;
+    }
+    const method = accessedMemberNames(c).find(
+      (x) => x === "construct" || x === "apply",
+    );
+    if (
+      method &&
+      valueTransparentLeaves(c.expression).some((o) => {
+        const oo = unwrapErased(o);
+        return ts.isIdentifier(oo) && oo.text === "Reflect";
+      })
+    ) {
+      return { method, target: n.arguments[0] };
+    }
+  }
+  return null;
+}
+
+// Targets de CONSTRUCCIÓN de `expr`: hojas value-survival, DESLIGANDO `.bind(...)` recursivamente (un
+// constructor LIGADO, al `new`, construye el ORIGINAL: `new (X.M.bind(t,...a))()` ≡ `new X.M(...a)`).
+// SIN cap (termina por descenso del AST). Compartido por el check `NewExpression` Y `Reflect.construct`
+// (mismo target-en-sitio decidible). El member-alias (`const M=X.M; new M(b)`) sigue residual (no en-sitio).
+function constructionTargets(expr) {
+  return valueSurvivalLeaves(expr).flatMap((leaf) => {
+    const receiver = unwrapBindChain(leaf);
+    return receiver === leaf ? [leaf] : constructionTargets(receiver);
+  });
 }
 
 // Aplana los SPREAD de ARRAY-LITERAL en una lista de args: `f(...["a", b], c)` → ["a", b, c]. Un
@@ -5037,16 +5104,22 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // = indirección/data-flow §141 residual (el receiver se pierde por seguimiento de valor, no en-sitio).
     if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
       // ¿`expr` resuelve a un método ∈ RECEIVER_BOUND con el receiver DESLIGADO en-sitio? → {r, member}.
-      // Robusto a wrapper VT (resuelve por las hojas this-detaching) y a alias del root (exprPartialRoot).
+      // Robusto a: wrapper VT (resuelve por las hojas this-detaching), alias del root (exprPartialRoot),
+      // y la CADENA DE RECEIVER de `.call/.apply/.bind` a CUALQUIER profundidad/orden (`peelReceiverChain`,
+      // iterativo sin cap → `X.m.call`, `X.m.bind(a).call(b)`, `(X.m.call).bind(X.m)()`, profundidad 50…
+      // todos pelan hasta el member base). Una hoja CallExpression (`.bind(…)` call) es candidata pelable.
       const boundMemberOf = (expr) => {
         const lu = unwrapErased(expr);
         const candidates =
-          ts.isPropertyAccessExpression(lu) || ts.isElementAccessExpression(lu)
+          ts.isPropertyAccessExpression(lu) ||
+          ts.isElementAccessExpression(lu) ||
+          ts.isCallExpression(lu)
             ? [lu]
             : valueTransparentChildren(lu).length > 0
               ? valueTransparentLeaves(lu).map(unwrapErased)
               : [];
-        for (const c of candidates) {
+        for (const cand of candidates) {
+          const c = peelReceiverChain(cand);
           if (
             !ts.isPropertyAccessExpression(c) &&
             !ts.isElementAccessExpression(c)
@@ -5095,16 +5168,24 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               ts.isElementAccessExpression(innerCallee)) &&
             accessedMemberNames(innerCallee).includes("bind")
           ) {
-            // `unwrapBindChain` (helper COMPARTIDO con construcción): desliga `.bind` ENCADENADO
-            // (`X.m.bind(a).bind(b)()`) con la misma exhaustividad que el detach-por-bind de construcción
-            // (simetría de las dos ramas). `boundMemberOf` resuelve después el VT-antes-del-bind multi-hoja.
-            detachTarget = unwrapBindChain(innerCallee.expression);
+            // `boundMemberOf` → `peelReceiverChain` pela el resto de la cadena de receiver (`.bind`
+            // encadenado, `.call/.apply` intercalados, VT-antes) a cualquier profundidad.
+            detachTarget = innerCallee.expression;
           }
         }
         if (detachTarget) {
           hit = boundMemberOf(detachTarget);
           via = "Function.prototype.call/apply/bind";
         }
+      }
+      // (c) `Reflect.apply(T, thisArg, args)` ≡ `T.apply(thisArg, args)` — invoca T con `this` CONTROLADO
+      // (arg1) → MISMO detach que `.call/.apply`, pero T (arg0) llega vía un builtin Reflect (fuera del
+      // universo `.call/.apply/.bind`). T EN-SITIO → decidible con `boundMemberOf` (el gate ya modela
+      // Reflect para el eval-sink). `Reflect.construct` → más abajo (construcción). codex P1.
+      const reflectTgt = reflectCallTarget(node);
+      if (!hit && reflectTgt && reflectTgt.method === "apply") {
+        hit = boundMemberOf(reflectTgt.target);
+        if (hit) via = "Reflect.apply (this controlado)";
       }
       if (hit) {
         const start = node.getStart(sourceFile);
@@ -5116,6 +5197,36 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           line: line + 1,
           detail: `llamada UNBOUND de \`${hit.r}.${hit.member}\` — método branded host DESLIGADO de su receiver (${via}) → \`this\` no es el objeto ${hit.r} → TypeError en Edge/SSR. La llamada LIGADA (\`${hit.r}.${hit.member}(…)\`, o envuelta en parens/cast) es Edge-safe: ${lineText}`,
         });
+      }
+      // `Reflect.construct(T, args)` ≡ `new T(...args)` — construye T (arg0) SIN `new` → salta el check
+      // `NewExpression`. T EN-SITIO → mismo resolver `constructionTargets`; cierra la construcción-vía-Reflect.
+      if (reflectTgt && reflectTgt.method === "construct") {
+        for (const target of constructionTargets(reflectTgt.target)) {
+          if (
+            !ts.isPropertyAccessExpression(target) &&
+            !ts.isElementAccessExpression(target)
+          ) {
+            continue;
+          }
+          const ctorRoot = exprPartialRoot(target.expression, context);
+          const ctorMember =
+            ctorRoot &&
+            accessedMemberNames(target).find((mm) =>
+              isConstructionDeniedMember(ctorRoot, mm),
+            );
+          if (ctorMember) {
+            const start = node.getStart(sourceFile);
+            const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+            const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+            violations.push({
+              file: relPath,
+              rule: "no-bare-dom-access",
+              line: line + 1,
+              detail: `\`Reflect.construct(${ctorRoot}.${ctorMember}, …)\` ≡ \`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render: ${lineText}`,
+            });
+            break;
+          }
+        }
       }
     }
     // CONSTRUCCIÓN denegada: `new WebAssembly.Module(bytes)` compila bytes SIEMPRE (sin overload
@@ -5134,24 +5245,10 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       // unwrapErased); el gap era SOLO los operadores VT. El member-alias (`const M=WebAssembly.Module;
       // new M(bytes)`) sigue residual §141 (token no en-sitio). Eje VALUE-survival (compartido con
       // eval-sink/import.meta), DISTINTO del eje receiver-detach del unbound (set VT SPLIT, no fusionar).
-      // Targets de construcción: hojas value-survival, DESLIGANDO `.bind(...)` — un constructor LIGADO,
-      // al hacer `new`, construye el ORIGINAL (`new (X.Module.bind(thisArg,...args))()` ≡ `new X.Module(
-      // ...args)`: `new` ignora el this ligado, los args se prepend). codex P1 @c4d8176. Recursivo →
-      // cubre `.bind` encadenado y VT-antes-del-bind (`new ((c?X.Module:Y).bind(...))()`), dotted/bracket/
-      // optional vía accessedMemberNames. `.call/.apply` NO aplican a construcción (invocan, no devuelven
-      // constructor). depth-guard anti-runaway. El member-alias (`const M=X.Module; new M(b)`) sigue residual.
-      const constructionTargets = (expr, depth) => {
-        if (depth > 8) return [];
-        return valueSurvivalLeaves(expr).flatMap((leaf) => {
-          // `unwrapBindChain` (helper COMPARTIDO con el unbound) desliga `.bind` encadenado; si la hoja
-          // era una cadena `.bind`, su receiver puede ser multi-hoja VT → recurse value-survival.
-          const receiver = unwrapBindChain(leaf);
-          return receiver === leaf
-            ? [leaf]
-            : constructionTargets(receiver, depth + 1);
-        });
-      };
-      for (const target of constructionTargets(node.expression, 0)) {
+      // `constructionTargets` (module-level): hojas value-survival DESLIGANDO `.bind(...)` recursivo
+      // (`new (X.Module.bind(t,...a))()` ≡ `new X.Module(...a)`; `.bind` encadenado + VT-antes + dotted/
+      // bracket/optional). `.call/.apply` NO aplican a construcción. El member-alias sigue residual.
+      for (const target of constructionTargets(node.expression)) {
         if (
           !ts.isPropertyAccessExpression(target) &&
           !ts.isElementAccessExpression(target)

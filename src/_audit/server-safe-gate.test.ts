@@ -556,6 +556,32 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(F(`crypto.randomUUID.apply(null, [])`)).toBe(true);
     expect(F(`crypto.getRandomValues.bind(null)(new Uint8Array(4))`)).toBe(true); // bind invocado en-sitio
     expect(F(`crypto.getRandomValues.bind(null).bind(null)(new Uint8Array(4))`)).toBe(true); // .bind ENCADENADO (unwrapBindChain, simétrico con construcción)
+    // `.call`/`.apply` COMO MEMBER alcanzado como detach-target (vía .bind o operador) — `boundMemberOf` ve
+    // a través (son los métodos de Function que INVOCAN el receiver). codex P1 @39e593b.
+    expect(F(`((crypto.randomUUID.call as any).bind(crypto.randomUUID))(null)`)).toBe(true); // .call vía .bind (codex)
+    expect(F(`(0, crypto.getRandomValues.call)(null, new Uint8Array(4))`)).toBe(true); // .call vía operador
+    expect(F(`(crypto.getRandomValues.call as any).call(crypto.getRandomValues, null, new Uint8Array(4))`)).toBe(true); // .call.call (see-through recursivo)
+    // CARACTERIZACIÓN del eje composición {call,apply,bind} (cerrado por CONSTRUCCIÓN, no nodo-a-nodo):
+    // (1) branded en posición RECEIVER (el `.expression` de los ops) → DECIDIBLE estructuralmente por
+    // `peelReceiverChain` (iterativo, SIN cap) a CUALQUIER profundidad/orden. El depth-guard de 8 era una
+    // frontera-FALSA (dejaba pasar 9+); la profundidad tiene final (el member base) → se cierra hasta el fondo.
+    expect(F(`crypto.getRandomValues${".bind(null)".repeat(20)}(new Uint8Array(4))`)).toBe(true); // .bind ×20 (profundidad)
+    expect(F(`crypto.getRandomValues.bind(null).call(null, new Uint8Array(4))`)).toBe(true); // bind-then-call (interleaving)
+    expect(F(`crypto.getRandomValues.bind(null).bind(null).call(null, new Uint8Array(4))`)).toBe(true); // bind²-then-call
+    // (2a) en composición {call,apply,bind}, branded en posición ARGUMENTO (`.bind`-vía-`.call`, `(.bind).bind`):
+    // el branded se rutea por el arg de un Function-method al `this` de OTRO → requiere EVALUAR el resultado de
+    // una invocación, no pattern-matching estructural → §141 RESIDUAL genuino (mismo cruce que `const r=X.m;r()`).
+    expect(F(`((crypto.getRandomValues.bind as any).call(crypto.getRandomValues, null))(new Uint8Array(4))`)).toBe(false); // .bind-vía-.call
+    expect(F(`((crypto.getRandomValues.bind as any).bind(crypto.getRandomValues))(null)(new Uint8Array(4))`)).toBe(false); // (.bind).bind(X.m)
+    // (2b) Reflect.construct(T,…)≡new T(...) / Reflect.apply(T,…)≡T.apply(...) — constructos FUERA de new/
+    // {call,apply,bind} (saltan los checks NewExpression/detach). T (arg0) EN-SITIO → DECIDIBLE con los mismos
+    // resolvers → FLAG (cerrado, codex P1; el gate ya modelaba Reflect para el eval-sink). T NO-en-sitio
+    // (alias `const rc=Reflect.construct`, target-alias, `Reflect.get`-key-string) = data-flow residual → PASA.
+    expect(F(`Reflect.apply(crypto.getRandomValues, null, [new Uint8Array(4)])`)).toBe(true); // Reflect.apply target en-sitio
+    expect(F(`Reflect.construct(WebAssembly.Module, [new Uint8Array(4)])`)).toBe(true); // Reflect.construct target en-sitio
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const C = () => { const rc = Reflect.construct; return rc(WebAssembly.Module, [new Uint8Array(4)]); };`, "rc.fixture.tsx").length > 0,
+    ).toBe(false); // Reflect alias → data-flow residual
     expect(F(`crypto.getRandomValues["call"](null, new Uint8Array(4))`)).toBe(true); // bracket-literal
     expect(F(`crypto.getRandomValues?.call?.(null, new Uint8Array(4))`)).toBe(true); // optional
     expect(F(`(performance as any).measureUserAgentSpecificMemory()`)).toBe(true); // browser-only
