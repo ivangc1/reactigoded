@@ -556,6 +556,35 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`const M = WebAssembly.Module; return new M(new Uint8Array());`)).toBe(false);
   });
 
+  // codex P1 (review genérico): método branded host bucket-1 (RECEIVER_BOUND_MEMBERS) llamado UNBOUND
+  // lanza TypeError (this detachado). Edge-específico (crypto: OK-Node/throw-Edge). Set VT split SOLO aquí:
+  // operadores this-detaching (,/&&/||/??/?:/=) detachan; parens/cast preservan.
+  it("llamada UNBOUND de método branded host: detach-por-operador cazado, bound/console/data-flow no (codex P1)", () => {
+    const any = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const C = () => ${b};`, "ub.fixture.tsx").length > 0;
+    const stmt = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const C = () => { ${b} };`, "ub2.fixture.tsx").length > 0;
+    // FAIL-OPEN Edge-específico (crypto) — CAZADO en todas las formas this-detaching:
+    expect(any(`(0, crypto.getRandomValues)(new Uint8Array(4))`)).toBe(true);
+    expect(any(`(crypto.getRandomValues || (() => {}))(new Uint8Array(4))`)).toBe(true);
+    expect(any(`(true ? crypto.randomUUID : (() => ""))()`)).toBe(true);
+    expect(any(`(0, (crypto as any)["randomUUID"])()`)).toBe(true);
+    expect(stmt(`const c = crypto; return (0, c.getRandomValues)(new Uint8Array(4));`)).toBe(true);
+    // performance.now: over-strict consciente (lanza unbound en TODOS los runtimes, no solo Edge):
+    expect(any(`(0, performance.now)()`)).toBe(true);
+    // BOUND (receiver en-sitio; parens/cast preservan `this`) — PASA, 0-FP:
+    expect(any(`crypto.getRandomValues(new Uint8Array(4))`)).toBe(false);
+    expect(any(`(crypto.getRandomValues)(new Uint8Array(4))`)).toBe(false);
+    expect(any(`(crypto.getRandomValues as any)(new Uint8Array(4))`)).toBe(false);
+    expect(any(`crypto.randomUUID()`)).toBe(false);
+    // console NO es receiver-bound (callable-unbound, escribe a stream) — PASA, sin FP:
+    expect(any(`(0, console.log)("x")`)).toBe(false);
+    expect(any(`(0, console.error)("x")`)).toBe(false);
+    // RESIDUAL data-flow §141: detached-NO-invocado + var-extract → el receiver se pierde por value-tracking:
+    expect(stmt(`const f = (0, crypto.getRandomValues); return f;`)).toBe(false);
+    expect(stmt(`const r = crypto.getRandomValues; return r(new Uint8Array(4));`)).toBe(false);
+  });
+
   it("caza `import(<literal builtin>)` dinámico; deja residual el variable/createRequire (codex P1)", () => {
     const has = (body: string) =>
       checkSourceFile(`/** @server-safe */\n${body}`, "dynimp.fixture.tsx").some(

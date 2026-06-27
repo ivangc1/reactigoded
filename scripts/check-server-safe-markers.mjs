@@ -589,6 +589,20 @@ function isConstructionDeniedMember(root, member) {
   return Boolean(CONSTRUCTION_DENIED_MEMBERS[root]?.has(member));
 }
 
+// MÉTODOS bucket-1 ALLOWED que son RECEIVER-BOUND (brand-check): seguros llamados LIGADOS
+// (`crypto.getRandomValues(b)`) pero LANZAN llamados DESLIGADOS (`(0, crypto.getRandomValues)(b)` →
+// `this` ya no es el objeto host → TypeError). El allowlist confirma "miembro Edge-present", NO
+// "seguro llamado sin receiver" — son ejes distintos. Set DERIVADO del oráculo conductual
+// `@edge-runtime/vm` (member a member: `(0, X.m)()` ¿lanza?): crypto.{randomUUID,getRandomValues} y
+// performance.now LANZAN; `console.*` son CALLABLE-UNBOUND (escriben a un stream, sin brand) → EXCLUIDOS
+// (flaggearlos sería FP). crypto/performance unbound: OK-Node pero THROW-Edge (crypto) o THROW-ambos
+// (performance, over-strict-consciente — código roto en todos lados). El subset se re-deriva en #190
+// contra producción. codex P1 (review genérico: "deny unbound calls to branded host methods").
+const RECEIVER_BOUND_MEMBERS = {
+  crypto: new Set(["randomUUID", "getRandomValues"]),
+  performance: new Set(["now"]),
+};
+
 // ¿`root` tiene política de miembro (denylist bucket-2 O allowlist bucket-1 O constructor-ban)?
 // Predicado CENTRAL (exprPartialRoot lo consulta para resolver el root + sus aliases).
 function isPartialMemberRoot(root) {
@@ -4957,6 +4971,46 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           line: line + 1,
           detail: `import() dinámico de \`${litSpec}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
         });
+      }
+    }
+    // LLAMADA UNBOUND de método branded host (codex P1): un método bucket-1 ALLOWED ∈
+    // RECEIVER_BOUND_MEMBERS es Edge-safe LIGADO (`crypto.getRandomValues(b)`; parens/cast preservan
+    // `this`) pero LANZA DESLIGADO (`(0, crypto.getRandomValues)(b)` → `this` ya no es el objeto host).
+    // El set value-transparente preserva el VALOR pero `,`/`&&`/`||`/`??`/`?:`/`=` DETACHAN el `this`;
+    // parens/`as`/`!`/`<T>` (erased) NO. Por eso este check SPLIT-ea el set SOLO aquí: `unwrapErased`
+    // (this-preserving) deja un nodo VT residual ⟺ el callee cruzó un operador this-detaching. El set
+    // VT unificado para eval-sinks (rama ①, `.constructor`) queda INTACTO. Se caza SOLO el callee
+    // INVOCADO en-sitio; el detach NO-invocado (`const f=(0,X.m)`) y el var-extract (`const r=X.m; r()`)
+    // = indirección/data-flow §141 residual (el receiver se pierde por seguimiento de valor, no en-sitio).
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      const calleeStripped = unwrapErased(node.expression);
+      if (valueTransparentChildren(calleeStripped).length > 0) {
+        for (const leaf of valueTransparentLeaves(calleeStripped)) {
+          const lu = unwrapErased(leaf);
+          if (
+            !ts.isPropertyAccessExpression(lu) &&
+            !ts.isElementAccessExpression(lu)
+          ) {
+            continue;
+          }
+          const r = exprPartialRoot(lu.expression, context);
+          const bound = r ? RECEIVER_BOUND_MEMBERS[r] : null;
+          const member = bound
+            ? accessedMemberNames(lu).find((mm) => bound.has(mm))
+            : null;
+          if (member) {
+            const start = node.getStart(sourceFile);
+            const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+            const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+            violations.push({
+              file: relPath,
+              rule: "no-bare-dom-access",
+              line: line + 1,
+              detail: `llamada UNBOUND de \`${r}.${member}\` — método branded host DESLIGADO de su receiver (operador this-detaching) → \`this\` no es el objeto ${r} → TypeError en Edge/SSR. La llamada LIGADA (\`${r}.${member}(…)\`, o envuelta en parens/cast) es Edge-safe: ${lineText}`,
+            });
+            break;
+          }
+        }
       }
     }
     // CONSTRUCCIÓN denegada: `new WebAssembly.Module(bytes)` compila bytes SIEMPRE (sin overload
