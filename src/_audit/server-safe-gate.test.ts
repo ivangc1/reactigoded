@@ -485,9 +485,12 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
   it("buckets de namespaces host-populated (crypto/console allowlist; Intl wholesale)", () => {
     const any = (b: string) =>
       checkSourceFile(`/** @server-safe */\nexport const f = () => ${b};`, "bk.fixture.tsx").length > 0;
-    // crypto bucket 1 — DENY node:crypto (era fail-open), ALLOW Web Crypto:
-    expect(any(`(crypto as any).timingSafeEqual(0 as any, 0 as any)`)).toBe(true);
-    expect(any(`(crypto as any).createHash("sha256")`)).toBe(true);
+    // crypto WHOLESALE (revertido): el global Web Crypto = {subtle,getRandomValues,randomUUID} IDÉNTICO
+    // en browser+Node+Edge → cero miembro divergente. createHash/timingSafeEqual NO existen en el global
+    // de NINGÚN runtime (node:crypto MÓDULO) → (crypto as any).createHash() lanza idéntico = UNIVERSAL-crash
+    // out-of-mandate (el npm test del contributor lo caza). Por presencia, crypto.* PASA wholesale:
+    expect(any(`(crypto as any).timingSafeEqual(0 as any, 0 as any)`)).toBe(false);
+    expect(any(`(crypto as any).createHash("sha256")`)).toBe(false);
     expect(any(`crypto.randomUUID()`)).toBe(false);
     expect(any(`crypto.subtle`)).toBe(false);
     expect(any(`crypto.getRandomValues(new Uint8Array(8))`)).toBe(false);
@@ -502,8 +505,8 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`console.warn("x")`)).toBe(false);
     expect(any(`console.error("x")`)).toBe(false);
     expect(any(`console.info("x"); console.debug("y"); console.trace("z")`)).toBe(false);
-    // crypto alias + destructure flow through the central predicate:
-    expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { createHash } = crypto as any; return createHash("x"); }`, "bk2.fixture.tsx").length > 0).toBe(true);
+    // crypto wholesale: destructuring de cualquier miembro PASA (incl. el universal createHash):
+    expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { createHash } = crypto as any; return createHash("x"); }`, "bk2.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(`/** @server-safe */\nexport function f(){ const { randomUUID } = crypto; return randomUUID(); }`, "bk3.fixture.tsx")).toEqual([]);
     // Intl bucket 3 — wholesale (NO allowlist; DurationFormat allowed = correcto):
     expect(any(`new Intl.NumberFormat()`)).toBe(false);
@@ -511,6 +514,52 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     // WebAssembly bucket 2 — denylist intacto:
     expect(any(`WebAssembly.compile(new Uint8Array())`)).toBe(true);
     expect(any(`WebAssembly.validate(new Uint8Array())`)).toBe(false);
+  });
+
+  // PIN de la tabla 3-RUNTIME (audit de mandato — "¿solo crypto es universal?"). Cada candidato fue
+  // probado en los TRES runtimes: Chromium real (Playwright, http://localhost + COOP/COEP — about:blank
+  // da falsos-undefined para APIs secure-context-gated), Node, y @edge-runtime/vm. REGLA: funciona en
+  // browser O Node pero rompe en Edge/server = DIVERGENCIA → el gate lo CAZA (única defensa, el npm test
+  // del contributor no lo ve). Rompe en los TRES idéntico = UNIVERSAL-crash → out-of-mandate, el gate NO
+  // lo caza (el npm test del contributor ya lo caza). Tabla verificada (browser / Node / Edge):
+  //   crypto.createHash/timingSafeEqual   ausente / ausente / ausente   → UNIVERSAL → PASA
+  //   (0,crypto.getRandomValues)() unbound throws  / OK     / throws     → DIVERGENCIA(Node-OK) → FLAG
+  //   measureUserAgentSpecificMemory      PRESENTE / ausente / ausente   → client-vs-server → FLAG
+  //   navigator.geolocation/clipboard     PRESENTE / ausente / ausente   → client-vs-server → FLAG
+  //   setTimeout("code")                  EVALÚA   / throws / throws      → eval-sink/c-vs-s → FLAG
+  //   console.table/group/clear/dirxml    presente / presente / ausente  → Node-vs-Edge → FLAG
+  //   performance.eventLoopUtilization    ausente  / presente / ausente  → Node-vs-Edge → FLAG
+  //   (0,performance.now)() unbound       throws   / throws / throws      → UNIVERSAL → PASA
+  // REGENERAR: scratchpad/vm (@edge-runtime/vm) + Playwright chromium http://localhost COOP/COEP + Node.
+  it("H. clasificación de mandato pineada contra la tabla 3-runtime (divergencia→FLAG, universal→PASA)", () => {
+    const F = (b: string) =>
+      checkSourceFile(`/** @server-safe */\nexport const C = () => ${b};`, "h.fixture.tsx").length > 0;
+    // UNIVERSAL-crash (rompe en los 3) → out-of-mandate → PASA:
+    expect(F(`(crypto as any).createHash("sha256")`)).toBe(false);
+    expect(F(`(crypto as any).timingSafeEqual(0 as any, 0 as any)`)).toBe(false);
+    expect(F(`(0, performance.now)()`)).toBe(false);
+    // CONTROL — el PASA de createHash es por WHOLESALE, no por una causa frágil (el eje invocación
+    // NO contamina el eje presencia, y el `as any` NO vuelve el root irresoluble):
+    //  (a) createHash/zBogus NO estaban en el viejo allowlist {subtle,randomUUID,getRandomValues} →
+    //      si crypto siguiera bucket-1 (re-denegado por la puerta de RECEIVER_BOUND), esto sería FLAG.
+    //      PASA ⟹ wholesale-de-presencia (isDeniedPartialMember cae a `return false`, no a la rama allow).
+    expect(F(`(crypto as any).zBogusNonExistentMember`)).toBe(false);
+    //  (b) crypto SÍ resuelve como root a través del cast (el unbound flaggea) → el PASA de createHash
+    //      es por wholesale, NO porque `as any` rompa la resolución del root (si lo rompiera, esto = PASA):
+    expect(F(`(0, (crypto as any).getRandomValues)(new Uint8Array(4))`)).toBe(true);
+    // DIVERGENCIA (browser O Node sí, Edge no) → in-mandate → FLAG:
+    expect(F(`(0, crypto.getRandomValues)(new Uint8Array(4))`)).toBe(true); // Node-OK/Edge-throws
+    expect(F(`(performance as any).measureUserAgentSpecificMemory()`)).toBe(true); // browser-only
+    expect(F(`(navigator as any).geolocation`)).toBe(true); // browser-only (navigator denied root)
+    expect(F(`(console as any).table([])`)).toBe(true); // Node-present/Edge-absent
+    expect(F(`(performance as any).eventLoopUtilization()`)).toBe(true); // Node-only
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const C = () => { setTimeout("code", 0); };`, "h2.fixture.tsx").length > 0,
+    ).toBe(true); // browser-evals, Node/Edge throw → eval-sink
+    // Línea base allowed (no candidatos):
+    expect(F(`crypto.getRandomValues(new Uint8Array(4))`)).toBe(false); // bound
+    expect(F(`performance.now()`)).toBe(false); // bound
+    expect(F(`console.log("x")`)).toBe(false);
   });
 
   // codex P2 (review genérico): `performance` ES bucket-1 — la INSTANCIA existe en Edge (VM:

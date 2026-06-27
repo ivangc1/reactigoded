@@ -238,13 +238,14 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     expect(dump).toEqual({
       // performance: VM contaminado para miembros → solo convergencia {now,timeOrigin}, resto complemento.
       performance: ["now", "timeOrigin"],
-      // crypto: VM-fiel (node:crypto undefined) → interfaz Crypto del global.
-      crypto: ["getRandomValues", "randomUUID", "subtle"],
       // console: VM-fiel (table/Console undefined aunque Node los tiene) → los 12 Edge-present.
       console: [
         "assert", "count", "debug", "dir", "error", "info",
         "log", "time", "timeEnd", "timeLog", "trace", "warn",
       ],
+      // crypto NO está: el global Web Crypto = {subtle,getRandomValues,randomUUID} IDÉNTICO en los 3
+      // runtimes → cero miembro divergente → WHOLESALE para presencia. La invocación-unbound se cubre
+      // por RECEIVER_BOUND_MEMBERS (eje ortogonal), no por allowlist de presencia. Ver Test H (tabla 3-runtime).
     });
   });
 

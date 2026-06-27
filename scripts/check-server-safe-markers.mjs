@@ -542,13 +542,14 @@ const SAFE_PARTIAL_MEMBERS = {
   // CONSTRUCCIÓN (complemento), NO por denylist → resiste que el VM mienta sobre él. Refinar contra
   // introspección de PRODUCCIÓN (no otro oráculo local) en #190. codex P2 (review genérico).
   performance: new Set(["now", "timeOrigin"]),
-  // Edge `crypto` = Web Crypto. Doc Vercel CONFIRMA `crypto`/`SubtleCrypto`/`CryptoKey`; los 3
-  // miembros de la interfaz Crypto (`subtle`/`randomUUID`/`getRandomValues`) son la superficie
-  // COMPLETA del global → no hay falso-ALLOW ni FP. (Oráculo passthrough para crypto, pero benigno:
-  // el `crypto` global de Node ES la Web Crypto = la de Edge; diff = 0 false-allows.) Lo que la gente
-  // confunde con node:crypto (`createHash`/`timingSafeEqual`/…) vive en el MÓDULO `node:crypto`, no en
-  // el global → denegado por complemento. Verificado doc Vercel (review genérico).
-  crypto: new Set(["subtle", "randomUUID", "getRandomValues"]),
+  // `crypto` NO es bucket-1: el global Web Crypto = `{subtle, getRandomValues, randomUUID}` IDÉNTICO en
+  // browser + Node + Edge (verificado 3-runtime: Chromium real con COOP/COEP, Node, @edge-runtime/vm) →
+  // CERO miembro divergente que denegar. El "fail-open de crypto.createHash" era premisa FALSA: createHash/
+  // timingSafeEqual NO existen en el global crypto de NINGÚN runtime (viven en el MÓDULO `node:crypto`, que
+  // SÍ caza el check de node-builtins por import). `(crypto as any).createHash()` lanza idéntico en los 3 →
+  // UNIVERSAL-crash = out-of-mandate (el `npm test` del contributor en Node lo caza, no es divergencia-Edge).
+  // → crypto WHOLESALE para presencia-de-miembro. La INVOCACIÓN unbound (`(0,crypto.getRandomValues)(b)`:
+  // OK-Node/throw-Edge = divergencia real) SÍ se caza vía RECEIVER_BOUND_MEMBERS (eje ortogonal). codex P2.
   // Edge `console` = consola de debugging MÍNIMA (NO la interfaz WHATWG completa). Set DERIVADO del
   // ORÁCULO `@edge-runtime/primitives` (su `console` es subset propio, NO passthrough del de Node —
   // verificado `=== globalThis.console` → false), intersección Node∩Edge. La spec WHATWG NO sirve de
@@ -605,13 +606,23 @@ const RECEIVER_BOUND_MEMBERS = {
   crypto: new Set(["randomUUID", "getRandomValues"]),
 };
 
-// ¿`root` tiene política de miembro (denylist bucket-2 O allowlist bucket-1 O constructor-ban)?
-// Predicado CENTRAL (exprPartialRoot lo consulta para resolver el root + sus aliases).
+// PREDICADO DE RESOLUCIÓN, **NO de política** (contrato blindado tras el barrido de "ejes ortogonales
+// bajo predicado compartido" — el patrón que falló en WebAssembly.Module/crypto). Responde UNA pregunta
+// axis-agnóstica: "¿algún check de miembro se interesa por este root? → exprPartialRoot lo resuelve (+ sus
+// aliases)". Es la UNIÓN de los 4 sets SOLO para alcanzabilidad. NUNCA usar este predicado para DECIDIR un
+// flag: cada POLÍTICA consulta SU PROPIO set por separado — presencia→isDeniedPartialMember (SAFE_PARTIAL/
+// PARTIAL_SAFE), construcción→isConstructionDeniedMember (CONSTRUCTION_DENIED), invocación-unbound→el check
+// L5005 (RECEIVER_BOUND directamente). Por eso incluir RECEIVER_BOUND aquí es INERTE para presencia: hace
+// `crypto` RESOLVIBLE (lo necesita el check unbound) pero NO presence-denied — isDeniedPartialMember NO
+// consulta RECEIVER_BOUND y devuelve false (wholesale) para crypto. Resolver ≠ denegar. La inertness está
+// pineada por Test H (`(crypto as any).zBogus`→PASA): si alguien rompe el aislamiento (hace crypto
+// presence-denied), Test H revienta. ÚNICO call-site: exprPartialRoot (resolución), verificado por grep.
 function isPartialMemberRoot(root) {
   return Boolean(
     PARTIAL_SAFE_GLOBAL_MEMBERS[root] ||
       SAFE_PARTIAL_MEMBERS[root] ||
-      CONSTRUCTION_DENIED_MEMBERS[root],
+      CONSTRUCTION_DENIED_MEMBERS[root] ||
+      RECEIVER_BOUND_MEMBERS[root],
   );
 }
 // ¿`member` está DENEGADO para `root`? denylist (bucket 2): ∈ set. allowlist (bucket 1): ∉ set.
