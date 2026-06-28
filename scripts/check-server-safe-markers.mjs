@@ -4567,6 +4567,26 @@ function tryResolveNonAuditable(noExtAbsPath, fileExists) {
 // envía el .mjs) = bypass cross-module. Hoy LATENTE (0 .mjs/.js en src) → fail-closed.
 const VITE_RESOLVE_EXTS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
 
+// Orden COMPLETO de resolución de Vite para un specifier SIN extensión: file-ext (resolve.extensions, con
+// `.json` ÚLTIMO) ANTES que dir-index (Vite prueba `<base>.<ext>` archivo antes que `<base>/index.<ext>`).
+// La PRIMERA extensión que existe es la que Vite ENVÍA. codex P2 (`.json`).
+const VITE_RESOLVE_ORDER = [
+  ...VITE_RESOLVE_EXTS,
+  ".json",
+  ...VITE_RESOLVE_EXTS.map((e) => `/index${e}`),
+  "/index.json",
+];
+// ¿`<base>` (extensionless) resuelve a un `.json`? — el PRIMER candidato existente en el orden de Vite es
+// un `.json`. Vite (resolve.extensions incluye `.json` + resolveJsonModule) lo carga como DATOS, no código
+// de render → external. Captura la precedencia exacta: `<base>.json` FILE gana al dir-index (`<base>/
+// index.ts`, file-beats-dir) pero PIERDE ante un `<base>.<source/js-ext>` FILE (más precedencia). codex P2.
+function resolvesToJsonAsset(noExt, fileExists) {
+  for (const ext of VITE_RESOLVE_ORDER) {
+    if (fileExists(`${noExt}${ext}`)) return ext.endsWith(".json");
+  }
+  return false;
+}
+
 // Extensiones de SOURCE que TS/Vite resuelven (sin .json — no se audita). Un specifier que YA las
 // trae (`./helper.mjs`, `@/x/helper.ts`) es EXPLÍCITO: Vite lo resuelve EXACTAMENTE (resolve.extensions
 // solo aplica a imports SIN extensión), así que se chequea el archivo exacto ANTES de la cascada y NO
@@ -4767,6 +4787,11 @@ function resolveImportPath(
         // Extensión explícita (`@/x/helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
         const exact =
           hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
+        // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
+        // `<base>.json` FILE gana al dir-index (file-beats-dir). codex P2.
+        if (!exact && resolvesToJsonAsset(noExt, fileExists)) {
+          return { kind: "external" };
+        }
         const resolved = exact ?? tryResolveFile(noExt, fileExists);
         if (resolved) {
           if (exact && !isAuditableExt(exact)) {
@@ -4808,6 +4833,11 @@ function resolveImportPath(
   const noExt = crossOsResolve(importerDir, specifier);
   // Extensión explícita (`./helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
   const exact = hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
+  // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
+  // `<base>.json` FILE gana al dir-index (file-beats-dir). codex P2.
+  if (!exact && resolvesToJsonAsset(noExt, fileExists)) {
+    return { kind: "external" };
+  }
   const resolved = exact ?? tryResolveFile(noExt, fileExists);
   if (resolved) {
     // Solo seguimos dentro de src/ (proxy para "archivo del DS, no

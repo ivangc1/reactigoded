@@ -1056,6 +1056,22 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("edge-denied");
   });
 
+  it("import EXTENSIONLESS que resuelve a `.json` → external (Vite resolve.extensions + precedencia file-vs-dir), codex P2", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    // FP cerrado: `./data` con data.json → external (JSON = datos, no código de render); dot + alias:
+    expect(resolveImportPath("./data", "/repo/src/c.tsx", [], has(["/repo/src/data.json"]), roots).kind).toBe("external");
+    expect(resolveImportPath("@/data", "/repo/src/c.tsx", [{ prefix: "@/", targetPrefix: "/repo/src/" }], has(["/repo/src/data.json"]), roots).kind).toBe("external");
+    // Precedencia Vite: `<base>.json` FILE gana al dir-index (file-beats-dir):
+    expect(resolveImportPath("./foo", "/repo/src/c.tsx", [], has(["/repo/src/foo.json", "/repo/src/foo/index.ts"]), roots).kind).toBe("external");
+    // …pero PIERDE ante un source/JS FILE (más precedencia en resolve.extensions):
+    expect(resolveImportPath("./mix", "/repo/src/c.tsx", [], has(["/repo/src/mix.ts", "/repo/src/mix.json"]), roots).kind).toBe("internal");
+    expect(resolveImportPath("./jx", "/repo/src/c.tsx", [], has(["/repo/src/jx.js", "/repo/src/jx.json"]), roots).kind).toBe("unresolvable");
+    // dir-index json: `dir/index.json` solo → external; `dir2/index.ts` gana a `dir2/index.json`:
+    expect(resolveImportPath("./dir", "/repo/src/c.tsx", [], has(["/repo/src/dir/index.json"]), roots).kind).toBe("external");
+    expect(resolveImportPath("./dir2", "/repo/src/c.tsx", [], has(["/repo/src/dir2/index.ts", "/repo/src/dir2/index.json"]), roots).kind).toBe("internal");
+  });
+
   it("SIGUE el dynamic import RENDER-PATH con specifier literal (relativo/alias) y audita el módulo; deferred/variable/builtin por su vía (codex P1)", () => {
     const dirty = `export function cwd() { return process.cwd(); }`;
     // 1. FAIL-OPEN CERRADO: `await import("./x")` en el render audita ./x.ts (process.cwd → flag).
