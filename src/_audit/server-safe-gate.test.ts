@@ -999,13 +999,20 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     }
   });
 
-  it("import de ASSET (`?query` de bundler / extensión no-código) → external, NO unresolved-import (codex P2)", () => {
+  it("import de ASSET (LOADER `?raw/?url/?worker/?module` / extensión no-código) → external; query ARBITRARIA `?v=1` sobre .ts → audita (codex P2 + P1)", () => {
     const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
     const assetExists = (p: string) => /\.(wasm|css|png|svg)$/.test(p);
-    // `?query` de bundler (Wasm-as-Module Edge-safe, ?url, ?raw, ?worker) → external (no se sigue el asset):
+    // LOADER de bundler (Wasm-as-Module Edge-safe, ?url, ?raw, ?worker) → external (no se sigue el asset):
     for (const spec of ["./add.wasm?module", "./styles.css?inline", "./img.png?url", "./w.ts?worker"]) {
       expect(resolveImportPath(spec, "/repo/src/c.tsx", [], () => false, roots).kind).toBe("external");
     }
+    // codex P1: una query ARBITRARIA (`?v=1` cache-bust, NO loader) sobre un `.ts` EJECUTABLE NO es external
+    // — Vite lo transforma como código → se DESLIGA la query y se AUDITA (el `?→external` incondicional era
+    // fail-open: `./edge.ts?v=1` con `process.cwd()` se saltaba la auditoría):
+    const codeExists = (p: string) => p.endsWith("/edge.ts");
+    expect(resolveImportPath("./edge.ts?v=1", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    expect(resolveImportPath("./edge.ts?t=1&x=2", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    expect(resolveImportPath("./edge.ts?worker", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("external"); // loader sí
     // Asset SIN query que EXISTE (extensión no-código) → external:
     for (const spec of ["./add.wasm", "./styles.css", "./logo.svg"]) {
       expect(resolveImportPath(spec, "/repo/src/c.tsx", [], assetExists, roots).kind).toBe("external");

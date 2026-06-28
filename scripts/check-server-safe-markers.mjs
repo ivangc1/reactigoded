@@ -4607,6 +4607,20 @@ function bundlerShadowSibling(resolvedAbsPath, fileExists) {
  *     a ningún archivo. El gate falla ruidosamente — un skip silencioso
  *     aquí reproduce el bypass que este gate cierra.
  */
+// LOADERS de asset de bundler (flags BARE, no `key=value`): transforman el import en algo NO ejecutado en
+// el render (`?raw`/`?url`→string/URL, `?worker`/`?sharedworker`→bundle en otro thread, `?module`/`?init`→
+// WebAssembly.Module/init, `?inline`). Una query ARBITRARIA (`?v=1` cache-bust) NO es loader: Vite resuelve/
+// transforma el `.ts` como CÓDIGO igual → hay que AUDITARLO. codex P1 (el `?→external` incondicional previo
+// era over-broad = fail-open: `./x.ts?v=1` se saltaba la auditoría).
+const ASSET_LOADER_QUERIES = new Set([
+  "raw",
+  "url",
+  "worker",
+  "sharedworker",
+  "inline",
+  "module",
+  "init",
+]);
 // ¿`p` (path resuelto, extensión explícita) es un ASSET no-código? — NO `.ts/.tsx` (auditable) ni
 // `.js/.jsx/.cjs/.mjs` (JS no-auditable → fail-closed convert-to-ts). `.wasm/.css/.scss/.png/.svg/.json/…`
 // = asset que el bundler maneja, no código ejecutado en el render → el gate no lo audita (external si
@@ -4641,13 +4655,21 @@ function resolveImportPath(
   const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
   const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
 
-  // Sufijo de QUERY de bundler (`?module`, `?url`, `?raw`, `?worker`, `?inline`): directiva de ASSET, NO
-  // un módulo a seguir/auditar. `import wasm from "./add.wasm?module"` da un `WebAssembly.Module`
-  // PRE-compilado (Edge-safe — instanciarlo lo PERMITE la frontera bucket-2: solo el byte-source en-runtime
-  // es residual); `./x.ts?worker` corre en otro thread (no en el render); `./img.png?url` es una string. El
-  // gate solo audita `.ts/.tsx` ejecutados en el render → external (no se sigue el asset). codex P2.
-  if (specifier.includes("?")) {
-    return { kind: "external" };
+  // Sufijo de QUERY: distinguir un LOADER de asset (transforma el import en algo NO ejecutado en el render
+  // → external) de una query ARBITRARIA (`?v=1` cache-bust → Vite transforma el `.ts` como CÓDIGO, hay que
+  // AUDITARLO). LOADER (flag bare ∈ ASSET_LOADER_QUERIES) → external; cualquier otra query → DESLIGAR y
+  // resolver el módulo base. codex P1 (el `?→external` incondicional previo era over-broad = fail-open:
+  // `./edge-only.ts?v=1` con `process.cwd()` se saltaba la auditoría).
+  const qIdx = specifier.indexOf("?");
+  if (qIdx >= 0) {
+    const isAssetLoader = specifier
+      .slice(qIdx + 1)
+      .split("&")
+      .some((part) => !part.includes("=") && ASSET_LOADER_QUERIES.has(part));
+    if (isAssetLoader) {
+      return { kind: "external" };
+    }
+    specifier = specifier.slice(0, qIdx);
   }
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
