@@ -751,6 +751,15 @@ function isExemptInDeferredBody(_api, context) {
 // phase) en client. Los effects no corren en SSR, por tanto sus bodies
 // nunca se ejecutan durante render server — exención safe.
 //
+// REGLA UNIFICADORA del eje client-only (más fina que "¿cuándo corre el callback?"): exento ⟺ el callback
+// (a) NO se ejecuta en render Y (b) NO EXPONE nada invocable-en-render. useEffect/useLayoutEffect/
+// useInsertionEffect y el `ref` callback de host pasan AMBOS (corren en commit; lo que retornan —nada /
+// cleanup-de-unmount— no es render-callable). useImperativeHandle FALLA (b): corre en commit pero RETORNA un
+// handle cuyos métodos el consumer invoca vía `ref.current.m()`, posiblemente en el render del padre →
+// expone superficie render-callable → flag. useCallback FALLA (b) igual (el value memoizado se llama donde
+// el consumer quiera). useMemo/useState-init/useSyncExternalStore-get*Snapshot FALLAN (a) (corren en render
+// directo). NO clasificar por "es un hook que corre en commit" — clasificar por qué-corre-O-se-expone-en-render.
+//
 // EXCLUIDOS intencionalmente:
 //   - useMemo / useState (lazy init) / useRef (lazy init): el factory
 //     corre durante el render server, por tanto accesos a client APIs
@@ -849,15 +858,23 @@ function isDeferredExecutionContext(fnNode, context) {
   }
   if (!parent) return "none";
 
-  // (1) JSX event handler RESTRICTED a intrinsic HTML elements:
-  // `<button onClick={fn}>`. Custom components `<MyComp onFoo={fn}>`
-  // pueden invocar `onFoo` síncronamente durante render — NO son
-  // deferred sinks. Distinción: tagName lowercase first char =
-  // intrinsic (string element), uppercase / PropertyAccess / namespaced =
-  // component reference. Codex round 16 P2.1.
+  // (1) JSX event handler `on[A-Z]` O `ref` callback, RESTRICTED a intrinsic HTML elements:
+  // `<button onClick={fn}>` / `<div ref={fn}>`. Un `ref` callback de un elemento HOST corre en el
+  // COMMIT del cliente (cuando el nodo DOM existe), NO durante el render SSR/Edge — React no invoca
+  // host ref callbacks en SSR → su cuerpo es client-only igual que un handler (codex P2). Custom
+  // components `<MyComp onFoo={fn}>` / `<MyComp ref={fn}>` pueden invocar `onFoo` o (React 19) recibir
+  // `ref` como prop normal e invocarlo síncronamente durante render — NO son deferred sinks. Distinción:
+  // tagName lowercase first char = intrinsic (string element), uppercase / PropertyAccess / namespaced =
+  // component reference. Codex round 16 P2.1 + ref-callback P2. (El `ref` callback de host es client-only —
+  // su return es el CLEANUP, que corre en unmount=cliente, NO un value invocable-en-render — DISTINTO de
+  // `useCallback`/`useImperativeHandle`, removidos de DEFERRED_HOOKS porque su VALUE returned SÍ puede
+  // invocarse en render por el consumer = fail-closed ratificado, codex round 15 P2.2.)
   if (ts.isJsxAttribute(parent)) {
     const attrName = parent.name;
-    if (ts.isIdentifier(attrName) && /^on[A-Z]/.test(attrName.text)) {
+    if (
+      ts.isIdentifier(attrName) &&
+      (/^on[A-Z]/.test(attrName.text) || attrName.text === "ref")
+    ) {
       const jsxAttributes = parent.parent;
       const jsxElement = jsxAttributes?.parent;
       if (

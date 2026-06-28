@@ -2770,6 +2770,21 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     expect(flagged(code)).toBe(false);
   });
 
+  // CONTROL fail-open del inventario client-only: hooks cuyo callback CORRE en el render SSR/Edge (useMemo,
+  // useState-init, useSyncExternalStore get*Snapshot) o cuyo value returned se invoca en render (useCallback,
+  // useImperativeHandle — round 15 P2.2) NO se eximen. Es el lado SIMÉTRICO del FP de ref/useImperativeHandle:
+  // eximir de MÁS sería fail-open. Solo useEffect/useLayoutEffect/useInsertionEffect (post-render) eximen.
+  it.each([
+    ["useMemo (corre EN render)", '/** @server-safe */\nimport { useMemo } from "react";\nexport function C() { return useMemo(() => (window as any).innerWidth, []); }'],
+    ["useSyncExternalStore getSnapshot (corre EN render)", '/** @server-safe */\nimport { useSyncExternalStore } from "react";\nexport function C() { return useSyncExternalStore(() => () => {}, () => (window as any).innerWidth, () => 0); }'],
+    ["useSyncExternalStore getServerSnapshot (corre EN SSR)", '/** @server-safe */\nimport { useSyncExternalStore } from "react";\nexport function C() { return useSyncExternalStore(() => () => {}, () => 0, () => (window as any).innerWidth); }'],
+    ["useState lazy init (corre EN render)", '/** @server-safe */\nimport { useState } from "react";\nexport function C() { const [s] = useState(() => (window as any).innerWidth); return s; }'],
+    ["useImperativeHandle (value invocable en render, round 15)", '/** @server-safe */\nimport { useImperativeHandle, forwardRef } from "react";\nexport const C = forwardRef((_p, r) => { useImperativeHandle(r, () => ({ s() { (window as any).x; } })); return null; });'],
+    ["useCallback (value memoizado invocable en render, round 15)", '/** @server-safe */\nimport { useCallback } from "react";\nexport function C() { const f = useCallback(() => (window as any).x, []); return <div onClick={f} />; }'],
+  ])("CONTROL fail-open: hook render-phase NO se exime (FLAGGEA): %s", (_l, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
   // BYPASS codex P1 (recursión file-global revertida): un alias react NESTED en `helper` NO
   // debe reclasificar el `useEffect` de OTRO scope importado de un módulo no-react (`./sync`,
   // que corre síncrono en render). La resolución de alias react es TOP-LEVEL only; un alias en
@@ -2824,6 +2839,8 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     ["$Panel onClick síncrono", '/** @server-safe */\nfunction $Panel(props: { onClick: () => void }) { props.onClick(); return null; }\nexport function C() { return <$Panel onClick={() => { window.alert(document.cookie); }} />; }'],
     ["_Widget onMount síncrono", '/** @server-safe */\nfunction _Widget(props: { onMount: () => void }) { props.onMount(); return null; }\nexport function C() { return <_Widget onMount={() => { localStorage.setItem("k", screen.width + ""); }} />; }'],
     ["Upper onShow", '/** @server-safe */\nfunction Box(props: { onShow: () => void }) { props.onShow(); return null; }\nexport function C() { return <Box onShow={() => { history.pushState(null, "", location.href); }} />; }'],
+    // ref callback en COMPONENTE: React 19 puede pasar `ref` como prop normal e invocarlo en render → NO exento (codex P2).
+    ["Comp ref síncrono", '/** @server-safe */\nfunction Box(props: { ref: (n: unknown) => void }) { props.ref(null); return null; }\nexport function C() { return <Box ref={() => { void window.name; }} />; }'],
   ])("FLAGGEA handler en COMPONENTE custom (corre síncrono en render): %s", (_l, code) => {
     expect(flagged(code)).toBe(true);
   });
@@ -2833,7 +2850,10 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     ["<button onClick>", '/** @server-safe */\nexport function C() { return <button onClick={() => { window.alert(document.cookie); }}>x</button>; }'],
     ["<div onMouseEnter>", '/** @server-safe */\nexport function C() { return <div onMouseEnter={() => { void localStorage.length; }} />; }'],
     ["<x$ onClick> (lowercase-first intrínseco)", '/** @server-safe */\nexport function C() { return <x$ onClick={() => { void window.name; }} />; }'],
-  ])("0-FP: handler en intrínseco lowercase sigue EXENTO: %s", (_l, code) => {
+    // ref callback en HOST: corre en el COMMIT del cliente (no en SSR render) → EXENTO igual que un handler (codex P2).
+    ["<div ref> callback", '/** @server-safe */\nexport function C() { return <div ref={() => { window.scrollTo(0, 0); }} />; }'],
+    ["<input ref> callback (document)", '/** @server-safe */\nexport function C() { return <input ref={(n: unknown) => { if (n) document.title = "x"; }} />; }'],
+  ])("0-FP: handler/ref en intrínseco lowercase sigue EXENTO: %s", (_l, code) => {
     expect(flagged(code)).toBe(false);
   });
 });
