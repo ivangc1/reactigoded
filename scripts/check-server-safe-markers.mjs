@@ -3377,6 +3377,35 @@ function unwrapErased(node) {
   return node;
 }
 
+// ASCENSO inverso de `unwrapErased`+`valueTransparentLeaves`: desde `node` sube por los MISMOS wrappers
+// —erased (`isErasedOuterExpr`, el predicado que usa `unwrapErased`) + operadores value-transparent
+// (`isValueTransparentParent`)— hasta el member-access que lo ENVUELVE; lo devuelve si `node` (a través de
+// los wrappers) es su `.expression`/root, si no null. La allowance de root-de-miembro-seguro es sobre el
+// VALOR (¿`process`/`import.meta` llega al member-access?), y los wrappers (erased Y VT) PRESERVAN el valor:
+// `(0, process).env` ≡ `process.env`, Edge-safe, NO diverge → el gate caza divergencia, no ofuscación, así
+// que no le toca penalizarlo (mandato divergencia-Edge, ratificado B). Espeja el camino DESCENDENTE de
+// import.meta (`valueSurvivalLeaves`) → los dos roots de la familia tratan VT IGUAL, sin drift. ORTOGONAL al
+// eje receiver-detach: éste extiende la allowance de miembros-VALOR no-método (env/url ∈ SAFE_MEMBERS_OF_
+// DENIED_ROOT/SAFE_IMPORT_META_MEMBERS); el detach-de-this por VT aplica a métodos branded (RECEIVER_BOUND,
+// crypto) — sets distintos, checks distintos, no se pisan. codex P2 + ratificación mandato (Iván).
+function wrapperEnclosingMemberAccess(node) {
+  let top = node;
+  while (
+    top.parent &&
+    ((isErasedOuterExpr(top.parent) && top.parent.expression === top) ||
+      isValueTransparentParent(top.parent, top))
+  ) {
+    top = top.parent;
+  }
+  const acc = top.parent;
+  return acc &&
+    (ts.isPropertyAccessExpression(acc) ||
+      ts.isElementAccessExpression(acc)) &&
+    acc.expression === top
+    ? acc
+    : null;
+}
+
 /**
  * Mapeo ÚNICO del set ACOTADO de constructos VALUE-TRANSPARENTES → las sub-expresiones
  * cuyo valor ES (sintácticamente) el de la expresión, sin evaluar nada: wrappers erased
@@ -6739,7 +6768,24 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const api = node.text;
       const isUnsafeGlobal = !SAFE_GLOBALS.has(api);
       const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
-      if (isUnsafeGlobal || isEvalSink) {
+      // MIEMBRO SEGURO de una raíz DENEGADA a través de WRAPPER: `process` está denegado bare pero
+      // `process.env` lo expone Edge. La rama (c) lo exime cuando `process.env` es DIRECTO (root = Identifier),
+      // pero un wrapper erased/value-transparent (`(process as any).env`, `(process).env`, `(0,process).env`)
+      // rompe esa rama y el `process` interno cae aquí como bare = FP (codex P2). Trato uniforme con
+      // import.meta.env (que resuelve el wrapper por valueSurvivalLeaves): ascender por los wrappers hasta el
+      // member-access y eximir SOLO si el miembro ∈ SAFE_MEMBERS_OF_DENIED_ROOT. `(process as any).cwd` (no
+      // seguro) / `process` bare-sin-miembro siguen flaggeando.
+      const denialSafe = SAFE_MEMBERS_OF_DENIED_ROOT[api];
+      let safeMemberOfDeniedRoot = false;
+      if (denialSafe) {
+        const acc = wrapperEnclosingMemberAccess(node);
+        if (acc) {
+          const mems = accessedMemberNames(acc);
+          safeMemberOfDeniedRoot =
+            mems.length > 0 && mems.every((mm) => denialSafe.has(mm));
+        }
+      }
+      if ((isUnsafeGlobal || isEvalSink) && !safeMemberOfDeniedRoot) {
         if (
           !context.localBindings.has(api) &&
           // Forward value-read de un nombre module-declared dentro de una función

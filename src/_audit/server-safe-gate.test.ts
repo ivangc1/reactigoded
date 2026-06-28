@@ -473,7 +473,19 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
       checkSourceFile(`/** @server-safe */\nexport const f = (c: boolean) => ${b};`, "pr.fixture.tsx").length > 0;
     expect(any(`process.env.NODE_ENV`)).toBe(false);
     expect(any(`process["env"]`)).toBe(false);
+    // `process.env` a través de wrapper (erased cast/parens Y operador VT coma/`?:`) — el `process` interno
+    // NO se flaggea bare. Los wrappers PRESERVAN el valor: `(0,process).env` ≡ `process.env`, Edge-safe, NO
+    // diverge → el gate caza divergencia, no ofuscación (mandato, ratificación B). Trato uniforme con
+    // import.meta.env (mismo eje VALUE). codex P2 @1d1f780.
+    expect(any(`(process as any).env.NODE_ENV`)).toBe(false); // cast (codex)
+    expect(any(`(process).env`)).toBe(false); // parens
+    expect(any(`(process as any)["env"]`)).toBe(false); // cast + bracket-literal
+    expect(any(`((process as any) as any).env`)).toBe(false); // doble cast
+    expect(any(`(0, process).env`)).toBe(false); // coma VT (ratificación B: preserva valor, no diverge)
+    expect(any(`(c ? process : ({} as any)).env`)).toBe(false); // ternario VT
     expect(any(`process.cwd()`)).toBe(true);
+    expect(any(`(process as any).cwd()`)).toBe(true); // wrapper NO exime miembro no-seguro
+    expect(any(`(0, process).cwd()`)).toBe(true); // VT NO exime miembro no-seguro (allowance es member-específica)
     expect(any(`(process as any).binding("fs")`)).toBe(true);
     expect(any(`process`)).toBe(true);
     expect(any(`(process as any)[c ? "env" : "cwd"]`)).toBe(true);
