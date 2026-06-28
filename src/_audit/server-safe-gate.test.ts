@@ -1024,6 +1024,54 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("edge-denied");
   });
 
+  it("SIGUE el dynamic import RENDER-PATH con specifier literal (relativo/alias) y audita el módulo; deferred/variable/builtin por su vía (codex P1)", () => {
+    const dirty = `export function cwd() { return process.cwd(); }`;
+    // 1. FAIL-OPEN CERRADO: `await import("./x")` en el render audita ./x.ts (process.cwd → flag).
+    let v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nexport async function P() { const m = await import("./x"); return m.cwd(); }`,
+        "/repo/src/x.ts": dirty,
+      }),
+    );
+    expect(v.length).toBeGreaterThan(0);
+    // 2. PARIDAD con el check de builtins: en cuerpo cliente-diferido (useEffect) NO se sigue (no FP).
+    v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport { useEffect } from "react";\nexport function P() { useEffect(() => { import("./x"); }, []); return null; }`,
+        "/repo/src/x.ts": dirty,
+      }),
+    );
+    expect(v).toEqual([]);
+    // 3. builtin dynamic → UNA sola violation (flaggeado inline, NO empujado al colector → sin doble-flag).
+    v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nexport async function P() { await import("fs"); return null; }`,
+      }),
+    );
+    expect(v.length).toBe(1);
+    // 4. `import(variable)` = data-flow §141 residual → NO se sigue (no hay hoja literal).
+    v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nexport async function P() { const s = "./x"; const m = await import(s); return m.cwd(); }`,
+        "/repo/src/x.ts": dirty,
+      }),
+    );
+    expect(v).toEqual([]);
+    // 5. limpio render dynamic import → PASA (no FP).
+    v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nexport async function P() { const m = await import("./clean"); return m.ok; }`,
+        "/repo/src/clean.ts": `export const ok = 1;`,
+      }),
+    );
+    expect(v).toEqual([]);
+  });
+
   it("FALLA RUIDOSO 'no auditable' (no genérico 'no resolvió') si un import EXTENSIONLESS resuelve a JS-family Vite-resoluble (`.mjs`/`.js`/`.mts`/`.jsx`, codex P3)", () => {
     // Vite resuelve `./helper` → `helper.mts` (está en resolve.extensions). La cascada auditable
     // (.ts/.tsx) falla, pero el archivo EXISTE → el error genérico "no resolvió" MIENTE. Debe ser

@@ -4869,8 +4869,11 @@ function isExportPurelyTypeOnly(exportDecl) {
  * (`import type {...}`) como inline (`import { type X }`) — codex round
  * 1 sobre #106.
  *
- * Los `import("...")` dynamic NO se incluyen — hueco conocido
- * documentado en el header del archivo.
+ * Los `import("...")` dynamic NO salen de aquí (esta fn solo ve estáticos):
+ * el dynamic import RENDER-PATH con specifier literal lo recolecta el walker
+ * per-file `checkSourceFile` (que tiene el context `isInClientOnlyDeferredBody`)
+ * y `checkFileWithImports` lo sigue junto a estos refs. `import(variable)`/
+ * ensamblado = data-flow §141 residual. codex P1 (@<este commit>).
  */
 function extractModuleReferences(sourceFile) {
   const refs = [];
@@ -4967,18 +4970,23 @@ function checkFileWithImports(entryAbsPath, options = {}) {
 
   // Per-file analysis. Las violations heredan la chain del caller; el
   // archivo donde aparece la violation se añade al final.
+  // El colector recibe los dynamic imports RENDER-PATH con specifier literal (codex P1): el walker
+  // per-file es quien tiene el context `isInClientOnlyDeferredBody`, así que recolecta ahí y los seguimos
+  // aquí como refs (no se duplica la detección de cuerpo-diferido en `extractModuleReferences`).
+  const dynamicRefs = [];
   const fileViolations = checkSourceFile(
     cached.content,
     relPath,
     cached.sourceFile,
+    dynamicRefs,
   );
   const fullChain = chain.length > 0 ? [...chain, relPath] : null;
   for (const v of fileViolations) {
     violations.push(fullChain ? { ...v, chain: fullChain } : v);
   }
 
-  // Seguir refs (imports + barrels).
-  const refs = extractModuleReferences(cached.sourceFile);
+  // Seguir refs (imports estáticos + barrels + dynamic-import render-path literal).
+  const refs = [...extractModuleReferences(cached.sourceFile), ...dynamicRefs];
   for (const ref of refs) {
     if (ref.kind === "type-only") continue;
     const resolution = resolveImportPath(
@@ -5034,7 +5042,12 @@ function checkFileWithImports(entryAbsPath, options = {}) {
  *   `checkFileWithImports` lo pre-parsea y comparte vía cache para evitar
  *   re-parsear utils importados desde N componentes.
  */
-function checkSourceFile(content, relPath, preparsedSourceFile) {
+function checkSourceFile(
+  content,
+  relPath,
+  preparsedSourceFile,
+  dynamicRefsOut,
+) {
   const violations = [];
 
   const sourceFile =
@@ -5159,8 +5172,9 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       context = withEmbeddedAssignmentAliases(context, head);
     }
     // `import(<literal builtin>)` — import() DINÁMICO con specifier LITERAL EN-SITIO (`import("fs")`,
-    // `import("node:fs")`): no data-flow → cazable, rompe en Edge igual que el import estático.
-    // `extractModuleReferences` (grafo) solo ve estáticos → este es el hueco de dynamic-import.
+    // `import("node:fs")`): no data-flow → cazable, rompe en Edge igual que el import estático. El BUILTIN
+    // se flaggea aquí inline (también en modo single-file sin grafo); el specifier relativo/alias se
+    // RECOLECTA en `dynamicRefsOut` y `checkFileWithImports` lo SIGUE como ref (cierra el hueco — codex P1).
     // VALUE-survival: el specifier puede llegar por operadores VT (`import((0,"fs"))` coma,
     // `import(c?"fs":"x")` ternario MULTI-hoja) → se resuelve por `valueSurvivalLeaves` (helper
     // compartido) y se flaggea FAIL-CLOSED si CUALQUIER hoja es un builtin literal (paridad con
@@ -5172,10 +5186,11 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       node.arguments.length > 0 &&
       !context.isInClientOnlyDeferredBody
     ) {
-      const litNode = valueSurvivalLeaves(node.arguments[0]).find(
-        (l) => ts.isStringLiteralLike(l) && isNodeBuiltinSpecifier(l.text),
+      const litLeaves = valueSurvivalLeaves(node.arguments[0]).filter((l) =>
+        ts.isStringLiteralLike(l),
       );
-      if (litNode) {
+      const builtinLeaf = litLeaves.find((l) => isNodeBuiltinSpecifier(l.text));
+      if (builtinLeaf) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
         const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -5183,8 +5198,26 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
           file: relPath,
           rule: "no-node-builtin",
           line: line + 1,
-          detail: `import() dinámico de \`${litNode.text}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
+          detail: `import() dinámico de \`${builtinLeaf.text}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
         });
+      }
+      // FOLLOW del dynamic import RENDER-PATH con specifier LITERAL relativo/alias (codex P1): el specifier
+      // está EN-SITIO (decidible) y el módulo corre en el render → auditarlo como un import estático. El
+      // colector lo recibe `checkFileWithImports` y lo resuelve+sigue igual que un ref estático (relativo→
+      // audita el .ts, builtin ya flaggeado arriba → se EXCLUYE para no doble-flaggear, bare→external). NO
+      // se dispara en cuerpo cliente-diferido (el `!isInClientOnlyDeferredBody` de arriba lo garantiza —
+      // paridad con el check de builtins). `import(variable)`/ensamblado = sin hoja literal → data-flow §141
+      // residual (no se sigue). Multi-hoja `import(c?"./a":"./b")` → se siguen AMBAS (value-survival).
+      if (dynamicRefsOut) {
+        for (const l of litLeaves) {
+          if (!isNodeBuiltinSpecifier(l.text)) {
+            dynamicRefsOut.push({
+              specifier: l.text,
+              kind: "value",
+              modulePos: l.getStart(sourceFile),
+            });
+          }
+        }
       }
     }
     // LLAMADA UNBOUND de método branded host (codex P1): un método bucket-1 ALLOWED ∈
