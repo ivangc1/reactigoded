@@ -999,6 +999,24 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     }
   });
 
+  it("import de ASSET (`?query` de bundler / extensión no-código) → external, NO unresolved-import (codex P2)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const assetExists = (p: string) => /\.(wasm|css|png|svg)$/.test(p);
+    // `?query` de bundler (Wasm-as-Module Edge-safe, ?url, ?raw, ?worker) → external (no se sigue el asset):
+    for (const spec of ["./add.wasm?module", "./styles.css?inline", "./img.png?url", "./w.ts?worker"]) {
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], () => false, roots).kind).toBe("external");
+    }
+    // Asset SIN query que EXISTE (extensión no-código) → external:
+    for (const spec of ["./add.wasm", "./styles.css", "./logo.svg"]) {
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], assetExists, roots).kind).toBe("external");
+    }
+    expect(resolveImportPath("@/styles.css", "/repo/src/c.tsx", [{ prefix: "@/", targetPrefix: "/repo/src/" }], assetExists, roots).kind).toBe("external");
+    // Denegación crítica intacta: JS no-auditable → unresolvable; asset inexistente → fail-loud; builtin → edge-denied:
+    expect(resolveImportPath("./legacy.js", "/repo/src/c.tsx", [], (p) => p.endsWith("legacy.js"), roots).kind).toBe("unresolvable");
+    expect(resolveImportPath("./nope.wasm", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("unresolvable");
+    expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("edge-denied");
+  });
+
   it("FALLA RUIDOSO 'no auditable' (no genérico 'no resolvió') si un import EXTENSIONLESS resuelve a JS-family Vite-resoluble (`.mjs`/`.js`/`.mts`/`.jsx`, codex P3)", () => {
     // Vite resuelve `./helper` → `helper.mts` (está en resolve.extensions). La cascada auditable
     // (.ts/.tsx) falla, pero el archivo EXISTE → el error genérico "no resolvió" MIENTE. Debe ser

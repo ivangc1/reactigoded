@@ -4607,6 +4607,17 @@ function bundlerShadowSibling(resolvedAbsPath, fileExists) {
  *     a ningún archivo. El gate falla ruidosamente — un skip silencioso
  *     aquí reproduce el bypass que este gate cierra.
  */
+// ¿`p` (path resuelto, extensión explícita) es un ASSET no-código? — NO `.ts/.tsx` (auditable) ni
+// `.js/.jsx/.cjs/.mjs` (JS no-auditable → fail-closed convert-to-ts). `.wasm/.css/.scss/.png/.svg/.json/…`
+// = asset que el bundler maneja, no código ejecutado en el render → el gate no lo audita (external si
+// EXISTE; si no existe, cae a unresolvable fail-loud — typo en el path). codex P2 (mismo eje que `?query`).
+function hasAssetExt(p) {
+  const base = p.slice(Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return false;
+  const ext = base.slice(dot).toLowerCase();
+  return ![".ts", ".tsx", ".js", ".jsx", ".cjs", ".mjs"].includes(ext);
+}
 function resolveImportPath(
   specifier,
   importerAbsPath,
@@ -4629,6 +4640,15 @@ function resolveImportPath(
   // preservación manual).
   const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
   const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
+
+  // Sufijo de QUERY de bundler (`?module`, `?url`, `?raw`, `?worker`, `?inline`): directiva de ASSET, NO
+  // un módulo a seguir/auditar. `import wasm from "./add.wasm?module"` da un `WebAssembly.Module`
+  // PRE-compilado (Edge-safe — instanciarlo lo PERMITE la frontera bucket-2: solo el byte-source en-runtime
+  // es residual); `./x.ts?worker` corre en otro thread (no en el render); `./img.png?url` es una string. El
+  // gate solo audita `.ts/.tsx` ejecutados en el render → external (no se sigue el asset). codex P2.
+  if (specifier.includes("?")) {
+    return { kind: "external" };
+  }
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
@@ -4675,6 +4695,9 @@ function resolveImportPath(
             kind: "unresolvable",
             reason: `alias \`${specifier}\` resuelve (extensionless) a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, nonAuditable)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
           };
+        }
+        if (hasAssetExt(noExt) && fileExists(noExt)) {
+          return { kind: "external" };
         }
         return {
           kind: "unresolvable",
@@ -4726,6 +4749,11 @@ function resolveImportPath(
         reason: `relativo \`${specifier}\` resuelve (extensionless) a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, nonAuditable)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
       };
     }
+    return { kind: "external" };
+  }
+  // Asset no-código que EXISTE (`./styles.css`, `./add.wasm`): el bundler lo maneja, no es módulo
+  // ejecutado en el render → external (el `?query` ya salió arriba; esto cubre el asset sin query).
+  if (hasAssetExt(noExt) && fileExists(noExt)) {
     return { kind: "external" };
   }
   return {
