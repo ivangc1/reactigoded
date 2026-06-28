@@ -782,6 +782,13 @@ const DEFERRED_HOOKS = new Set([
   "useEffect",
   "useLayoutEffect",
   "useInsertionEffect",
+  // useEffectEvent (React 19.2 estable; `experimental_useEffectEvent` en 19.0/19.1): el callback corre
+  // CUANDO el Effect Event se invoca, y React DOCUMENTA que solo puede llamarse desde Effects + ERRA si se
+  // llama en render → (a) no corre en render Y (b) el return NO es render-invocable (React lo previene).
+  // Pasa AMBAS condiciones de la regla unificadora → exento. DISTINTO de useCallback/useImperativeHandle
+  // (removidos): su return SÍ es render-invocable porque React NO lo previene. codex P2.
+  "useEffectEvent",
+  "experimental_useEffectEvent",
 ]);
 
 // Browser/JS timers cuyo callback NO corre durante el render server.

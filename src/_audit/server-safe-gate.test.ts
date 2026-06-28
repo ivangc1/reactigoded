@@ -2773,6 +2773,15 @@ describe("server-safe gate — deferred-execution: import-equals hook-shadow + J
     expect(flagged('/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { useEffect(() => { void window.location.href; }); return null; }')).toBe(false);
   });
 
+  // useEffectEvent (React 19.2): el callback corre desde un Effect y React ERRA si se llama en render →
+  // (a) no corre en render + (b) el return no es render-invocable (React lo previene) → exento. codex P2.
+  it("0-FP: useEffectEvent de react EXENTO; pero de NO-react FLAGGEA (source-check, sin fail-open)", () => {
+    expect(flagged('/** @server-safe */\nimport { useEffectEvent } from "react";\nexport function C() { const e = useEffectEvent(() => { void window.location.href; }); return null; }')).toBe(false);
+    expect(flagged('/** @server-safe */\nimport { experimental_useEffectEvent } from "react";\nexport function C() { const e = experimental_useEffectEvent(() => { void window.location.href; }); return null; }')).toBe(false);
+    // source-check: un `useEffectEvent` de un módulo NO-react (corre síncrono) NO exime → fail-closed.
+    expect(flagged('/** @server-safe */\nimport { useEffectEvent } from "./sync";\nexport function C() { const e = useEffectEvent(() => { void window.location.href; }); e(); return null; }')).toBe(true);
+  });
+
   // A — FP destructure-de-react cerrado (hunt scope-aware, 7 FP_REGRESSION). Destructurar hooks
   // reales del namespace React (`const { useEffect } = React`) es un alias react, NO un shadow
   // sync → el read diferido dentro DEBE eximir. variableInitAliasesReact + gatherReactImports.
