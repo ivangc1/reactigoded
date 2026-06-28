@@ -612,6 +612,14 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(F(`new ((WebAssembly.Module as any).bind(null, b))()`)).toBe(true); // .bind → constructor ligado construye el original (codex P1 @c4d8176)
     expect(F(`new ((WebAssembly.Module as any).bind(null).bind(null))()`)).toBe(true); // .bind encadenado
     expect(F(`new ((c ? WebAssembly.Module : (X as any)).bind(null, b))()`)).toBe(true); // VT-antes-del-bind
+    // SUBCLASE anónima EN-SITIO: `new (class extends X.Module {})(b)` ≡ super(b) ≡ new X.Module(b) (codex P1
+    // @df596d6). El `class X extends X.Module {}` NOMBRADO + `new X(b)` = data-flow residual (X variable).
+    expect(F(`new (class extends WebAssembly.Module {})(b)`)).toBe(true); // anon class extends ctor-denied
+    expect(F(`new (class extends (WebAssembly.Module as any) {})(b)`)).toBe(true); // extends cast
+    expect(F(`new (class extends (c ? WebAssembly.Module : (Object as any)) {})(b)`)).toBe(true); // extends VT
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const C = () => { class X extends (WebAssembly.Module as any) {} return new X(new Uint8Array(8)); };`, "cls.fixture.tsx").length > 0,
+    ).toBe(false); // named class = data-flow residual
     expect(F(`(c ? import.meta : ({} as any)).dirname`)).toBe(true); // import.meta root VT-envuelto
     expect(F(`(0, import.meta).filename`)).toBe(true); // import.meta coma
     expect(F(`(0, [].constructor.constructor)("x")()`)).toBe(true); // .constructor weaponizado VT-envuelto

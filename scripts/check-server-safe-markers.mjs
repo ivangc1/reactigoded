@@ -3590,7 +3590,22 @@ function reflectCallTarget(n) {
 function constructionTargets(expr) {
   return valueSurvivalLeaves(expr).flatMap((leaf) => {
     const receiver = unwrapBindChain(leaf);
-    return receiver === leaf ? [leaf] : constructionTargets(receiver);
+    if (receiver !== leaf) return constructionTargets(receiver);
+    // ClassExpression con `extends <ctor>` EN-SITIO: `new (class extends X.Module {})(b)` ≡ `super(b)` ≡
+    // `new X.Module(b)` — toda subclase INSTANCIABLE de un ctor llama `super` (un derived class DEBE llamar
+    // super antes de usar `this`), así que construir la subclase construye el ORIGINAL. El `extends` está
+    // a-la-vista (contiguo con el `new`) → decidible: resolver la heritage-extends como target (recursivo →
+    // extends VT-envuelto `extends (c?X.Module:Y)`). El `class X extends X.Module {}; new X(b)` con X NOMBRADA
+    // = data-flow residual (X es variable, el extends no está en-sitio en el `new`). codex P1.
+    if (ts.isClassExpression(leaf) && leaf.heritageClauses) {
+      const ext = leaf.heritageClauses.find(
+        (h) => h.token === ts.SyntaxKind.ExtendsKeyword,
+      );
+      if (ext && ext.types.length > 0) {
+        return constructionTargets(ext.types[0].expression);
+      }
+    }
+    return [leaf];
   });
 }
 
