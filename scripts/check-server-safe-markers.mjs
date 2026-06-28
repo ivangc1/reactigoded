@@ -5441,7 +5441,7 @@ function checkSourceFile(
     // SUBSISTEMA que §373 RENUNCIA (igual que el parser de JS-family). Detectable sintácticamente → FAIL-
     // CLOSED LOUD (no residual-silencioso): un mod del glob con `process.cwd` pasaría sin auditar = fail-open
     // por N. El contribuidor audita por import directo (seguido) o evita glob en @server-safe. codex-diligencia.
-    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+    if (ts.isCallExpression(node)) {
       const callee = node.expression;
       const globName =
         ts.isPropertyAccessExpression(callee) &&
@@ -5461,15 +5461,36 @@ function checkSourceFile(
             l.keywordToken === ts.SyntaxKind.ImportKeyword,
         )
       ) {
-        const start = node.getStart(sourceFile);
-        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-        violations.push({
-          file: relPath,
-          rule: "unresolved-import",
-          line: line + 1,
-          detail: `\`import.meta.${globName}(...)\` — bulk-import por patrón glob: el gate NO puede expandir el glob (exigiría readdir + la semántica micromatch de Vite, el subsistema que §373 renuncia) → los módulos cargados quedarían SIN auditar = fail-open por N. Audítalos por import directo (\`import "./mod"\`, que sí se sigue) o evita glob en @server-safe. ${lineText}`,
-        });
+        // EAGER vs LAZY decide la paridad-con-deferred (codex P1 @30612a3): un EAGER glob (`globEager` o
+        // `glob(…,{eager:true})`) Vite lo BAJA a imports estáticos TOP-LEVEL → el módulo carga en module-eval
+        // (SSR/Edge) AUNQUE el call esté en un callback que nunca corre → se flaggea SIEMPRE, ignorando
+        // `isInClientOnlyDeferredBody`. Un LAZY glob devuelve importers on-call (posición-dependiente, como un
+        // dynamic import) → en cuerpo cliente-diferido es client-side → se respeta el skip. opts no-analizable
+        // (variable/spread) o `eager:<no-literal>` → fail-closed EAGER (ante la duda, carga en SSR).
+        const opts = node.arguments[1];
+        const eager =
+          globName === "globEager" ||
+          (opts !== undefined &&
+            (!ts.isObjectLiteralExpression(opts) ||
+              opts.properties.some(
+                (p) =>
+                  ts.isPropertyAssignment(p) &&
+                  ((ts.isIdentifier(p.name) && p.name.text === "eager") ||
+                    (ts.isStringLiteralLike(p.name) &&
+                      p.name.text === "eager")) &&
+                  p.initializer.kind !== ts.SyntaxKind.FalseKeyword,
+              )));
+        if (eager || !context.isInClientOnlyDeferredBody) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "unresolved-import",
+            line: line + 1,
+            detail: `\`import.meta.${globName}(...)\` — bulk-import por patrón glob${eager ? " EAGER (Vite lo baja a imports estáticos top-level → carga en module-eval SSR/Edge aunque el callback nunca corra)" : ""}: el gate NO puede expandir el glob (exigiría readdir + la semántica micromatch de Vite, el subsistema que §373 renuncia) → los módulos cargados quedarían SIN auditar = fail-open por N. Audítalos por import directo (\`import "./mod"\`, que sí se sigue) o evita glob en @server-safe. ${lineText}`,
+          });
+        }
       }
     }
     // (a) Detectar typeof guards en if-statements: el then-branch

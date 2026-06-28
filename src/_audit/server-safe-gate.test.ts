@@ -470,6 +470,16 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`(import.meta as any).glob("./*", { eager: true })`)).toBe(true);
     expect(any(`(import.meta as any).globEager("./*")`)).toBe(true);
     expect(any(`(import.meta as any)["glob"]("./*")`)).toBe(true); // bracket-literal
+    // EAGER vs LAZY en cuerpo cliente-diferido (codex P1): Vite baja el EAGER glob a imports estáticos
+    // top-level → carga en module-eval SSR/Edge AUNQUE el callback nunca corra → flaggeado IGUAL. El LAZY
+    // es on-call → en un callback es client-side → PASA (paridad con dynamic import).
+    const inEffect = (body: string) =>
+      checkSourceFile(`/** @server-safe */\nimport { useEffect } from "react";\nexport function C() { useEffect(() => { ${body} }, []); return null; }`, "glob.fixture.tsx").length > 0;
+    expect(inEffect(`(import.meta as any).glob("./*", { eager: true });`)).toBe(true); // eager → SSR
+    expect(inEffect(`(import.meta as any).globEager("./*");`)).toBe(true); // globEager → SSR
+    expect(inEffect(`const o = {} as any; (import.meta as any).glob("./*", o);`)).toBe(true); // opts no-literal → fail-closed eager
+    expect(inEffect(`(import.meta as any).glob("./*");`)).toBe(false); // lazy → on-call client
+    expect(inEffect(`(import.meta as any).glob("./*", { eager: false });`)).toBe(false); // lazy explícito
     // §141 residual: bracket dinámico.
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
   });
