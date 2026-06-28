@@ -5434,6 +5434,44 @@ function checkSourceFile(
         });
       }
     }
+    // `import.meta.glob(...)` / `import.meta.globEager(...)` — bulk-import de Vite que carga N módulos por
+    // PATRÓN glob. El miembro `glob` ESTÁ en SAFE_IMPORT_META_MEMBERS (el ACCESO es Edge-safe, el namespace
+    // lo puebla el build) — ORTOGONAL a si los MÓDULOS cargados se auditan. El gate NO los sigue: expandir el
+    // glob exige `readdir` + replicar la semántica micromatch de Vite (`*`/`**`/`{a,b}`/negación) = el
+    // SUBSISTEMA que §373 RENUNCIA (igual que el parser de JS-family). Detectable sintácticamente → FAIL-
+    // CLOSED LOUD (no residual-silencioso): un mod del glob con `process.cwd` pasaría sin auditar = fail-open
+    // por N. El contribuidor audita por import directo (seguido) o evita glob en @server-safe. codex-diligencia.
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      const callee = node.expression;
+      const globName =
+        ts.isPropertyAccessExpression(callee) &&
+        (callee.name.text === "glob" || callee.name.text === "globEager")
+          ? callee.name.text
+          : ts.isElementAccessExpression(callee) &&
+              ts.isStringLiteralLike(callee.argumentExpression) &&
+              (callee.argumentExpression.text === "glob" ||
+                callee.argumentExpression.text === "globEager")
+            ? callee.argumentExpression.text
+            : null;
+      if (
+        globName &&
+        valueSurvivalLeaves(callee.expression).some(
+          (l) =>
+            ts.isMetaProperty(l) &&
+            l.keywordToken === ts.SyntaxKind.ImportKeyword,
+        )
+      ) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "unresolved-import",
+          line: line + 1,
+          detail: `\`import.meta.${globName}(...)\` — bulk-import por patrón glob: el gate NO puede expandir el glob (exigiría readdir + la semántica micromatch de Vite, el subsistema que §373 renuncia) → los módulos cargados quedarían SIN auditar = fail-open por N. Audítalos por import directo (\`import "./mod"\`, que sí se sigue) o evita glob en @server-safe. ${lineText}`,
+        });
+      }
+    }
     // (a) Detectar typeof guards en if-statements: el then-branch
     // hereda el guard activo. El else-branch NO (en else, X está
     // undefined per la negación de la condición positiva).

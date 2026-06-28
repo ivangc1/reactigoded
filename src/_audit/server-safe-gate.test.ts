@@ -461,7 +461,15 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(any(`import.meta.url`)).toBe(false);
     expect(any(`(import.meta as any).env.DEV`)).toBe(false);
     expect(any(`(import.meta as any).hot`)).toBe(false);
-    expect(any(`(import.meta as any).glob("./*")`)).toBe(false);
+    // glob: el ACCESO al miembro es Edge-safe (el namespace lo puebla el build) — PASA.
+    expect(any(`(import.meta as any).glob`)).toBe(false);
+    // PERO el CALL `import.meta.glob(...)` es bulk-import por patrón: el gate no puede expandir el glob
+    // (readdir + micromatch de Vite = subsistema §373 renunciado) → los módulos quedarían sin auditar →
+    // FAIL-CLOSED, ORTOGONAL al acceso permitido (acceso-allowed ≠ módulos-auditados). codex-diligencia.
+    expect(any(`(import.meta as any).glob("./*")`)).toBe(true);
+    expect(any(`(import.meta as any).glob("./*", { eager: true })`)).toBe(true);
+    expect(any(`(import.meta as any).globEager("./*")`)).toBe(true);
+    expect(any(`(import.meta as any)["glob"]("./*")`)).toBe(true); // bracket-literal
     // §141 residual: bracket dinámico.
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
   });
