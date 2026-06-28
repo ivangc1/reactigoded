@@ -641,6 +641,20 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(F(`(c ? import.meta : ({} as any)).dirname`)).toBe(true); // import.meta root VT-envuelto
     expect(F(`(0, import.meta).filename`)).toBe(true); // import.meta coma
     expect(F(`(0, [].constructor.constructor)("x")()`)).toBe(true); // .constructor weaponizado VT-envuelto
+    // Function ctor vía `super()` en subclase ANÓNIMA inline `extends <fn>.constructor` (codex P1, análogo
+    // eval-sink de la subclase WebAssembly.Module): al construir, super invoca el Function ctor. NAMED = data-flow.
+    expect(F(`new (class extends ((()=>{}).constructor as any) { constructor(){ super("return 1"); } })()`)).toBe(true);
+    expect(F(`new (class extends ((()=>{}).constructor as any) {})("return 1")`)).toBe(true); // default derived ctor
+    expect(F(`Reflect.construct(class extends ((()=>{}).constructor as any) { constructor(){super("x");} }, [])`)).toBe(true);
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const C = () => { class X extends ((() => {}).constructor as any) {} return new X("x"); };`, "fnsub.fixture.tsx").length > 0,
+    ).toBe(false); // NAMED class = data-flow residual
+    expect(F(`new (class extends (([].constructor) as any) {})()`)).toBe(false); // [].constructor = Array, no Function
+    // NESTING anónimo: eval-sink en el heritage INTERNO de una clase construida (la externa delega a super
+    // → la interna se construye → su super invoca Function). classExpressionIsConstructed recurre por la
+    // cadena de heritage anónima. codex P1 (sub-hueco del cruce, diligencia).
+    expect(F(`new (class extends (class extends ((()=>{}).constructor as any) {}) {})()`)).toBe(true);
+    expect(F(`new (class extends (class extends (Array as any) {}) {})()`)).toBe(false); // base segura = no eval-sink
     expect(F(`setTimeout("code", 0)`)).toBe(true); // string-timer eval-sink
     expect(F(`(0, setTimeout)("code", 0)`)).toBe(true); // string-timer callee VT-envuelto
     expect(

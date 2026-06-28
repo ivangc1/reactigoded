@@ -3901,6 +3901,43 @@ function objectLiteralCannotOverrideConstructor(objLit) {
  * `x.constructor()`. Exigir `node.parent` directo dejaba escapar la forma envuelta.
  * beta.27 BLOCKER-1 (hunt: paren-wrap C; re-hunt: `!`/`as`/`satisfies` + operadores).
  */
+// ¿La `ClassExpression` `cls` es CONSTRUIDA inline — target DIRECTO de `new`/`Reflect.construct` a través de
+// parens/value-transparentes? `new (class…)()` / `Reflect.construct(class…, a)` → sí; `const X = class…;
+// new X()` (NOMBRADA/aliased) → no (data-flow residual). Simétrico con el manejo de subclase de
+// `constructionTargets` (heritage-extends EN-SITIO de la clase construida). codex P1.
+function classExpressionIsConstructed(cls) {
+  let top = cls;
+  while (
+    top.parent &&
+    (isValueTransparentParent(top.parent, top) ||
+      (isErasedOuterExpr(top.parent) && top.parent.expression === top))
+  ) {
+    top = top.parent;
+  }
+  const p = top.parent;
+  if (!p) return false;
+  if (ts.isNewExpression(p) && p.expression === top) return true;
+  if (ts.isCallExpression(p)) {
+    const rc = reflectCallTarget(p);
+    if (rc && rc.method === "construct" && rc.target === top) return true;
+  }
+  // NESTING anónimo: `top` es el extends-heritage de OTRA `ClassExpression` que a su vez se construye →
+  // al construir la subclase externa su `super` construye ESTA (el derived ctor delega a super), así que
+  // ESTA también se construye → su propio heritage eval-sink debe cazarse. Recursivo por la cadena de
+  // heritage (AST finito, sube hasta el `new`). El extends NOMBRADO (`extends A` identifier) NO recurre →
+  // data-flow residual. codex P1 (sub-hueco del cruce, diligencia).
+  if (
+    ts.isExpressionWithTypeArguments(p) &&
+    p.expression === top &&
+    p.parent &&
+    ts.isHeritageClause(p.parent) &&
+    p.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+    ts.isClassExpression(p.parent.parent)
+  ) {
+    return classExpressionIsConstructed(p.parent.parent);
+  }
+  return false;
+}
 function isWeaponizedConstructorAccess(node) {
   // (a) doble `x.constructor.constructor` (ES Function, se llame o no) — la base
   //     puede venir envuelta en value-transparentes: `(0, x.constructor).constructor`.
@@ -3933,6 +3970,25 @@ function isWeaponizedConstructorAccess(node) {
   ) {
     const m = accessedMemberName(parent);
     if (m === "call" || m === "apply" || m === "bind") return true;
+  }
+  // (f) heritage `extends <fn>.constructor` de una clase CONSTRUIDA inline: `new (class extends
+  //     (f.constructor) { constructor(){ super("return 1"); } })()` — al construir la subclase, `super`
+  //     INVOCA el `Function` constructor (el default derived ctor reenvía args vía `super(...args)`; un
+  //     `super("code")` explícito igual). El `.constructor` está EN-SITIO en la cláusula extends (contiguo
+  //     con el `new`) → decidible, ANÁLOGO eval-sink de la subclase WebAssembly.Module (`constructionTargets`).
+  //     El guard de receiver (arriba) ya descartó `extends [].constructor` (= Array, no Function). Solo la
+  //     clase ANÓNIMA inline-construida; la NOMBRADA (`class X extends f.constructor {}; new X()`) = data-flow
+  //     residual (token en la declaración, no en el `new`). codex P1.
+  if (
+    ts.isExpressionWithTypeArguments(parent) &&
+    parent.expression === child &&
+    parent.parent &&
+    ts.isHeritageClause(parent.parent) &&
+    parent.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+    ts.isClassExpression(parent.parent.parent) &&
+    classExpressionIsConstructed(parent.parent.parent)
+  ) {
+    return true;
   }
   // (e) `Reflect.construct(x.constructor, [...])` / `Reflect.apply(x.constructor, …)` — el
   //     `.constructor` (acceso DIRECTO contiguo) se INVOCA vía un builtin Reflect nombrado
