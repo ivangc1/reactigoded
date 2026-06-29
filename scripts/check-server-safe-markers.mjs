@@ -4755,6 +4755,17 @@ function resolveImportPath(
   const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
   const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
 
+  // Protocol-relative URL (`//host/x` — hereda el protocolo http/https de la página) → CÓDIGO REMOTO, no un
+  // peer de npm ni un archivo local. La regex de esquema URL de abajo (letra+`:`) NO lo caza (empieza con
+  // `//`); la rama relativa lo haría unresolvable solo INCIDENTALMENTE (not-found) y con mensaje engañoso.
+  // Explícito → fail-closed por DISEÑO, robusto. (Hermano del esquema-URL: ambos cargan código remoto que el
+  // gate no puede auditar y corre en el render.) codex-diligencia (barrido de dimensiones del resolver).
+  if (specifier.startsWith("//")) {
+    return {
+      kind: "unresolvable",
+      reason: `import protocol-relative \`${specifier.slice(0, 48)}${specifier.length > 48 ? "…" : ""}\` — URL REMOTA (hereda http/https), NO un peer de npm ni archivo local: carga código que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local.`,
+    };
+  }
   // Sufijo de QUERY: distinguir un LOADER de asset (transforma el import en algo NO ejecutado en el render
   // → external) de una query ARBITRARIA (`?v=1` cache-bust → Vite transforma el `.ts` como CÓDIGO, hay que
   // AUDITARLO). LOADER (flag bare ∈ ASSET_LOADER_QUERIES) → external; cualquier otra query → DESLIGAR y
@@ -4786,6 +4797,18 @@ function resolveImportPath(
     // (review genérico). El `import type` ya se salta antes (type-only, erased).
     if (isNodeBuiltinSpecifier(specifier)) {
       return { kind: "edge-denied", specifier };
+    }
+    // Esquema URL (`data:`/`http:`/`https:`/`blob:`/`file:`/…, ≠ `node:` ya manejado arriba): NO es un peer
+    // de npm. `data:` es CÓDIGO ejecutable INLINE (`data:text/javascript,export default process.cwd()`);
+    // http/blob/file cargan un módulo remoto/dinámico. El gate no puede auditar el código que cargan, y corre
+    // en el RENDER → fail-closed RUIDOSO (NO external): un `import("data:…")` render-path contrabandeaba código
+    // sin auditar (process.cwd() rompe en Edge). codex P2. (Un peer/`@scope/pkg` no tiene `:` → no matchea.)
+    const urlScheme = /^[a-z][a-z0-9+.-]*:/i.exec(specifier);
+    if (urlScheme) {
+      return {
+        kind: "unresolvable",
+        reason: `import con esquema URL \`${urlScheme[0]}\` (\`${specifier.slice(0, 48)}${specifier.length > 48 ? "…" : ""}\`) — NO es un peer de npm: carga código ejecutable (\`data:\`=JS inline; \`http:\`/\`blob:\`/\`file:\`=módulo remoto/dinámico) que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local, o no importes por esquema URL en @server-safe.`,
+      };
     }
     for (const { prefix, targetPrefix } of tsconfigPaths) {
       if (specifier.startsWith(prefix)) {

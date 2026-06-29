@@ -1083,6 +1083,35 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("./dir2", "/repo/src/c.tsx", [], has(["/repo/src/dir2/index.ts", "/repo/src/dir2/index.json"]), roots).kind).toBe("internal");
   });
 
+  it("import con ESQUEMA URL (`data:`/`http:`/`blob:`/`file:`) → unresolvable (carga código no auditable, NO peer), codex P2", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const no = () => false;
+    // FAIL-OPEN cerrado: `data:` es JS inline ejecutable; http/blob/file cargan módulo remoto/dinámico:
+    for (const spec of ["data:text/javascript,export default 1", "https://evil.com/m.js", "http://x/m.js", "blob:abc", "file:///x.js"]) {
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+    }
+    // Protocol-relative `//host/x` (hereda http/https) — la regex de esquema (letra+`:`) NO lo caza (empieza
+    // con `//`) → fail-closed EXPLÍCITO por diseño (URL remota, no peer ni local). codex-diligencia (la 9ª
+    // dimensión que el barrido del resolver destapó: el esquema-URL que la regex de esquema no ve).
+    expect(resolveImportPath("//evil.com/x", "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+    expect(resolveImportPath("//cdn.example/m.js?worker", "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+    // …pero un solo `/` (absoluto) NO es protocol-relative → no lo caza el check de `//`:
+    expect(resolveImportPath("react", "/repo/src/c.tsx", [], no, roots).kind).toBe("external"); // control: peer sin esquema
+    // Flujo completo por FORMA de entrega del literal (checkFileWithImports sigue el grafo): cast (caso de
+    // codex), directo, static, template-sin-interp → todas FLAGGEAN; el cast/template no salvan el data::
+    const flow = (entry: string) =>
+      runWithVfs("/repo/src/c.tsx", vfs({ "/repo/src/c.tsx": `/** @server-safe */\n${entry}` })).length > 0;
+    expect(flow(`export async function P() { return import(("data:text/javascript,export default process.cwd()") as string); }`)).toBe(true); // cast (codex)
+    expect(flow(`export async function P() { return import("data:text/javascript,export default 1"); }`)).toBe(true); // directo
+    expect(flow(`import x from "data:text/javascript,export default 1";\nexport const P = () => x;`)).toBe(true); // static
+    expect(flow("export async function P() { return import(`data:text/javascript,export default 1`); }")).toBe(true); // template-sin-interp
+    // Controles: peer (sin `:`) → external; builtin → edge-denied (NO afectados por el scheme-check):
+    expect(resolveImportPath("react", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
+    expect(resolveImportPath("@scope/pkg", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
+    expect(resolveImportPath("lodash/fp", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
+    expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], no, roots).kind).toBe("edge-denied");
+  });
+
   it("SIGUE el dynamic import RENDER-PATH con specifier literal (relativo/alias) y audita el módulo; deferred/variable/builtin por su vía (codex P1)", () => {
     const dirty = `export function cwd() { return process.cwd(); }`;
     // 1. FAIL-OPEN CERRADO: `await import("./x")` en el render audita ./x.ts (process.cwd → flag).
