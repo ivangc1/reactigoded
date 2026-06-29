@@ -478,6 +478,17 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(inEffect(`(import.meta as any).glob("./*", { eager: true });`)).toBe(true); // eager → SSR
     expect(inEffect(`(import.meta as any).globEager("./*");`)).toBe(true); // globEager → SSR
     expect(inEffect(`const o = {} as any; (import.meta as any).glob("./*", o);`)).toBe(true); // opts no-literal → fail-closed eager
+    // BARRIDO de node-kinds de las opts: cualquier forma NO-provablemente-lazy → fail-closed eager (codex P1
+    // spread + barrido proactivo shorthand/computed; el chequeo viejo solo miraba PropertyAssignment-con-nombre):
+    expect(inEffect(`(import.meta as any).glob("./*", { ...{ eager: true } });`)).toBe(true); // spread
+    expect(inEffect(`const o = {} as any; (import.meta as any).glob("./*", { ...o });`)).toBe(true); // spread-var
+    expect(inEffect(`const eager = true; (import.meta as any).glob("./*", { eager });`)).toBe(true); // shorthand
+    expect(inEffect(`(import.meta as any).glob("./*", { ["eager"]: true });`)).toBe(true); // computed-key
+    expect(inEffect(`const k = "eager"; (import.meta as any).glob("./*", { [k]: true });`)).toBe(true); // computed-var
+    expect(inEffect(`const v = true; (import.meta as any).glob("./*", { eager: v });`)).toBe(true); // valor variable
+    // …pero opciones no-eager (incl. shorthand) NO disparan eager → sigue lazy → exento:
+    expect(inEffect(`const query = "?raw"; (import.meta as any).glob("./*", { query });`)).toBe(false);
+    expect(inEffect(`(import.meta as any).glob("./*", { import: "default", eager: false });`)).toBe(false);
     expect(inEffect(`(import.meta as any).glob("./*");`)).toBe(false); // lazy → on-call client
     expect(inEffect(`(import.meta as any).glob("./*", { eager: false });`)).toBe(false); // lazy explícito
     // §141 residual: bracket dinámico.

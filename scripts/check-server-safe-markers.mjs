@@ -5575,21 +5575,36 @@ function checkSourceFile(
         // `glob(…,{eager:true})`) Vite lo BAJA a imports estáticos TOP-LEVEL → el módulo carga en module-eval
         // (SSR/Edge) AUNQUE el call esté en un callback que nunca corre → se flaggea SIEMPRE, ignorando
         // `isInClientOnlyDeferredBody`. Un LAZY glob devuelve importers on-call (posición-dependiente, como un
-        // dynamic import) → en cuerpo cliente-diferido es client-side → se respeta el skip. opts no-analizable
-        // (variable/spread) o `eager:<no-literal>` → fail-closed EAGER (ante la duda, carga en SSR).
+        // dynamic import) → en cuerpo cliente-diferido es client-side → se respeta el skip.
+        // LAZY PROVABLE ⟺ object-literal donde CADA propiedad prueba que NO contribuye `eager:true`: o es una
+        // opción distinta de `eager` (nombre identifier/string-literal estático ≠ "eager"), o es `eager: false`
+        // LITERAL. CUALQUIER node-kind no-analizable → fail-closed EAGER: opts no-object-literal (variable),
+        // SPREAD (`{...o}`), SHORTHAND `{eager}` (valor=variable), COMPUTED-KEY `{["eager"]:…}` (nombre no
+        // estático), `eager:<no-false>` (variable/ternario/true). Barrido de node-kinds COMPLETO — codex P1
+        // (spread) + barrido proactivo (shorthand/computed): el chequeo viejo solo miraba PropertyAssignment-
+        // con-nombre y se saltaba los otros kinds → fail-open en callback. Vite baja el eager a estáticos
+        // top-level → carga en module-eval AUNQUE el call esté en callback.
         const opts = node.arguments[1];
+        const propProvesNotEagerTrue = (p) => {
+          if (ts.isSpreadAssignment(p)) return false;
+          if (!p.name || ts.isComputedPropertyName(p.name)) return false;
+          const name = ts.isIdentifier(p.name)
+            ? p.name.text
+            : ts.isStringLiteralLike(p.name)
+              ? p.name.text
+              : null;
+          if (name === null) return false;
+          if (name !== "eager") return true;
+          return (
+            ts.isPropertyAssignment(p) &&
+            p.initializer.kind === ts.SyntaxKind.FalseKeyword
+          );
+        };
         const eager =
           globName === "globEager" ||
           (opts !== undefined &&
             (!ts.isObjectLiteralExpression(opts) ||
-              opts.properties.some(
-                (p) =>
-                  ts.isPropertyAssignment(p) &&
-                  ((ts.isIdentifier(p.name) && p.name.text === "eager") ||
-                    (ts.isStringLiteralLike(p.name) &&
-                      p.name.text === "eager")) &&
-                  p.initializer.kind !== ts.SyntaxKind.FalseKeyword,
-              )));
+              !opts.properties.every(propProvesNotEagerTrue)));
         if (eager || !context.isInClientOnlyDeferredBody) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
