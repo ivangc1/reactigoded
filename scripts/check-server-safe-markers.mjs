@@ -4707,20 +4707,25 @@ function bundlerShadowSibling(resolvedAbsPath, fileExists) {
  *     a ningún archivo. El gate falla ruidosamente — un skip silencioso
  *     aquí reproduce el bypass que este gate cierra.
  */
-// LOADERS de asset de bundler (flags BARE, no `key=value`): transforman el import en algo NO ejecutado en
-// el render (`?raw`/`?url`→string/URL, `?worker`/`?sharedworker`→bundle en otro thread, `?module`/`?init`→
-// WebAssembly.Module/init, `?inline`). Una query ARBITRARIA (`?v=1` cache-bust) NO es loader: Vite resuelve/
-// transforma el `.ts` como CÓDIGO igual → hay que AUDITARLO. codex P1 (el `?→external` incondicional previo
-// era over-broad = fail-open: `./x.ts?v=1` se saltaba la auditoría).
-const ASSET_LOADER_QUERIES = new Set([
-  "raw",
-  "url",
-  "worker",
-  "sharedworker",
-  "inline",
-  "module",
-  "init",
-]);
+// LOADERS de asset de bundler: el import se DESVÍA a string/URL/Worker/WasmModule — el cuerpo del módulo NO se
+// EJECUTA en este module-eval → external (no se audita). Replicamos las regex REALES de Vite 8 (copiadas
+// data-driven de node_modules/vite/dist, NO a-ojo: una réplica a-ojo DIVERGE — workflow-final cazó 3
+// divergencias: trailing-ws `?raw `, `#`-fragment `#.wasm?init`, y `?raw=1`). Vite detecta el loader sobre el
+// REQUEST CRUDO (no trimea borde ni token), por eso un trailing whitespace / `=` / `#`-antes rompe el match y
+// Vite TRANSPILA+EJECUTA el módulo → hay que AUDITARLO. `raw`/`url`/`worker`/`sharedworker` desvían CUALQUIER
+// base; `?init` SOLO sobre `.wasm` (lookbehind `(?<![?#].*)` → un `#`/`?` antes lo descalifica); `inline`/
+// `module` NO son loaders standalone (sobre un `.ts` Vite ejecuta; un asset vuelve external vía hasAssetExt
+// tras cleanUrl). codex P1/P2 + breaker + workflow-final (verificado vs Vite 8.0.14 ssrLoadModule real).
+const VITE_RAW_RE = /(?:\?|&)raw(?:&|$)/;
+const VITE_URL_RE = /(?:\?|&)url(?:&|$)/;
+const VITE_WORKER_RE = /(?:\?|&)(?:worker|sharedworker)(?:&|$)/;
+const VITE_WASM_INIT_RE = /(?<![?#].*)\.wasm\?init/;
+// cleanUrl de Vite = postfixRE EXACTO (sin `/s`, byte-idéntico a node_modules/vite/dist): quita `?query` Y
+// `#hash` desde el PRIMERO de ambos. (Las 4 regex de loader de arriba se fuzzearon byte-equivalentes a Vite 8 —
+// 300k casos, 0 divergencias; el `/s` previo era la única discrepancia de carácter → eliminado. Sin `/s`, un
+// specifier con newline INTERNO tras `?`/`#` no se stripea → cae a resolución → unresolvable, NUNCA external,
+// igual que Vite que tampoco resuelve ese request.) workflow-final xhigh (fidelidad de regex).
+const VITE_CLEAN_URL_RE = /[?#].*$/;
 // ¿`p` (path resuelto, extensión explícita) es un ASSET no-código? — NO `.ts/.tsx` (auditable) ni
 // `.js/.jsx/.cjs/.mjs` (JS no-auditable → fail-closed convert-to-ts). `.wasm/.css/.scss/.png/.svg/.json/…`
 // = asset que el bundler maneja, no código ejecutado en el render → el gate no lo audita (external si
@@ -4755,33 +4760,75 @@ function resolveImportPath(
   const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
   const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
 
+  // NORMALIZACIÓN: el edge-trim (whitespace/C0-control inicial/final) es GLOBAL — un specifier legítimo nunca
+  // lo lleva y los guards de `//`/esquema están anclados en char[0] (` data:…` se vería como bare→external
+  // sin él). El strip de tab/LF/CR INTERNO, en cambio, es propiedad SOLO del parser WHATWG-URL (data:/http:/
+  // `//`), NO de la detección de loader-query de Vite (regex sobre el request CRUDO). Aplicarlo global era un
+  // fail-open NUEVO: `./x.ts?ra\tw` fabricaba un loader `raw` que Vite NUNCA hace (Vite transpila+EJECUTA el
+  // .ts, idéntico a `?v=1`) → external sin auditar. Por eso: edge-trim al `specifier` (lo usan `?query` +
+  // resolución, con el token de query ÍNTEGRO), y el strip interno SOLO en `urlProbe`, que alimenta los
+  // guards de `//`/esquema (`da\tta:` → `data:` se sigue cazando). breaker-adversarial (regresión que la
+  // normalización global de workflow-hunt introdujo; verificado vs Vite 8 real: URL-parse y loader-regex
+  // normalizan DISTINTO).
+  // `rawSpecifier` = el ORIGINAL sin tocar: la detección de loader-query de abajo lo usa porque Vite NO
+  // trimea el borde ni el token (un trailing whitespace / `#`-antes tras el flag NO es un loader → Vite
+  // EJECUTA el .ts). workflow-final: el edge-trim alimentaba la detección de loader y fabricaba `?raw ` →
+  // external sin auditar (fail-open). El edge-trim sigue para la RESOLUCIÓN del path (URL-parse).
+  const rawSpecifier = specifier;
+  specifier = specifier
+    // eslint-disable-next-line no-control-regex -- rango C0+space INTENCIONAL: modela el trim de borde WHATWG-URL del runtime ESM, no un control char accidental.
+    .replace(/^[\u0000-\u0020]+/, "")
+    // eslint-disable-next-line no-control-regex -- idem, borde final.
+    .replace(/[\u0000-\u0020]+$/, "");
+  // Copia URL-normalizada (tab/LF/CR interno eliminado, como el parser WHATWG) SOLO para detectar `//`/esquema.
+  const urlProbe = specifier.replace(/[\t\n\r]/g, "");
+
   // Protocol-relative URL (`//host/x` — hereda el protocolo http/https de la página) → CÓDIGO REMOTO, no un
   // peer de npm ni un archivo local. La regex de esquema URL de abajo (letra+`:`) NO lo caza (empieza con
   // `//`); la rama relativa lo haría unresolvable solo INCIDENTALMENTE (not-found) y con mensaje engañoso.
   // Explícito → fail-closed por DISEÑO, robusto. (Hermano del esquema-URL: ambos cargan código remoto que el
   // gate no puede auditar y corre en el render.) codex-diligencia (barrido de dimensiones del resolver).
-  if (specifier.startsWith("//")) {
+  if (urlProbe.startsWith("//")) {
     return {
       kind: "unresolvable",
-      reason: `import protocol-relative \`${specifier.slice(0, 48)}${specifier.length > 48 ? "…" : ""}\` — URL REMOTA (hereda http/https), NO un peer de npm ni archivo local: carga código que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local.`,
+      reason: `import protocol-relative \`${urlProbe.slice(0, 48)}${urlProbe.length > 48 ? "…" : ""}\` — URL REMOTA (hereda http/https), NO un peer de npm ni archivo local: carga código que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local.`,
     };
   }
-  // Sufijo de QUERY: distinguir un LOADER de asset (transforma el import en algo NO ejecutado en el render
-  // → external) de una query ARBITRARIA (`?v=1` cache-bust → Vite transforma el `.ts` como CÓDIGO, hay que
-  // AUDITARLO). LOADER (flag bare ∈ ASSET_LOADER_QUERIES) → external; cualquier otra query → DESLIGAR y
-  // resolver el módulo base. codex P1 (el `?→external` incondicional previo era over-broad = fail-open:
-  // `./edge-only.ts?v=1` con `process.cwd()` se saltaba la auditoría).
-  const qIdx = specifier.indexOf("?");
-  if (qIdx >= 0) {
-    const isAssetLoader = specifier
-      .slice(qIdx + 1)
-      .split("&")
-      .some((part) => !part.includes("=") && ASSET_LOADER_QUERIES.has(part));
-    if (isAssetLoader) {
-      return { kind: "external" };
+  // Esquema URL (`data:`/`http:`/`https:`/`blob:`/`file:`/`node:`/…) → dispatch ANTES del bloque `?query`:
+  // un `data:text/javascript,…?raw` lleva un loader bare (`raw`) en SU PROPIA query; si el `?query` corriera
+  // primero tomaría el atajo loader→external y el módulo inline (`process.cwd()`) se saltaría la auditoría
+  // (corre en un runtime Node de dev, rompe en el target Edge donde `process` no existe). El rechazo de
+  // esquema DEBE ganar al atajo de loader. codex P2 (eff6e1b). `node:` → builtin de Node (edge-denied); el
+  // resto carga código ejecutable INLINE (`data:`=JS) o remoto/dinámico (`http:`/`blob:`/`file:`) que el gate
+  // no puede auditar y corre en el render → unresolvable RUIDOSO. (Un peer/`@scope/pkg`/relativo NO tiene
+  // esquema `letra+:` → no matchea: `@/x?raw` y `./x?raw` caen al `?query` de abajo como loaders locales
+  // legítimos; este es el mismo eje de ordenación que el `?query` over-broad — un check temprano no debe
+  // interceptar un caso que un check posterior debía rechazar.)
+  const urlScheme = /^[a-z][a-z0-9+.-]*:/i.exec(urlProbe);
+  if (urlScheme) {
+    if (isNodeBuiltinSpecifier(urlProbe)) {
+      return { kind: "edge-denied", specifier: urlProbe };
     }
-    specifier = specifier.slice(0, qIdx);
+    return {
+      kind: "unresolvable",
+      reason: `import con esquema URL \`${urlScheme[0]}\` (\`${urlProbe.slice(0, 48)}${urlProbe.length > 48 ? "…" : ""}\`) — NO es un peer de npm: carga código ejecutable (\`data:\`=JS inline; \`http:\`/\`blob:\`/\`file:\`=módulo remoto/dinámico) que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local, o no importes por esquema URL en @server-safe.`,
+    };
   }
+  // LOADER de asset vs query/código: Vite detecta el loader con regex sobre el REQUEST CRUDO (rawSpecifier).
+  // Si matchea → el import es string/URL/Worker/WasmModule (NO ejecuta el cuerpo) → external. Si NO → cleanUrl
+  // quita `?query`+`#hash` y Vite TRANSPILA+EJECUTA la base → resolver+auditar. Un trailing-ws, un `=`, o un
+  // `#`-antes rompen el match igual que en Vite. workflow-final (vs Vite 8 real): cerró `?raw ` (trailing-ws),
+  // `#.wasm?init` (`#`-fragment) y `?raw=1`, que el `split("&")`+`endsWith(".wasm")` a-ojo clasificaba mal.
+  if (
+    VITE_RAW_RE.test(rawSpecifier) ||
+    VITE_URL_RE.test(rawSpecifier) ||
+    VITE_WORKER_RE.test(rawSpecifier) ||
+    VITE_WASM_INIT_RE.test(rawSpecifier)
+  ) {
+    return { kind: "external" };
+  }
+  // cleanUrl: quita `?query` y `#hash` → la base que Vite resuelve+ejecuta (el edge-trim ya tocó el path).
+  specifier = specifier.replace(VITE_CLEAN_URL_RE, "");
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
@@ -4795,20 +4842,10 @@ function resolveImportPath(
     // builtin (`import {Buffer} from "buffer"` = builtin o npm-shim según el bundler) SÍ es resolución/
     // provenance que el gate renuncia (§141) → deny-conservador-ahora + allowlist-#190. codex P1/P2
     // (review genérico). El `import type` ya se salta antes (type-only, erased).
+    // `node:fs`/`data:`/`http:`/… (esquema `letra+:`) ya se dispatcharon ARRIBA, antes del `?query` (codex P2).
+    // Aquí solo llega el bare/subpath SIN esquema: `fs`, `path`, `fs/promises` → builtin edge-denied.
     if (isNodeBuiltinSpecifier(specifier)) {
       return { kind: "edge-denied", specifier };
-    }
-    // Esquema URL (`data:`/`http:`/`https:`/`blob:`/`file:`/…, ≠ `node:` ya manejado arriba): NO es un peer
-    // de npm. `data:` es CÓDIGO ejecutable INLINE (`data:text/javascript,export default process.cwd()`);
-    // http/blob/file cargan un módulo remoto/dinámico. El gate no puede auditar el código que cargan, y corre
-    // en el RENDER → fail-closed RUIDOSO (NO external): un `import("data:…")` render-path contrabandeaba código
-    // sin auditar (process.cwd() rompe en Edge). codex P2. (Un peer/`@scope/pkg` no tiene `:` → no matchea.)
-    const urlScheme = /^[a-z][a-z0-9+.-]*:/i.exec(specifier);
-    if (urlScheme) {
-      return {
-        kind: "unresolvable",
-        reason: `import con esquema URL \`${urlScheme[0]}\` (\`${specifier.slice(0, 48)}${specifier.length > 48 ? "…" : ""}\`) — NO es un peer de npm: carga código ejecutable (\`data:\`=JS inline; \`http:\`/\`blob:\`/\`file:\`=módulo remoto/dinámico) que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local, o no importes por esquema URL en @server-safe.`,
-      };
     }
     for (const { prefix, targetPrefix } of tsconfigPaths) {
       if (specifier.startsWith(prefix)) {

@@ -1042,20 +1042,40 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     }
   });
 
-  it("import de ASSET (LOADER `?raw/?url/?worker/?module` / extensión no-código) → external; query ARBITRARIA `?v=1` sobre .ts → audita (codex P2 + P1)", () => {
+  it("import por LOADER de bundler → external SEGÚN alcance (universal vs ext-restringido); loader-sobre-código `.ts` o query arbitraria → audita (codex P1/P2 + workflow-hunt)", () => {
     const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
     const assetExists = (p: string) => /\.(wasm|css|png|svg)$/.test(p);
-    // LOADER de bundler (Wasm-as-Module Edge-safe, ?url, ?raw, ?worker) → external (no se sigue el asset):
-    for (const spec of ["./add.wasm?module", "./styles.css?inline", "./img.png?url", "./w.ts?worker"]) {
+    // UNIVERSAL (raw/url/worker/sharedworker): desvían CUALQUIER base (incl. `.ts`) — el valor importado es
+    // string/URL/Worker, NO el módulo ejecutado → external sin mirar existencia ni extensión:
+    for (const spec of ["./img.png?url", "./x.ts?raw", "./w.ts?worker", "./s.ts?sharedworker", "./edge.ts?worker"]) {
       expect(resolveImportPath(spec, "/repo/src/c.tsx", [], () => false, roots).kind).toBe("external");
     }
-    // codex P1: una query ARBITRARIA (`?v=1` cache-bust, NO loader) sobre un `.ts` EJECUTABLE NO es external
-    // — Vite lo transforma como código → se DESLIGA la query y se AUDITA (el `?→external` incondicional era
-    // fail-open: `./edge.ts?v=1` con `process.cwd()` se saltaba la auditoría):
+    // `?init` es EXT-RESTRINGIDO a `.wasm` (Vite wasmInitRE): sobre `.wasm` → external (short-circuit, sin
+    // mirar existencia); sobre un `.ts` NO desvía nada → cae a resolve+audit (ver fail-open cerrado abajo):
+    expect(resolveImportPath("./add.wasm?init", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("external");
+    // `?module` NO existe como query de Vite; `?inline` solo modifica CSS/asset — sobre un asset siguen siendo
+    // external vía hasAssetExt tras DESLIGAR la query (requiere que el asset EXISTA, si no → fail-loud):
+    expect(resolveImportPath("./add.wasm?module", "/repo/src/c.tsx", [], assetExists, roots).kind).toBe("external");
+    expect(resolveImportPath("./styles.css?inline", "/repo/src/c.tsx", [], assetExists, roots).kind).toBe("external");
+    // FAIL-OPEN CERRADO (workflow-hunt, verificado contra Vite 8 `ssrLoadModule` real): `?inline`/`?module`/
+    // `?init` sobre un `.ts` EJECUTABLE NO son loaders — Vite transpila+ejecuta el .ts (cleanUrl quita la
+    // query) → AUDITAR. Antes caían a external (whitelist over-broad) y el `process.cwd()` se saltaba la auditoría:
     const codeExists = (p: string) => p.endsWith("/edge.ts");
+    for (const q of ["?inline", "?module", "?init"]) {
+      expect(resolveImportPath(`./edge.ts${q}`, "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    }
+    // …y end-to-end por el grafo: `./edge.ts?inline` arrastra la violación del módulo sucio (no se salta):
+    const v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport x from "./edge.ts?inline";\nexport function P() { return x; }`,
+        "/repo/src/edge.ts": `export default process.cwd();`,
+      }),
+    );
+    expect(v.some((x) => x.file.endsWith("edge.ts"))).toBe(true);
+    // codex P1: query ARBITRARIA (`?v=1` cache-bust, NO loader) sobre un `.ts` EJECUTABLE → DESLIGA + AUDITA:
     expect(resolveImportPath("./edge.ts?v=1", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
     expect(resolveImportPath("./edge.ts?t=1&x=2", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
-    expect(resolveImportPath("./edge.ts?worker", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("external"); // loader sí
     // Asset SIN query que EXISTE (extensión no-código) → external:
     for (const spec of ["./add.wasm", "./styles.css", "./logo.svg"]) {
       expect(resolveImportPath(spec, "/repo/src/c.tsx", [], assetExists, roots).kind).toBe("external");
@@ -1065,6 +1085,38 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("./legacy.js", "/repo/src/c.tsx", [], (p) => p.endsWith("legacy.js"), roots).kind).toBe("unresolvable");
     expect(resolveImportPath("./nope.wasm", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("unresolvable");
     expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("edge-denied");
+  });
+
+  it("LOADER detectado con las regex REALES de Vite (no a-ojo): trailing-ws / `#`-fragment / `=`-form rompen el match → se AUDITA (workflow-final, vs Vite 8 real)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const codeExists = (p: string) => p.endsWith("/x.ts");
+    // A — trailing whitespace/C0 tras el token: Vite exige flag + `&`|fin; un trailing-ws rompe el match →
+    //     transpila+EJECUTA el .ts → AUDITAR. El edge-trim del borde lo fabricaba como loader → external (fail-open):
+    for (const q of ["?raw ", "?raw\t", "?url ", "?worker\t", "?sharedworker "]) {
+      expect(resolveImportPath(`./x.ts${q}`, "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    }
+    // B — `#`-fragment: Vite cleanUrl quita `?query` Y `#hash`; `#.wasm?init` NO es wasm-init (el lookbehind
+    //     `(?<![?#].*)` lo descalifica) → la base real es el `.ts` → AUDITAR (no external por `baseIsWasm` falso):
+    expect(resolveImportPath("./x.ts#.wasm?init", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    expect(resolveImportPath("./x.ts#frag", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    // C — `=`-form: la regex real (`(?:&|$)`) NO matchea `?raw=1` → EJECUTA → AUDITAR:
+    expect(resolveImportPath("./x.ts?raw=1", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    // Controles GENUINOS (Vite SÍ los honra → external):
+    for (const q of ["?raw", "?url", "?worker", "?raw&v=1", "?v=1&raw"]) {
+      expect(resolveImportPath(`./x.ts${q}`, "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("external");
+    }
+    expect(resolveImportPath("./add.wasm?init", "/repo/src/c.tsx", [], () => false, roots).kind).toBe("external");
+    // End-to-end por grafo: el `.ts` sucio tras un trailing-ws / `#`-fragment se AUDITA (no se salta):
+    for (const q of ["?raw ", "#.wasm?init"]) {
+      const v = runWithVfs(
+        "/repo/src/c.tsx",
+        vfs({
+          "/repo/src/c.tsx": `/** @server-safe */\nimport x from "./x.ts${q}";\nexport function P() { return x; }`,
+          "/repo/src/x.ts": `export default process.cwd();`,
+        }),
+      );
+      expect(v.some((e) => e.file.endsWith("x.ts"))).toBe(true);
+    }
   });
 
   it("import EXTENSIONLESS que resuelve a `.json` → external (Vite resolve.extensions + precedencia file-vs-dir), codex P2", () => {
@@ -1095,6 +1147,24 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     // dimensión que el barrido del resolver destapó: el esquema-URL que la regex de esquema no ve).
     expect(resolveImportPath("//evil.com/x", "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
     expect(resolveImportPath("//cdn.example/m.js?worker", "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+    // codex P2 (eff6e1b): un esquema-URL que lleva un loader BARE en su PROPIA query NO debe tomar el atajo
+    // loader→external del bloque `?query` — el rechazo de esquema corre ANTES. Sin esto, el módulo inline
+    // (`process.cwd()`) se saltaba la auditoría (corre en Node-dev, rompe en Edge). Es el mismo eje de
+    // ordenación que el `?query` over-broad: un check temprano no debe interceptar un rechazo posterior.
+    const yes = () => true;
+    for (const spec of [
+      "data:text/javascript,export default process.cwd();//?raw", // el caso EXACTO de codex
+      "data:text/javascript,x?url",
+      "https://evil.com/m.js?worker",
+      "blob:abc?raw",
+    ]) {
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+      // fail-closed POR DISEÑO: el rechazo de esquema gana aunque "exista" un archivo (corre antes de tryResolveFile):
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], yes, roots).kind).toBe("unresolvable");
+    }
+    // …y el control inverso sigue vivo: un loader LOCAL legítimo (sin esquema) → external (cae al `?query`):
+    expect(resolveImportPath("./asset.png?url", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
+    expect(resolveImportPath("@/x?worker", "/repo/src/c.tsx", [{ prefix: "@/", targetPrefix: "src/" }], no, roots).kind).toBe("external");
     // …pero un solo `/` (absoluto) NO es protocol-relative → no lo caza el check de `//`:
     expect(resolveImportPath("react", "/repo/src/c.tsx", [], no, roots).kind).toBe("external"); // control: peer sin esquema
     // Flujo completo por FORMA de entrega del literal (checkFileWithImports sigue el grafo): cast (caso de
@@ -1110,6 +1180,64 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("@scope/pkg", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
     expect(resolveImportPath("lodash/fp", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
     expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], no, roots).kind).toBe("edge-denied");
+  });
+
+  it("NORMALIZA whitespace/C0 borde + tab/LF/CR interno como el runtime ESM/WHATWG: ` data:…` → unresolvable (no external), parity con el sin-espacio (workflow-hunt)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const no = () => false;
+    const yes = () => true;
+    // FAIL-OPEN CERRADO: un espacio/tab/newline INICIAL derrotaba los guards anclados en char[0] (`//` y la
+    // regex de esquema) → ` data:…process.cwd()` caía a external SIN auditar; rolldown lo emite crudo al dist y
+    // Node lo EJECUTA (verificado). El runtime recorta el borde → el gate lo modela → se ve como `data:`:
+    for (const spec of [
+      " data:text/javascript,export default process.cwd()", // espacio inicial (el caso del workflow)
+      "\tdata:text/javascript,x", // tab inicial
+      "\ndata:text/javascript,x", // newline inicial
+      "  \t data:text/javascript,x", // run mixto
+      "data:text/javascript,x   ", // whitespace FINAL
+      "da\tta:text/javascript,x", // tab INTERNO (WHATWG lo elimina → `data:`)
+    ]) {
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+      // fail-closed POR DISEÑO: gana aunque "exista" un archivo (la normalización corre antes de resolver):
+      expect(resolveImportPath(spec, "/repo/src/c.tsx", [], yes, roots).kind).toBe("unresolvable");
+    }
+    // El protocol-relative con espacio inicial también se recupera (tras recortar → `//host` → unresolvable):
+    expect(resolveImportPath(" //evil.com/x", "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+    // Control: un specifier LEGÍTIMO con whitespace de borde se recorta y resuelve+audita NORMAL (no FP, no
+    // external nuevo): ` ./edge.ts ` → `./edge.ts` → internal; ` react` → `react` → external (peer):
+    const codeExists = (p: string) => p.endsWith("/edge.ts");
+    expect(resolveImportPath(" ./edge.ts ", "/repo/src/c.tsx", [], codeExists, roots).kind).toBe("internal");
+    expect(resolveImportPath("  react", "/repo/src/c.tsx", [], no, roots).kind).toBe("external");
+    // REGRESIÓN-FAIL-OPEN (breaker-adversarial): el strip de tab/LF/CR INTERNO es solo del parser URL, NO de
+    // los TOKENS de loader-query (Vite los detecta por regex sobre el request CRUDO → `?ra\tw` ≠ raw → Vite
+    // TRANSPILA+EJECUTA el .ts, idéntico a `?v=1`). Aplicar el strip global fabricaba un loader `raw` y mandaba
+    // el .ts (con process.cwd()) a external SIN auditar. El split (edge-trim global + strip interno SOLO en
+    // urlProbe para `//`/esquema) lo cierra → el .ts se AUDITA:
+    const xExists = (p: string) => p.endsWith("/x.ts");
+    // tab INTERNO (no es line-terminator): cleanUrl (postfixRE, sin `/s`) cruza el `\t` y stripea la query
+    // → base `./x.ts` → Vite la transpila+EJECUTA → AUDITAR (internal), idéntico a Vite real:
+    for (const tok of ["ra\tw", "shared\tworker", "x&ra\tw"]) {
+      expect(resolveImportPath(`./x.ts?${tok}`, "/repo/src/c.tsx", [], xExists, roots).kind).toBe("internal");
+    }
+    // newline/CR INTERNO en la query: el `.` de postfixRE NO cruza line-terminators (igual que Vite, sin
+    // `/s`) → cleanUrl NO stripea → se resuelve un archivo con `\n`/`\r` que NO existe → unresolvable. Vite
+    // tampoco lo resuelve (crashea) → mismo fail-closed SEGURO, NO un fail-open:
+    for (const tok of ["u\nrl", "work\rer"]) {
+      expect(resolveImportPath(`./x.ts?${tok}`, "/repo/src/c.tsx", [], xExists, roots).kind).toBe("unresolvable");
+    }
+    // …mientras el loader GENUINO (sin char interno) sigue external; y `da\tta:` (tab interno en el ESQUEMA, que
+    // el parser URL sí elimina) sigue cazándose vía urlProbe → unresolvable:
+    expect(resolveImportPath("./x.ts?raw", "/repo/src/c.tsx", [], xExists, roots).kind).toBe("external");
+    expect(resolveImportPath("da\tta:text/javascript,x", "/repo/src/c.tsx", [], no, roots).kind).toBe("unresolvable");
+    // End-to-end por el grafo: `./x.ts?ra\tw` arrastra la violación del módulo sucio (no se salta la auditoría):
+    const gv = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport v from "./x.ts?ra\tw";\nexport function P() { return v; }`,
+        "/repo/src/x.ts": `export default process.cwd();`,
+      }),
+    );
+    expect(gv.some((x) => x.file.endsWith("x.ts"))).toBe(true);
   });
 
   it("SIGUE el dynamic import RENDER-PATH con specifier literal (relativo/alias) y audita el módulo; deferred/variable/builtin por su vía (codex P1)", () => {
