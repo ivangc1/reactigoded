@@ -1194,6 +1194,29 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     }
   });
 
+  it("file-beats-dir gana al `dir/index.json`: un parent source sibling COEXISTIENDO con pkg/index.json NO se externaliza — lockea resolvesToJsonAsset contra un short-circuit por index.json (codex P2, vs Vite 8.1 real)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    const B = "/repo/src/pkg";
+    const idx = `${B}/index.json`;
+    const pj = `${B}/package.json`;
+    // Oráculo Vite 8.1: con un parent source file-winner presente, Vite corre el PARENT (file-beats-dir) e
+    // IGNORA pkg/index.json (y package.json). resolvesToJsonAsset recorre VITE_RESOLVE_ORDER (parent-exts ANTES
+    // de /index.json) → el parent se encuentra PRIMERO → NO externaliza. La señal BLOQUEANTE sería `external`
+    // (Vite corre código no auditado); internal-vs-unresolvable es calibración. Esta celda (parent ∩ index.json)
+    // no la tocaban los otros tests → guardia anti-regresión contra un futuro short-circuit por index.json:
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.ts`, idx]), roots).kind).toBe("internal");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.tsx`, idx]), roots).kind).toBe("internal");
+    // parent JS-family: Vite corre JS NO auditable → unresolvable (fail-closed; NUNCA external):
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.mjs`, idx]), roots).kind).toBe("unresolvable");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.js`, idx]), roots).kind).toBe("unresolvable");
+    // con package.json TAMBIÉN en el dir: el parent file-winner sigue ganando → mismo veredicto (no external):
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.ts`, pj, idx]), roots).kind).toBe("internal");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.mjs`, pj, idx]), roots).kind).toBe("unresolvable");
+    // CONTROL: sin parent sibling, solo index.json → external (Vite carga el json, no hay parent que correr):
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([idx]), roots).kind).toBe("external");
+  });
+
   it("guard package.json dispara por PRESENCIA (sin index.json): package.json + index.ts/index.tsx/solo → unresolvable; sin package.json → internal (codex P2)", () => {
     const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
     const has = (set: string[]) => (p: string) => set.includes(p);
