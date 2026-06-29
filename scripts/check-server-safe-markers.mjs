@@ -4753,16 +4753,18 @@ const VITE_WASM_INIT_RE = /(?<![?#].*)\.wasm\?init/;
 // specifier con newline INTERNO tras `?`/`#` no se stripea → cae a resolución → unresolvable, NUNCA external,
 // igual que Vite que tampoco resuelve ese request.) workflow-final xhigh (fidelidad de regex).
 const VITE_CLEAN_URL_RE = /[?#].*$/;
-// ¿`p` (path resuelto, extensión explícita) es un ASSET no-código? — NO `.ts/.tsx` (auditable) ni
-// `.js/.jsx/.cjs/.mjs` (JS no-auditable → fail-closed convert-to-ts). `.wasm/.css/.scss/.png/.svg/.json/…`
-// = asset que el bundler maneja, no código ejecutado en el render → el gate no lo audita (external si
-// EXISTE; si no existe, cae a unresolvable fail-loud — typo en el path). codex P2 (mismo eje que `?query`).
+// ¿`p` (path resuelto) es un ASSET que Vite NO ejecuta como código? — ALLOWLIST de los tipos que Vite
+// asset-handlea: KNOWN_ASSET_TYPES verbatim del dist de Vite 8 + CSS_LANGS + json (datos) + wasm. Una ext
+// FUERA del set la resuelve el resolver exacto y `vite:load-fallback` la lee como MÓDULO → la EJECUTA (un
+// `.payload` con JS válido CORRE — verificado vs Vite 8 real) → NO es asset → cae a unresolvable fail-closed
+// (NO external). codex P2: el boundary seguro es un ALLOWLIST de assets, no un deny-list de JS/TS — un
+// deny-list externaliza `.payload`/`.weirdext` ejecutables = fail-open. (assetsInclude custom en vite.config
+// añadiría exts → drift #190.)
+const VITE_ASSET_RE =
+  /\.(apng|bmp|png|jpe?g|jfif|pjpeg|pjp|gif|svg|ico|webp|avif|cur|jxl|mp4|webm|ogg|mp3|wav|flac|aac|opus|mov|m4a|vtt|woff2?|eot|ttf|otf|webmanifest|pdf|txt|css|less|sass|scss|styl|stylus|pcss|postcss|sss|json|wasm)$/i;
 function hasAssetExt(p) {
   const base = p.slice(Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
-  const dot = base.lastIndexOf(".");
-  if (dot <= 0) return false;
-  const ext = base.slice(dot).toLowerCase();
-  return ![".ts", ".tsx", ".js", ".jsx", ".cjs", ".mjs"].includes(ext);
+  return VITE_ASSET_RE.test(base);
 }
 function resolveImportPath(
   specifier,
@@ -4839,6 +4841,20 @@ function resolveImportPath(
     return {
       kind: "unresolvable",
       reason: `import con esquema URL \`${urlScheme[0]}\` (\`${urlProbe.slice(0, 48)}${urlProbe.length > 48 ? "…" : ""}\`) — NO es un peer de npm: carga código ejecutable (\`data:\`=JS inline; \`http:\`/\`blob:\`/\`file:\`=módulo remoto/dinámico) que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local, o no importes por esquema URL en @server-safe.`,
+    };
+  }
+  // Subpath-import de package (`#edge`, `#internal/x` — el specifier EMPIEZA con `#`): Node/Vite lo resuelven
+  // vía `package.json#imports` (resolveSubpathImports), que puede mapear a CÓDIGO local (`#edge` → ./src/edge.ts,
+  // EJECUTADO — verificado vs Vite 8 real). El resolver NO lee package.json#imports (subsistema de resolución de
+  // paquetes que renuncia, §373) → fail-closed RUIDOSO. DEBE ir ANTES de cleanUrl (que borraría el `#` inicial
+  // como fragment → "" → external = fail-open) y ANTES del loader: un `#edge?raw` NO ejecuta (Vite devuelve el
+  // source como string — oráculo Auditor-B) → external sería más preciso, pero fail-cerramos por conservadurismo
+  // (discriminar el caso inexistente `#alias?raw` no compensa; el `#edge` SIN loader SÍ ejecuta). Un `#`
+  // NO-inicial (`./x.ts#frag`) es un fragment de verdad → lo maneja cleanUrl. codex P2.
+  if (specifier.startsWith("#")) {
+    return {
+      kind: "unresolvable",
+      reason: `subpath-import ${specifier} — se resuelve vía package.json#imports (puede mapear a código local ejecutable) y el gate no lee package.json. Importa el módulo destino directamente con su ruta .ts/.tsx.`,
     };
   }
   // LOADER de asset vs query/código: Vite detecta el loader con regex sobre el REQUEST CRUDO (rawSpecifier).

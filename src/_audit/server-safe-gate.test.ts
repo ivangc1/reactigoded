@@ -19,6 +19,7 @@
  * en property + identifier).
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
 import ts from "typescript";
 import { transformSync } from "esbuild";
 import {
@@ -1229,6 +1230,71 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     // CONTROL: el MISMO dir SIN package.json + index.ts → internal (auditado). Prueba que el flip lo dispara
     // el package.json, no el index:
     expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/index.ts`]), roots).kind).toBe("internal");
+  });
+
+  it("subpath-import de package (`#edge`, leading `#`) → unresolvable: Vite lo resuelve vía package.json#imports (posible código), no leído por el gate (codex P2, §373, vs Vite 8 real)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const yes = () => true;
+    // Vite resuelve `#edge` vía package.json#imports → ./src/edge.ts EJECUTADO (verificado). cleanUrl borraría
+    // el `#` inicial (→ "" → external = fail-open); el gate no lee package.json#imports (§373) → fail-closed.
+    // ANTES del loader: un `#edge?raw` no debe tomar el atajo loader→external:
+    for (const s of ["#edge", "#internal/foo", "#edge/sub", "#edge?raw"]) {
+      expect(resolveImportPath(s, "/repo/src/c.tsx", [], yes, roots).kind).toBe("unresolvable");
+    }
+    // CONTROL: un `#` NO-inicial es un fragment de verdad → cleanUrl lo quita → resuelve la base (.ts → internal):
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    expect(resolveImportPath("./x.ts#frag", "/repo/src/c.tsx", [], has(["/repo/src/x.ts"]), roots).kind).toBe("internal");
+  });
+
+  it("asset por ALLOWLIST de Vite (no deny-list): ext desconocida que Vite ejecuta como módulo → unresolvable; asset conocido → external (codex P2, vs Vite 8 real)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    // FAIL-OPEN CERRADO: una ext FUERA del allowlist de Vite (`.payload`/`.weirdext`/`.bin`/`.coffee`) NO es
+    // asset — el resolver la resuelve y vite:load-fallback la lee como MÓDULO → la EJECUTA (verificado: un
+    // `.payload` con JS válido corre). El deny-list anterior (no-JS/TS → asset) la externalizaba SIN auditar =
+    // fail-open. Ahora → unresolvable fail-closed:
+    for (const a of ["./edge.payload", "./x.weirdext", "./data.bin", "./mod.coffee"]) {
+      expect(resolveImportPath(a, "/repo/src/c.tsx", [], has([`/repo/src/${a.slice(2)}`]), roots).kind).toBe("unresolvable");
+    }
+    // Assets CONOCIDOS de Vite (KNOWN_ASSET_TYPES verbatim + CSS_LANGS + json + wasm) → external (sin regresión):
+    for (const a of ["./logo.svg", "./styles.css", "./img.png", "./p.jpeg", "./p.jpg", "./f.woff2", "./d.pdf", "./n.txt", "./s.scss", "./i.webp", "./data.json", "./add.wasm"]) {
+      expect(resolveImportPath(a, "/repo/src/c.tsx", [], has([`/repo/src/${a.slice(2)}`]), roots).kind).toBe("external");
+    }
+  });
+
+  it("meta: VITE_ASSET_RE + VITE_RESOLVE_EXTS siguen siendo el snapshot del Vite instalado — anti version-drift (Auditor-B)", () => {
+    // VITE_ASSET_RE (= KNOWN_ASSET_TYPES verbatim) y VITE_RESOLVE_EXTS (= resolve.extensions default) son FOTOS
+    // hardcodeadas de node_modules/vite/dist. Un bump de Vite que cambie esas listas re-abriría un fail-open (una
+    // ext que pasó a no-asset → ejecutada → externalizada) o metería FPs, EN SILENCIO. Este meta-test re-extrae
+    // las listas del dist instalado y las compara con las constantes → si Vite cambia el set, CI rompe RUIDOSO con
+    // el diff exacto. Cierra de un golpe la clase de drift (resolve.extensions #173, asset-allowlist, assetsInclude #190).
+    const dir = `${process.cwd()}/node_modules/vite/dist/node/chunks`;
+    let knownRaw: string | null = null;
+    let defExtRaw: string | null = null;
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith(".js")) continue;
+      const s = readFileSync(`${dir}/${file}`, "utf8");
+      knownRaw ??= s.match(/KNOWN_ASSET_TYPES\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? null;
+      defExtRaw ??= s.match(/DEFAULT_EXTENSIONS\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? null;
+    }
+    expect(knownRaw).toBeTruthy();
+    expect(defExtRaw).toBeTruthy();
+    const parse = (raw: string) =>
+      [...raw.matchAll(/['"`]([^'"`,\s]+)['"`]/g)].map((m) => m[1]);
+    // Lee los SNAPSHOTS hardcodeados del SOURCE del gate y compáralos con el dist (sin importar las constantes:
+    // el .mjs sin .d.ts no las expone a TS). Si Vite bumpea y cambia el set, una de estas dos rompe RUIDOSO:
+    const gate = readFileSync(
+      `${process.cwd()}/scripts/check-server-safe-markers.mjs`,
+      "utf8",
+    );
+    // (1) el literal VITE_ASSET_RE del gate embebe la lista EXACTA de KNOWN_ASSET_TYPES de Vite:
+    expect(gate).toContain(parse(knownRaw as string).join("|"));
+    // (2) VITE_RESOLVE_EXTS del gate == DEFAULT_EXTENSIONS de Vite menos `.json` (que el gate maneja aparte):
+    const gateExtsRaw =
+      gate.match(/const VITE_RESOLVE_EXTS\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+    expect(parse(gateExtsRaw)).toEqual(
+      parse(defExtRaw as string).filter((e) => e !== ".json"),
+    );
   });
 
   it("import con ESQUEMA URL (`data:`/`http:`/`blob:`/`file:`) → unresolvable (carga código no auditable, NO peer), codex P2", () => {
