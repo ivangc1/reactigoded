@@ -1135,6 +1135,79 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("./dir2", "/repo/src/c.tsx", [], has(["/repo/src/dir2/index.ts", "/repo/src/dir2/index.json"]), roots).kind).toBe("internal");
   });
 
+  it("import de DIRECTORIO con `package.json` (redirect main/exports → posible CÓDIGO) NO se externaliza vía index.json → fail-closed (codex P2, vs Vite 8 real)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    const B = "/repo/src/pkg";
+    // FAIL-OPEN CERRADO: Vite consulta `pkg/package.json` (main→edge.ts CÓDIGO) ANTES del dir-index; con un
+    // `pkg/index.json` presente el gate lo externalizaba como asset SIN auditar el edge.ts que Vite EJECUTA
+    // (verificado vs Vite 8 ssrLoadModule real). resolveImportPath no lee package.json (resolución de paquetes,
+    // §373) → fail-closed RUIDOSO. Incl. cleanUrl(#frag/?x):
+    const redirect = has([`${B}/package.json`, `${B}/edge.ts`, `${B}/index.json`]);
+    for (const s of ["./pkg", "./pkg#frag", "./pkg?x"]) {
+      expect(resolveImportPath(s, "/repo/src/c.tsx", [], redirect, roots).kind).toBe("unresolvable");
+    }
+    expect(resolveImportPath("@/pkg", "/repo/src/c.tsx", [{ prefix: "@/", targetPrefix: "src/" }], redirect, roots).kind).toBe("unresolvable");
+    // Controles (no regresión): index.json SIN package.json → external (Vite carga el json); file-beats-dir
+    // (`pkg.ts`/`pkg.json` archivo gana al dir) → internal/external; index.ts SIN package.json → internal:
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/index.json`]), roots).kind).toBe("external");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has(["/repo/src/pkg.ts", `${B}/package.json`]), roots).kind).toBe("internal");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has(["/repo/src/pkg.json", `${B}/package.json`]), roots).kind).toBe("external");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/index.ts`]), roots).kind).toBe("internal");
+    // End-to-end por grafo: un @server-safe que importa el dir-con-package.json se flaggea (no se salta como asset):
+    const v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport pkg from "./pkg";\nexport function P() { return pkg; }`,
+        "/repo/src/pkg/package.json": `{ "main": "./edge.ts" }`,
+        "/repo/src/pkg/edge.ts": `export default process.cwd();`,
+        "/repo/src/pkg/index.json": `{}`,
+      }),
+    );
+    expect(v.length).toBeGreaterThan(0);
+  });
+
+  it("frontera file-beats-dir del guard package.json: un hermano padre EN resolve.extensions suprime el guard; `.cjs`/`.cts` NO (codex P2, vs Vite 8.1 real)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    const B = "/repo/src/pkg";
+    const pj = `${B}/package.json`;
+    const edge = `${B}/edge.ts`; // package.json main→edge.ts (CÓDIGO) — sentinela de "Vite entró al dir"
+    // FILE-winners AUDITABLES (`.ts`/`.tsx`): Vite carga `pkg.<ext>` (file-beats-dir), nunca entra al dir →
+    // el gate audita ese archivo → internal. Prueba que el guard se SUPRIME con un file-winner padre:
+    for (const ext of [".ts", ".tsx"]) {
+      expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg${ext}`, pj, edge]), roots).kind).toBe("internal");
+    }
+    // FILE-winners JS-family (`.mjs`/`.js`/`.mts`/`.jsx`): Vite carga el archivo (file-beats-dir) PERO el gate
+    // no audita JS-family ni resuelve un parent bare JS → unresolvable (fail-closed, política JS-no-auditable
+    // preexistente). NO external: el guard se suprime, pero la resolución JS-parent ya fail-cierra:
+    for (const ext of [".mjs", ".js", ".mts", ".jsx"]) {
+      expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg${ext}`, pj, edge]), roots).kind).toBe("unresolvable");
+    }
+    // `.json` file-winner → Vite carga el json asset → external (file-beats-dir, guard suprimido):
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg.json`, pj, edge]), roots).kind).toBe("external");
+    // `.cjs`/`.cts` NO son file-winners (Vite los IGNORA y ENTRA al dir → corre edge.ts) → el guard DEBE
+    // disparar → unresolvable. (Si alguien mete .cjs/.cts en VITE_RESOLVE_EXTS, el helper los vería como
+    // file-winner y suprimiría el guard → este invariante rompe. Oráculo Vite 8.1: .cjs/.cts → DIR.)
+    for (const ext of [".cjs", ".cts"]) {
+      expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`/repo/src/pkg${ext}`, pj, edge]), roots).kind).toBe("unresolvable");
+    }
+  });
+
+  it("guard package.json dispara por PRESENCIA (sin index.json): package.json + index.ts/index.tsx/solo → unresolvable; sin package.json → internal (codex P2)", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const has = (set: string[]) => (p: string) => set.includes(p);
+    const B = "/repo/src/pkg";
+    // El guard fail-closea por PRESENCIA de package.json (no lee main → no sabe si apunta a ./index o a CÓDIGO),
+    // SIN necesidad de index.json. Verdicto sin cambio vs el viejo guard 2c (ambos unresolvable):
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/package.json`, `${B}/index.ts`]), roots).kind).toBe("unresolvable");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/package.json`, `${B}/index.tsx`]), roots).kind).toBe("unresolvable");
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/package.json`]), roots).kind).toBe("unresolvable");
+    // CONTROL: el MISMO dir SIN package.json + index.ts → internal (auditado). Prueba que el flip lo dispara
+    // el package.json, no el index:
+    expect(resolveImportPath("./pkg", "/repo/src/c.tsx", [], has([`${B}/index.ts`]), roots).kind).toBe("internal");
+  });
+
   it("import con ESQUEMA URL (`data:`/`http:`/`blob:`/`file:`) → unresolvable (carga código no auditable, NO peer), codex P2", () => {
     const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
     const no = () => false;

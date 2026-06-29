@@ -4572,6 +4572,13 @@ function tryResolveNonAuditable(noExtAbsPath, fileExists) {
 // que Vite preferiría, el BUNDLER ENVÍA ESE archivo y el gate auditaría OTRO → divergencia
 // silenciosa (hunt final: helper.ts limpio + helper.mjs `screen.width` → gate `[]`, Vite
 // envía el .mjs) = bypass cross-module. Hoy LATENTE (0 .mjs/.js en src) → fail-closed.
+// INVARIANTE file-beats-dir (codex P2 / dirEntryShadowedByPackageJson): `[...VITE_RESOLVE_EXTS, ".json"]` DEBE
+// ser EXACTAMENTE el set que Vite trata como file-beats-dir (un archivo `<base>.<ext>` gana al directorio ANTES
+// de que Vite mire `<dir>/package.json`/`index.*`). Verificado vs Vite 8.1 real (oráculo ssrLoadModule):
+// {.mjs,.js,.mts,.ts,.jsx,.tsx,.json} ganan al dir; `.cjs`/`.cts` NO (Vite los IGNORA y ENTRA al dir). Una ext
+// de MÁS aquí (p.ej. `.cjs`) suprimiría el guard cuando existe un hermano `pkg.cjs` mientras Vite corre el
+// código del dir → fail-open reintroducido; por eso NUNCA añadir `.cjs`/`.cts`. Si `vite.config` customiza
+// `resolve.extensions`, este hardcode driftaría → #190 (derivar del config efectivo).
 const VITE_RESOLVE_EXTS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
 
 // Orden COMPLETO de resolución de Vite para un specifier SIN extensión: file-ext (resolve.extensions, con
@@ -4592,6 +4599,22 @@ function resolvesToJsonAsset(noExt, fileExists) {
     if (fileExists(`${noExt}${ext}`)) return ext.endsWith(".json");
   }
   return false;
+}
+// Vite consulta `<dir>/package.json` (main/module/browser/exports → puede apuntar a CÓDIGO ejecutable) ANTES
+// del dir-index (`<dir>/index.*`). resolveImportPath solo tiene `fileExists`, NO readFile → no puede resolver
+// el campo main/exports (el subsistema de resolución de paquetes que el resolver renuncia, §373). Detecta el
+// RIESGO con fileExists: `<base>` resuelve VÍA DIRECTORIO (ningún archivo `<base>.<ext>` ni `<base>.json` gana
+// primero, file-beats-dir) Y `<base>/package.json` existe → el redirect podría enviar Vite a un `.ts` que el
+// gate vería como el `index.json` asset (external) y NO auditaría = fail-open. Verificado vs Vite 8 real
+// (`./pkg` con package.json main→edge.ts EJECUTA edge.ts). El consumer fail-closea RUIDOSO. codex P2;
+// generaliza el guard 2c de bundlerShadowSibling (que solo cubría el dir-index ya resuelto a `.ts`).
+function dirEntryShadowedByPackageJson(noExt, fileExists) {
+  if (!fileExists(`${noExt}/package.json`)) return false;
+  // Un archivo `<base>.<sourceext>` o `<base>.json` gana file-beats-dir → Vite NO entra al directorio.
+  for (const ext of [...VITE_RESOLVE_EXTS, ".json"]) {
+    if (fileExists(`${noExt}${ext}`)) return false;
+  }
+  return true;
 }
 
 // Extensiones de SOURCE que TS/Vite resuelven (sin .json — no se audita). Un specifier que YA las
@@ -4678,7 +4701,11 @@ function bundlerShadowSibling(resolvedAbsPath, fileExists) {
     // package.json — es el subsistema de resolución de paquetes) → el gate auditaría index.ts
     // mientras Vite envía el archivo del redirect = BYPASS. Fail-NOISY: devolver el package.json
     // como shadow → import unresolvable/AMBIGUO. (0 package.json en src del DS; contrivado y
-    // fail-closed.) deepest re-hunt #173.
+    // fail-closed.) deepest re-hunt #173. SUBSUMIDO por `dirEntryShadowedByPackageJson` (codex P2), que corre
+    // ANTES (de resolvesToJsonAsset/tryResolveFile) y fail-closea TODO `<dir>` con package.json sin file-winner
+    // padre → para llegar AQUÍ con package.json haría falta un file-winner padre, pero entonces tryResolveFile
+    // resuelve el ARCHIVO padre (no el index) → esta rama 2c-package.json es inalcanzable. Mismo verdicto
+    // (unresolvable), sin drift; se mantiene como backstop defensivo.
     const pkg = `${dirBase}/package.json`;
     if (fileExists(pkg)) return pkg;
     return null;
@@ -4856,6 +4883,12 @@ function resolveImportPath(
           hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
         // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
         // `<base>.json` FILE gana al dir-index (file-beats-dir). codex P2.
+        if (!exact && dirEntryShadowedByPackageJson(noExt, fileExists)) {
+          return {
+            kind: "unresolvable",
+            reason: `alias ${specifier} resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+          };
+        }
         if (!exact && resolvesToJsonAsset(noExt, fileExists)) {
           return { kind: "external" };
         }
@@ -4902,6 +4935,12 @@ function resolveImportPath(
   const exact = hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
   // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
   // `<base>.json` FILE gana al dir-index (file-beats-dir). codex P2.
+  if (!exact && dirEntryShadowedByPackageJson(noExt, fileExists)) {
+    return {
+      kind: "unresolvable",
+      reason: `relativo ${specifier} resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+    };
+  }
   if (!exact && resolvesToJsonAsset(noExt, fileExists)) {
     return { kind: "external" };
   }
