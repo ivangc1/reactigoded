@@ -5789,15 +5789,21 @@ function checkSourceFile(
     // por N. El contribuidor audita por import directo (seguido) o evita glob en @server-safe. codex-diligencia.
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
+      // La KEY del bracket puede venir ERASED (`["glob" as const]`, `[("glob")]`) — el `as`/paren se borra al
+      // mismo `import.meta["glob"]` que el gate fail-cierra → desenvolver antes del StringLiteralLike (codex P2).
+      // Una key VARIABLE (`import.meta[k]`) sigue null = NO-glob: Vite tampoco la trata como macro (runtime error
+      // universal), §141 data-flow, no fail-open.
+      const globKey = ts.isElementAccessExpression(callee)
+        ? unwrapErased(callee.argumentExpression)
+        : null;
       const globName =
         ts.isPropertyAccessExpression(callee) &&
         (callee.name.text === "glob" || callee.name.text === "globEager")
           ? callee.name.text
-          : ts.isElementAccessExpression(callee) &&
-              ts.isStringLiteralLike(callee.argumentExpression) &&
-              (callee.argumentExpression.text === "glob" ||
-                callee.argumentExpression.text === "globEager")
-            ? callee.argumentExpression.text
+          : globKey &&
+              ts.isStringLiteralLike(globKey) &&
+              (globKey.text === "glob" || globKey.text === "globEager")
+            ? globKey.text
             : null;
       if (
         globName &&

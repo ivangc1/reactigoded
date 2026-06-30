@@ -496,6 +496,46 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
   });
 
+  it("detección de `import.meta.glob` desenvuelve la KEY erased del bracket (`[\"glob\" as const]`, `[(\"glob\")]`) → fail-closed; key variable/no-glob siguen no-glob (codex P2)", () => {
+    const detects = (b: string) =>
+      checkSourceFile(
+        `/** @server-safe */
+export function C(k: string){ ${b} return null; }`,
+        "gk.fixture.tsx",
+      ).some((v) => v.rule === "unresolved-import");
+    // DETECTAN (la key erased se borra al mismo `import.meta["glob"]` que el gate fail-cierra):
+    expect(detects(`const m = import.meta.glob("./x.ts", { eager: true }); void m;`)).toBe(true);
+    expect(detects(`const m = import.meta["glob"]("./x.ts", { eager: true }); void m;`)).toBe(true);
+    expect(detects(`const m = (import.meta as any)["glob" as const]("./x.ts", { eager: true }); void m;`)).toBe(true);
+    expect(detects(`const m = (import.meta as any)[("glob")]("./x.ts", { eager: true }); void m;`)).toBe(true);
+    expect(detects(`const m = import.meta[("globEager")!]("./x.ts"); void m;`)).toBe(true);
+    // NO-glob (correctos): key VARIABLE = §141 data-flow (Vite tampoco la glob-ea → runtime error universal);
+    // key no-glob:
+    expect(detects(`const m = import.meta[k]("./x.ts"); void m;`)).toBe(false);
+    expect(detects(`const m = import.meta["foo"]("./x.ts"); void m;`)).toBe(false);
+  });
+
+  it("clasificación EAGER de `import.meta.glob` es fail-closed ante erased en las opciones (objeto/clave/valor `as const`, spread → eager bajo guard); solo `{eager:false}` CRUDO prueba lazy — simetría con el fix de la key (Auditor-B)", () => {
+    // Bajo guard client-only (`typeof window`): un LAZY se suprime, un EAGER flaggea (Vite lo hoistea a
+    // module-top → corre server-side). Así la mis-clasificación eager→lazy sería un fail-open visible.
+    const flagsUnderGuard = (opts: string) =>
+      checkSourceFile(
+        `/** @server-safe */
+export function C(){ if (typeof window !== "undefined") { const m = import.meta.glob("./x.ts"${opts}); void m; } return null; }`,
+        "ge.fixture.tsx",
+      ).some((v) => v.rule === "unresolved-import");
+    // LAZY (suprimido bajo guard) — SOLO el `eager:false` CRUDO lo prueba:
+    expect(flagsUnderGuard(``)).toBe(false);
+    expect(flagsUnderGuard(`, { eager: false }`)).toBe(false);
+    // EAGER (Vite hoistea → FLAG aunque esté bajo guard) — el default fail-closed cubre TODO erased:
+    expect(flagsUnderGuard(`, { eager: true }`)).toBe(true);
+    expect(flagsUnderGuard(`, { eager: true } as const`)).toBe(true); // OBJETO erased
+    expect(flagsUnderGuard(`, { ["eager" as const]: true }`)).toBe(true); // CLAVE erased
+    expect(flagsUnderGuard(`, { eager: (true as const) }`)).toBe(true); // VALOR erased
+    expect(flagsUnderGuard(`, { eager: (false as const) }`)).toBe(true); // false erased → over-flag benigno (fail-closed)
+    expect(flagsUnderGuard(`, { ...({} as Record<string, unknown>) }`)).toBe(true); // spread → no prueba not-eager
+  });
+
   // codex P2 + Auditor-B: `process.env` ENDURECIDO a deny. `process` es present-but-partial
   // (NON_ABSENCE_DENIALS): en el baseline edge estricto (Workers/Deno sin compat) `process` es undeclared →
   // `process.env.FOO` tira ReferenceError sobre el bare `process` en ESM strict-mode. El contrato @server-safe
