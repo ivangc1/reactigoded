@@ -766,6 +766,33 @@ export const f = (c: boolean, k: string, m: string, buf: any) => { ${b} };`,
     expect(any(`const M = WebAssembly.Module; return new M(new Uint8Array());`)).toBe(false);
   });
 
+  // codex P2 + Auditor-B: constructor COMPUTADO de raíz construct-denied — `new WebAssembly[m]()` con m
+  // variable saltaba el check (accessedMemberNames=[]) → fail-open HERMANO del default-deny. Polaridad
+  // ESPEJO: en denylist el peligro es CONSTRUIR (no leer), así que fail-closed SOLO en `new`/Reflect.
+  // construct; el value-read/instanceof computado se PRESERVA Edge-safe (la fila decisiva de CC).
+  it("constructor COMPUTADO de raíz construct-denied (WebAssembly) → fail-closed en `new`/Reflect.construct; value-read preservado; call-computado-read-ban + member-alias = residual §141 (codex P2)", () => {
+    const flag = (b: string) =>
+      checkSourceFile(
+        `/** @server-safe */
+export const f = (c: boolean, m: string, bytes: any, wasm: any) => { ${b} };`,
+        "wac.fixture.tsx",
+      ).some((x) => x.rule === "no-bare-dom-access");
+    // CONSTRUCCIÓN computada → FLAG (m podría ser Module; NO se resuelve m = no §141):
+    expect(flag(`return new WebAssembly[m](bytes);`)).toBe(true);
+    expect(flag(`return new WebAssembly[c ? "Module" : "Memory"](bytes);`)).toBe(true);
+    expect(flag(`return Reflect.construct(WebAssembly[m], [bytes]);`)).toBe(true);
+    // VALUE-READ / instanceof computado → PASA (preservado: el valor es Edge-safe, solo `new` compila):
+    expect(flag(`const C = WebAssembly[m]; return C;`)).toBe(false);
+    expect(flag(`return wasm instanceof WebAssembly[m];`)).toBe(false);
+    // LITERAL sin regresión: Module-construct FLAG; Memory-construct / value-read PASA:
+    expect(flag(`return new WebAssembly.Module(bytes);`)).toBe(true);
+    expect(flag(`return new WebAssembly.Memory({ initial: 1 });`)).toBe(false);
+    expect(flag(`const M = WebAssembly.Module; return M;`)).toBe(false);
+    // RESIDUAL nombrado (NO cubierto, distinto del construct-ban): call computado de read-ban + member-alias §141:
+    expect(flag(`return WebAssembly[m](bytes);`)).toBe(false);
+    expect(flag(`const M = WebAssembly[m]; return new M(bytes);`)).toBe(false);
+  });
+
   // codex P1 (review genérico): método branded host bucket-1 (RECEIVER_BOUND_MEMBERS) llamado UNBOUND
   // lanza TypeError (this detachado). Edge-específico (crypto: OK-Node/throw-Edge). Set VT split SOLO aquí:
   // operadores this-detaching (,/&&/||/??/?:/=) detachan; parens/cast preservan.

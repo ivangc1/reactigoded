@@ -5644,12 +5644,17 @@ function checkSourceFile(
             continue;
           }
           const ctorRoot = exprPartialRoot(target.expression, context);
-          const ctorMember =
-            ctorRoot &&
-            accessedMemberNames(target).find((mm) =>
-              isConstructionDeniedMember(ctorRoot, mm),
-            );
-          if (ctorMember) {
+          const ctorCandidates = ctorRoot ? accessedMemberNames(target) : [];
+          const ctorMember = ctorCandidates.find((mm) =>
+            isConstructionDeniedMember(ctorRoot, mm),
+          );
+          // COMPUTADO vía Reflect.construct (`Reflect.construct(WebAssembly[m], …)`, m variable): mismo
+          // fail-close que `new WebAssembly[m]()` (Reflect.construct ≡ new). No §141 (detecta el patrón).
+          const ctorComputedDenied =
+            Boolean(ctorRoot) &&
+            ctorCandidates.length === 0 &&
+            CONSTRUCTION_DENIED_MEMBERS[ctorRoot] !== undefined;
+          if (ctorMember || ctorComputedDenied) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
             const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -5657,7 +5662,9 @@ function checkSourceFile(
               file: relPath,
               rule: "no-bare-dom-access",
               line: line + 1,
-              detail: `\`Reflect.construct(${ctorRoot}.${ctorMember}, …)\` ≡ \`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render: ${lineText}`,
+              detail: ctorMember
+                ? `\`Reflect.construct(${ctorRoot}.${ctorMember}, …)\` ≡ \`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render: ${lineText}`
+                : `\`Reflect.construct(${ctorRoot}[<computado>], …)\` ≡ \`new ${ctorRoot}[<computado>](bytes)\` — constructor COMPUTADO: no se puede probar que el miembro no sea construcción-denegada (${[...CONSTRUCTION_DENIED_MEMBERS[ctorRoot]].join("/")} compila bytes) → fail-closed: ${lineText}`,
             });
             break;
           }
@@ -5691,12 +5698,23 @@ function checkSourceFile(
           continue;
         }
         const ctorRoot = exprPartialRoot(target.expression, context);
-        const ctorMember =
-          ctorRoot &&
-          accessedMemberNames(target).find((mm) =>
-            isConstructionDeniedMember(ctorRoot, mm),
-          );
-        if (ctorMember) {
+        const ctorCandidates = ctorRoot ? accessedMemberNames(target) : [];
+        const ctorMember = ctorCandidates.find((mm) =>
+          isConstructionDeniedMember(ctorRoot, mm),
+        );
+        // COMPUTADO en posición `new` (`new WebAssembly[m](bytes)`, m variable → accessedMemberNames=[]):
+        // el miembro NO-probado no se puede demostrar ∉ construcción-denegada (m podría ser "Module") →
+        // fail-CLOSED, paridad con el literal-desconocido. Decidible SIN resolver m (no §141: detecta el
+        // patrón, no foldea la variable). SOLO en posición `new` → preserva el value-read Edge-safe
+        // (`const C = WebAssembly[m]`, `instanceof WebAssembly[m]` NO están en `new` → intactos). El
+        // member-read/CALL COMPUTADO de un read-ban (`WebAssembly[m]()` con m="compile") es residual
+        // SEPARADO: read-ban ≠ construct-ban — el read de compile ya flaggea literal, pero el computado no
+        // distingue Module-read-safe de compile-read-banned sin RESOLVER m (§141). codex P2 + Auditor-B.
+        const ctorComputedDenied =
+          Boolean(ctorRoot) &&
+          ctorCandidates.length === 0 &&
+          CONSTRUCTION_DENIED_MEMBERS[ctorRoot] !== undefined;
+        if (ctorMember || ctorComputedDenied) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
           const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -5704,7 +5722,9 @@ function checkSourceFile(
             file: relPath,
             rule: "no-bare-dom-access",
             line: line + 1,
-            detail: `\`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render. El VALOR \`${ctorRoot}.${ctorMember}\` (instanceof, static methods) es Edge-safe: ${lineText}`,
+            detail: ctorMember
+              ? `\`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render. El VALOR \`${ctorRoot}.${ctorMember}\` (instanceof, static methods) es Edge-safe: ${lineText}`
+              : `\`new ${ctorRoot}[<computado>](bytes)\` — constructor COMPUTADO de ${ctorRoot}: no se puede probar que el miembro no sea construcción-denegada (${[...CONSTRUCTION_DENIED_MEMBERS[ctorRoot]].join("/")} compila bytes → dynamic codegen Edge) → fail-closed. Usa el constructor literal o reescribe: ${lineText}`,
           });
           break;
         }
