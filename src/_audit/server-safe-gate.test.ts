@@ -1450,6 +1450,37 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(v).toEqual([]);
   });
 
+  it("typeof-guard client-only suprime el follow de dynamic-import + glob LAZY (paridad con read directo / deferred-body); rama SERVER y eager siguen auditándose (codex P2)", () => {
+    const run = (entry: string) =>
+      runWithVfs(
+        "/repo/src/c.tsx",
+        vfs({
+          "/repo/src/c.tsx": `/** @server-safe */\n${entry}`,
+          "/repo/src/browser-only.ts": `export function f(){ return window.innerWidth; }`,
+        }),
+      );
+    // FP CERRADO: un `import()` dinámico dentro de `if (typeof window !== "undefined")` solo corre en browser →
+    // NO se sigue/audita (paridad con el read directo guardado, que activeGuards ya exime). codex P2:
+    expect(
+      run(`export async function C(){ if (typeof window !== "undefined") { await import("./browser-only"); } return null; }`),
+    ).toEqual([]);
+    // CONTROL render-path: sin guard → SÍ audita el módulo (window flaggeado):
+    expect(
+      run(`export async function C(){ await import("./browser-only"); return null; }`).length,
+    ).toBeGreaterThan(0);
+    // CONTROL NO-FAIL-OPEN: rama SERVER (`typeof window === "undefined"` then) → activeGuards vacío → SÍ audita:
+    expect(
+      run(`export async function C(){ if (typeof window === "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
+    // glob LAZY guardado → NO se sigue; EAGER guardado → SÍ (Vite lo hoistea a module-eval → corre server-side):
+    expect(
+      run(`export function C(){ if (typeof window !== "undefined") { const m = import.meta.glob("./browser-only.ts"); void m; } return null; }`),
+    ).toEqual([]);
+    expect(
+      run(`export function C(){ if (typeof window !== "undefined") { const m = import.meta.glob("./browser-only.ts", { eager: true }); void m; } return null; }`).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("FALLA RUIDOSO 'no auditable' (no genérico 'no resolvió') si un import EXTENSIONLESS resuelve a JS-family Vite-resoluble (`.mjs`/`.js`/`.mts`/`.jsx`, codex P3)", () => {
     // Vite resuelve `./helper` → `helper.mts` (está en resolve.extensions). La cascada auditable
     // (.ts/.tsx) falla, pero el archivo EXISTE → el error genérico "no resolvió" MIENTE. Debe ser

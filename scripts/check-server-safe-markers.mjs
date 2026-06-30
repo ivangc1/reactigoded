@@ -5409,7 +5409,13 @@ function checkSourceFile(
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length > 0 &&
-      !context.isInClientOnlyDeferredBody
+      !context.isInClientOnlyDeferredBody &&
+      // typeof-guard client-only (`if (typeof window !== "undefined") import("./x")`): la rama solo corre en
+      // browser → el import NO se ejecuta en Edge → NO seguir/flaggear (paridad con no-bare-dom-access, que
+      // activeGuards ya suprime para reads directos, y con el deferred-body de arriba). activeGuards no-vacío ⟺
+      // una browser-global está guaranteed-defined en esta rama (= client-only); una rama SERVER (`typeof window
+      // === "undefined"` then) deja activeGuards VACÍO → SÍ se audita (no fail-open). codex P2.
+      context.activeGuards.size === 0
     ) {
       const litLeaves = valueSurvivalLeaves(node.arguments[0]).filter((l) =>
         ts.isStringLiteralLike(l),
@@ -5720,7 +5726,14 @@ function checkSourceFile(
           (opts !== undefined &&
             (!ts.isObjectLiteralExpression(opts) ||
               !opts.properties.every(propProvesNotEagerTrue)));
-        if (eager || !context.isInClientOnlyDeferredBody) {
+        // typeof-guard client-only: un glob LAZY dentro de `if (typeof window !== "undefined")` solo aplica en
+        // browser → suprimir (paridad con el deferred-body y con el dynamic-import de arriba). Un EAGER NO se
+        // suprime: Vite lo HOISTEA a `import * as` en module-top → corre en module-eval (server-side) aunque el
+        // `import.meta.glob` esté dentro del guard → sigue flaggeando. codex P2 (mismo eje que el dynamic-import).
+        if (
+          eager ||
+          (!context.isInClientOnlyDeferredBody && context.activeGuards.size === 0)
+        ) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
           const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
