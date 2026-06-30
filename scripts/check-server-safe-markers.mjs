@@ -6646,18 +6646,37 @@ function checkSourceFile(
       // sombreado) o vía ALIAS scope-aware (`const WA = WebAssembly; WA.compile()` — el root está en
       // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). exprPartialRoot ya respeta
       // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
-      const resolvedPartialRoot =
-        memberCandidates.length > 0
-          ? exprPartialRoot(node.expression, context)
-          : null;
-      // Predicado CENTRAL: denylist (WebAssembly) → miembro ∈ set; allowlist (performance/crypto) →
+      // Se resuelve SIEMPRE (también con memberCandidates=[]) para cazar el miembro COMPUTADO de abajo.
+      const resolvedPartialRoot = exprPartialRoot(node.expression, context);
+      // Predicado CENTRAL: denylist (WebAssembly) → miembro ∈ set; allowlist (performance/console) →
       // miembro ∉ set. Cualquier candidato denegado (fail-closed sobre las alternativas).
-      const partialMember = resolvedPartialRoot
-        ? (memberCandidates.find((m) =>
-            isDeniedPartialMember(resolvedPartialRoot, m),
-          ) ?? null)
-        : null;
-      const partialRootName = partialMember ? resolvedPartialRoot : null;
+      const partialMember =
+        resolvedPartialRoot && memberCandidates.length > 0
+          ? (memberCandidates.find((m) =>
+              isDeniedPartialMember(resolvedPartialRoot, m),
+            ) ?? null)
+          : null;
+      // MIEMBRO COMPUTADO (`performance[m]()`, m variable/expr → memberCandidates=[]) sobre raíz default-
+      // DENY (allowlist parcial ∈ SAFE_PARTIAL_MEMBERS: performance/console): el miembro NO-probado no se
+      // puede demostrar ∈ allowlist → fail-CLOSED, paridad EXACTA con un miembro literal-desconocido (que
+      // ya fail-cierra). Decidible SIN resolver `expr` (NO §141 — no se foldea la variable, solo se detecta
+      // el patrón); mismo principio que el deny de process.env (default-deny + no-probable-seguro = denegar).
+      // Hereda alias-tracking de exprPartialRoot (`const p=performance; p[m]()` flaggea igual que
+      // `p.eventLoopUtilization()`) y la polaridad de probe de `safelyProbed` abajo (`typeof`/`?.[m]?.()` no
+      // ejecutan → PASA; `[m]()`/`?.[m]()` ejecutan → FLAG). FUERA de alcance, NO cubierto aquí: (a) raíces
+      // DENYLIST wholesale (`WebAssembly[m]()` — fail-open HERMANO, su propio P2; verificado que hoy pasa);
+      // (b) destructure de miembro computado (`const {[k]:x}=performance` — §141 data-flow; la rama c.1c
+      // abajo solo caza el destructure LITERAL); (c) raíces WHOLESALE-safe (crypto — sin default-deny de
+      // miembro → `crypto[m]` pasa, correcto). codex P2 + Auditor-B.
+      const computedDefaultDenyRoot =
+        resolvedPartialRoot &&
+        memberCandidates.length === 0 &&
+        SAFE_PARTIAL_MEMBERS[resolvedPartialRoot] !== undefined
+          ? resolvedPartialRoot
+          : null;
+      const partialRootName = partialMember
+        ? resolvedPartialRoot
+        : computedDefaultDenyRoot;
       // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
       // (`typeof performance.x` → "undefined", no lee); (2) short-circuit opcional (`x?.()`,
       // `x?.foo`, `x?.[i]` → undefined si el miembro falta). Reading el miembro ausente da
@@ -6759,9 +6778,12 @@ function checkSourceFile(
           file: relPath,
           rule: "no-bare-dom-access",
           line: line + 1,
-          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
-            ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
-            : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
+          detail:
+            partialMember === null
+              ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un global parcial default-deny (allow: ${[...SAFE_PARTIAL_MEMBERS[partialRootName]].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro Node-only escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
+              : PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+                ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
+                : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
         });
       }
     }

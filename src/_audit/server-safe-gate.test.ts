@@ -711,6 +711,40 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport const c = performance;`, "perf-bare.fixture.tsx")).toEqual([]);
   });
 
+  // codex P2 + Auditor-B: miembro COMPUTADO sobre raíz parcial default-deny (performance/console) —
+  // `performance[m]()` con `m` variable saltaba el check (memberCandidates=[] → resolvedPartialRoot=null) →
+  // fail-open. Fail-closed por PARIDAD con el literal-desconocido (NO se resuelve `m` = no §141). Reusa
+  // exprPartialRoot (alias) + safelyProbed (polaridad de probe) → traps verificadas en la tabla de paridad.
+  it("miembro COMPUTADO de raíz parcial default-deny → fail-closed (paridad con literal-desconocido); safe-probes/alias/opt-chain heredados; crypto/WebAssembly/destructure fuera de alcance (codex P2)", () => {
+    const flag = (b: string) =>
+      checkSourceFile(
+        `/** @server-safe */
+export const f = (c: boolean, k: string, m: string, buf: any) => { ${b} };`,
+        "pcomp.fixture.tsx",
+      ).some((x) => x.rule === "no-bare-dom-access");
+    // COMPUTADO (var/param/ternario-enumerado) → FLAG: el miembro no-probado no se demuestra ∈ allowlist:
+    expect(flag(`const x = "eventLoopUtilization"; return performance[x]();`)).toBe(true);
+    expect(flag(`return performance[k]();`)).toBe(true);
+    expect(flag(`return performance[c ? "now" : "x"]();`)).toBe(true);
+    expect(flag(`console[m]("s"); return 0;`)).toBe(true);
+    // ALIAS → hereda alias-tracking de exprPartialRoot (paridad con `p.eventLoopUtilization()` que ya flaggea):
+    expect(flag(`const p = performance; return p[m]();`)).toBe(true);
+    // SAFE-PROBES (no ejecutan) → PASA, preservados:
+    expect(flag(`return typeof performance[m];`)).toBe(false);
+    expect(flag(`return m in performance;`)).toBe(false);
+    expect(flag(`return performance?.[m]?.();`)).toBe(false); // opt-chain corta sobre miembro ausente
+    // opt-ACCESS con call NO-opcional → ejecuta → FLAG (paridad con `performance?.eventLoopUtilization()`):
+    expect(flag(`return performance?.[m]();`)).toBe(true);
+    // literal-safe NO se afecta (sin over-flag):
+    expect(flag(`console.log("s"); return 0;`)).toBe(false);
+    expect(flag(`return performance.now();`)).toBe(false);
+    // FUERA de alcance (intactos): crypto WHOLESALE; WebAssembly DENYLIST (fail-open hermano, su propio P2);
+    // destructure de miembro COMPUTADO (§141 data-flow; el destructure LITERAL sí lo caza c.1c):
+    expect(flag(`return crypto[m](buf);`)).toBe(false);
+    expect(flag(`return (WebAssembly as any)[m]();`)).toBe(false);
+    expect(flag(`const { [k]: x } = performance; return x();`)).toBe(false);
+  });
+
   // codex P2 (review genérico): bucket 2 separado por OPERACIÓN — `WebAssembly.Module` ban-de-
   // CONSTRUCCIÓN (`new`), NO member-read (el valor es Edge-safe). Era FP sobre instanceof/static-methods.
   it("WebAssembly.Module: construcción denegada, valor Edge-safe (codex P2)", () => {
