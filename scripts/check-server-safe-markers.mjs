@@ -4785,7 +4785,10 @@ function hasAssetExt(p) {
 // null (check inerte) si no se puede leer. Auditor-B + CC.
 function readSelfReferenceName(rootDir, readFile) {
   try {
-    const pkg = JSON.parse(readFile(resolve(rootDir, "package.json")));
+    // `crossOsResolve` (no `resolve`): produce forward-slashes en TODOS los OS → matchea la key del vfs
+    // (`/repo/package.json`) en los tests Windows y readFileSync acepta forward-slashes en Windows prod. El
+    // `resolve` plano daba `\repo\package.json` en Windows → ENOENT → null → check inerte (CI Windows rojo).
+    const pkg = JSON.parse(readFile(crossOsResolve(rootDir, "package.json")));
     // Node permite self-reference SOLO si el paquete declara `exports` (sin él, `import "ownname"` desde
     // DENTRO no auto-resuelve → va a node_modules/external, no es vector). Chequear que `exports` EXISTA es
     // decidible con readFile → descarta el eje SIN-exports. NO se chequea qué clave matchea un subpath (eso
