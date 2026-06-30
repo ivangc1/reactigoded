@@ -1578,6 +1578,40 @@ export const y = z;`,
     expect(
       run(`export function C(){ if (typeof window !== "undefined") { const m = import.meta.glob("./browser-only.ts", { eager: true }); void m; } return null; }`).length,
     ).toBeGreaterThan(0);
+    // FAIL-OPEN CERRADO (codex P2 sobre 6a32565): un guard sobre LOCAL/PARAM/module-decl es VACUO (siempre
+    // defined → la rama corre en SSR) → NO es client-only → SÍ se audita. `activeGuards.size` lo inflaba; el
+    // fix exige un guard de browser-GLOBAL real (no-local) vía hasClientOnlyGuard:
+    expect(
+      run(`export async function C(){ const ready = true; if (typeof ready !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0); // guard LOCAL
+    expect(
+      run(`export async function C(p: unknown){ if (typeof p !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0); // guard PARAM
+    expect(
+      run(`const ready = true;
+export async function C(){ if (typeof ready !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0); // guard MODULE-DECL leído call-time
+    expect(
+      run(`export function C(){ const ready = true; if (typeof ready !== "undefined") { const m = import.meta.glob("./browser-only.ts"); void m; } return null; }`).length,
+    ).toBeGreaterThan(0); // glob LAZY con guard LOCAL (mismo bug, mismo fix)
+    // FILA-TRAMPA (Auditor-B): `||`-con-local NO es client-only — `ready` (local) siempre existe → la rama
+    // corre TAMBIÉN en SSR aunque `window` esté en activeGuards. collectConjunctionGuards NO recurre por `||`
+    // (solo `&&`) → activeGuards VACÍO en el then → AUDITA, en paridad EXACTA con el read directo (que tampoco
+    // lo suprime — la estructura del guard ya pesa el operador aguas arriba). import Y glob:
+    expect(
+      run(`export async function C(){ const ready = true; if (typeof window !== "undefined" || typeof ready !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
+    expect(
+      run(`export function C(){ const ready = true; if (typeof window !== "undefined" || typeof ready !== "undefined") { const m = import.meta.glob("./browser-only.ts"); void m; } return null; }`).length,
+    ).toBeGreaterThan(0);
+    // AND-con-local: `window` GARANTIZADO → client-only → SUPRIME (el local extra NO des-cualifica):
+    expect(
+      run(`export async function C(){ const ready = true; if (typeof window !== "undefined" && typeof ready !== "undefined") { await import("./browser-only"); } return null; }`),
+    ).toEqual([]);
+    // else-de-`=== "undefined"`: el else es CLIENT (window presente) → SUPRIME el import (el then sería server):
+    expect(
+      run(`export async function C(){ if (typeof window === "undefined") { /* server */ } else { await import("./browser-only"); } return null; }`),
+    ).toEqual([]);
   });
 
   it("FALLA RUIDOSO 'no auditable' (no genérico 'no resolvió') si un import EXTENSIONLESS resuelve a JS-family Vite-resoluble (`.mjs`/`.js`/`.mts`/`.jsx`, codex P3)", () => {

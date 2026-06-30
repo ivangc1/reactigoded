@@ -5366,6 +5366,23 @@ function checkSourceFile(
   // que son componentes (no globals). Se calcula una vez por archivo.
   const moduleDeclaredNames = gatherModuleDeclaredNames(sourceFile);
 
+  // Una rama es CLIENT-ONLY (no corre en SSR/Edge) cuando está guardada por `typeof <browser-global> !==
+  // "undefined"` — el global SOLO está definido en el browser. classifyTypeofGuard añade a activeGuards
+  // CUALQUIER nombre del typeof (excluye SAFE_GLOBALS + NON_ABSENCE_DENIALS), incluidos LOCALS/PARAMS/module-
+  // decls cuyo guard es VACUO (`typeof ready` con ready local = siempre defined → la rama corre TAMBIÉN en
+  // SSR). Por eso `activeGuards.size` NO basta para "client-only" (un guard local lo inflaba → fail-open en el
+  // follow de import()/glob): hay que exigir que ALGÚN guard sea un browser-GLOBAL real (no-local). Mismos
+  // descalificadores de "es local" que el check no-bare-dom-access (localBindings + module-decl leído call-
+  // time). codex P2 (review sobre 6a32565).
+  const hasClientOnlyGuard = (ctx) => {
+    for (const name of ctx.activeGuards) {
+      if (ctx.localBindings.has(name)) continue;
+      if (ctx.isInFunctionBody && moduleDeclaredNames.has(name)) continue;
+      return true;
+    }
+    return false;
+  };
+
   // Rule 1: no "use client" directive coexisting con @server-safe.
   // Inspect AST directive prologue: walk top-level statements mientras
   // sean ExpressionStatement con StringLiteral (prologue cohort per
@@ -5489,10 +5506,11 @@ function checkSourceFile(
       !context.isInClientOnlyDeferredBody &&
       // typeof-guard client-only (`if (typeof window !== "undefined") import("./x")`): la rama solo corre en
       // browser → el import NO se ejecuta en Edge → NO seguir/flaggear (paridad con no-bare-dom-access, que
-      // activeGuards ya suprime para reads directos, y con el deferred-body de arriba). activeGuards no-vacío ⟺
-      // una browser-global está guaranteed-defined en esta rama (= client-only); una rama SERVER (`typeof window
-      // === "undefined"` then) deja activeGuards VACÍO → SÍ se audita (no fail-open). codex P2.
-      context.activeGuards.size === 0
+      // activeGuards ya suprime para reads directos, y con el deferred-body de arriba). DEBE ser un guard de
+      // browser-GLOBAL (no `activeGuards.size`, que un `typeof local` vacuo inflaba → fail-open: la rama corría
+      // en SSR pero no se auditaba — codex P2). Rama SERVER (`typeof window === "undefined"` then) → sin guard
+      // de global → SÍ se audita (no fail-open).
+      !hasClientOnlyGuard(context)
     ) {
       const litLeaves = valueSurvivalLeaves(node.arguments[0]).filter((l) =>
         ts.isStringLiteralLike(l),
@@ -5824,12 +5842,13 @@ function checkSourceFile(
             (!ts.isObjectLiteralExpression(opts) ||
               !opts.properties.every(propProvesNotEagerTrue)));
         // typeof-guard client-only: un glob LAZY dentro de `if (typeof window !== "undefined")` solo aplica en
-        // browser → suprimir (paridad con el deferred-body y con el dynamic-import de arriba). Un EAGER NO se
-        // suprime: Vite lo HOISTEA a `import * as` en module-top → corre en module-eval (server-side) aunque el
-        // `import.meta.glob` esté dentro del guard → sigue flaggeando. codex P2 (mismo eje que el dynamic-import).
+        // browser → suprimir (paridad con el deferred-body y con el dynamic-import de arriba). DEBE ser guard de
+        // browser-GLOBAL (`hasClientOnlyGuard`, no `activeGuards.size` que un `typeof local` vacuo inflaba →
+        // fail-open, codex P2). Un EAGER NO se suprime: Vite lo HOISTEA a `import * as` en module-top → corre en
+        // module-eval (server-side) aunque el `import.meta.glob` esté dentro del guard → sigue flaggeando.
         if (
           eager ||
-          (!context.isInClientOnlyDeferredBody && context.activeGuards.size === 0)
+          (!context.isInClientOnlyDeferredBody && !hasClientOnlyGuard(context))
         ) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
