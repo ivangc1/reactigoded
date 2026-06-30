@@ -449,6 +449,39 @@ const EDGE_MISSING_GLOBALS = new Set([
   "WritableStreamDefaultController",
 ]);
 
+// BROWSER-ONLY: globals presentes SOLO en el browser (AUSENTES en Node Y en Edge — DOM/BOM, sin habitante
+// server). Un `typeof X !== "undefined"` sobre uno de éstos prueba que la rama corre SOLO client-side →
+// CLIENT-ONLY (justifica suprimir el follow de import()/glob). ALLOWLIST POSITIVO + fail-CLOSED: el gate solo
+// modela `builtin ∪ nodeBuiltin`, así que un global Edge-only (`EdgeRuntime`, `caches`), Deno-only, o
+// DESCONOCIDO NO se puede probar browser-only → auditar (NUNCA asumir client-only — ése era el fail-open de la
+// categoría Edge-present/Node-absent, codex P2). NO derivable de `globals.browser − nodeBuiltin`: `caches` se
+// cuela ahí siendo Edge-present → curado a mano. Incompleto = FP fail-closed (un guard browser-only raro se
+// sobre-audita, suprimible), NUNCA fail-open. El subset preciso (browser − node − edge) se deriva en #190.
+const BROWSER_ONLY_GUARD_GLOBALS = new Set([
+  "window",
+  "document",
+  "navigator",
+  "location",
+  "history",
+  "screen",
+  "localStorage",
+  "sessionStorage",
+  "customElements",
+  "matchMedia",
+  "getComputedStyle",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "HTMLElement",
+  "Element",
+  "Node",
+  "ShadowRoot",
+  "DOMParser",
+  "MutationObserver",
+  "IntersectionObserver",
+  "ResizeObserver",
+  "XMLHttpRequest",
+]);
+
 // Whitelist efectiva. Acceso bare a cualquier identificador NO resuelto
 // en scope (local/param/import) y AUSENTE de este set se trata como
 // global no-server-safe y se flaggea. Reemplaza al antiguo `CLIENT_GLOBALS`
@@ -5376,9 +5409,16 @@ function checkSourceFile(
   // time). codex P2 (review sobre 6a32565).
   const hasClientOnlyGuard = (ctx) => {
     for (const name of ctx.activeGuards) {
+      // Sombra: un local/param/module-decl con el nombre de un browser-global lo des-cualifica (el `typeof`
+      // refiere al binding local, vacuo). Va ANTES del allowlist para que un `const window=…` no cuente.
       if (ctx.localBindings.has(name)) continue;
       if (ctx.isInFunctionBody && moduleDeclaredNames.has(name)) continue;
-      return true;
+      // POSITIVO + fail-CLOSED (codex P2): SOLO un browser-only CONOCIDO (∈ BROWSER_ONLY_GUARD_GLOBALS = ∈
+      // browser, ∉ Node, ∉ Edge) prueba que la rama es client-only. Subsume el caso Node-present
+      // (`BroadcastChannel` ∉ allowlist → audita) Y cierra el Edge-present/Node-absent (`EdgeRuntime`/`caches`/
+      // Deno/unknown ∉ allowlist → audita). El default del unknown es AUDITAR, no suprimir — enumeración del
+      // espacio {Node,Edge}×{present,absent}, no casos sueltos (Auditor-B).
+      if (BROWSER_ONLY_GUARD_GLOBALS.has(name)) return true;
     }
     return false;
   };

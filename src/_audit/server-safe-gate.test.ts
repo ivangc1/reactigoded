@@ -1652,6 +1652,43 @@ export async function C(){ if (typeof ready !== "undefined") { await import("./b
     expect(
       run(`export async function C(){ if (typeof window === "undefined") { /* server */ } else { await import("./browser-only"); } return null; }`),
     ).toEqual([]);
+    // FAIL-OPEN CERRADO (codex P2 sobre d74e114): un guard sobre un global NODE-PRESENT/edge-missing
+    // (`BroadcastChannel`, `MessageChannel` ∈ EDGE_MISSING_GLOBALS) NO es client-only — `typeof X` es TRUE en
+    // Node → la rama corre en Node SSR → SÍ se audita. Solo browser-only (ausente en Node Y Edge) suprime:
+    expect(
+      run(`export async function C(){ if (typeof BroadcastChannel !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
+    expect(
+      run(`export function C(){ if (typeof MessageChannel !== "undefined") { const m = import.meta.glob("./browser-only.ts"); void m; } return null; }`).length,
+    ).toBeGreaterThan(0);
+    // AND mixto: `window` (browser-only) GARANTIZA client-only aunque haya un Node-present extra → suprime:
+    expect(
+      run(`export async function C(){ if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") { await import("./browser-only"); } return null; }`),
+    ).toEqual([]);
+    // CATEGORÍA Edge-present/Node-absent + DESCONOCIDOS (codex P2): `EdgeRuntime`/`caches`/`Deno`/unknown NO son
+    // browser-only (el gate solo modela builtin∪node) → ∉ BROWSER_ONLY_GUARD_GLOBALS → AUDITAN. El default del
+    // unknown es AUDITAR (fail-closed), no asumir client-only — enumeración del espacio, no casos sueltos:
+    expect(
+      run(`export async function C(){ if (typeof EdgeRuntime !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
+    expect(
+      run(`export async function C(){ if (typeof caches !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
+    expect(
+      run(`export async function C(){ if (typeof __UnknownGlobal__ !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
+    // browser-only del allowlist más allá de window/document (localStorage, MutationObserver) → suprimen:
+    expect(
+      run(`export async function C(){ if (typeof localStorage !== "undefined") { await import("./browser-only"); } return null; }`),
+    ).toEqual([]);
+    expect(
+      run(`export async function C(){ if (typeof MutationObserver !== "undefined") { await import("./browser-only"); } return null; }`),
+    ).toEqual([]);
+    // ORTOGONALIDAD allowlist × población-de-set (Auditor-B): el `||`-con-local AUDITA con CUALQUIER allowlist-
+    // member, no solo `window` — `collectConjunctionGuards` no recurre por `||` independientemente del global:
+    expect(
+      run(`export async function C(){ const ready = true; if (typeof localStorage !== "undefined" || typeof ready !== "undefined") { await import("./browser-only"); } return null; }`).length,
+    ).toBeGreaterThan(0);
   });
 
   it("FALLA RUIDOSO 'no auditable' (no genérico 'no resolvió') si un import EXTENSIONLESS resuelve a JS-family Vite-resoluble (`.mjs`/`.js`/`.mts`/`.jsx`, codex P3)", () => {
