@@ -496,30 +496,36 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
   });
 
-  // codex P2 (review genérico): `process` denegado, pero `process.env` lo expone Vercel Edge —
-  // miembro seguro de raíz denegada (trato uniforme con import.meta.env).
-  it("partición de `process` (allow process.env; deny bare/cwd/binding/dynKey)", () => {
+  // codex P2 + Auditor-B: `process.env` ENDURECIDO a deny. `process` es present-but-partial
+  // (NON_ABSENCE_DENIALS): en el baseline edge estricto (Workers/Deno sin compat) `process` es undeclared →
+  // `process.env.FOO` tira ReferenceError sobre el bare `process` en ESM strict-mode. El contrato @server-safe
+  // de una librería PUBLICADA = MCD de runtimes del consumidor = estricto → deny; `import.meta.env` (cross-
+  // runtime, mecanismo SEPARADO) es el idiom portable y SIGUE allow. Permit-guarded (`typeof process !==
+  // "undefined"`) = futuro (server-global narrowing, polaridad espejo de window).
+  it("partición de `process` (deny env/cwd/binding/bare/dynKey — baseline estricto; import.meta.env allow aparte)", () => {
     const any = (b: string) =>
       checkSourceFile(`/** @server-safe */\nexport const f = (c: boolean) => ${b};`, "pr.fixture.tsx").length > 0;
-    expect(any(`process.env.NODE_ENV`)).toBe(false);
-    expect(any(`process["env"]`)).toBe(false);
-    // `process.env` a través de wrapper (erased cast/parens Y operador VT coma/`?:`) — el `process` interno
-    // NO se flaggea bare. Los wrappers PRESERVAN el valor: `(0,process).env` ≡ `process.env`, Edge-safe, NO
-    // diverge → el gate caza divergencia, no ofuscación (mandato, ratificación B). Trato uniforme con
-    // import.meta.env (mismo eje VALUE). codex P2 @1d1f780.
-    expect(any(`(process as any).env.NODE_ENV`)).toBe(false); // cast (codex)
-    expect(any(`(process).env`)).toBe(false); // parens
-    expect(any(`(process as any)["env"]`)).toBe(false); // cast + bracket-literal
-    expect(any(`((process as any) as any).env`)).toBe(false); // doble cast
-    expect(any(`(0, process).env`)).toBe(false); // coma VT (ratificación B: preserva valor, no diverge)
-    expect(any(`(c ? process : ({} as any)).env`)).toBe(false); // ternario VT
+    // `process.env` DENEGADO (el bare `process` revienta antes de `.env` en el baseline estricto; los wrappers
+    // VT/erased PRESERVAN el bare `process` denegado → flaggean igual). Antes era allow (ratificación B, revertida):
+    expect(any(`process.env.NODE_ENV`)).toBe(true);
+    expect(any(`process["env"]`)).toBe(true);
+    expect(any(`(process as any).env.NODE_ENV`)).toBe(true); // cast
+    expect(any(`(process).env`)).toBe(true); // parens
+    expect(any(`(process as any)["env"]`)).toBe(true); // cast + bracket-literal
+    expect(any(`((process as any) as any).env`)).toBe(true); // doble cast
+    expect(any(`(0, process).env`)).toBe(true); // coma VT
+    expect(any(`(c ? process : ({} as any)).env`)).toBe(true); // ternario VT
+    // resto de `process` (sin cambio):
     expect(any(`process.cwd()`)).toBe(true);
-    expect(any(`(process as any).cwd()`)).toBe(true); // wrapper NO exime miembro no-seguro
-    expect(any(`(0, process).cwd()`)).toBe(true); // VT NO exime miembro no-seguro (allowance es member-específica)
+    expect(any(`(process as any).cwd()`)).toBe(true);
+    expect(any(`(0, process).cwd()`)).toBe(true);
     expect(any(`(process as any).binding("fs")`)).toBe(true);
     expect(any(`process`)).toBe(true);
     expect(any(`(process as any)[c ? "env" : "cwd"]`)).toBe(true);
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (process as any)[k];`, "pr2.fixture.tsx").length > 0).toBe(true);
+    // CONTROL Auditor-B: `import.meta.env` (análogo PORTABLE, mecanismo SEPARADO) SIGUE allow — el harden NO lo mueve:
+    expect(any(`import.meta.env.NODE_ENV`)).toBe(false);
+    expect(any(`import.meta.env.DEV`)).toBe(false);
   });
 
   // codex P2 (review genérico): TRES buckets. crypto/console = bucket 1 (allowlist Edge-present,

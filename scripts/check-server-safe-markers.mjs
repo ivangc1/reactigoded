@@ -672,12 +672,21 @@ const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 // genérico). El subset definitivo Edge se deriva del baseline real en #190.
 const SAFE_IMPORT_META_MEMBERS = new Set(["url", "env", "hot", "glob"]);
 
-// `process` es UN GLOBAL DENEGADO (ausente/stub en el edge baseline; ver CLIENT/denied set), PERO
-// `process.env` SÍ lo expone Vercel Edge (env vars). Estructura inversa a PARTIAL_SAFE_GLOBAL_MEMBERS
-// (raíz denegada, miembro SEGURO): allow `process.env`, deny bare `process` y el resto (`cwd`,
-// `binding`, …). Trato UNIFORME con import.meta.env (mismo idiom host-env-var Edge-safe) — sin esto
-// hay incoherencia entre dos objetos que hacen lo mismo. codex P2 (review genérico). #190 refina.
-const SAFE_MEMBERS_OF_DENIED_ROOT = { process: new Set(["env"]) };
+// Miembros SEGUROS de una raíz DENEGADA (raíz denegada bare, miembro X exento). VACÍO tras ENDURECER
+// `process.env`: codex P2 + Auditor-B. `process` ya está en NON_ABSENCE_DENIALS (present-but-partial, como
+// `navigator`): `typeof process !== "undefined"` da FALSA CONFIANZA (prueba que `process` existe, no que el
+// miembro exista). En el baseline edge ESTRICTO (Workers/Deno SIN nodejs_compat) `process` es un identificador
+// NO DECLARADO → en ESM strict-mode `process.env.FOO` tira ReferenceError sobre el bare `process` ANTES de
+// llegar a `.env` (y `process?.env` tampoco salva: optional-chaining corta sobre null/undefined, no sobre una
+// referencia inexistente). El contrato @server-safe de una LIBRERÍA PUBLICADA debe ser el MÍNIMO COMÚN
+// DENOMINADOR de los runtimes del consumidor = estricto; `process.env` NO es MCD, `import.meta.env` SÍ
+// (cross-runtime, sigue allow en SAFE_IMPORT_META_MEMBERS — mecanismo separado, NO se toca). #190 absorbido:
+// baseline declarado = estricto. FUTURO (cambio APARTE, NO aquí): permitir `process.env` bajo `typeof process
+// !== "undefined"` exige CONSTRUIR el narrowing de server-globals — polaridad ESPEJO de window (`typeof process
+// !== "undefined"` = rama SERVER = EXIME porque `process` existe ahí; el `else` de `=== "undefined"` corre
+// cuando `process` FALTA → debe FLAGGEAR; copiar la lógica de window sin invertir = fail-open). Hoy la forma
+// guardada queda flagged = fail-CLOSED (lado seguro). El objeto vacío preserva el mecanismo.
+const SAFE_MEMBERS_OF_DENIED_ROOT = {};
 
 // Denegaciones para las que un guard `typeof X !== "undefined"` NO hace el
 // body safe — el typeof-guard NO se reconoce para ellas:
