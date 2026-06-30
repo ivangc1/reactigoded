@@ -4775,6 +4775,32 @@ function hasAssetExt(p) {
   const base = p.slice(Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
   return VITE_ASSET_RE.test(base);
 }
+// Devuelve el nombre del paquete SI puede self-referenciarse (declara `exports`), si no `null`. NO es "el
+// nombre del paquete" a secas — el valor está CONDICIONADO a que la self-reference sea posible (de ahí el
+// nombre `readSelfReferenceName`, no `readOwnPackageName`: un caller que esperase el nombre a secas recibiría
+// null para un paquete con name pero sin exports). Leído del `package.json` del repoRoot vía el `readFile`
+// INYECTADO (NO `import.meta.url`, que vite-node transforma → null bajo vitest). `checkFileWithImports` lo
+// enhebra hasta el resolver para fail-cerrar la self-reference (`import … from "reactigoded"`), que PUEDE
+// auto-resolverse vía package.json#exports a la entrada del paquete (dist), fuera del src auditado. Degrada a
+// null (check inerte) si no se puede leer. Auditor-B + CC.
+function readSelfReferenceName(rootDir, readFile) {
+  try {
+    const pkg = JSON.parse(readFile(resolve(rootDir, "package.json")));
+    // Node permite self-reference SOLO si el paquete declara `exports` (sin él, `import "ownname"` desde
+    // DENTRO no auto-resuelve → va a node_modules/external, no es vector). Chequear que `exports` EXISTA es
+    // decidible con readFile → descarta el eje SIN-exports. NO se chequea qué clave matchea un subpath (eso
+    // exige evaluar el map = §373) NI se discrimina `exports: {}` / solo-assets (mismo §373): "presente y
+    // no-null" es la señal, y `exports: {}` (rarísimo, no es el caso del DS) cae en fail-close. O sea: el
+    // guard es APROXIMADO — exacto solo en el eje sin/con-exports, NO en qué resuelve; el over-catch de
+    // subpaths no-exportados de un paquete CON exports se conserva (§373, ver predicado ancho abajo). Sin
+    // `exports` (o sin name válido) → null = check inerte.
+    if (pkg == null || pkg.exports == null) return null;
+    const name = pkg.name;
+    return typeof name === "string" && name.length > 0 ? name : null;
+  } catch {
+    return null;
+  }
+}
 function resolveImportPath(
   specifier,
   importerAbsPath,
@@ -4797,6 +4823,7 @@ function resolveImportPath(
   // preservación manual).
   const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
   const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
+  const selfReferenceName = rootsOverride?.selfReferenceName ?? null;
 
   // NORMALIZACIÓN: el edge-trim (whitespace/C0-control inicial/final) es GLOBAL — un specifier legítimo nunca
   // lo lleva y los guards de `//`/esquema están anclados en char[0] (` data:…` se vería como bare→external
@@ -4881,6 +4908,31 @@ function resolveImportPath(
   }
   // cleanUrl: quita `?query` y `#hash` → la base que Vite resuelve+ejecuta (el edge-trim ya tocó el path).
   specifier = specifier.replace(VITE_CLEAN_URL_RE, "");
+
+  // Self-reference por NOMBRE PROPIO: un specifier bare cuyo primer segmento == el nombre del paquete
+  // (`reactigoded`, `reactigoded/components/X`). Node/Vite SOLO auto-resuelven esto si el paquete declara
+  // `exports` (garantizado: readSelfReferenceName devuelve null sin `exports`). Las claves EXPORTADAS resuelven a
+  // la ENTRADA del paquete (dist), NO al src que el gate audita → external SILENCIOSO = fail-open latente
+  // (verificado vs Vite). PERO el predicado es MÁS ANCHO que el peligro y es una DECISIÓN CONSCIENTE (§373):
+  // un subpath NO-exportado (`reactigoded/internal/guts` sin clave que matchee) NO resuelve a dist — Vite tira
+  // `ERR_PACKAGE_PATH_NOT_EXPORTED`, no ejecuta NADA. Distinguir qué subpaths matchean una clave (patrones
+  // `./*`, condiciones import/worker, precedencia) exige EVALUAR el exports map = subsistema de resolución
+  // RENUNCIADO → fail-cerramos TODO primer-segmento==nombre, incluido el ruido BENIGNO de los no-exportados
+  // (que de todas formas fallarían en runtime; el gate solo cambia QUIÉN grita: build vs resolución de Vite, y
+  // no oculta nada ejecutable). El intento "exacto" (probar el subpath contra src vía fileExists) sería PEOR:
+  // adivina el mapeo del exports map → audita el archivo equivocado mientras Vite ejecuta otro = fail-open
+  // nuevo. 0 casos en source (el DS usa relativo/alias). DESPUÉS del loader (`reactigoded?raw` ya salió
+  // external) y de cleanUrl (la base limpia es la que matchearía exports). Auditor-B + CC.
+  if (
+    selfReferenceName &&
+    (specifier === selfReferenceName ||
+      specifier.startsWith(`${selfReferenceName}/`))
+  ) {
+    return {
+      kind: "unresolvable",
+      reason: `self-reference por nombre propio \`${specifier}\` — un specifier cuyo primer segmento es el nombre del paquete PUEDE auto-resolverse vía package.json#exports a la entrada del paquete (dist), fuera del src que el gate audita (si exports declara una clave que lo cubra → dist; si no, el specifier —root o subpath— fallaría en runtime con ERR_PACKAGE_PATH_NOT_EXPORTED). Importa el módulo destino directamente con su ruta relativa/alias .ts/.tsx.`,
+    };
+  }
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
@@ -5175,11 +5227,19 @@ function checkFileWithImports(entryAbsPath, options = {}) {
     // producción no se setean — defaults a los paths físicos del repo.
     repoRoot: optsRepoRoot,
     srcRoot: optsSrcRoot,
+    selfReferenceName: optsSelfReferenceName,
   } = options;
 
   const effectiveRepoRoot = optsRepoRoot ?? repoRoot;
   const effectiveSrcRoot =
     optsSrcRoot ?? (optsRepoRoot ? resolve(optsRepoRoot, "src") : SRC_ROOT);
+  // Nombre del paquete propio: computado UNA vez en el top-level y enhebrado por la recursión (la presencia
+  // de la key, no `??`, evita releer package.json por cada archivo aunque el nombre sea null). vfs-friendly:
+  // lee del repoRoot vía el readFile inyectado.
+  const effectiveSelfReferenceName =
+    "selfReferenceName" in options
+      ? optsSelfReferenceName
+      : readSelfReferenceName(effectiveRepoRoot, readFile);
 
   const violations = [];
   if (visited.has(entryAbsPath)) return violations;
@@ -5228,7 +5288,11 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       entryAbsPath,
       tsconfigPaths,
       fileExists,
-      { repoRoot: effectiveRepoRoot, srcRoot: effectiveSrcRoot },
+      {
+        repoRoot: effectiveRepoRoot,
+        srcRoot: effectiveSrcRoot,
+        selfReferenceName: effectiveSelfReferenceName,
+      },
     );
     if (resolution.kind === "external") continue;
     if (resolution.kind === "edge-denied") {
@@ -5259,6 +5323,7 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       chain: childChain,
       repoRoot: effectiveRepoRoot,
       srcRoot: effectiveSrcRoot,
+      selfReferenceName: effectiveSelfReferenceName,
     });
     violations.push(...childViolations);
   }

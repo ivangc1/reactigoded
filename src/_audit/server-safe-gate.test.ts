@@ -1350,6 +1350,38 @@ describe("server-safe gate — smuggling cross-módulo (beta.26 HIGH-2)", () => 
     expect(resolveImportPath("node:fs", "/repo/src/c.tsx", [], no, roots).kind).toBe("edge-denied");
   });
 
+  it("self-reference por NOMBRE PROPIO (`reactigoded`, `reactigoded/x`) → unresolvable fail-closed, NO external silencioso: Vite lo resuelve vía package.json#exports a dist, fuera del src auditado (Auditor-B + CC)", () => {
+    const files = (spec: string) =>
+      vfs({
+        "/repo/package.json": `{ "name": "reactigoded", "exports": { ".": "./dist/index.js" } }`,
+        "/repo/src/c.tsx": `/** @server-safe */
+import { z } from "${spec}";
+export const y = z;`,
+      });
+    const isSelfRef = (spec: string) =>
+      runWithVfs("/repo/src/c.tsx", files(spec)).some((v) =>
+        /self-reference/.test(v.detail),
+      );
+    // self-import por el nombre propio → fail-closed (primer segmento == nombre del paquete):
+    expect(isSelfRef("reactigoded")).toBe(true);
+    expect(isSelfRef("reactigoded/components/Button")).toBe(true);
+    // externos legítimos (incl. un nombre con el propio como PREFIJO) → NO tocados (external = sin violación):
+    expect(runWithVfs("/repo/src/c.tsx", files("react"))).toEqual([]);
+    expect(runWithVfs("/repo/src/c.tsx", files("clsx"))).toEqual([]);
+    expect(runWithVfs("/repo/src/c.tsx", files("reactigoded-other"))).toEqual([]); // prefijo, no el paquete propio
+    // el loader gana ANTES del check: `reactigoded?raw` = external (raw text, no ejecuta):
+    expect(runWithVfs("/repo/src/c.tsx", files("reactigoded?raw"))).toEqual([]);
+    // GUARD de `exports`: Node SOLO permite self-reference si el paquete declara `exports`; sin él, `import
+    // "reactigoded"` desde dentro NO auto-resuelve (va a node_modules/external) → NO es vector → NO se caza:
+    const sinExports = vfs({
+      "/repo/package.json": `{ "name": "reactigoded" }`,
+      "/repo/src/c.tsx": `/** @server-safe */
+import { z } from "reactigoded";
+export const y = z;`,
+    });
+    expect(runWithVfs("/repo/src/c.tsx", sinExports)).toEqual([]);
+  });
+
   it("NORMALIZA whitespace/C0 borde + tab/LF/CR interno como el runtime ESM/WHATWG: ` data:…` → unresolvable (no external), parity con el sin-espacio (workflow-hunt)", () => {
     const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
     const no = () => false;
