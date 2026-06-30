@@ -58,17 +58,21 @@ export declare function checkSourceFile(
 ): ServerSafeGateViolation[];
 
 /**
- * Resultado de resolver un module specifier. Tres outcomes:
+ * Resultado de resolver un module specifier. Cuatro outcomes:
  *   - `internal`: archivo dentro de `src/`. El orquestador desciende.
  *   - `external`: bare specifier sin alias match, o relativo que resuelve
- *     fuera de `src/`. El orquestador NO desciende — peer/built-in/out-of-scope.
- *   - `unresolvable`: relativo o alias que no resuelve a archivo. El
- *     orquestador emite una violation `unresolved-import` para fallar
- *     ruidosamente.
+ *     fuera de `src/`. El orquestador NO desciende — peer/out-of-scope.
+ *   - `edge-denied`: builtin de Node (bare `fs`, prefijado `node:fs`, subpath
+ *     `fs/promises`). Node-only por construcción, fuera de la intersección
+ *     cross-runtime → el orquestador lo flaggea (no existe en el baseline Edge).
+ *   - `unresolvable`: relativo/alias/subpath/dir-con-package.json/ext-no-asset
+ *     que el gate no puede resolver o auditar. El orquestador emite una
+ *     violation `unresolved-import` para fallar ruidosamente.
  */
 export type ResolveImportResult =
   | { kind: "internal"; absPath: string }
   | { kind: "external" }
+  | { kind: "edge-denied"; specifier: string }
   | { kind: "unresolvable"; reason: string };
 
 export declare function resolveImportPath(
