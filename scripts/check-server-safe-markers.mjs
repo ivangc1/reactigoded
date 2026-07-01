@@ -706,6 +706,16 @@ const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 // NO Node-only. La lista se pudre solo con un EVENTO VERSIONADO (sube spec / sube Vite), no con cada
 // release de Node. Whitelist-sobre-denylist = la misma ratificación de SAFE_GLOBALS (codex P2 review
 // genérico). El subset definitivo Edge se deriva del baseline real en #190.
+//
+// NOTA `hot` (codex P2 sobre `604e817`, RATIFICADO OUT-OF-MANDATE): `import.meta.hot.<deref>()` UNGUARDED
+// (`import.meta.hot.accept()` sin `if (import.meta.hot)` / `?.`) crashea porque Vite poda `hot→undefined` en
+// TODO build de producción. Se MANTIENE en el allowlist a propósito: NO es divergencia-Edge (no hay runtime-
+// prod donde funcione — falla el discriminador "¿hay prod-runtime donde corre?", a diferencia de `process.env`
+// que SÍ corre en Vercel-Edge) sino CRASH UNIVERSAL de producción = FUERA del mandato del gate (Edge-safety, no
+// correctness-de-prod-general; mismo criterio que el universal-crash TDZ/receiver-binding e `instantiate`).
+// Cerrarlo DISOLVERÍA el mandato (¿por qué no `JSON.parse(undefined)`, `throw` en module-scope…?). El READ
+// pelado + las formas guardadas/optional-chain SÍ son safe. Residual out-of-mandate documentado en ADR D1-P1
+// + LIMITATIONS. NO re-flaggear sin re-decidir el mandato.
 const SAFE_IMPORT_META_MEMBERS = new Set(["url", "env", "hot", "glob"]);
 
 // Miembros SEGUROS de una raíz DENEGADA (raíz denegada bare, miembro X exento). VACÍO tras ENDURECER
