@@ -200,15 +200,18 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { isBuiltin } from "node:module";
 
-// ¿`specifier` resuelve a un builtin de Node (bare `fs`, prefijado `node:fs`, subpath `fs/promises`)?
-// ORÁCULO = `module.isBuiltin` (la enumeración canónica del runtime, NO una lista a mano → sin la
-// deriva de denylist que motivó #173). Subsume el check de esquema `node:`: isBuiltin('node:test')=true,
-// isBuiltin('test')=false (prefix-only → bare `test` NO es builtin, no se deniega). Normaliza el subpath
-// (corta por el 1er `/` tras quitar `node:`) por si una versión de Node no resuelve `fs/promises` directo.
+// ¿`specifier` resuelve a un builtin de Node (bare `fs`, prefijado `node:fs`, subpath `fs/promises`,
+// prefijo+subpath `node:fs/promises`)? ORÁCULO = `module.isBuiltin` (enumeración canónica del runtime, NO
+// lista a mano → sin la deriva de denylist que motivó #173). Maneja los 4 vectores POR SÍ SOLO (normaliza
+// `node:` Y resuelve subpaths — medido: `node:fs/promises`→true) Y rechaza los no-builtin con precisión de
+// subpath (`fs/promises`→true PERO `buffer/foo`/`node:buffer/foo`→false: buffer no tiene ese subpath, Node
+// tira ERR_UNKNOWN_BUILTIN_MODULE). El fallback `base`-split anterior re-implementaba esto a mano y PEOR:
+// denegaba `<nombre-builtin>/<lo-que-sea>` (colisión con paquete npm — `buffer/foo`) que el oráculo dice que
+// NO es builtin = over-deny FP (codex P2). Borrado: confía el oráculo, no lo second-guesses. El `node:buffer/
+// foo` no-builtin lo caza el scheme-guard aguas abajo (`node:` scheme + no-builtin → unresolvable, fail-
+// closed), NO cae a external silencioso.
 function isNodeBuiltinSpecifier(specifier) {
-  if (isBuiltin(specifier)) return true;
-  const base = specifier.replace(/^node:/, "").split("/")[0];
-  return base !== specifier && isBuiltin(base);
+  return isBuiltin(specifier);
 }
 import {
   dirname,

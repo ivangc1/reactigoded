@@ -898,6 +898,27 @@ export const f = (c: boolean, m: string, bytes: any, wasm: any) => { ${b} };`,
     ).toBe("edge-denied");
   });
 
+  it("builtin-detection con precisión de subpath (oráculo `module.isBuiltin`, sin base-split): `fs/promises` denied, `buffer/foo` (colisión npm) external, `node:buffer/foo` unresolvable (codex P2)", () => {
+    const kind = (spec: string) =>
+      resolveImportPath(spec, "/repo/src/c.tsx", [], () => false, {
+        repoRoot: "/repo",
+        srcRoot: "/repo/src",
+      }).kind;
+    // subpaths builtin REALES → edge-denied (isBuiltin los caza por sí solo, incl. prefijo+subpath):
+    expect(kind("fs/promises")).toBe("edge-denied");
+    expect(kind("node:fs/promises")).toBe("edge-denied");
+    expect(kind("stream/web")).toBe("edge-denied");
+    // subpath de PAQUETE npm que COLISIONA con nombre builtin → external (over-deny arreglado; el base-split
+    // lo denegaba, pero `isBuiltin("buffer/foo")`=false — buffer no tiene ese subpath):
+    expect(kind("buffer/foo")).toBe("external");
+    expect(kind("stream/foo")).toBe("external");
+    expect(kind("events/bar")).toBe("external");
+    // con `node:` (fuerza builtin, pero no lo es → Node tira ERR_UNKNOWN_BUILTIN_MODULE) → unresolvable por el
+    // scheme-guard (fail-closed), NUNCA external silencioso:
+    expect(kind("node:buffer/foo")).toBe("unresolvable");
+    expect(kind("node:stream/foo")).toBe("unresolvable");
+  });
+
   it("NO flaggea spread de timer con callback función o variable (codex P2)", () => {
     expect(checkSourceFile(fixture(`setTimeout(...[() => {}, 0]);`), "spread-fn.fixture.tsx")).toEqual([]);
     expect(checkSourceFile(fixture(`const args: any = ["x"]; setTimeout(...args);`), "spread-var.fixture.tsx")).toEqual([]);
