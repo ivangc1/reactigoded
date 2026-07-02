@@ -5852,3 +5852,267 @@ describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)",
     expect(flagged(`/** @server-safe */\nexport function h() { return (false ? null : (() => {}).constructor)("return 1")(); }`)).toBe(true);
   });
 });
+
+describe("server-safe gate — Auditoría B (re-hunt 4): ∃-quantificación de raíces + reflexión + spread + marker Cc", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "auditb.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  // ── FIX-1/#1: exprPartialRoots ∃-quantifica un receptor value-transparent multi-rama ──
+  describe("FIX-1: receptor multi-rama (∃-quantificación de raíces, no first-match)", () => {
+    it.each([
+      ["ternario new Module", W + "export function p(b:boolean){ return new (b?crypto:WebAssembly).Module(new Uint8Array()); }"],
+      ["ternario reverso", W + "export function p(b:boolean){ return new (b?WebAssembly:crypto).Module(new Uint8Array()); }"],
+      ["ternario compile", W + "export function p(b:boolean){ return (b?crypto:WebAssembly).compile(new Uint8Array()); }"],
+      ["ternario elu()", W + "export function p(b:boolean){ return (b?crypto:performance).eventLoopUtilization(); }"],
+      ["ternario console.table", W + "export function p(b:boolean){ return (b?crypto:console).table([1]); }"],
+      ["X2 no-crypto (WA:performance)", W + "export function p(b:boolean){ return (b?WebAssembly:performance).eventLoopUtilization(); }"],
+      ["|| dead-branch", W + "export function f(){ return new (crypto||WebAssembly).Module(new Uint8Array()); }"],
+      ["?? dead-branch", W + "export function f(){ return (WebAssembly??performance).eventLoopUtilization(); }"],
+      ["container-proj [crypto,WA][k]", W + "export function f(k:number){ return [crypto,WebAssembly][k].compile(new Uint8Array()); }"],
+    ])("FLAG: %s", (_n, src) => {
+      expect(flagged(src)).toBe(true);
+    });
+
+    it.each([
+      ["coma = último operando (crypto)", W + "export const x = (performance, crypto).eventLoopUtilization;"],
+      ["&& = derecha (crypto)", W + "export const x = (performance && crypto).eventLoopUtilization;"],
+      ["ley-polaridad: rama irresoluble (objeto local) → IGNORAR", W + "export function f(b:boolean){ const o={foo(){ return 1; }}; return (b?crypto:o).foo(); }"],
+      ["wholesale crypto.subtle", W + "export const x = crypto.subtle;"],
+    ])("SILENT: %s", (_n, src) => {
+      expect(flagged(src)).toBe(false);
+    });
+  });
+
+  // ── FIX-2: alias multi-rama + FIX-1/#2: import.meta enmascarado por hoja previa ──
+  describe("FIX-2 alias multi-rama + #2 import.meta enmascarado", () => {
+    it.each([
+      ["alias const R=(b?crypto:performance); R.elu()", W + "export function f(b:boolean){ const R=(b?crypto:performance); return R.eventLoopUtilization(); }"],
+      ["#2 (c?crypto:import.meta).dirname", W + "export function f(c:boolean){ return (c?crypto:import.meta).dirname; }"],
+      ["#2 [crypto,import.meta][k].dirname", W + "export function f(k:number){ return [crypto,import.meta][k].dirname; }"],
+      ["Reflect.get(b?crypto:performance,k) multi-root", W + "export function f(b:boolean,k:string){ return Reflect.get(b?crypto:performance,k); }"],
+      ["destructure {compile}=(b?crypto:WebAssembly)", W + "export function f(b:boolean){ const {compile}=(b?crypto:WebAssembly); return compile; }"],
+    ])("FLAG: %s", (_n, src) => {
+      expect(flagged(src)).toBe(true);
+    });
+
+    it("import.meta.url (safe member) vía multi-rama → SILENT (polaridad allowlist)", () => {
+      expect(flagged(W + "export function f(c:boolean){ return (c?crypto:import.meta).url; }")).toBe(false);
+    });
+  });
+
+  // ── INV-SYM: simetría de orden — el mecanismo de cierre DURADERO (Auditoría B §4), sobre los 6
+  // consumidores value-survival (Fable watch-list #3, no solo member-read). veredicto(op(D,N)) ===
+  // veredicto(op(N,D)): un residual §141/out-of-mandate pasa en AMBOS órdenes; un gap first-match no.
+  // Habría cazado #1/#2 mecánicamente y blinda contra regresiones tipo 71be882 (hoja enmascarada por orden).
+  describe("INV-SYM: simetría de orden sobre los 6 consumidores", () => {
+    // form produce un BODY completo; D = raíz divergente (aporta el miembro), N = raíz neutra.
+    it.each<[string, (a: string, b: string) => string, string]>([
+      ["member-read elu()", (a, b) => `return (c?${a}:${b}).eventLoopUtilization();`, "performance"],
+      ["member-read import.meta.dirname", (a, b) => `return (c?${a}:${b}).dirname;`, "import.meta"],
+      ["|| dead-branch elu()", (a, b) => `return (${a}||${b}).eventLoopUtilization();`, "performance"],
+      ["construcción new .Module", (a, b) => `return new (c?${a}:${b}).Module(new Uint8Array());`, "WebAssembly"],
+      ["Reflect.construct .Module", (a, b) => `return Reflect.construct((c?${a}:${b}).Module, [new Uint8Array()]);`, "WebAssembly"],
+      ["Reflect.get member", (a, b) => `return Reflect.get(c?${a}:${b}, "eventLoopUtilization");`, "performance"],
+      ["destructure {compile}", (a, b) => `const {compile}=(c?${a}:${b}); return compile;`, "WebAssembly"],
+      ["eval-sink unbound-detach", (a, b) => `return ((c?${a}:${b}).getRandomValues)(new Uint8Array(8));`, "crypto"],
+      ["array-proj variable-key (existencial)", (a, b) => `return [${a},${b}][k].compile(new Uint8Array());`, "WebAssembly"],
+    ])("%s: veredicto(D,N)===veredicto(N,D) y ambos FLAG", (_n, form, D) => {
+      // N = raíz neutra (no aporta el miembro divergente). Para el eval-sink D=crypto → N=performance.
+      const N = D === "crypto" ? "performance" : "crypto";
+      const wrap = (body: string) =>
+        `${W}export function f(c:boolean,k:number){ ${body} }`;
+      const vDN = flagged(wrap(form(D, N)));
+      const vND = flagged(wrap(form(N, D)));
+      expect(vDN).toBe(vND); // simetría
+      expect(vDN).toBe(true); // y ambos FLAG (D en el set, se ∃-quantifica)
+    });
+  });
+
+  // ── Watch-list Fable #4 (alias transitivo) + #6 (proyección literal-key precisa) ──
+  describe("Watch-list: alias transitivo (unión del set) + proyección literal-key (precisa/asimétrica)", () => {
+    it.each([
+      ["#4 alias-of-alias: A=(b?crypto:WA); B=A; new B.Module", W + "export function f(b:boolean){ const A=(b?crypto:WebAssembly); const B=A; return new B.Module(new Uint8Array()); }"],
+      ["#4 cadena same-stmt: A=WA, B=A; new B.Module", W + "export function f(){ const A=WebAssembly, B=A; return new B.Module(new Uint8Array()); }"],
+      ["#6 [crypto,WA][1].Module (elem 1 = WA)", W + "export function f(){ return new [crypto,WebAssembly][1].Module(new Uint8Array()); }"],
+      ["#6b [crypto,WA][k].Module variable (existencial)", W + "export function f(k:number){ return new [crypto,WebAssembly][k].Module(new Uint8Array()); }"],
+      ["#6b [WA,crypto][k].Module variable (existencial)", W + "export function f(k:number){ return new [WebAssembly,crypto][k].Module(new Uint8Array()); }"],
+    ])("FLAG: %s", (_n, src) => {
+      expect(flagged(src)).toBe(true);
+    });
+
+    it.each([
+      ["#6 [WA,crypto][1].Module (elem 1 = crypto, precisa)", W + "export function f(){ return new [WebAssembly,crypto][1].Module(new Uint8Array()); }"],
+      ["#6 [crypto,WA][0].Module (elem 0 = crypto, precisa)", W + "export function f(){ return new [crypto,WebAssembly][0].Module(new Uint8Array()); }"],
+      ["#1 alias a solo-hojas-irresolubles → sin flag espurio (Set vacío → null)", W + "export function f(b:boolean){ const localA={}, localB={}; const R=(b?localA:localB); return new (R as { Module: new () => unknown }).Module(); }"],
+    ])("SILENT: %s", (_n, src) => {
+      expect(flagged(src)).toBe(false);
+    });
+  });
+
+  // ── FIX-3: idiomas reflexivos de lectura-de-valor (ACOTA #3, no cierra) ──
+  describe("FIX-3: reflexión (gOPD/gOPDs/assign/create/spread) ≡ R.k", () => {
+    it.each([
+      ["gOPD(import.meta,'dirname').value", W + "export const x = Object.getOwnPropertyDescriptor(import.meta,'dirname').value;"],
+      ["Reflect.gOPD(...).value", W + "export const x = Reflect.getOwnPropertyDescriptor(import.meta,'dirname').value;"],
+      ["gOPDs(import.meta).dirname.value", W + "export const x = Object.getOwnPropertyDescriptors(import.meta).dirname.value;"],
+      ["Object.assign({},import.meta).dirname", W + "export const x = Object.assign({}, import.meta).dirname;"],
+      ["({...import.meta}).dirname", W + "export const x = ({...import.meta}).dirname;"],
+      ["Object.create(import.meta).dirname", W + "export const x = Object.create(import.meta).dirname;"],
+      ["multi-branch gOPD(b?crypto:import.meta)", W + "export function f(b:boolean){ return Object.getOwnPropertyDescriptor(b?crypto:import.meta,'dirname').value; }"],
+      ["Object.assign({},WebAssembly).compile (fail-closed)", W + "export const x = Object.assign({}, WebAssembly).compile;"],
+    ])("FLAG: %s", (_n, src) => {
+      expect(flagged(src)).toBe(true);
+    });
+
+    it.each([
+      ["safe member gOPD(...,'url').value", W + "export const x = Object.getOwnPropertyDescriptor(import.meta,'url').value;"],
+      ["fromEntries∘entries (§141 renunciado)", W + "export const x = Object.fromEntries(Object.entries(import.meta)).dirname;"],
+      ["variable-key gOPD(...,k).value (§141)", W + "export function f(k:string){ return Object.getOwnPropertyDescriptor(import.meta,k).value; }"],
+      ["receiver-vía-flujo const c={...im}; c.dirname (§141)", W + "export function f(){ const c={...import.meta}; return c.dirname; }"],
+      ["entries[0] key-implícita (§141)", W + "export const x = Object.entries(import.meta)[0];"],
+      ["gOPD sin .value (descriptor, no valor)", W + "export const x = Object.getOwnPropertyDescriptor(import.meta,'dirname');"],
+    ])("SILENT (renunciado/seguro): %s", (_n, src) => {
+      expect(flagged(src)).toBe(false);
+    });
+  });
+
+  // ── FIX-5: flatten de spread-de-array-literal ──
+  describe("FIX-5: spread-de-array-literal flatten", () => {
+    it.each([
+      ["import([...['fs']][0])", W + "export async function f(){ return import([...['fs']][0]); }"],
+      ["new ([...[WebAssembly.Module]][0])()", W + "export function f(){ return new ([...[WebAssembly.Module]][0])(new Uint8Array()); }"],
+      ["doble-spread [...[...['fs']]][0]", W + "export async function f(){ return import([...[...['fs']]][0]); }"],
+      ["mixto ['x',...['fs'],'y'][1]", W + "export async function f(){ return import(['x', ...['fs'], 'y'][1]); }"],
+    ])("FLAG: %s", (_n, src) => {
+      expect(flagged(src)).toBe(true);
+    });
+
+    it.each([
+      ["spread de variable (§141)", W + "export async function f(arr:string[]){ return import([...arr][0]); }"],
+      ["spread de literal seguro", W + "export async function f(){ return import([...['./safe.js']][0]); }"],
+    ])("SILENT: %s", (_n, src) => {
+      expect(flagged(src)).toBe(false);
+    });
+  });
+
+  // ── FIX-4: marker Cc — test diferencial end-to-end contra ts.getJSDocTags (Auditoría B, oráculo real) ──
+  describe("FIX-4: marker Cc (test diferencial vs ts.getJSDocTags)", () => {
+    const C = (n: number) => String.fromCodePoint(n);
+    const body = "\nexport const x = 1;\n";
+    const tsRecognizes = (cp: number) => {
+      const src = `/**${C(cp)}@server-safe */${body}`;
+      const sf = ts.createSourceFile("t.ts", src, ts.ScriptTarget.Latest, true);
+      const tags: string[] = [];
+      const walk = (n: ts.Node) => {
+        for (const t of ts.getJSDocTags(n)) tags.push(t.tagName.getText(sf));
+        ts.forEachChild(n, walk);
+      };
+      walk(sf);
+      return tags.includes("server-safe");
+    };
+    const gateRecognizes = (cp: number) =>
+      isContentServerSafeMarked(`/**${C(cp)}@server-safe*/${body}`, "x.ts");
+    const isCc = (cp: number) => cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f);
+
+    it("regla ⊇ TS: 0 FN residual sobre todo codepoint Cc glued al @", () => {
+      const below: number[] = [];
+      for (let cp = 0x00; cp <= 0x9f; cp++) {
+        if (!isCc(cp)) continue;
+        if (!gateRecognizes(cp) && tsRecognizes(cp)) below.push(cp);
+      }
+      expect(below).toEqual([]);
+    });
+
+    it("todo Cc glued (60 no-ws foldean; TAB/LF/VT/FF/CR ya parsean) → detectado", () => {
+      for (let cp = 0x00; cp <= 0x9f; cp++) {
+        if (!isCc(cp)) continue;
+        expect(gateRecognizes(cp)).toBe(true);
+      }
+    });
+
+    it("NEL U+0085 glued (divergencia gate vs TS del round) → detectado tras el fold", () => {
+      expect(gateRecognizes(0x85)).toBe(true);
+    });
+
+    it("marker limpio y prosa: sin cambios (no FP)", () => {
+      expect(isContentServerSafeMarked("/** @server-safe */" + body, "x.ts")).toBe(true);
+      expect(isContentServerSafeMarked('const s = "@server-safe";' + body, "x.ts")).toBe(false);
+      expect(isContentServerSafeMarked("// @server-safe\n" + body, "x.ts")).toBe(false);
+    });
+  });
+
+  // ── P3: política de guards nivel-miembro (ADR D1-P1 extensión; decisión Iván: Opción A) ──
+  // Un guard de MIEMBRO no suprime el flag: (a) no discrimina present-but-throws (WebAssembly.Module EXISTE
+  // en Workers → typeof==='function' pasa → construye → lanza: suprimir reintroduce el FN que este ciclo
+  // cerró); (b) el lenguaje ya da la sonda flow-free `?.()`. La medición P3 se pinea como test: ningún
+  // refactor futuro puede derivar esta política en silencio.
+  describe("P3: guard nivel-miembro NO suprime (Opción A ratificada, D1-P1)", () => {
+    it.each<[string, string, string]>([
+      ["root-guard EXPR ternario", `return typeof performance!=="undefined"?performance.eventLoopUtilization():y;`, "(y:number)"],
+      ["root-guard STATEMENT if", `if(typeof performance!=="undefined"){return performance.eventLoopUtilization();}return 0;`, "()"],
+      ["member-guard EXPR typeof", `return typeof performance.eventLoopUtilization==="function"?performance.eventLoopUtilization():y;`, "(y:number)"],
+      ["member-guard STATEMENT if", `if(typeof performance.eventLoopUtilization==="function"){return performance.eventLoopUtilization();}return 0;`, "()"],
+      ["in-guard EXPR", `return "eventLoopUtilization" in performance?performance.eventLoopUtilization():y;`, "(y:number)"],
+    ])("FLAG: %s", (_n, body2, sig) => {
+      expect(flagged(`${W}export function f${sig}{ ${body2} }`)).toBe(true);
+    });
+
+    it("CRÍTICO present-but-throws: un member-guard NO puede suprimir (suprimir = reintroducir FN)", () => {
+      // WebAssembly.Module EXISTE en Workers → typeof==='function' pasa → `new` lanza. DEBE seguir FLAG.
+      expect(
+        flagged(`${W}export function f(bytes:Uint8Array,fb:unknown){ return typeof WebAssembly.Module==="function" ? new WebAssembly.Module(bytes) : fb; }`),
+      ).toBe(true);
+    });
+
+    // M-1 (condición de Fable, medida no asumida): la sonda `?.()` es la imagen ESPECULAR del member-guard
+    // — solo discrimina AUSENCIA. Para un miembro present-but-throws (`WebAssembly.compile` EXISTE en Workers,
+    // `compile?.(b)` procede y rechaza) la sonda NO protege → DEBE seguir FLAG. Si la sanción silenciara
+    // `?.()` de forma UNIFORME, reintroduciría el FN present-throws por la puerta de la sanción (el mismo que
+    // P3 cerró por la puerta del guard). Medido: el gate distingue.
+    it.each<[string, string, boolean]>([
+      ["AUSENCIA performance.eventLoopUtilization?.() → SILENT", `performance.eventLoopUtilization?.()`, true],
+      ["AUSENCIA console.table?.([1]) → SILENT", `console.table?.([1])`, true],
+      ["present-throws WebAssembly.compile?.(b) → FLAG", `WebAssembly.compile?.(b)`, false],
+      ["present-throws WebAssembly.compileStreaming?.(b) → FLAG", `WebAssembly.compileStreaming?.(b)`, false],
+      ["present-throws WebAssembly.instantiateStreaming?.(b) → FLAG", `WebAssembly.instantiateStreaming?.(b)`, false],
+      ["present-throws WebAssembly.compile?.call(null,b) → FLAG", `WebAssembly.compile?.call(null,b)`, false],
+    ])("M-1 sanción `?.()` distingue ausencia/present-throws: %s", (_n, expr, silent) => {
+      expect(flagged(`${W}export function f(b:Uint8Array){ return ${expr}; }`)).toBe(!silent);
+    });
+
+    it("M-1: WebAssembly.instantiate?.(b) → SILENT es §141 residual (arg-type: `instantiate(Module)` es legítimo en Edge), NO efecto del `?.()` — igual que el plain", () => {
+      expect(flagged(`${W}export function f(b:Uint8Array){ return WebAssembly.instantiate?.(b); }`)).toBe(false);
+      expect(flagged(`${W}export function f(b:Uint8Array){ return WebAssembly.instantiate(b); }`)).toBe(false);
+    });
+  });
+
+  // ── INV-WRAP: invariancia de envoltorio value-transparent (Auditoría B §4, criterio 6) ──
+  // veredicto(W(D)) === veredicto(D) para composiciones de wrappers value-transparent (parens/cast/non-null/
+  // coma/proyección/spread-de-literal/alias-const) hasta profundidad 3; wrapper RENUNCIADO (data-flow) → SILENT.
+  describe("INV-WRAP: envoltorio value-transparent preserva el veredicto", () => {
+    it.each<[string, (r: string) => string]>([
+      ["identidad (prof 0)", (r) => r],
+      ["paren (1)", (r) => `(${r})`],
+      ["cast as any (1)", (r) => `(${r} as any)`],
+      ["non-null ! (1)", (r) => `(${r}!)`],
+      ["coma (0,R) (1)", (r) => `(0, ${r})`],
+      ["proyección [R][0] (1)", (r) => `[${r}][0]`],
+      ["spread-literal [...[R]][0] (2)", (r) => `[...[${r}]][0]`],
+      ["paren×3 (3)", (r) => `(((${r})))`],
+      ["cast∘proj∘paren (3)", (r) => `(([${r}][0]) as any)`],
+    ])("W=%s: (W(performance)).elu() FLAG (invariante)", (_n, wrap) => {
+      expect(flagged(`${W}export function f(){ return ${wrap("performance")}.eventLoopUtilization(); }`)).toBe(true);
+    });
+
+    it("alias-hop const (prof 1) preserva el flag", () => {
+      expect(flagged(`${W}export function f(){ const p = performance; return p.eventLoopUtilization(); }`)).toBe(true);
+    });
+    it("alias-de-alias const (prof 2) preserva el flag", () => {
+      expect(flagged(`${W}export function f(){ const p = performance, q = p; return q.eventLoopUtilization(); }`)).toBe(true);
+    });
+    it("wrapper RENUNCIADO (receptor vía función, data-flow §141) → SILENT en ambos", () => {
+      expect(flagged(`${W}function getP(): typeof performance { return performance; }\nexport function f(){ return getP().eventLoopUtilization(); }`)).toBe(false);
+    });
+  });
+});

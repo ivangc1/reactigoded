@@ -29,6 +29,14 @@ mandate.
   baseline without `process` (Workers / Deno without `nodejs_compat`). If your SSR runtime injects a fake
   `window` or a partial `process`, a `typeof X !== "undefined"` guard the gate trusts can become true where
   it should not. Shimming globals voids the guarantee for those names.
+- **Member-presence guards do not suppress the flag; use `?.()`.** A `typeof R.m === "function"` or `"m" in R`
+  guard on a partial-safe global (`performance`, `WebAssembly`, `console`, `import.meta`) does **not** suppress
+  the member-divergence flag (ADR D1-P1, member level). Two reasons: the guard cannot tell *absent-in-Edge* from
+  *present-but-throws* (`typeof WebAssembly.Module === "function"` is `true` in Workers, yet
+  `new WebAssembly.Module(bytes)` throws), and the language already gives a flow-free safe-probe. Remediate a
+  **call-shaped** divergent member with `R.m?.()` (the sanctioned safe-probe). **Data members have no `?.()`
+  escape:** a divergent data property (`import.meta.dirname`) cannot be safe-probed into a call — redesign (read
+  it off a server-only boundary) or a justified disable is the only path.
 
 ## 2. Out of mandate — the gate *should not* catch these (a production build's job)
 
@@ -84,6 +92,12 @@ subsystem the gate renounces. Never hides anything executable.
   Vercel-Edge-missing set, with `SharedArrayBuffer` additionally removed (Cloudflare disables it — Spectre).
   A fully systematic `{workerd ∩ Deno ∩ Vercel-Edge}` intersection (and the `Atomics` / high-resolution-timer
   questions) is pending a real-runtime globalThis dump.
+- **Marker mentioned inside another JSDoc tag (M2, round-5 policy call).** A prose mention of `@server-safe`
+  inside the text of a *different* tag — `/** @param x the @server-safe flag */` — registers `server-safe` as
+  a JSDoc tag → the file is treated as marked and linted, without the maintainer intending it. Fail-closed
+  direction (a spurious lint, not a missed one), but surprising. Whether the marker must be its own
+  block-level tag is a policy decision deferred to round 5. *Workaround: don't mention `@server-safe` inside
+  another tag's text; put it on its own line.*
 
 ---
 

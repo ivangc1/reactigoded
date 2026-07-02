@@ -2797,18 +2797,35 @@ function addTimerAliases(context, stmt) {
 }
 
 /**
- * Nombre del GLOBAL parcial-safe al que `expr` resuelve (value-transparente): un identifier que ES
- * un root de PARTIAL_SAFE_GLOBAL_MEMBERS no sombreado (`WebAssembly`, `performance`), o un alias ya
- * conocido en scope (`const WA = WebAssembly` → "WebAssembly"). null si no. El read del root está en
- * SAFE_GLOBALS → un alias sería invisible aguas arriba = bypass del partial-member gate (codex P2),
- * misma asimetría que los timer-alias. Respeta shadow (localBindings) y forward value-read.
+ * SET de globals parcial-safe candidatos a los que `expr` resuelve (value-transparente): cada hoja de
+ * `valueTransparentLeaves` que es un root de PARTIAL_SAFE_GLOBAL_MEMBERS no sombreado (`WebAssembly`,
+ * `performance`), un alias ya conocido en scope (`const WA = WebAssembly`; puede aliasar VARIOS roots si
+ * su init es multi-rama, FIX-2), o `import.meta` (root-sentinel). El read del root está en SAFE_GLOBALS →
+ * un alias sería invisible aguas arriba = bypass del partial-member gate (codex P2). Respeta shadow
+ * (localBindings) y forward value-read.
+ *
+ * ∃-QUANTIFICACIÓN (Auditoría B FIX-1): un receptor multi-rama (`b ? crypto : WebAssembly`, `crypto ||
+ * WebAssembly`, `[crypto,WA][k]`) resuelve a VARIAS hojas; devolver solo la 1ª (first-match) enmascara un
+ * `(root,member)` divergente en una hoja posterior → FN. `valueTransparentLeaves` YA respeta la semántica
+ * por-operador (coma→right, &&→right, ||/??→ambos, ternario→ramas, container-proj→selectivos) → el set
+ * hereda la polaridad correcta sin enumerar hojas a mano. Paridad con los hermanos
+ * `accessedMemberNames`/`objectLiteralMemberValues`, que ya devuelven sets.
+ *
+ * LEY DE POLARIDAD (Auditoría B §1): esto es un resolver de RAÍZ (fail-open), no de clave. Solo se acumulan
+ * los candidatos RESUELTOS; una hoja irresoluble (variable, objeto local, forma no enumerada) es procedencia
+ * renunciada → se IGNORA, NO dispara warn (si no, `(b?crypto:local).x` inundaría de FPs). Discriminador
+ * gap-vs-renuncia (INV-SYM): si intercambiar ramas cambia el veredicto, era un gap.
  */
-function exprPartialRoot(expr, context) {
-  if (!expr) return null;
+function exprPartialRoots(expr, context) {
+  const out = new Set();
+  if (!expr) return out;
   const known = context.scopePartialAliases;
   for (const leaf of valueTransparentLeaves(expr)) {
     if (ts.isIdentifier(leaf)) {
-      if (known && known.has(leaf.text)) return known.get(leaf.text);
+      if (known && known.has(leaf.text)) {
+        for (const r of known.get(leaf.text)) out.add(r);
+        continue;
+      }
       if (
         isPartialMemberRoot(leaf.text) &&
         !context.localBindings.has(leaf.text) &&
@@ -2817,30 +2834,61 @@ function exprPartialRoot(expr, context) {
           context.moduleDeclaredNames?.has(leaf.text)
         )
       ) {
-        return leaf.text;
+        out.add(leaf.text);
       }
     } else if (
       ts.isMetaProperty(leaf) &&
       leaf.keywordToken === ts.SyntaxKind.ImportKeyword
     ) {
-      // `import.meta` como root-sentinel (Fable cross-review rc.1, root C): enrola el
-      // destructure (`const {resolve}=import.meta`, c.1c) y el const-alias (`const
-      // m=import.meta; m.resolve()`, scopePartialAliases) — el gate ya cierra esa clase
-      // para los roots-identifier. NO es identifier → no shadowable (`import` es reserved).
-      // La POLARIDAD la despacha `partialMemberDenied` (import.meta = ALLOWLIST, no denylist).
-      return IMPORT_META_ROOT;
+      // `import.meta` como root-sentinel (Fable cross-review rc.1, root C): enrola el destructure
+      // (`const {resolve}=import.meta`, c.1c) y el const-alias (`const m=import.meta; m.resolve()`,
+      // scopePartialAliases). NO es identifier → no shadowable (`import` es reserved). ACUMULA al set (no
+      // early-return, Auditoría B FIX-1/#2): restaura la semántica existencial perdida en 71be882
+      // (`(c?crypto:import.meta).dirname` enmascaraba import.meta tras crypto). La POLARIDAD la despacha
+      // `partialMemberDenied` (import.meta = ALLOWLIST).
+      out.add(IMPORT_META_ROOT);
     }
     // La proyección container-literal (`[WebAssembly][0]`, `({0:WebAssembly})[0]`) YA la desciende
-    // valueTransparentChildren (INV-VT, re-hunt2) → la hoja es el root directo. No hay rama ElementAccess
-    // aquí: sería código muerto (el leaf nunca es un ElementAccess foldable) y violaría INV-VT.
+    // valueTransparentChildren (INV-VT, re-hunt2) → la hoja es el root directo.
   }
-  return null;
+  return out;
 }
 
-/** Mapa aliasName→rootGlobalName declarados por `stmt` (`const WA = WebAssembly`, `p = performance`). */
+/**
+ * ∃-quantificación de construcción-denegada sobre `exprPartialRoots(target.expression)` (Auditoría B FIX-1):
+ * un ctor multi-rama (`new (b?crypto:WebAssembly).Module`) enmascaraba el root denegado tras uno safe/no-
+ * denegante → FN. Devuelve el primer `(root, member)` construcción-denegado; o el primer root allowlist-style
+ * con miembro COMPUTADO (fail-closed). `ctorCandidates` es root-independiente (accessedMemberNames del target).
+ * Compartido por las posiciones `new` y `Reflect.construct` (≡ new).
+ */
+function resolveConstructionDeny(target, context) {
+  const roots = exprPartialRoots(target.expression, context);
+  const candidates = roots.size ? accessedMemberNames(target) : [];
+  for (const root of roots) {
+    if (candidates.length > 0) {
+      const m = candidates.find((mm) => isConstructionDeniedMember(root, mm));
+      if (m) return { ctorRoot: root, ctorMember: m, ctorComputedDenied: false };
+    } else if (CONSTRUCTION_DENIED_MEMBERS[root] !== undefined) {
+      return { ctorRoot: root, ctorMember: null, ctorComputedDenied: true };
+    }
+  }
+  return { ctorRoot: null, ctorMember: null, ctorComputedDenied: false };
+}
+
+/**
+ * resolve para collectStructuralAliases (partial-aliases): SET de roots candidatos, o null si vacío.
+ * collectStructuralAliases usa `if (v) emit(...)`, y un Set vacío es truthy → devolver null para "sin
+ * alias". Un init multi-rama (`const R = b ? crypto : performance`) aliasa AMBOS roots (Auditoría B FIX-2).
+ */
+function resolvePartialRootSet(expr, context) {
+  const s = exprPartialRoots(expr, context);
+  return s.size ? s : null;
+}
+
+/** Mapa aliasName→Set<rootGlobalName> declarados por `stmt` (`const WA = WebAssembly`, `p = performance`). */
 function partialAliasesDeclaredBy(stmt, context) {
   const out = new Map();
-  const emit = (name, root) => out.set(name, root);
+  const emit = (name, roots) => out.set(name, roots);
   // import-equals ROOT-alias: `import WA = WebAssembly` (Identifier moduleReference) → WA aliasa el
   // root parcial. (El `import compile = WA.compile` MIEMBRO lo caza la rama c.1d.) codex P2.
   if (
@@ -2848,15 +2896,15 @@ function partialAliasesDeclaredBy(stmt, context) {
     !stmt.isTypeOnly &&
     ts.isIdentifier(stmt.moduleReference)
   ) {
-    const root = exprPartialRoot(stmt.moduleReference, context);
-    if (root) out.set(stmt.name.text, root);
+    const roots = exprPartialRoots(stmt.moduleReference, context);
+    if (roots.size) out.set(stmt.name.text, roots);
     return out;
   }
   // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
   if (ts.isVariableDeclaration(stmt)) {
-    collectStructuralAliases(stmt.name, stmt.initializer, context, exprPartialRoot, emit, true);
+    collectStructuralAliases(stmt.name, stmt.initializer, context, resolvePartialRootSet, emit, true);
     eachEmbeddedAssignment(stmt.initializer, (a) =>
-      collectStructuralAliases(a.left, a.right, context, exprPartialRoot, emit, true),
+      collectStructuralAliases(a.left, a.right, context, resolvePartialRootSet, emit, true),
     );
     return out;
   }
@@ -2877,10 +2925,10 @@ function partialAliasesDeclaredBy(stmt, context) {
         local.set(n, root);
         out.set(n, root);
       };
-      collectStructuralAliases(d.name, d.initializer, ctx, exprPartialRoot, addLocal, true);
+      collectStructuralAliases(d.name, d.initializer, ctx, resolvePartialRootSet, addLocal, true);
       // Assignments EMBEBIDAS en el initializer (`const _ = (WA = WebAssembly), …`) (codex P2).
       eachEmbeddedAssignment(d.initializer, (a) =>
-        collectStructuralAliases(a.left, a.right, ctx, exprPartialRoot, addLocal, true),
+        collectStructuralAliases(a.left, a.right, ctx, resolvePartialRootSet, addLocal, true),
       );
       if (local.size > 0) {
         ctx = {
@@ -2902,7 +2950,7 @@ function partialAliasesDeclaredBy(stmt, context) {
         assign.left,
         assign.right,
         ctx,
-        exprPartialRoot,
+        resolvePartialRootSet,
         (n, r) => {
           local.set(n, r);
           out.set(n, r);
@@ -3567,6 +3615,29 @@ function wrapperEnclosingMemberAccess(node) {
  * solo desenvolvía erased+coma → el bypass `({})["constructor"][1 && "constructor"](…)`
  * escapaba por la asimetría base-vs-key. beta.27 BLOCKER-1.
  */
+/**
+ * Elementos-valor de un array-literal para descenso ∃-peligro, APLANANDO spread-de-array-literal
+ * recursivamente (Auditoría B FIX-5, cierra #5): `[...['fs']]` aporta `'fs'`; `[...[...['fs']]]` recursivo;
+ * `[X, ...['a'], Y]` aporta X, 'a', Y. Un spread NO resoluble a array-literal (variable/Set/generator/string)
+ * es §141 (contenido desconocido, posiciones desplazadas) → se ignora su contenido (el ∃-peligro sobre los
+ * demás elementos ya es fail-closed). El VALOR sobrevive el spread-de-literal EN-SITIO (decidible sin data-
+ * flow), igual que la proyección container. `depth` acota recursión patológica.
+ */
+function spreadFlattenedElements(elements, out, depth = 0) {
+  if (depth > 16) return out;
+  for (const el of elements) {
+    if (!el || ts.isOmittedExpression(el)) continue;
+    if (ts.isSpreadElement(el)) {
+      for (const arr of arrayLiteralAlternatives(el.expression)) {
+        spreadFlattenedElements(arr.elements, out, depth + 1);
+      }
+      continue;
+    }
+    out.push(el);
+  }
+  return out;
+}
+
 function valueTransparentChildren(node) {
   if (!node) return [];
   if (isErasedOuterExpr(node)) return [node.expression];
@@ -3629,11 +3700,8 @@ function valueTransparentChildren(node) {
       // `identifier[i]` no es container-literal → out vacío → sin descenso (lo manejan computedDefaultDenyRoot
       // etc.). La rama RESUELTA (else) mantiene la precisión: solo el elemento específico.
       for (const arr of arrayLiteralAlternatives(node.expression)) {
-        for (const el of arr.elements) {
-          if (el && !ts.isOmittedExpression(el) && !ts.isSpreadElement(el)) {
-            out.push(el);
-          }
-        }
+        // FIX-5: aplana spread-de-array-literal (`[...['fs']][k]` → 'fs') además de los elementos directos.
+        spreadFlattenedElements(arr.elements, out);
       }
       for (const obj of objectLiteralAlternatives(node.expression)) {
         for (const p of obj.properties) {
@@ -3650,13 +3718,10 @@ function valueTransparentChildren(node) {
           for (const arr of arrayLiteralAlternatives(node.expression)) {
             if (arr.elements.some(ts.isSpreadElement)) {
               // Un spread DESPLAZA las posiciones → el índice resuelto ya no mapea a un elemento fijo →
-              // ∃-peligro sobre los elementos NO-spread (fail-closed, extensión del flip de polaridad a
-              // spread-in-array; `[...[0], X][1]` alcanza X). Fable cross-review 3 (variante array).
-              for (const el of arr.elements) {
-                if (el && !ts.isOmittedExpression(el) && !ts.isSpreadElement(el)) {
-                  out.push(el);
-                }
-              }
+              // ∃-peligro sobre los elementos NO-spread + el contenido APLANADO de spread-de-array-literal
+              // (fail-closed; `[...[0], X][1]` alcanza X, `[...[WA.Module]][0]` alcanza WA.Module). Fable
+              // cross-review 3 (variante array) + Auditoría B FIX-5 (flatten del spread-de-literal).
+              spreadFlattenedElements(arr.elements, out);
               continue;
             }
             const el = arr.elements[i];
@@ -3793,7 +3858,7 @@ function reflectCallTarget(n) {
 }
 
 // ¿`n` es `Reflect.get(R, "k")` con key STRING-LITERAL? → {receiver: R, member: "k"}. Es un member-read
-// EN-SITIO ≡ `R["k"]`, decidible con los MISMOS resolvers (R por exprPartialRoot, k literal), NO data-flow
+// EN-SITIO ≡ `R["k"]`, decidible con los MISMOS resolvers (R por exprPartialRoots, k literal), NO data-flow
 // → gap a cerrar para el eje PRESENCIA-DE-MIEMBRO (root B / Fable). El gate ya modela Reflect.construct/
 // apply (reflectCallTarget); 'get' faltaba para este eje. DISTINTO del residual §141 documentado de
 // `Reflect.get(x,"constructor")()` (eje EVAL-SINK: x variable + result-chasing por invocación). Key
@@ -3824,6 +3889,106 @@ function reflectGetMemberRead(n) {
     }
   }
   return null;
+}
+
+/** ¿`node` es un CALL a `<ns>.<method>(...)` (ns = "Object"/"Reflect"), value-transparente? Espejo del
+ *  patrón de reflectGetMemberRead (callee VT-fold; ns por identifier-text, misma asunción de no-shadow). */
+function staticNamespaceCall(node, ns, method) {
+  if (!ts.isCallExpression(node)) return false;
+  for (const callee of valueTransparentLeaves(unwrapErased(node.expression))) {
+    const c = unwrapErased(callee);
+    if (
+      !ts.isPropertyAccessExpression(c) &&
+      !ts.isElementAccessExpression(c)
+    ) {
+      continue;
+    }
+    if (!accessedMemberNames(c).some((x) => x === method)) continue;
+    if (
+      valueTransparentLeaves(c.expression).some((o) => {
+        const oo = unwrapErased(o);
+        return ts.isIdentifier(oo) && oo.text === ns;
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * IDIOMAS REFLEXIVOS de lectura-de-valor (Auditoría B FIX-3, ACOTA #3 — NO cierra): rutas que leen el VALOR
+ * de `R.k` a través de un intrínseco de copia/reflexión, evadiendo el member-read directo. Lista FINITA
+ * (denylist de idiomas dentro de una regla allowlist → espacio ABIERTO, no correct-by-construction; V3 halló
+ * 2 idiomas fuera de la lista al 1er intento). Devuelve `[{receiver, members}]` (receiver = R-expr; members =
+ * Set de nombres de miembro leídos), a ∃-quantificar por el caller vía `exprPartialRoots(receiver)` +
+ * `partialMemberDenied`. `R` hereda cobertura multi-rama de exprPartialRoots.
+ *
+ * SOUNDNESS de la equivalencia `X(R).k ≡ R.k`: exacta para miembros OWN-DATA (verificado import.meta.dirname/
+ * filename/resolve en V1). Para miembros heredados/non-enumerable de otras raíces la equivalencia puede no
+ * valer (gOPD own-only; assign/spread copian solo enumerable-own) → el flag es sobre-aproximación FAIL-CLOSED
+ * (dirección FP, consistente con que el gate ya flaggea el read literal `WebAssembly.compile`). Key VARIABLE
+ * (resolveKeyCandidates vacío) o receptor-vía-flujo (`const c={...R}; c.k`) = §141 renunciado (no en-sitio).
+ * RENUNCIADOS explícitos (tabla ADR): entries/values/keys→índice (key-implícita), fromEntries∘entries
+ * (composición copia key-implícita), structuredClone (lanza DataCloneError, V4), Proxy (handler altera lectura).
+ */
+function reflectiveValueReads(node) {
+  const out = [];
+  const add = (receiver, members) => {
+    if (receiver && members && members.size > 0) out.push({ receiver, members });
+  };
+  // (A/A2) `<descriptor>.value` — el idioma getOwnPropertyDescriptor(s).
+  if (ts.isPropertyAccessExpression(node) && node.name.text === "value") {
+    const inner = unwrapErased(node.expression);
+    if (
+      ts.isCallExpression(inner) &&
+      inner.arguments.length >= 2 &&
+      (staticNamespaceCall(inner, "Object", "getOwnPropertyDescriptor") ||
+        staticNamespaceCall(inner, "Reflect", "getOwnPropertyDescriptor"))
+    ) {
+      // getOwnPropertyDescriptor(R, "k").value → member = k (key VT-fold canónica); receiver = R.
+      add(inner.arguments[0], resolveKeyCandidates(inner.arguments[1]));
+    } else if (
+      ts.isPropertyAccessExpression(inner) ||
+      ts.isElementAccessExpression(inner)
+    ) {
+      // getOwnPropertyDescriptors(R).k.value / [.]["k"].value (plural, solo Object) → member = k; receiver = R.
+      const innerCall = unwrapErased(inner.expression);
+      if (
+        ts.isCallExpression(innerCall) &&
+        innerCall.arguments.length >= 1 &&
+        staticNamespaceCall(innerCall, "Object", "getOwnPropertyDescriptors")
+      ) {
+        add(innerCall.arguments[0], new Set(accessedMemberNames(inner)));
+      }
+    }
+  }
+  // (B) `<copia/proto>.k` / `["k"]` — Object.assign / Object.create / spread-de-root.
+  if (
+    ts.isPropertyAccessExpression(node) ||
+    ts.isElementAccessExpression(node)
+  ) {
+    const members = new Set(accessedMemberNames(node));
+    if (members.size > 0) {
+      const recv = unwrapErased(node.expression);
+      if (ts.isCallExpression(recv) && staticNamespaceCall(recv, "Object", "assign")) {
+        // Object.assign(target, ...sources).k → CUALQUIER arg (target o source) puede aportar k. Un
+        // SpreadElement de arg (`Object.assign({}, ...srcs)`) es §141 (fuentes desconocidas) → skip.
+        for (const a of recv.arguments) if (!ts.isSpreadElement(a)) add(a, members);
+      } else if (
+        ts.isCallExpression(recv) &&
+        recv.arguments.length >= 1 &&
+        staticNamespaceCall(recv, "Object", "create")
+      ) {
+        add(recv.arguments[0], members); // Object.create(R).k → lectura vía prototipo (V3)
+      } else if (ts.isObjectLiteralExpression(recv)) {
+        for (const p of recv.properties) {
+          if (ts.isSpreadAssignment(p)) add(p.expression, members); // ({...R}).k
+        }
+      }
+    }
+  }
+  return out;
 }
 
 // Targets de CONSTRUCCIÓN de `expr`: hojas value-survival, DESLIGANDO `.bind(...)` recursivamente (un
@@ -4093,7 +4258,7 @@ function withEmbeddedAssignmentAliases(context, node) {
       assign.left,
       assign.right,
       ctx,
-      exprPartialRoot,
+      resolvePartialRootSet,
       (n, r) => (partial ||= new Map()).set(n, r),
       true,
     );
@@ -5962,12 +6127,16 @@ function checkSourceFile(
           ) {
             continue;
           }
-          const r = exprPartialRoot(c.expression, context);
-          const bound = r ? RECEIVER_BOUND_MEMBERS[r] : null;
-          const member = bound
-            ? accessedMemberNames(c).find((mm) => bound.has(mm))
-            : null;
-          if (member) return { r, member };
+          // ∃-quantifica sobre exprPartialRoots(c.expression) (Auditoría B FIX-1): un receptor detach
+          // multi-rama (`(b?WebAssembly:crypto).getRandomValues`) enmascaraba el root con el miembro bound
+          // (crypto) tras uno sin ese bound (WebAssembly) → FN.
+          for (const r of exprPartialRoots(c.expression, context)) {
+            const bound = RECEIVER_BOUND_MEMBERS[r];
+            const member = bound
+              ? accessedMemberNames(c).find((mm) => bound.has(mm))
+              : null;
+            if (member) return { r, member };
+          }
         }
         return null;
       };
@@ -6044,17 +6213,11 @@ function checkSourceFile(
           ) {
             continue;
           }
-          const ctorRoot = exprPartialRoot(target.expression, context);
-          const ctorCandidates = ctorRoot ? accessedMemberNames(target) : [];
-          const ctorMember = ctorCandidates.find((mm) =>
-            isConstructionDeniedMember(ctorRoot, mm),
-          );
-          // COMPUTADO vía Reflect.construct (`Reflect.construct(WebAssembly[m], …)`, m variable): mismo
-          // fail-close que `new WebAssembly[m]()` (Reflect.construct ≡ new). No §141 (detecta el patrón).
-          const ctorComputedDenied =
-            Boolean(ctorRoot) &&
-            ctorCandidates.length === 0 &&
-            CONSTRUCTION_DENIED_MEMBERS[ctorRoot] !== undefined;
+          // ∃-quantifica construcción-denegada sobre exprPartialRoots(target) (Auditoría B FIX-1); el
+          // computado vía Reflect.construct (`Reflect.construct(WebAssembly[m],…)`, m variable) fail-cierra
+          // igual que `new WebAssembly[m]()` (Reflect.construct ≡ new). No §141 (detecta el patrón).
+          const { ctorRoot, ctorMember, ctorComputedDenied } =
+            resolveConstructionDeny(target, context);
           if (ctorMember || ctorComputedDenied) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -6098,23 +6261,13 @@ function checkSourceFile(
         ) {
           continue;
         }
-        const ctorRoot = exprPartialRoot(target.expression, context);
-        const ctorCandidates = ctorRoot ? accessedMemberNames(target) : [];
-        const ctorMember = ctorCandidates.find((mm) =>
-          isConstructionDeniedMember(ctorRoot, mm),
-        );
-        // COMPUTADO en posición `new` (`new WebAssembly[m](bytes)`, m variable → accessedMemberNames=[]):
-        // el miembro NO-probado no se puede demostrar ∉ construcción-denegada (m podría ser "Module") →
-        // fail-CLOSED, paridad con el literal-desconocido. Decidible SIN resolver m (no §141: detecta el
-        // patrón, no foldea la variable). SOLO en posición `new` → preserva el value-read Edge-safe
-        // (`const C = WebAssembly[m]`, `instanceof WebAssembly[m]` NO están en `new` → intactos). El
-        // member-read/CALL COMPUTADO de un read-ban (`WebAssembly[m]()` con m="compile") es residual
-        // SEPARADO: read-ban ≠ construct-ban — el read de compile ya flaggea literal, pero el computado no
-        // distingue Module-read-safe de compile-read-banned sin RESOLVER m (§141). codex P2 + Auditor-B.
-        const ctorComputedDenied =
-          Boolean(ctorRoot) &&
-          ctorCandidates.length === 0 &&
-          CONSTRUCTION_DENIED_MEMBERS[ctorRoot] !== undefined;
+        // ∃-quantifica construcción-denegada sobre exprPartialRoots(target) (Auditoría B FIX-1). El
+        // COMPUTADO en posición `new` (`new WebAssembly[m](bytes)`, m variable → sin candidatos) fail-CIERRA
+        // (m podría ser "Module"); paridad con el literal-desconocido. Decidible SIN resolver m (detecta el
+        // patrón, no §141). SOLO en posición `new` → preserva el value-read Edge-safe (`const C =
+        // WebAssembly[m]`, `instanceof WebAssembly[m]` intactos). read-ban ≠ construct-ban. codex P2 + Auditor-B.
+        const { ctorRoot, ctorMember, ctorComputedDenied } =
+          resolveConstructionDeny(target, context);
         if (ctorMember || ctorComputedDenied) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -6132,7 +6285,7 @@ function checkSourceFile(
       }
     }
     // `import.meta.<member>` (dot / bracket-literal / alias / proyección / VT) se maneja UNIFICADO en la
-    // rama partial-root c.1b (import.meta enrolado como root-sentinel en exprPartialRoot, root C; polaridad
+    // rama partial-root c.1b (import.meta enrolado como root-sentinel en resolvePartialRootSet, root C; polaridad
     // ALLOWLIST vía partialMemberDenied) — Fable cross-review 3 (#3). Se ELIMINÓ el bloque dedicado que había
     // aquí: duplicaba la policy y, al no aplicar el safe-probe de c.1b, flaggeaba `typeof import.meta.dirname`
     // / `import.meta.resolve?.()` de más (FP). `import.meta.hot`/`url`/`env`/`glob` ∈ allowlist → PASA;
@@ -6146,18 +6299,33 @@ function checkSourceFile(
     if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
       const rget = reflectGetMemberRead(node);
       if (rget) {
-        const rgRoot = exprPartialRoot(rget.receiver, context);
+        // ∃-quantifica sobre exprPartialRoots(receiver) (Auditoría B FIX-1): un receiver multi-rama
+        // `Reflect.get(b?crypto:performance, k)` enmascaraba el root denegado tras uno wholesale-safe → FN.
         // members RESUELTOS → ∃-candidato denegado. members VACÍO (key variable/ensamblada) sobre un root
         // allowlist default-deny (SAFE_PARTIAL_MEMBERS) → fail-closed, ESPEJO de `<root>[<computado>]`
         // (computedDefaultDenyRoot, codex P2): `Reflect.get(performance, k) ≡ performance[k]`. Fable #4.
-        const denied =
-          rgRoot && rget.members.size > 0
-            ? [...rget.members].find((m) => partialMemberDenied(rgRoot, m))
-            : undefined;
-        const computedDeny =
-          rgRoot &&
-          rget.members.size === 0 &&
-          SAFE_PARTIAL_MEMBERS[rgRoot] !== undefined;
+        const rgRoots = exprPartialRoots(rget.receiver, context);
+        let rgRoot = null;
+        let denied = undefined;
+        let computedDeny = false;
+        if (rget.members.size > 0) {
+          for (const root of rgRoots) {
+            const m = [...rget.members].find((mm) =>
+              partialMemberDenied(root, mm),
+            );
+            if (m !== undefined) {
+              rgRoot = root;
+              denied = m;
+              break;
+            }
+          }
+        } else {
+          rgRoot =
+            [...rgRoots].find(
+              (root) => SAFE_PARTIAL_MEMBERS[root] !== undefined,
+            ) ?? null;
+          computedDeny = rgRoot !== null;
+        }
         if (denied !== undefined || computedDeny) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -6170,6 +6338,40 @@ function checkSourceFile(
               ? `\`Reflect.get(${rgRoot}, <computado>)\` ≡ \`${rgRoot}[<computado>]\` — key no resoluble sobre global parcial default-deny (allow: ${[...SAFE_PARTIAL_MEMBERS[rgRoot]].join("/")}) → fail-closed: ${lineText}`
               : `\`Reflect.get(${rgRoot}, "${denied}")\` ≡ \`${rgRoot}.${denied}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
           });
+        }
+      }
+    }
+    // Idiomas REFLEXIVOS de lectura-de-valor (`gOPD(R,"k").value`, `gOPDs(R).k.value`, `Object.assign({},R).k`,
+    // `Object.create(R).k`, `({...R}).k`) ≡ `R.k` (Auditoría B FIX-3, ACOTA #3 — no cierra). ∃-quantifica sobre
+    // exprPartialRoots(receiver) + partialMemberDenied (dispatch de polaridad por-root, incl. import.meta
+    // allowlist). Fail-closed sobre-aproximado para miembros non-own-data (ver reflectiveValueReads).
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)) &&
+      !context.isInClientOnlyDeferredBody
+    ) {
+      for (const { receiver, members } of reflectiveValueReads(node)) {
+        let hitRoot = null;
+        let hitMember = null;
+        for (const root of exprPartialRoots(receiver, context)) {
+          const m = [...members].find((mm) => partialMemberDenied(root, mm));
+          if (m !== undefined) {
+            hitRoot = root;
+            hitMember = m;
+            break;
+          }
+        }
+        if (hitRoot) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail: `lectura reflexiva de \`${hitRoot}.${hitMember}\` (getOwnPropertyDescriptor/assign/create/spread) ≡ \`${hitRoot}.${hitMember}\` — miembro que diverge/lanza en el baseline Edge; la indirección reflexiva no lo oculta: ${lineText}`,
+          });
+          break;
         }
       }
     }
@@ -6480,7 +6682,7 @@ function checkSourceFile(
             p.name,
             p.initializer,
             pCtx,
-            exprPartialRoot,
+            resolvePartialRootSet,
             (n, r) => {
               lp.set(n, r);
               pAdds.set(n, r);
@@ -6856,7 +7058,7 @@ function checkSourceFile(
           tAdds.add(n),
         );
         const pAdds = new Map();
-        collectStructuralAliases(pat, undefined, bodyContext, exprPartialRoot, (n, r) =>
+        collectStructuralAliases(pat, undefined, bodyContext, resolvePartialRootSet, (n, r) =>
           pAdds.set(n, r), true,
         );
         if (tAdds.size > 0) {
@@ -6937,7 +7139,7 @@ function checkSourceFile(
           tA.add(n),
         );
         const pA = new Map();
-        collectStructuralAliases(forExprInit, undefined, context, exprPartialRoot, (n, r) =>
+        collectStructuralAliases(forExprInit, undefined, context, resolvePartialRootSet, (n, r) =>
           pA.set(n, r), true,
         );
         if (tA.size > 0) {
@@ -7085,7 +7287,7 @@ function checkSourceFile(
       // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). exprPartialRoot ya respeta
       // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
       // Se resuelve SIEMPRE (también con memberCandidates=[]) para cazar el miembro COMPUTADO de abajo.
-      const resolvedPartialRoot = exprPartialRoot(node.expression, context);
+      const resolvedPartialRoots = exprPartialRoots(node.expression, context);
       // Predicado CENTRAL con dispatch de POLARIDAD: denylist (WebAssembly) → miembro ∈ set; allowlist
       // (performance/console) → ∉ set; allowlist import.meta (SAFE_IMPORT_META_MEMBERS). import.meta se
       // maneja AQUÍ tanto DIRECTO (`import.meta.dirname`) como por alias/proyección (`m.dirname`) — Fable
@@ -7093,12 +7295,25 @@ function checkSourceFile(
       // `importMetaDirect`, de modo que el safe-probe/optional-chain de abajo aplica también al directo
       // (`typeof import.meta.dirname`, `import.meta.resolve?.()` → PASA), cerrando el FP por construcción y
       // eliminando la asimetría de dos implementaciones de la misma policy.
-      const partialMember =
-        resolvedPartialRoot && memberCandidates.length > 0
-          ? (memberCandidates.find((m) =>
-              partialMemberDenied(resolvedPartialRoot, m),
-            ) ?? null)
-          : null;
+      // ∃-QUANTIFICACIÓN (Auditoría B FIX-1): un receptor multi-rama (`(b?crypto:WebAssembly).Module`)
+      // resuelve a VARIOS roots; buscar el PRIMER (root,member) denegado sobre TODO el set — no first-match
+      // del root, que enmascaraba un root denegado tras uno wholesale-safe/no-denegante → FN. La asimetría
+      // de orden (reverso→FLAG) era el tell del gap. `resolvedPartialRoot`+`partialMember` = el par que
+      // DECIDE el flag (para el detail).
+      let partialMember = null;
+      let resolvedPartialRoot = null;
+      if (memberCandidates.length > 0) {
+        for (const root of resolvedPartialRoots) {
+          const denied = memberCandidates.find((m) =>
+            partialMemberDenied(root, m),
+          );
+          if (denied) {
+            partialMember = denied;
+            resolvedPartialRoot = root;
+            break;
+          }
+        }
+      }
       // MIEMBRO COMPUTADO (`performance[m]()`, m variable/expr → memberCandidates=[]) sobre raíz default-
       // DENY (allowlist parcial ∈ SAFE_PARTIAL_MEMBERS: performance/console): el miembro NO-probado no se
       // puede demostrar ∈ allowlist → fail-CLOSED, paridad EXACTA con un miembro literal-desconocido (que
@@ -7111,11 +7326,15 @@ function checkSourceFile(
       // (b) destructure de miembro computado (`const {[k]:x}=performance` — §141 data-flow; la rama c.1c
       // abajo solo caza el destructure LITERAL); (c) raíces WHOLESALE-safe (crypto — sin default-deny de
       // miembro → `crypto[m]` pasa, correcto). codex P2 + Auditor-B.
+      // ∃ un candidato allowlist-style (∈ SAFE_PARTIAL_MEMBERS) con miembro COMPUTADO → default-deny
+      // (Auditoría B §1: set mixto `(b?crypto:performance)[m]` → performance avisa aunque crypto sea
+      // wholesale-safe). Mismo contrato fail-closed que single-root; no sobre-avisa (la rama puede tomarse
+      // en runtime), salvo la sobre-aproximación documentada de rama-muerta de `||`/`??`.
       const computedDefaultDenyRoot =
-        resolvedPartialRoot &&
-        memberCandidates.length === 0 &&
-        SAFE_PARTIAL_MEMBERS[resolvedPartialRoot] !== undefined
-          ? resolvedPartialRoot
+        memberCandidates.length === 0
+          ? ([...resolvedPartialRoots].find(
+              (root) => SAFE_PARTIAL_MEMBERS[root] !== undefined,
+            ) ?? null)
           : null;
       const partialRootName = partialMember
         ? resolvedPartialRoot
@@ -7226,7 +7445,7 @@ function checkSourceFile(
               ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un global parcial default-deny (allow: ${[...SAFE_PARTIAL_MEMBERS[partialRootName]].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro Node-only escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
               : PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
                 ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
-                : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR: ${lineText}`,
+                : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR. Remedia con \`${partialRootName}.${partialMember}?.()\` (safe-probe sancionado; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
         });
       }
     }
@@ -7293,8 +7512,10 @@ function checkSourceFile(
             ? pat.properties
             : pat.elements;
           // init puede ser undefined (catch-pattern / param sin default) → solo el default-scan corre.
-          const partialRootName = init ? exprPartialRoot(init, context) : null;
-          if (partialRootName) {
+          // ∃-quantifica sobre exprPartialRoots(init) (Auditoría B FIX-1): un init destructure multi-rama
+          // (`const {compile}=(b?crypto:WebAssembly)`) enmascaraba el root denegado tras uno safe → FN.
+          const partialRoots = init ? exprPartialRoots(init, context) : new Set();
+          if (partialRoots.size) {
             // Solo un OBJECT pattern extrae un MIEMBRO por key; un array pattern sobre el root es
             // iteración (no member-access). init ES el root → sin literal anidado que recursar.
             if (!isObjPat) return;
@@ -7315,13 +7536,21 @@ function checkSourceFile(
                     ts.isShorthandPropertyAssignment(el)
                   ? el.name
                   : null;
-              // Key con ALTERNATIVAS (`[c ? "compile" : "validate"]`) → cualquier rama denegada
-              // cuenta, fail-closed; predicado central con polaridad (denylist / allowlist /
-              // allowlist import.meta) (codex P2 + root C).
-              const key =
-                structuralKeyTexts(kn).find((k) =>
-                  partialMemberDenied(partialRootName, k),
-                ) ?? null;
+              // Key con ALTERNATIVAS (`[c ? "compile" : "validate"]`) → cualquier rama denegada cuenta,
+              // fail-closed; predicado central con polaridad. Sobre el SET de roots: el primer (root, key)
+              // denegado decide el flag (denyRoot para el detail). codex P2 + root C + Auditoría B.
+              let denyRoot = null;
+              let key = null;
+              for (const cand of structuralKeyTexts(kn)) {
+                denyRoot =
+                  [...partialRoots].find((root) =>
+                    partialMemberDenied(root, cand),
+                  ) ?? null;
+                if (denyRoot) {
+                  key = cand;
+                  break;
+                }
+              }
               // ¿DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` / `{ x: y = d }` (assign).
               // Miembro AUSENTE (performance.measure undefined) → default SE ACTIVA → seguro. Root
               // PRESENT-throws (WebAssembly.compile EXISTE) → default NO se activa → sigue lanzando.
@@ -7337,7 +7566,7 @@ function checkSourceFile(
               if (
                 key &&
                 hasDefault &&
-                !PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+                !PARTIAL_PRESENT_THROWS_ROOTS.has(denyRoot)
               ) {
                 continue; // miembro ausente con default → seguro
               }
@@ -7351,9 +7580,9 @@ function checkSourceFile(
                   file: relPath,
                   rule: "no-bare-dom-access",
                   line: line + 1,
-                  detail: PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
-                    ? `destructuring de \`${partialRootName}.${key}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
-                    : `destructuring de \`${partialRootName}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+                  detail: PARTIAL_PRESENT_THROWS_ROOTS.has(denyRoot)
+                    ? `destructuring de \`${denyRoot}.${key}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+                    : `destructuring de \`${denyRoot}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR. Remedia accediendo con \`${denyRoot}.${key}?.()\` (safe-probe; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
                 });
               }
             }
@@ -7456,10 +7685,14 @@ function checkSourceFile(
       !context.isInClientOnlyDeferredBody
     ) {
       // El root resuelve DIRECTO (no sombreado) o vía ALIAS scope-aware (`import WA = WebAssembly;
-      // import compile = WA.compile`) — exprPartialRoot ya pliega shadow/forward/alias (codex P2).
-      const ieRootName = exprPartialRoot(node.moduleReference.left, context);
+      // import compile = WA.compile`) — exprPartialRoots pliega shadow/forward/alias (codex P2). El
+      // moduleReference.left es un Identifier (guard arriba) → set ≤1 root por gramática; ∃-quantify por
+      // uniformidad (Auditoría B FIX-1: cero call-sites del wrapper singular exprPartialRoot).
       const ieMember = node.moduleReference.right.text;
-      if (ieRootName && isDeniedPartialMember(ieRootName, ieMember)) {
+      const ieRootName = [...exprPartialRoots(node.moduleReference.left, context)].find((r) =>
+        isDeniedPartialMember(r, ieMember),
+      );
+      if (ieRootName) {
         const start = node.getStart(sourceFile);
         const { line } = sourceFile.getLineAndCharacterOfPosition(start);
         const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -7469,7 +7702,7 @@ function checkSourceFile(
           line: line + 1,
           detail: PARTIAL_PRESENT_THROWS_ROOTS.has(ieRootName)
             ? `import-equals de \`${ieRootName}.${ieMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
-            : `import-equals de \`${ieRootName}.${ieMember}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR: ${lineText}`,
+            : `import-equals de \`${ieRootName}.${ieMember}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR. Remedia con \`${ieRootName}.${ieMember}?.()\` (safe-probe; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
         });
       }
     }
@@ -8126,9 +8359,24 @@ function detectServerSafeMarker(sourceFile, relPath) {
 // medido: U+200C, U+2028). Cf→"" (zero-width/BOM/soft-hyphen); Zl/Zp→"\n" (line/paragraph separator
 // U+2028/U+2029); Zs→" " (space separators, incl. nbsp/ideographic). Categorías Unicode (auto-actualizan
 // con las tablas del runtime), no allowlist puntual — la lección del round aplicada. Fable cross-review 3 (#5).
+// Cc que rompen la detección del gate→"": los 60 controles C0/C1/DEL EXCEPTO TAB/LF/VT/FF/CR (los 5 ws
+// estructurales de JS que el detector SÍ trata como trivia glued — borrarlos fusionaría líneas). Fold-set
+// determinado EMPÍRICAMENTE contra el detector REAL del gate (no por categoría whitespace — lección V9 de
+// Fable: whitespace-ness NO es el oráculo). DIVERGENCIA vs V7 (59): NEL U+0085 lo reconoce ts.getJSDocTags
+// pero NO el detector comment-range del gate → se INCLUYE en el fold (gate ⊇ TS, 60 chars). El char corregido
+// de #4: NEL no era el ejemplo; el gap real son los Cc pegados al `@` (V8). El OR-de-dos-parses = monótono.
 function normalizeMarkerText(text) {
   return text
     .replace(/\p{Cf}/gu, "")
+    .replace(/\p{Cc}/gu, (c) => {
+      // Mantener los 5 ws estructurales que el detector SI trata como trivia glued (TAB 9/LF 10/VT 11/FF
+      // 12/CR 13); foldear el resto de Cc (los 60: C0 no-ws + DEL + C1 incl. NEL). Predicado por code-point
+      // (no literal de control en el source -> sin no-control-regex ni eslint-disable).
+      const cp = c.codePointAt(0);
+      return cp === 9 || cp === 10 || cp === 11 || cp === 12 || cp === 13
+        ? c
+        : "";
+    })
     .replace(/[\p{Zl}\p{Zp}]/gu, "\n")
     .replace(/\p{Zs}/gu, " ");
 }
@@ -8142,6 +8390,25 @@ function detectMarkerRobust(sourceFile, content, relPath) {
   if (detectServerSafeMarker(sourceFile, relPath)) return true;
   const normalized = normalizeMarkerText(content);
   if (normalized === content) return false; // perf: 2º parse solo si cambió
+  const normSF = ts.createSourceFile(
+    relPath,
+    normalized,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindForPath(relPath),
+  );
+  return detectServerSafeMarker(normSF, relPath);
+}
+
+// ¿el marker de este archivo SOLO se detecta tras normalizar invisibles? (Auditoría B FIX-4, política de
+// higiene): entonces el source tiene un char invisible (Cc/Cf/Zs/Zl/Zp) entre `/**` y `@server-safe` que
+// rompe el scanner JSDoc de TS. El gate lo audita igual (fail-safe, vía detectMarkerRobust), pero OTRO tooling
+// basado en `ts.getJSDocTags` NO vería el tag → divergencia permanente. Diagnóstico fail-loud para que el
+// contributor elimine el char (domina al fold silencioso, que dejaría basura invisible permanente).
+function markerNeedsHygiene(sourceFile, content, relPath) {
+  if (detectServerSafeMarker(sourceFile, relPath)) return false; // el parse original ya lo ve → limpio
+  const normalized = normalizeMarkerText(content);
+  if (normalized === content) return false;
   const normSF = ts.createSourceFile(
     relPath,
     normalized,
@@ -8214,6 +8481,18 @@ if (isCliEntry) {
         detail: `marca @server-safe en un archivo NO auditable: el gate solo audita .ts/.tsx con runtime (un .d.ts es type-only sin runtime; JS-family no se modela: require()/CJS y parser JS). Marca la implementación .ts/.tsx.`,
       });
       continue;
+    }
+    const cachedMark = parseCache.get(file);
+    if (
+      cachedMark &&
+      markerNeedsHygiene(cachedMark.sourceFile, cachedMark.content, relPath)
+    ) {
+      // Auditoría B FIX-4: el marker se rescató por normalización de invisibles → char basura en el source.
+      allViolations.push({
+        rule: "server-safe-marker",
+        file: relPath,
+        detail: `el marker @server-safe contiene un carácter invisible (control C0/C1, format o space no estándar) entre \`/**\` y \`@server-safe\` que rompe el scanner JSDoc de TypeScript. El gate lo audita igual (fail-safe), pero otro tooling basado en ts.getJSDocTags NO vería el tag → divergencia. Elimina el carácter invisible del comentario.`,
+      });
     }
     const visited = new Set();
     allViolations.push(
