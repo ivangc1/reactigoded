@@ -2272,19 +2272,10 @@ function gatherReactNamespaceFamily(sourceFile) {
   const exprIsFamilyValue = (expr) => {
     if (!expr) return false;
     for (const leaf of valueTransparentLeaves(expr)) {
+      // La proyección container-literal (`[React][0]`, `({0:React})[0]`) YA la desciende
+      // valueTransparentChildren (INV-VT, re-hunt2) → la hoja es `React` directo. No hay rama
+      // ElementAccess aquí: sería código muerto (el leaf nunca es un ElementAccess foldable).
       if (ts.isIdentifier(leaf) && family.has(leaf.text)) return true;
-      if (ts.isElementAccessExpression(leaf)) {
-        // Base value-transparente (`(c ? [React] : [React])[0]`) → arrayLiteralAlternatives (codex P2).
-        const idx = leaf.argumentExpression
-          ? unwrapErased(leaf.argumentExpression)
-          : null;
-        if (idx && ts.isNumericLiteral(idx)) {
-          for (const arr of arrayLiteralAlternatives(leaf.expression)) {
-            const el = arr.elements[Number(idx.text)];
-            if (el && exprIsFamilyValue(el)) return true;
-          }
-        }
-      }
     }
     return false;
   };
@@ -2684,19 +2675,8 @@ function exprIsTimerValued(expr, context) {
         const mn = accessedMemberName(leaf);
         if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
       }
-      // Proyección array-literal-index `[setTimeout][0]` (token-en-su-sitio). Base value-transparente
-      // (`(c ? [setTimeout] : [setTimeout])[0]`) → arrayLiteralAlternatives, no solo unwrapErased (codex P2).
-      if (ts.isElementAccessExpression(leaf)) {
-        const idx = leaf.argumentExpression
-          ? unwrapErased(leaf.argumentExpression)
-          : null;
-        if (idx && ts.isNumericLiteral(idx)) {
-          for (const arr of arrayLiteralAlternatives(leaf.expression)) {
-            const el = arr.elements[Number(idx.text)];
-            if (el && exprIsTimerValued(el, context)) return true;
-          }
-        }
-      }
+      // La proyección `[setTimeout][0]` YA la desciende valueTransparentChildren (INV-VT) → la hoja es
+      // `setTimeout` directo, cazado arriba. Sin rama ElementAccess (sería código muerto).
     } else if (ts.isCallExpression(leaf)) {
       // `<timer>.bind(thisArg?)` SIN handler bindeado → la fn ligada SIGUE siendo un timer (el
       // handler llega en la llamada externa: `setTimeout.bind(null)("código")`). Con ≥1 handler
@@ -2849,20 +2829,10 @@ function exprPartialRoot(expr, context) {
       // para los roots-identifier. NO es identifier → no shadowable (`import` es reserved).
       // La POLARIDAD la despacha `partialMemberDenied` (import.meta = ALLOWLIST, no denylist).
       return IMPORT_META_ROOT;
-    } else if (ts.isElementAccessExpression(leaf)) {
-      // Proyección array-literal-index `[WebAssembly][0]`. Base value-transparente
-      // (`(c ? [WebAssembly] : [WebAssembly])[0]`) → arrayLiteralAlternatives (codex P2).
-      const idx = leaf.argumentExpression
-        ? unwrapErased(leaf.argumentExpression)
-        : null;
-      if (idx && ts.isNumericLiteral(idx)) {
-        for (const arr of arrayLiteralAlternatives(leaf.expression)) {
-          const el = arr.elements[Number(idx.text)];
-          const r = el ? exprPartialRoot(el, context) : null;
-          if (r) return r;
-        }
-      }
     }
+    // La proyección container-literal (`[WebAssembly][0]`, `({0:WebAssembly})[0]`) YA la desciende
+    // valueTransparentChildren (INV-VT, re-hunt2) → la hoja es el root directo. No hay rama ElementAccess
+    // aquí: sería código muerto (el leaf nunca es un ElementAccess foldable) y violaría INV-VT.
   }
   return null;
 }

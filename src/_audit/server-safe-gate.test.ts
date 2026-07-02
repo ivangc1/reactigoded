@@ -5345,6 +5345,87 @@ describe("server-safe gate — RE-HUNT 2: formas VT/coercidas/proyectadas de ín
   });
 });
 
+// INV-VT (Fable cross-review 2): la matriz vtForms genera las formas VALUE-TRANSPARENT/COERCIDAS/
+// PROYECTADAS de un hazard literal y asserta que TODAS flaggean — regresión INSTANTÁNEA del espacio VT.
+// Es el mecanismo que habría cazado los defectos del re-hunt2 en el acto: si un fix futuro cierra una
+// forma literal pero deja abierta una envuelta, aquí falla. Una fixture literal obtiene el espacio gratis.
+describe("server-safe gate — INV-VT: matriz vtForms (espacio VT de índice/key/receiver)", () => {
+  const flags = (b: string) =>
+    checkSourceFile(`/** @server-safe */\n${b}`, "vtforms.fixture.tsx").length > 0;
+  // Formas VT/coercidas/proyectadas de un VALOR `x` (receiver/constructor).
+  const vtWrap = (x: string): string[] => [
+    x,
+    `(0, ${x})`,
+    `(true ? ${x} : (0 as any))`,
+    `(1 && ${x})`,
+    `[${x}][0]`,
+    `[${x}]["0"]`,
+    `({0: ${x}})[0]`,
+    `({["k"]: ${x}}).k`,
+    `({k: ${x}}).k`,
+    `(${x} as any)`,
+  ];
+  // Formas VT/coercidas/proyectadas de una KEY literal `k`.
+  const vtWrapKey = (k: string): string[] => [
+    k,
+    `(0, ${k})`,
+    `(true ? ${k} : "now")`,
+    `(1 && ${k})`,
+    `[${k}][0]`,
+    `[${k}]["0"]`,
+    `({0: ${k}})[0]`,
+    `(${k} as string)`,
+  ];
+
+  it.each(vtWrap("WebAssembly.Module"))(
+    "construcción wasm (dynamic codegen Edge) — forma FLAG: %s",
+    (f) => {
+      expect(flags(`export const a = new (${f})(new Uint8Array());`)).toBe(true);
+    },
+  );
+  it.each(vtWrap("performance"))(
+    "partial-member Node-only (eventLoopUtilization) — receiver FLAG: %s",
+    (f) => {
+      expect(flags(`export const x = (${f}).eventLoopUtilization();`)).toBe(true);
+    },
+  );
+  it.each(vtWrap("import.meta"))(
+    "import.meta.dirname (Node-only) — receiver FLAG: %s",
+    (f) => {
+      expect(flags(`export const d = (${f}).dirname;`)).toBe(true);
+    },
+  );
+  it.each(vtWrapKey('"nodeTiming"'))(
+    "Reflect.get(performance, key) — key Node-only FLAG: %s",
+    (k) => {
+      expect(flags(`export const x = Reflect.get(performance, ${k});`)).toBe(true);
+    },
+  );
+});
+
+// INV-VT meta-test: el gate se audita a sí mismo (mismo espíritu que el catálogo #150). Prohíbe que
+// vuelva a aparecer la resolución de índice CRUDA (`isNumericLiteral(unwrapErased(...))` / `elements[Number(...)]`)
+// fuera del helper canónico `resolveKeyCandidates` — el anti-patrón que reabrió el fail-open por-forma.
+describe("server-safe gate — INV-VT meta-test: resolución de índice/key canónica", () => {
+  const gateSrc = readFileSync("scripts/check-server-safe-markers.mjs", "utf8");
+  // Escanear CÓDIGO, no comentarios (la doctrina INV-VT se documenta con el propio patrón prohibido).
+  const code = gateSrc
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+
+  it("resolveKeyCandidates es el resolver canónico (existe)", () => {
+    expect(gateSrc).toMatch(/function resolveKeyCandidates\(/);
+  });
+
+  it("cero indexado crudo `arr.elements[Number(...)]` (debe ir por resolveKeyCandidates → índice canónico)", () => {
+    expect(code.match(/\.elements\[Number\(/g) ?? []).toHaveLength(0);
+  });
+
+  it("cero `isNumericLiteral(unwrapErased(...))` inline (índice sin canonicalizar/VT-foldar)", () => {
+    expect(code.match(/isNumericLiteral\(unwrapErased\(/g) ?? []).toHaveLength(0);
+  });
+});
+
 // RAÍZ E (re-hunt rc.1 + Fable cross-review): VITE_ASSET_RE aplicaba UN `/i` a toda la unión, pero Vite
 // matchea css-langs (CSS_LANGS_RE) + json + wasm CASE-SENSITIVE y solo KNOWN_ASSET_TYPES (media/font)
 // case-insensitive (DEFAULT_ASSETS_RE = `new RegExp(…,"i")`). `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset
