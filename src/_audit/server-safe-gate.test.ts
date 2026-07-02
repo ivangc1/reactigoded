@@ -5226,12 +5226,16 @@ describe("server-safe gate — RAÍZ A: proyección container-literal en value-s
 
   it.each([
     ["índice fuera de rango", `export const f = (b: BufferSource) => new [WebAssembly.Module][5](b);`],
-    ["índice variable", `export const f = (i: number, b: BufferSource) => new [WebAssembly.Module][i](b);`],
-    ["spread en array", `export const f = (a: any[], b: BufferSource) => new [...a][0](b);`],
-    ["spread en object", `export const f = (s: object) => ({ ...s, p: performance }).p.eventLoopUtilization();`],
+    ["spread en array (variable)", `export const f = (a: any[], b: BufferSource) => new [...a][0](b);`],
     ["key computada en object", `export const f = (k: string, b: BufferSource) => new ({ [k]: WebAssembly.Module }).x(b);`],
   ])("frontera §141 (no decidible en-sitio → exime): %s", (_l, code) => {
     expect(flags(code)).toBe(false);
+  });
+
+  // FLIP DE POLARIDAD (Fable cross-review 3): sobre un container LITERAL, una key IRRESOLUBLE ya NO exime
+  // — desciende a TODOS los valores (∃-peligro), fail-closed. Un hueco de enumeración degrada a FP, no FN.
+  it("índice variable sobre container literal peligroso → FLAG (fail-closed, no §141)", () => {
+    expect(flags(`export const f = (i: number, b: BufferSource) => new [WebAssembly.Module][i](b);`)).toBe(true);
   });
 });
 
@@ -5360,8 +5364,15 @@ describe("server-safe gate — INV-VT: matriz vtForms (espacio VT de índice/key
     `(1 && ${x})`,
     `[${x}][0]`,
     `[${x}]["0"]`,
+    `[${x}][0n]`, // BigInt índice (Fable review 3 #1)
+    `[${x}][+0]`, // unary-signed (#6)
+    `[${x}][-0]`,
+    `[${x}][\`0\`]`, // template no-sub (#7, pin)
     `({0: ${x}})[0]`,
+    `({0: ${x}})[0n]`,
     `({["k"]: ${x}}).k`,
+    `({[\`m\`]: ${x}}).m`, // computed template def-side (#7, pin)
+    `({"-1": ${x}})[-1]`, // clave negativa decidible (#8)
     `({k: ${x}}).k`,
     `(${x} as any)`,
   ];
@@ -5373,6 +5384,7 @@ describe("server-safe gate — INV-VT: matriz vtForms (espacio VT de índice/key
     `(1 && ${k})`,
     `[${k}][0]`,
     `[${k}]["0"]`,
+    `[${k}][\`0\`]`,
     `({0: ${k}})[0]`,
     `(${k} as string)`,
   ];

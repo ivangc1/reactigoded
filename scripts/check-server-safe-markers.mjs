@@ -3428,16 +3428,34 @@ function foldConstString(node) {
   return undefined;
 }
 
-// Índice numérico entero → su KEY DE PROPIEDAD JS canonicalizada (Fable cross-review 2): en runtime
-// `Object.keys({1e2:1})` es `["100"]`, `{0x10:1}` es `["16"]`, y `({0:X})[0] === ({0:X})["0"]`. Se
-// canonicaliza por VALOR (`String(Number(text))`), NO por `.text` crudo. Float/negativo/NaN → null
-// (§141: `[X][1.5]`/`[X][-1]` no es una key de propiedad enumerable decidible). Desenvuelve erased.
+// KEY DE PROPIEDAD JS de una EXPRESIÓN-LITERAL-NUMÉRICA, FIEL a ToPropertyKey (Fable cross-review 3): en
+// runtime `obj[<literal-num>]` selecciona la clave `String(<valor>)`. Se reproduce ESA operación exacta —
+// `String(Number(text))` para NumericLiteral (fiel: "0.5", "1e+21", "Infinity"), `String(BigInt(...))` para
+// BigIntLiteral (fiel >2^53 donde Number redondea), y PrefixUnary(+/-) sobre esos. SIN filtro entero/n>=0:
+// esa restricción es del CONSUMIDOR (array-index solo acepta enteros en rango), NO de esta capa — mezclarlas
+// fue el bug de layering de #8 (`({"-1":X})[-1]` y `({"0.5":X})[0.5]` son keys de objeto perfectamente
+// decidibles). `+<bigint>` LANZA en runtime (ToNumber de BigInt) → nunca selecciona → residual seguro (null).
+// Devuelve la key string, o null si no es una expresión-literal-numérica decidible.
 function canonicalNumericKey(node) {
   const u = unwrapErased(node);
-  if (!ts.isNumericLiteral(u)) return null;
-  const n = Number(u.text);
-  if (!Number.isInteger(n) || n < 0) return null;
-  return String(n);
+  if (ts.isNumericLiteral(u)) return String(Number(u.text));
+  if (ts.isBigIntLiteral(u)) {
+    return String(BigInt(u.text.slice(0, -1).replace(/_/g, "")));
+  }
+  if (
+    ts.isPrefixUnaryExpression(u) &&
+    (u.operator === ts.SyntaxKind.PlusToken ||
+      u.operator === ts.SyntaxKind.MinusToken)
+  ) {
+    const inner = unwrapErased(u.operand);
+    const sign = u.operator === ts.SyntaxKind.MinusToken ? -1 : 1;
+    if (ts.isNumericLiteral(inner)) return String(sign * Number(inner.text));
+    if (ts.isBigIntLiteral(inner)) {
+      if (sign === 1) return null; // `+<bigint>` lanza TypeError → residual
+      return String(-BigInt(inner.text.slice(0, -1).replace(/_/g, "")));
+    }
+  }
+  return null;
 }
 
 // INV-VT (Fable cross-review 2): helper CENTRALIZADO de resolución de índice/key/selector. TODA
@@ -3601,16 +3619,43 @@ function valueTransparentChildren(node) {
     // ambas ramas. Fail-CLOSED (§141) ante key variable/ensamblada, spread en el array, índice
     // float/negativo (canonicalNumericKey→null → sin candidata).
     const out = [];
-    for (const key of resolveKeyCandidates(node.argumentExpression)) {
-      if (/^(0|[1-9]\d*)$/.test(key)) {
-        const i = Number(key);
-        for (const arr of arrayLiteralAlternatives(node.expression)) {
-          if (arr.elements.some(ts.isSpreadElement)) continue; // spread → índice indeterminado
-          const el = arr.elements[i];
-          if (el && !ts.isOmittedExpression(el)) out.push(el);
+    const keys = resolveKeyCandidates(node.argumentExpression);
+    if (keys.size === 0) {
+      // POLARIDAD FAIL-CLOSED (Fable cross-review 3): sobre un container LITERAL, una key IRRESOLUBLE
+      // (variable, ensamblada, o forma exótica no enumerada) podría seleccionar CUALQUIER elemento/valor
+      // → descender a TODOS (∃-peligro en el sink downstream). Consecuencia estructural: un hueco en
+      // canonicalNumericKey degrada a FP (over-flag), NUNCA a FN — la completitud de la enumeración deja de
+      // ser load-bearing para la soundness. Solo aplica a container LITERALES (`[...][i]`/`({...})[i]`); un
+      // `identifier[i]` no es container-literal → out vacío → sin descenso (lo manejan computedDefaultDenyRoot
+      // etc.). La rama RESUELTA (else) mantiene la precisión: solo el elemento específico.
+      for (const arr of arrayLiteralAlternatives(node.expression)) {
+        for (const el of arr.elements) {
+          if (el && !ts.isOmittedExpression(el) && !ts.isSpreadElement(el)) {
+            out.push(el);
+          }
         }
       }
-      out.push(...objectLiteralMemberValues(node.expression, key));
+      for (const obj of objectLiteralAlternatives(node.expression)) {
+        for (const p of obj.properties) {
+          if (ts.isPropertyAssignment(p)) out.push(p.initializer);
+          else if (ts.isShorthandPropertyAssignment(p)) out.push(p.name);
+        }
+      }
+    } else {
+      for (const key of keys) {
+        // ARRAY: solo un índice ENTERO canónico en rango selecciona elemento (restricción del CONSUMIDOR,
+        // no de la capa canónica — `[X]["-1"]`/`[X][0.5]` → undefined, no descienden el array).
+        if (/^(0|[1-9]\d*)$/.test(key)) {
+          const i = Number(key);
+          for (const arr of arrayLiteralAlternatives(node.expression)) {
+            if (arr.elements.some(ts.isSpreadElement)) continue; // spread → índice indeterminado
+            const el = arr.elements[i];
+            if (el && !ts.isOmittedExpression(el)) out.push(el);
+          }
+        }
+        // OBJECT: cualquier key string canónica (incl. "-1", "0.5", canonicalización numérica fiel).
+        out.push(...objectLiteralMemberValues(node.expression, key));
+      }
     }
     if (out.length > 0) return out;
   }
@@ -3820,15 +3865,16 @@ function objectLiteralAlternatives(expr) {
   );
 }
 
-// Nombre(s) canónico(s) de una PropertyName (INV-VT / Fable cross-review 2): identifier/string → [text];
-// numeric → key JS canonicalizada (`{1e2:…}`→"100"); computed-LITERAL → foldeada (`["m"]`→"m", `` [`m`] ``→"m",
-// `[0]`→"0"). Computed NO-foldable (ensamblaje/variable) → [] (indeterminada).
+// Nombre(s) canónico(s) de una PropertyName (INV-VT): identifier/string → [text]; numeric → key JS FIEL
+// (`{1e2:…}`→"100", `{0.5:…}`→"0.5", vía canonicalNumericKey — misma capa que el use-side, def-side simétrico,
+// Fable cross-review 3); computed-LITERAL → foldeada (`["m"]`→"m", `` [`m`] ``→"m", `[0]`→"0"). Computed
+// NO-foldable (ensamblaje/variable) → [] (indeterminada).
 function propNameCanonical(name) {
   if (!name) return [];
   if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return [name.text];
   if (ts.isNumericLiteral(name)) {
     const c = canonicalNumericKey(name);
-    return [c === null ? name.text : c];
+    return c === null ? [] : [c];
   }
   if (ts.isComputedPropertyName(name)) return [...resolveKeyCandidates(name.expression)];
   return [];
