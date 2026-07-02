@@ -4944,11 +4944,26 @@ const VITE_CLEAN_URL_RE = /[?#].*$/;
 // (NO external). codex P2: el boundary seguro es un ALLOWLIST de assets, no un deny-list de JS/TS — un
 // deny-list externaliza `.payload`/`.weirdext` ejecutables = fail-open. (assetsInclude custom en vite.config
 // añadiría exts → drift #190.)
-const VITE_ASSET_RE =
-  /\.(apng|bmp|png|jpe?g|jfif|pjpeg|pjp|gif|svg|ico|webp|avif|cur|jxl|mp4|webm|ogg|mp3|wav|flac|aac|opus|mov|m4a|vtt|woff2?|eot|ttf|otf|webmanifest|pdf|txt|css|less|sass|scss|styl|stylus|pcss|postcss|sss|json|wasm)$/i;
+// ROOT E (Fable cross-review rc.1): Vite decide asset por DOS familias con CASE-SENSITIVITY DISTINTA
+// (medido vs vite@8.0.14 dist, el oráculo — NO a-ojo):
+//   (a) KNOWN_ASSET_TYPES (media/font/pdf/txt/webmanifest) → DEFAULT_ASSETS_RE = `new RegExp(…, "i")` →
+//       CASE-INSENSITIVE. `.PNG`/`.Woff2` siguen siendo asset (correcto, no FP).
+//   (b) css-langs (CSS_LANGS_RE = `/\.(css|less|…|sss)(?:$|\?)/` SIN /i) + json + wasm (external-ext RE
+//       `/\.(?:json|json5|wasm)$/` SIN /i) → CASE-SENSITIVE. `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset
+//       para Vite → caen al pipeline JS y se EJECUTAN → un `.CSS` con body JS leyendo `process` corría sin
+//       auditar (fail-open). Sin /i dejan de clasificar como asset → unresolvable fail-closed (igual que
+//       .payload/.mjsx).
+// El `/i` único previo sobre TODA la unión era el bug: trataba `.CSS`/`.JSON`/`.WASM` como asset cuando Vite
+// las ejecuta. `json5` se DEJA FUERA a propósito (no estaba en el set → status quo fail-closed; añadirlo
+// abriría el hueco si el consumer ejecuta `.json5` como JS — Fable). Over-flag de un `.json5` legítimo es
+// fail-CLOSED (aceptable), no fail-open.
+const VITE_ASSET_INSENSITIVE_RE =
+  /\.(apng|bmp|png|jpe?g|jfif|pjpeg|pjp|gif|svg|ico|webp|avif|cur|jxl|mp4|webm|ogg|mp3|wav|flac|aac|opus|mov|m4a|vtt|woff2?|eot|ttf|otf|webmanifest|pdf|txt)$/i;
+const VITE_ASSET_SENSITIVE_RE =
+  /\.(css|less|sass|scss|styl|stylus|pcss|postcss|sss|json|wasm)$/;
 function hasAssetExt(p) {
   const base = p.slice(Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
-  return VITE_ASSET_RE.test(base);
+  return VITE_ASSET_INSENSITIVE_RE.test(base) || VITE_ASSET_SENSITIVE_RE.test(base);
 }
 // Devuelve el nombre del paquete SI puede self-referenciarse (declara `exports`), si no `null`. NO es "el
 // nombre del paquete" a secas — el valor está CONDICIONADO a que la self-reference sea posible (de ahí el

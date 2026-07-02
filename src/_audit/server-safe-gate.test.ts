@@ -5263,6 +5263,44 @@ describe("server-safe gate — RAÍZ B: Reflect.get member-read con key literal"
   });
 });
 
+// RAÍZ E (re-hunt rc.1 + Fable cross-review): VITE_ASSET_RE aplicaba UN `/i` a toda la unión, pero Vite
+// matchea css-langs (CSS_LANGS_RE) + json + wasm CASE-SENSITIVE y solo KNOWN_ASSET_TYPES (media/font)
+// case-insensitive (DEFAULT_ASSETS_RE = `new RegExp(…,"i")`). `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset
+// para Vite → caen al pipeline JS y se EJECUTAN → un body JS leyendo `process` corría sin auditar.
+describe("server-safe gate — RAÍZ E: asset ext case-sensitivity (css/json/wasm sensitive, media insensitive)", () => {
+  const importsFrom = (spec: string, fname: string, body: string) =>
+    runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport { y } from "${spec}";\nexport const z = y;`,
+        [`/repo/src/${fname}`]: body,
+      }),
+    );
+  const PROC = "export const y = process.platform;\n";
+
+  it.each([
+    ["./evil.CSS", "evil.CSS"],
+    ["./evil.JSON", "evil.JSON"],
+    ["./evil.WASM", "evil.WASM"],
+    ["./evil.Css", "evil.Css"],
+    ["./evil.ScSs", "evil.ScSs"],
+    ["./x.json5", "x.json5"], // json5 NO está en el set → fail-closed (status quo)
+  ])("CIERRA ext ejecutable-por-Vite (%s → unresolved-import)", (spec, fname) => {
+    const v = importsFrom(spec, fname, PROC);
+    expect(v.some((x) => x.rule === "unresolved-import")).toBe(true);
+  });
+
+  it.each([
+    ["./data.css", "data.css", "export const y = 1;\n"],
+    ["./mod.wasm", "mod.wasm", "export const y = 1;\n"],
+    ["./img.PNG", "img.PNG", "x"], // media case-INSENSITIVE → sin FP
+    ["./font.Woff2", "font.Woff2", "x"],
+    ["./doc.PDF", "doc.PDF", "x"],
+  ])("NO FP: asset legítimo sigue asset (%s → PASA)", (spec, fname, body) => {
+    expect(importsFrom(spec, fname, body)).toEqual([]);
+  });
+});
+
 describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)", () => {
   const flagged = (code: string) =>
     checkSourceFile(code, "fp.fixture.tsx").length > 0;
