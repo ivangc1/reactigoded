@@ -121,7 +121,7 @@ const SAFE_GLOBALS_PIN = [
   "Intl", "Iterator", "JSON", "Map", "Math", "NaN",
   "Number", "Object", "Promise", "Proxy", "RangeError", "ReadableStream",
   "ReadableStreamBYOBReader", "ReadableStreamDefaultReader", "ReferenceError", "Reflect", "RegExp", "Request",
-  "Response", "Set", "SharedArrayBuffer", "String", "SubtleCrypto", "Symbol",
+  "Response", "Set", "String", "SubtleCrypto", "Symbol",
   "SyntaxError", "TextDecoder", "TextDecoderStream", "TextEncoder", "TextEncoderStream", "TransformStream",
   "TypeError", "URIError", "URL", "URLSearchParams", "Uint16Array", "Uint32Array",
   "Uint8Array", "Uint8ClampedArray", "WeakMap", "WeakRef", "WeakSet", "WebAssembly",
@@ -196,6 +196,16 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     // Workers/Deno). En ese caso, decidir: ¿añadir a INTENTIONAL_DENY o
     // aceptar en el pin?
     expect([...SAFE_GLOBALS].sort()).toEqual([...SAFE_GLOBALS_PIN].sort());
+  });
+
+  it("E2. WORKERS_MISSING (root F): SharedArrayBuffer fuera de SAFE; Atomics sigue dentro", () => {
+    // root F / Fable cross-review rc.1: SharedArrayBuffer ESTÁ en el baseline Vercel Edge
+    // (@edge-runtime/vm) pero Cloudflare Workers lo DESHABILITA (mitigación Spectre, doc oficial) →
+    // misma clase que el reversal §448 de process.env (presente-en-Vercel-Edge ≠ presente-en-el-MCD)
+    // → restado de SAFE_GLOBALS. `Atomics` NO se resta sin medir workerd (ES2024 lo permite sobre
+    // ArrayBuffer normal → puede existir) → sigue en SAFE, derivación sistemática pendiente en #190.
+    expect(SAFE_GLOBALS.has("SharedArrayBuffer")).toBe(false);
+    expect(SAFE_GLOBALS.has("Atomics")).toBe(true);
   });
 
   it("F. EDGE_MISSING: Node los provee pero NO están en SAFE (edge baseline)", () => {

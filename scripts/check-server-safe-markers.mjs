@@ -452,6 +452,18 @@ const EDGE_MISSING_GLOBALS = new Set([
   "WritableStreamDefaultController",
 ]);
 
+// WORKERS-MISSING (root F / Fable cross-review rc.1): globals PRESENTES en el baseline Vercel Edge
+// (@edge-runtime/vm) pero AUSENTES en el más estricto Cloudflare Workers (workerd) — la MISMA clase que el
+// reversal §448 de `process.env` (presente-en-Vercel-Edge ≠ presente-en-el-MCD estricto). EDGE_MISSING se
+// deriva solo de @edge-runtime/vm, así que estos se cuelan a SAFE. `SharedArrayBuffer`: Cloudflare lo
+// DESHABILITA por mitigación Spectre (doc oficial "Security model" — "disable SharedArrayBuffer and
+// high-resolution timers") → leer/construir en module-eval lanza ReferenceError en Workers-sin-compat.
+// QUIRÚRGICO: solo lo DOCUMENTADO-ausente. `Atomics` NO se resta sin medir (ES2024 lo permite sobre
+// ArrayBuffer normal → puede existir en workerd; requiere dump de globalThis real, #190). Los "high-res
+// timers" NO son entrada de catálogo (`Date.now` congelado / `performance.now` grueso = COMPORTAMIENTO, no
+// presencia) → nota en #190. La derivación sistemática por intersección {workerd ∩ Deno ∩ Edge} es #190.
+const WORKERS_MISSING_GLOBALS = new Set(["SharedArrayBuffer"]);
+
 // BROWSER-ONLY: globals presentes SOLO en el browser (AUSENTES en Node Y en Edge — DOM/BOM, sin habitante
 // server). Un `typeof X !== "undefined"` sobre uno de éstos prueba que la rama corre SOLO client-side →
 // CLIENT-ONLY (justifica suprimir el follow de import()/glob). ALLOWLIST POSITIVO + fail-CLOSED: el gate solo
@@ -501,7 +513,8 @@ const SAFE_GLOBALS = new Set(
     (name) =>
       !INTENTIONAL_DENY.has(name) &&
       !GLOBALS_OVERCLAIMS.has(name) &&
-      !EDGE_MISSING_GLOBALS.has(name),
+      !EDGE_MISSING_GLOBALS.has(name) &&
+      !WORKERS_MISSING_GLOBALS.has(name),
   ),
 );
 
