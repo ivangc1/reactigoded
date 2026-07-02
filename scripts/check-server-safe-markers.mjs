@@ -3807,12 +3807,10 @@ function reflectGetMemberRead(n) {
       });
     if (isReflect) {
       // La KEY se resuelve por resolveKeyCandidates (INV-VT): paridad byte-a-byte con `R[key]` (coma/
-      // ternario/`&&`/`||`/proyección/canonicalización), NO solo unwrapErased. Key variable/ensamblada →
-      // Set vacío → §141. Fable cross-review 2 (B2).
-      const members = resolveKeyCandidates(n.arguments[1]);
-      if (members.size > 0) {
-        return { receiver: n.arguments[0], members };
-      }
+      // ternario/`&&`/`||`/proyección/canonicalización). Se devuelve SIEMPRE (incl. members VACÍO = key
+      // variable/ensamblada) para que el caller espeje `computedDefaultDenyRoot` (`R[dynKey]` fail-cierra
+      // sobre root allowlist). Fable cross-review 2 (B2) + 3 (#4).
+      return { receiver: n.arguments[0], members: resolveKeyCandidates(n.arguments[1]) };
     }
   }
   return null;
@@ -3894,14 +3892,19 @@ function objectLiteralMemberValues(baseExpr, key) {
     let val = null; // último candidato (PropertyAssignment/shorthand) para la key
     let blocked = false; // spread/computed-nofold (indet) u opaco (accessor/método con la key)
     for (const p of obj.properties) {
+      // POSICIONAL last-wins (Fable cross-review 3 #2 — SIN `break`): spread/computed-nofold bloquean,
+      // pero un PropertyAssignment/shorthand POSTERIOR con la key gana por orden de fuente y restaura el
+      // override determinista. `({...o, m:X}).m`→X (spread antes); `({m:X, ...o}).m`→bloqueado (spread
+      // después); `({...a, m:MALO, m:X}).m`→X (duplicate last-wins). El `break` anterior descartaba el
+      // override posterior → fail-open.
       if (ts.isSpreadAssignment(p)) {
         blocked = true; // §141: el spread podría aportar/sombrear la key
-        break;
+        continue;
       }
       const names = propNameCanonical(p.name);
       if (p.name && ts.isComputedPropertyName(p.name) && names.length === 0) {
         blocked = true; // computed no-foldable → podría ser la key → §141
-        break;
+        continue;
       }
       if (!names.includes(key)) continue; // sibling != key → no envenena
       if (ts.isPropertyAssignment(p)) {
@@ -6160,10 +6163,18 @@ function checkSourceFile(
       const rget = reflectGetMemberRead(node);
       if (rget) {
         const rgRoot = exprPartialRoot(rget.receiver, context);
-        const denied = rgRoot
-          ? [...rget.members].find((m) => partialMemberDenied(rgRoot, m))
-          : undefined;
-        if (denied !== undefined) {
+        // members RESUELTOS → ∃-candidato denegado. members VACÍO (key variable/ensamblada) sobre un root
+        // allowlist default-deny (SAFE_PARTIAL_MEMBERS) → fail-closed, ESPEJO de `<root>[<computado>]`
+        // (computedDefaultDenyRoot, codex P2): `Reflect.get(performance, k) ≡ performance[k]`. Fable #4.
+        const denied =
+          rgRoot && rget.members.size > 0
+            ? [...rget.members].find((m) => partialMemberDenied(rgRoot, m))
+            : undefined;
+        const computedDeny =
+          rgRoot &&
+          rget.members.size === 0 &&
+          SAFE_PARTIAL_MEMBERS[rgRoot] !== undefined;
+        if (denied !== undefined || computedDeny) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
           const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -6171,7 +6182,9 @@ function checkSourceFile(
             file: relPath,
             rule: "no-bare-dom-access",
             line: line + 1,
-            detail: `\`Reflect.get(${rgRoot}, "${denied}")\` ≡ \`${rgRoot}.${denied}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
+            detail: computedDeny
+              ? `\`Reflect.get(${rgRoot}, <computado>)\` ≡ \`${rgRoot}[<computado>]\` — key no resoluble sobre global parcial default-deny (allow: ${[...SAFE_PARTIAL_MEMBERS[rgRoot]].join("/")}) → fail-closed: ${lineText}`
+              : `\`Reflect.get(${rgRoot}, "${denied}")\` ≡ \`${rgRoot}.${denied}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
           });
         }
       }

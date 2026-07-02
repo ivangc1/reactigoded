@@ -5259,7 +5259,7 @@ describe("server-safe gate — RAÍZ B: Reflect.get member-read con key literal"
   it.each([
     ["miembro allowlist performance.now", `export const x = Reflect.get(performance, "now");`],
     ["miembro allowlist import.meta.url", `export const u = Reflect.get(import.meta, "url");`],
-    ["key variable → §141", `export const f = (k: string) => Reflect.get(performance, k);`],
+    ["key variable sobre wholesale-safe → §141", `export const f = (k: string) => Reflect.get(crypto, k);`],
     ["no-Reflect (Foo.get)", `const Foo = { get: (_a: unknown, _b: unknown) => 1 };\nexport const x = Foo.get(performance, "eventLoopUtilization");`],
     ["residual §141 eval-sink (receiver variable)", `export const f = (g: unknown) => Reflect.get(g as any, "constructor")();`],
   ])("no FP / frontera preservada: %s", (_l, code) => {
@@ -5435,6 +5435,36 @@ describe("server-safe gate — INV-VT meta-test: resolución de índice/key can�
 
   it("cero `isNumericLiteral(unwrapErased(...))` inline (índice sin canonicalizar/VT-foldar)", () => {
     expect(code.match(/isNumericLiteral\(unwrapErased\(/g) ?? []).toHaveLength(0);
+  });
+});
+
+// RE-HUNT 3 (Fable cross-review 3): capa canónica fiel (#1/#6/#8), spread posicional (#2), Reflect.get
+// default-deny (#4). El flip de polaridad y la canonicalización fiel van cubiertos por la matriz vtForms.
+describe("server-safe gate — RE-HUNT 3: canon fiel, spread posicional, Reflect.get default-deny", () => {
+  const flags = (b: string) =>
+    checkSourceFile(`/** @server-safe */\nconst o: Record<string, unknown> = {}; const b = new Uint8Array();\n${b}`, "rh3.fixture.tsx").length > 0;
+
+  // #2 — tabla-oracle de spread posicional (Fable cross-review 3):
+  it.each([
+    ["({...o, m:X}).m → X (spread antes)", `export const a = new (({ ...o, m: WebAssembly.Module }).m as any)(b);`, true],
+    ["({m:X, ...o}).m → bloqueado (spread después)", `export const a = new (({ m: WebAssembly.Module, ...o }).m as any)(b);`, false],
+    ["({...o, m:MALO, m:X}).m → X (last-wins)", `export const a = new (({ ...o, m: Array, m: WebAssembly.Module }).m as any)(b);`, true],
+    ["({...o, get m(){}}).m → bloqueado (accessor)", `export const a = new (({ ...o, get m() { return WebAssembly.Module; } }).m as any)(b);`, false],
+    ["({[k]:A, m:X}).m k-var → X", `export const a = (k: string) => new (({ [k]: Array, m: WebAssembly.Module }).m as any)(b);`, true],
+    ["({m:X, [k]:A}).m → bloqueado", `export const a = (k: string) => new (({ m: WebAssembly.Module, [k]: Array }).m as any)(b);`, false],
+  ])("#2 spread posicional: %s", (_l, code, exp) => {
+    expect(flags(code)).toBe(exp);
+  });
+
+  // #4 — Reflect.get con key variable espeja computedDefaultDenyRoot:
+  it.each([
+    ["Reflect.get(performance, m) → FLAG", `export const x = (m: string) => Reflect.get(performance, m);`, true],
+    ["Reflect.get(console, m) → FLAG", `export const x = (m: string) => Reflect.get(console, m);`, true],
+    ["Reflect.get(import.meta, k) → PASA (§141)", `export const x = (k: string) => Reflect.get(import.meta, k);`, false],
+    ["Reflect.get(crypto, k) → PASA (wholesale-safe)", `export const x = (k: string) => Reflect.get(crypto, k);`, false],
+    ['Reflect.get(performance, "now") → PASA', `export const x = Reflect.get(performance, "now");`, false],
+  ])("#4 Reflect.get default-deny: %s", (_l, code, exp) => {
+    expect(flags(code)).toBe(exp);
   });
 });
 
