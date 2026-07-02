@@ -3648,7 +3648,17 @@ function valueTransparentChildren(node) {
         if (/^(0|[1-9]\d*)$/.test(key)) {
           const i = Number(key);
           for (const arr of arrayLiteralAlternatives(node.expression)) {
-            if (arr.elements.some(ts.isSpreadElement)) continue; // spread → índice indeterminado
+            if (arr.elements.some(ts.isSpreadElement)) {
+              // Un spread DESPLAZA las posiciones → el índice resuelto ya no mapea a un elemento fijo →
+              // ∃-peligro sobre los elementos NO-spread (fail-closed, extensión del flip de polaridad a
+              // spread-in-array; `[...[0], X][1]` alcanza X). Fable cross-review 3 (variante array).
+              for (const el of arr.elements) {
+                if (el && !ts.isOmittedExpression(el) && !ts.isSpreadElement(el)) {
+                  out.push(el);
+                }
+              }
+              continue;
+            }
             const el = arr.elements[i];
             if (el && !ts.isOmittedExpression(el)) out.push(el);
           }

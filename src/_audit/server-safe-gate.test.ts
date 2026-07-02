@@ -5237,6 +5237,16 @@ describe("server-safe gate — RAÍZ A: proyección container-literal en value-s
   it("índice variable sobre container literal peligroso → FLAG (fail-closed, no §141)", () => {
     expect(flags(`export const f = (i: number, b: BufferSource) => new [WebAssembly.Module][i](b);`)).toBe(true);
   });
+
+  // Variante array del flip (Fable review 3): un spread desplaza posiciones → ∃-peligro sobre no-spread.
+  it.each([
+    ["spread-de-literal [...[0], X][1]", `export const f = (b: BufferSource) => new [...[0], WebAssembly.Module][1](b);`, true],
+    ["spread-de-variable [...a, X][0]", `export const f = (a: unknown[], b: BufferSource) => new [...a, WebAssembly.Module][0](b);`, true],
+    ["anti-FP: array con spread, sin hazard [...[0], Array][1]", `export const f = (b: BufferSource) => new [...[0], Array][1](b);`, false],
+    ["anti-FP: solo spread-variable [...a][0]", `export const f = (a: unknown[], b: BufferSource) => new [...a][0](b);`, false],
+  ])("spread-in-array: %s", (_l, code, exp) => {
+    expect(flags(code)).toBe(exp);
+  });
 });
 
 // RAÍZ B (re-hunt rc.1 + Fable cross-review): `Reflect.get(R, "k")` con key STRING-LITERAL es un
