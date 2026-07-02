@@ -1582,7 +1582,11 @@ function gatherModuleDeclaredNames(sourceFile) {
     } else if (
       (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
       stmt.name &&
-      !isAmbientDeclaration(stmt)
+      !isAmbientDeclaration(stmt) &&
+      // Firma sin cuerpo (`function window();` = overload signature) NO emite runtime value → NO debe
+      // sombrear el global homónimo (root H / Fable). Si hay implementación en scope, ÉSTA (con body) añade
+      // el nombre; una firma suelta solo "compila" con @ts-ignore + esbuild-only (TS2391) → fail-closed.
+      (!ts.isFunctionDeclaration(stmt) || stmt.body !== undefined)
     ) {
       names.add(stmt.name.text);
     } else if (ts.isImportDeclaration(stmt)) {
@@ -1696,7 +1700,7 @@ function gatherBlockFunctionDeclarations(blockNode) {
   const names = new Set();
   if (!blockNode.statements) return names;
   for (const stmt of blockNode.statements) {
-    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt)) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt) && stmt.body !== undefined) {
       names.add(stmt.name.text);
     }
   }
@@ -1711,7 +1715,7 @@ function gatherBlockFunctionDeclarations(blockNode) {
 function gatherSourceFileFunctionDeclarations(sourceFile) {
   const names = new Set();
   for (const stmt of sourceFile.statements) {
-    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt)) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt) && stmt.body !== undefined) {
       names.add(stmt.name.text);
     }
   }
@@ -6578,7 +6582,7 @@ function checkSourceFile(
       const blockFns = new Set();
       for (const clause of node.clauses) {
         for (const stmt of clause.statements) {
-          if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt)) {
+          if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt) && stmt.body !== undefined) {
             blockFns.add(stmt.name.text);
           }
         }

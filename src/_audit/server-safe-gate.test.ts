@@ -5353,6 +5353,32 @@ describe("server-safe gate — RAÍZ D: trailing-slash fuerza resolución de dir
   });
 });
 
+// RAÍZ H (re-hunt rc.1 + Fable cross-review, era residual 4.5 → elevado): los colectores de nombres
+// añadían TODA FunctionDeclaration non-ambient a localBindings/moduleDeclaredNames, incluida una FIRMA
+// SIN CUERPO (`function window();`), que sombreaba el global homónimo y eximía su read. Reachable solo
+// con `@ts-ignore` (suprime TS2391) + build esbuild-only → divergencia browser-OK/Edge-throws (Fable lo
+// midió). Micro-close: requerir `stmt.body` (una firma bodyless no emite; la implementación del overload
+// sí la añade → 0 FP, fail-closed).
+describe("server-safe gate — RAÍZ H: FunctionDeclaration sin cuerpo no sombrea el global", () => {
+  const flags = (b: string) =>
+    checkSourceFile(b, "rootH.fixture.tsx").length > 0;
+
+  it.each([
+    ["function window(): void; + window.location", `/** @server-safe */\nfunction window(): void;\nexport const x = window.location.href;`],
+    ["function process(): void; + process.cwd", `/** @server-safe */\nfunction process(): void;\nexport const x = process.cwd();`],
+  ])("firma bodyless NO sombrea → FLAG: %s", (_l, code) => {
+    expect(flags(code)).toBe(true);
+  });
+
+  it.each([
+    ["con cuerpo (sombra real)", `/** @server-safe */\nfunction window() { return { location: { href: "" } }; }\nexport const x = window().location.href;`],
+    ["overload sig bodyless + impl con body (sombra vía impl)", `/** @server-safe */\nfunction window(x: number): unknown;\nfunction window(x: unknown) { return x; }\nexport const y = window(1);`],
+    ["función normal con body sigue bindeando", `/** @server-safe */\nfunction foo() { return 1; }\nexport const x = foo();`],
+  ])("no FP (binding legítimo preservado): %s", (_l, code) => {
+    expect(flags(code)).toBe(false);
+  });
+});
+
 describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)", () => {
   const flagged = (code: string) =>
     checkSourceFile(code, "fp.fixture.tsx").length > 0;
