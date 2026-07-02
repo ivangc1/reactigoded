@@ -5468,6 +5468,41 @@ describe("server-safe gate — RE-HUNT 3: canon fiel, spread posicional, Reflect
   });
 });
 
+// #5 (Fable cross-review 3): marker precedido de char invisible/format-control → el scanner JSDoc de TS no
+// emite el tag → archivo sin auditar (fail-open silencioso). Fix = OR-de-dos-parses monótono + normalize
+// (no borrar). Canarios por clase Unicode + monotonía + general (si el pipeline de markers se rompe, gritan).
+describe("server-safe gate — #5: marker robusto a chars invisibles (OR + normalize, monótono)", () => {
+  const BODY = "\nexport const C = () => window.location.href;";
+  it.each([
+    ["Cf ZWNJ U+200C", "/**‌@server-safe */"],
+    ["Cf word-joiner U+2060", "/**⁠@server-safe */"],
+    ["Cf BOM U+FEFF", "/**﻿@server-safe */"],
+    ["Zl line-sep U+2028", "/** @server-safe */"],
+    ["Zp para-sep U+2029", "/** @server-safe */"],
+  ])("CIERRA fail-open: marker tras %s → detecta+audita", (_l, head) => {
+    // detecta el marker...
+    expect(isContentServerSafeMarked(head + BODY, "canary.tsx")).toBe(true);
+    // ...Y CANARIO: el archivo se audita y el `window` interno flaggea.
+    expect(checkSourceFile(head + BODY, "canary.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("CANARIO de MONOTONÍA: `//nota U+2028 /** @server-safe */` sigue detectándose (el OR no pierde el original)", () => {
+    const code = "// nota /** @server-safe */" + BODY;
+    expect(isContentServerSafeMarked(code, "mono.tsx")).toBe(true);
+  });
+
+  it("CANARIO GENERAL: archivo marcado con window DEBE detectarse+flaggear (subsistema markers vivo)", () => {
+    const code = "/** @server-safe */" + BODY;
+    expect(isContentServerSafeMarked(code, "canary-general.tsx")).toBe(true);
+    expect(checkSourceFile(code, "canary-general.tsx").length).toBeGreaterThan(0);
+  });
+
+  it("sin regresión: prosa pura NO marca; sin marker NO marca", () => {
+    expect(isContentServerSafeMarked("/** todavía no es @server-safe */\nexport const X = () => 1;", "p.tsx")).toBe(false);
+    expect(isContentServerSafeMarked("/** @internal */\nexport const x = 1;", "n.tsx")).toBe(false);
+  });
+});
+
 // RAÍZ E (re-hunt rc.1 + Fable cross-review): VITE_ASSET_RE aplicaba UN `/i` a toda la unión, pero Vite
 // matchea css-langs (CSS_LANGS_RE) + json + wasm CASE-SENSITIVE y solo KNOWN_ASSET_TYPES (media/font)
 // case-insensitive (DEFAULT_ASSETS_RE = `new RegExp(…,"i")`). `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset

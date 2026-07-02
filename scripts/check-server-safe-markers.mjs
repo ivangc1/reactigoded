@@ -8144,6 +8144,37 @@ function detectServerSafeMarker(sourceFile, relPath) {
  * @returns {boolean} true si algún statement top-level tiene
  *   `@server-safe` en su JSDoc.
  */
+// Normaliza caracteres invisibles/format-control que ROMPEN el scanner JSDoc de TS: un char no-trivia
+// entre `/**` y `@server-safe` hace que el tag no se emita → archivo sin auditar (fail-open silencioso,
+// medido: U+200C, U+2028). Cf→"" (zero-width/BOM/soft-hyphen); Zl/Zp→"\n" (line/paragraph separator
+// U+2028/U+2029); Zs→" " (space separators, incl. nbsp/ideographic). Categorías Unicode (auto-actualizan
+// con las tablas del runtime), no allowlist puntual — la lección del round aplicada. Fable cross-review 3 (#5).
+function normalizeMarkerText(text) {
+  return text
+    .replace(/\p{Cf}/gu, "")
+    .replace(/[\p{Zl}\p{Zp}]/gu, "\n")
+    .replace(/\p{Zs}/gu, " ");
+}
+
+// Detección de marker ROBUSTA = OR de dos parses (Fable cross-review 3): `detect(original) ||
+// detect(normalizado)`. MONÓTONO por construcción — el parse ORIGINAL nunca se pierde, así que normalizar
+// solo AÑADE detección, jamás la quita. (Borrar-y-reparsear NO es monótono: `//<U+2028>/** @server-safe */`
+// perdería el marker porque el `//` se tragaría el JSDoc — medido.) Sobre-normalizar es gratis: peor caso,
+// un archivo se audita de más (FP). El parse original va PRIMERO (preserva el fail-loud de marker mal-colocado).
+function detectMarkerRobust(sourceFile, content, relPath) {
+  if (detectServerSafeMarker(sourceFile, relPath)) return true;
+  const normalized = normalizeMarkerText(content);
+  if (normalized === content) return false; // perf: 2º parse solo si cambió
+  const normSF = ts.createSourceFile(
+    relPath,
+    normalized,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindForPath(relPath),
+  );
+  return detectServerSafeMarker(normSF, relPath);
+}
+
 export function isContentServerSafeMarked(content, relPath) {
   const sourceFile = ts.createSourceFile(
     relPath,
@@ -8152,7 +8183,7 @@ export function isContentServerSafeMarked(content, relPath) {
     /* setParentNodes */ true,
     scriptKindForPath(relPath),
   );
-  return detectServerSafeMarker(sourceFile, relPath);
+  return detectMarkerRobust(sourceFile, content, relPath);
 }
 
 if (isCliEntry) {
@@ -8186,7 +8217,7 @@ if (isCliEntry) {
     }
     const relRaw = relative(repoRoot, filePath);
     const relPath = relRaw.split(pathSep).join("/");
-    return detectServerSafeMarker(cached.sourceFile, relPath);
+    return detectMarkerRobust(cached.sourceFile, cached.content, relPath);
   }
 
   const markedFiles = allFiles.filter((f) => isFileServerSafeMarked(f));
