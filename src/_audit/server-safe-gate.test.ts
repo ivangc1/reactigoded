@@ -5301,6 +5301,58 @@ describe("server-safe gate — RAÍZ E: asset ext case-sensitivity (css/json/was
   });
 });
 
+// RAÍZ D (re-hunt rc.1 + Fable cross-review): una barra final (`./pkg/`, `@/pkg/`) fuerza en Vite
+// resolución DIRECTORIO-only (`pkg/index.tsx`), pero `crossOsResolve`→`path.posix.resolve` borraba la
+// barra → file-beats-dir elegía el sibling `pkg.ts` (limpio) y lo auditaba mientras Vite ejecuta el dir
+// (sucio) = fail-open. Fix: `forceDir` desde el specifier (tras cleanUrl) → cascada dir-index-only en el
+// orden de resolve.extensions (index.mjs/.js no-auditable → fail-closed; .ts/.tsx → auditar).
+describe("server-safe gate — RAÍZ D: trailing-slash fuerza resolución de directorio", () => {
+  const CLEAN = `/** @server-safe */\nexport const w = 1;\n`;
+  const DIRTY = `/** @server-safe */\nexport const w = screen.width;\n`;
+  const imp = (spec: string, files: Record<string, string>) =>
+    runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport { w } from "${spec}";\nexport const x = w;`,
+        ...Object.fromEntries(
+          Object.entries(files).map(([k, v]) => [`/repo/src/${k}`, v]),
+        ),
+      }),
+    );
+  const siblingCleanDirDirty = { "pkg.ts": CLEAN, "pkg/index.tsx": DIRTY };
+
+  it.each([
+    ["./pkg/", "./pkg/"],
+    ["@/pkg/", "@/pkg/"],
+    ["./pkg// (doble barra)", "./pkg//"],
+    ["./pkg/./", "./pkg/./"],
+  ])("CIERRA: barra final audita el dir-index sucio (%s)", (_l, spec) => {
+    expect(imp(spec, siblingCleanDirDirty).length).toBeGreaterThan(0);
+  });
+
+  it("control: sin barra audita el sibling file (limpio) → PASA", () => {
+    expect(imp("./pkg", siblingCleanDirDirty)).toEqual([]);
+  });
+
+  it("`./pkg/.` termina en `.` → FILE, no fuerza dir → audita sibling limpio → PASA", () => {
+    expect(imp("./pkg/.", siblingCleanDirDirty)).toEqual([]);
+  });
+
+  it("audita el módulo CORRECTO: sibling sucio + dir limpio, barra final → PASA (audita dir)", () => {
+    expect(imp("./pkg/", { "pkg.ts": DIRTY, "pkg/index.tsx": CLEAN })).toEqual([]);
+  });
+
+  it("orden resolve.extensions: index.mjs (no auditable) gana a index.ts → unresolved-import (fail-closed)", () => {
+    const v = imp("./pkg/", { "pkg/index.mjs": `export const w = 1;\n`, "pkg/index.ts": CLEAN });
+    expect(v.some((x) => x.rule === "unresolved-import")).toBe(true);
+  });
+
+  it("dir sin index → unresolved-import", () => {
+    const v = imp("./pkg/", { "pkg.ts": CLEAN });
+    expect(v.some((x) => x.rule === "unresolved-import")).toBe(true);
+  });
+});
+
 describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)", () => {
   const flagged = (code: string) =>
     checkSourceFile(code, "fp.fixture.tsx").length > 0;

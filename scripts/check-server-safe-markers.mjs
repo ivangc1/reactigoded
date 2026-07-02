@@ -4801,6 +4801,20 @@ function dirEntryShadowedByPackageJson(noExt, fileExists) {
   return true;
 }
 
+// Cascada DIR-INDEX de Vite (`<base>/index.<ext>`) en el orden de resolve.extensions + `.json` último. El
+// PRIMER `/index.<ext>` existente decide (byte-fiel a `tryCleanFsResolve` con tryIndex). Usado por el fix de
+// TRAILING-SLASH (root D / Fable): una barra final fuerza DIRECTORIO-only (Vite NUNCA mira `<base>.<ext>` ni
+// el sibling file), así que se resuelve SOLO por aquí, saltando todo file-beats-dir. Devuelve {absPath, ext}.
+function resolveDirIndex(noExt, fileExists) {
+  for (const ext of VITE_RESOLVE_EXTS) {
+    const p = `${noExt}/index${ext}`;
+    if (fileExists(p)) return { absPath: p, ext };
+  }
+  const j = `${noExt}/index.json`;
+  if (fileExists(j)) return { absPath: j, ext: ".json" };
+  return null;
+}
+
 // Extensiones de SOURCE que TS/Vite resuelven (sin .json — no se audita). Un specifier que YA las
 // trae (`./helper.mjs`, `@/x/helper.ts`) es EXPLÍCITO: Vite lo resuelve EXACTAMENTE (resolve.extensions
 // solo aplica a imports SIN extensión), así que se chequea el archivo exacto ANTES de la cascada y NO
@@ -5127,6 +5141,13 @@ function resolveImportPath(
     };
   }
 
+  // TRAILING-SLASH (root D / Fable): una barra final en el specifier (tras cleanUrl de `?query#hash`)
+  // fuerza en Vite resolución DIRECTORIO-only — `<base>/index.<ext>` únicamente, NUNCA `<base>.<ext>` ni el
+  // sibling file. `crossOsResolve`→`path.posix.resolve` BORRA la barra, así que sin esto file-beats-dir
+  // elegía el sibling `pkg.ts` (limpio) mientras Vite ejecuta `pkg/index.tsx` (sucio) = fail-open. `./pkg/`
+  // y `./pkg//` y `./pkg/./` → DIR; `./pkg/.` → FILE (termina en `.`). Verificado vs vite@8 ssrLoadModule.
+  const forceDir = /\/$/.test(specifier.replace(VITE_CLEAN_URL_RE, ""));
+
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
     // Builtin de Node (bare `fs`/`path`, prefijado `node:fs`, subpath `fs/promises`) — Node-only POR
@@ -5148,6 +5169,24 @@ function resolveImportPath(
       if (specifier.startsWith(prefix)) {
         const tail = specifier.slice(prefix.length);
         const noExt = crossOsResolve(projectRoot, targetPrefix + tail);
+        // Barra final → DIRECTORIO-only (root D): solo la cascada dir-index, saltando exact/file-beats-dir.
+        if (forceDir) {
+          const dirHit = resolveDirIndex(noExt, fileExists);
+          if (!dirHit) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` (barra final) fuerza resolución de DIRECTORIO pero no existe \`${crossOsRelative(projectRoot, noExt)}/index.{ts,tsx,…}\` — Vite lanza "Cannot find module". Importa el índice con su ruta .ts/.tsx.`,
+            };
+          }
+          if (dirHit.ext === ".json") return { kind: "external" };
+          if (!isAuditableExt(dirHit.absPath)) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` (barra final) resuelve al dir-index JS NO auditable (\`${crossOsRelative(projectRoot, dirHit.absPath)}\`): el gate solo audita .ts/.tsx. Conviértelo a .ts/.tsx.`,
+            };
+          }
+          return { kind: "internal", absPath: dirHit.absPath };
+        }
         // Extensión explícita (`@/x/helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
         const exact =
           hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
@@ -5201,6 +5240,27 @@ function resolveImportPath(
   // Relative.
   const importerDir = crossOsDirname(importerAbsPath);
   const noExt = crossOsResolve(importerDir, specifier);
+  // Barra final → DIRECTORIO-only (root D): solo la cascada dir-index, saltando exact/file-beats-dir.
+  if (forceDir) {
+    const dirHit = resolveDirIndex(noExt, fileExists);
+    if (!dirHit) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` (barra final) fuerza resolución de DIRECTORIO pero no existe \`${crossOsRelative(projectRoot, noExt)}/index.{ts,tsx,…}\` — Vite lanza "Cannot find module". Importa el índice con su ruta .ts/.tsx.`,
+      };
+    }
+    if (dirHit.ext === ".json") return { kind: "external" };
+    const relDir = crossOsRelative(srcRoot, dirHit.absPath);
+    const inSrcDir = !relDir.startsWith("..") && !relDir.startsWith("/");
+    if (!inSrcDir) return { kind: "external" };
+    if (!isAuditableExt(dirHit.absPath)) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` (barra final) resuelve al dir-index JS NO auditable (\`${crossOsRelative(projectRoot, dirHit.absPath)}\`): el gate solo audita .ts/.tsx. Conviértelo a .ts/.tsx.`,
+      };
+    }
+    return { kind: "internal", absPath: dirHit.absPath };
+  }
   // Extensión explícita (`./helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
   const exact = hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
   // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
