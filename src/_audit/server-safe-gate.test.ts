@@ -5503,6 +5503,65 @@ describe("server-safe gate — #5: marker robusto a chars invisibles (OR + norma
   });
 });
 
+// #3 (Fable cross-review 3): import.meta UNIFICADO en el path partial-root (root C) — eliminado el bloque
+// dedicado + la supresión importMetaDirect. El safe-probe/optional-chain de c.1b aplica también al DIRECTO,
+// cerrando el FP (`typeof import.meta.dirname` flaggeaba de más). Tabla-de-decisión preservada verbatim.
+describe("server-safe gate — #3: import.meta unificado (safe-probe directo, sin FP)", () => {
+  const flags = (b: string) => checkSourceFile(`/** @server-safe */\n${b}`, "im3.fixture.tsx").length > 0;
+  it.each([
+    // FP CERRADO — probes sin ejecución (typeof / optional-chain) → PASA:
+    ["typeof import.meta.dirname", `export const x = typeof import.meta.dirname;`, false],
+    ["import.meta.resolve?.('./a')", `export const x = import.meta.resolve?.("./a");`, false],
+    ["import.meta.dirname?.length", `export const x = import.meta.dirname?.length;`, false],
+    // Tabla-de-decisión preservada:
+    ["import.meta.dirname directo → FLAG", `export const d = import.meta.dirname;`, true],
+    ["const m=import.meta; m.dirname → FLAG", `const m = import.meta;\nexport const d = () => m.dirname;`, true],
+    ["const {dirname}=import.meta → FLAG", `const { dirname } = import.meta;\nexport const d = dirname;`, true],
+    ["import.meta.url → PASA", `export const u = import.meta.url;`, false],
+    ["import.meta.hot → PASA", `export const h = import.meta.hot;`, false],
+    ["import.meta.hot.accept() out-of-mandate → PASA (sobrevive)", `import.meta.hot.accept();\nexport const x = 1;`, false],
+    ["import.meta.glob eager → FLAG", `export const g = import.meta.glob("./*", { eager: true });`, true],
+  ])("%s", (_l, code, exp) => {
+    expect(flags(code)).toBe(exp);
+  });
+});
+
+// TEST DIFERENCIAL GENERATIVO (Fable cross-review 3, §5): el oráculo deja de ser MI enumeración y pasa a
+// ser el RUNTIME de Node. Para cada expresión-key `E`, la verdad-terreno es `Object.keys({[E]:1})[0]` (el
+// ToPropertyKey real); el gate debe cumplir MATCH-OR-FLAG — sobre `({[K]: hazard})[E]` (K = donde E cae en
+// runtime) o resuelve E→K (flag preciso) o E queda irresoluble (flip de polaridad → ∃-peligro → flag).
+// Cualquier tercer resultado (no flaggea = FN) es un bug de SOUNDNESS por definición. Esto reemplaza la
+// enumeración de vtForms (que era mi lista con otro disfraz) por el estándar operativo empírico.
+describe("server-safe gate — INV-VT diferencial generativo (oráculo = runtime, match-or-flag)", () => {
+  const flags = (b: string) => checkSourceFile(`/** @server-safe */\n${b}`, "diff.fixture.tsx").length > 0;
+  // Corpus `[expresión-fuente, VALOR JS real]`. El VALOR es la expresión evaluada por NODE (el compilador
+  // del test), NO por eval — el oráculo sigue siendo el runtime: `Object.keys({[valor]:1})[0]` da el
+  // ToPropertyKey exacto. Cubre cada notación de literal numérico (dec/hex/oct/bin/separador/exponente),
+  // >2^53 (Number redondea) + su BigInt (exacto, diverge fielmente), unary ±, string, template, VT, proyección.
+  const cases: ReadonlyArray<readonly [string, string | number | bigint]> = [
+    // numérico / bigint → el VALOR es el literal REAL que Node evalúa (oráculo de la coacción numérica):
+    ["0", 0], ["1e2", 1e2], ["0x10", 0x10], ["0o144", 0o144], ["0b1100100", 0b1100100],
+    ["1_000", 1_000], ["0.5", 0.5], ["-1", -1], ["-0", -0], ["+0", 0], ["+1e2", 100],
+    ["9007199254740993", 9007199254740993], ["0n", 0n], ["100n", 100n], ["0x64n", 0x64n],
+    ["-1n", -1n], ["9007199254740993n", 9007199254740993n],
+    // string / template / VT / proyección → coacción trivial a la clave del corpus:
+    [`"m"`, "m"], [`"1e+21"`, "1e+21"], ["`m`", "m"], ["`0`", "0"],
+    [`(0, "m")`, "m"], [`(true ? "m" : "x")`, "m"], [`(1 && "m")`, "m"],
+    [`["m"][0]`, "m"], [`({ 0: "m" })[0]`, "m"],
+  ];
+  it.each(cases)(
+    "soundness (match-or-flag): `({[K]: WebAssembly.Module})[%s]` → FLAG",
+    (sourceExpr, value) => {
+      // ToPropertyKey real (Node): para no-símbolos, ToPropertyKey(v) === ToString(v) === String(v).
+      const k = String(value);
+      // El container tiene el hazard en la clave EXACTA que E selecciona en runtime → el acceso lo alcanza.
+      // El gate debe resolver E→K (flag preciso) o dejar E irresoluble (flip → ∃-peligro → flag). Nunca FN.
+      const code = `export const a = new (({ [${JSON.stringify(k)}]: WebAssembly.Module })[${sourceExpr}])(new Uint8Array());`;
+      expect(flags(code)).toBe(true);
+    },
+  );
+});
+
 // RAÍZ E (re-hunt rc.1 + Fable cross-review): VITE_ASSET_RE aplicaba UN `/i` a toda la unión, pero Vite
 // matchea css-langs (CSS_LANGS_RE) + json + wasm CASE-SENSITIVE y solo KNOWN_ASSET_TYPES (media/font)
 // case-insensitive (DEFAULT_ASSETS_RE = `new RegExp(…,"i")`). `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset

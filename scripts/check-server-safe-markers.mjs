@@ -6121,38 +6121,12 @@ function checkSourceFile(
         }
       }
     }
-    // `import.meta.<member>` — namespace ESM poblado por el host/build; sus miembros se whitelistean
-    // fail-closed (SAFE_IMPORT_META_MEMBERS). `dirname`/`filename` son Node-only → ausentes en Edge →
-    // leer/derefenciarlos lanza en SSR/render. Forma dot Y bracket-LITERAL (`import.meta["dirname"]`,
-    // fold del literal vía accessedMemberNames); `import.meta[dynamicKey]` = §141 residual (data-flow).
-    // El ROOT `import.meta` puede llegar por operadores VT value-survival (`(c?import.meta:x).dirname`) →
-    // se resuelve por `valueSurvivalLeaves` (helper compartido), NO solo MetaProperty directo/erased
-    // (codex P1 @fdd3fe5, familia value-survival, simétrico con el constructor-Module). `import.meta[dynKey]`
-    // sigue §141 residual. `new.target` NO es vector (no poblado por host, sin miembros Node-only).
-    if (
-      (ts.isPropertyAccessExpression(node) ||
-        ts.isElementAccessExpression(node)) &&
-      valueSurvivalLeaves(node.expression).some(
-        (l) =>
-          ts.isMetaProperty(l) &&
-          l.keywordToken === ts.SyntaxKind.ImportKeyword,
-      ) &&
-      !context.isInClientOnlyDeferredBody
-    ) {
-      const members = accessedMemberNames(node);
-      const unsafe = members.find((mm) => !SAFE_IMPORT_META_MEMBERS.has(mm));
-      if (members.length > 0 && unsafe !== undefined) {
-        const start = node.getStart(sourceFile);
-        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
-        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
-        violations.push({
-          file: relPath,
-          rule: "no-bare-dom-access",
-          line: line + 1,
-          detail: `\`import.meta.${unsafe}\` — miembro Node-only, ausente del \`import.meta\` del baseline Edge/web-standard → lanza en SSR/render. Disponible-en-Edge: ${[...SAFE_IMPORT_META_MEMBERS].join("/")} (subset definitivo en #190): ${lineText}`,
-        });
-      }
-    }
+    // `import.meta.<member>` (dot / bracket-literal / alias / proyección / VT) se maneja UNIFICADO en la
+    // rama partial-root c.1b (import.meta enrolado como root-sentinel en exprPartialRoot, root C; polaridad
+    // ALLOWLIST vía partialMemberDenied) — Fable cross-review 3 (#3). Se ELIMINÓ el bloque dedicado que había
+    // aquí: duplicaba la policy y, al no aplicar el safe-probe de c.1b, flaggeaba `typeof import.meta.dirname`
+    // / `import.meta.resolve?.()` de más (FP). `import.meta.hot`/`url`/`env`/`glob` ∈ allowlist → PASA;
+    // `import.meta[dynKey]` § 141; el CALL `import.meta.glob(...)` lo caza el check de glob dedicado (abajo).
     // `Reflect.get(R, "k")` con key (VT-fold canónica) ≡ `R["k"]` (root B / Fable): member-read decidible
     // EN-SITIO. Reusa exprPartialRoot (resuelve R: performance/WebAssembly/console/crypto/process E
     // import.meta, con alias y proyección) + partialMemberDenied (dispatch de polaridad). B2
@@ -7102,22 +7076,15 @@ function checkSourceFile(
       // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
       // Se resuelve SIEMPRE (también con memberCandidates=[]) para cazar el miembro COMPUTADO de abajo.
       const resolvedPartialRoot = exprPartialRoot(node.expression, context);
-      // import.meta enrolado como root-sentinel (root C): el acceso DIRECTO (`import.meta.x`) lo
-      // caza el check dedicado de import.meta (arriba) — aquí solo se llega vía ALIAS (`const
-      // m=import.meta; m.x`); suprimimos el directo para NO doble-flaggear. Discriminador: un
-      // MetaProperty en las hojas value-survival = directo (mismo predicado que el check dedicado).
-      const importMetaDirect =
-        resolvedPartialRoot === IMPORT_META_ROOT &&
-        valueSurvivalLeaves(node.expression).some(
-          (l) =>
-            ts.isMetaProperty(l) &&
-            l.keywordToken === ts.SyntaxKind.ImportKeyword,
-        );
-      // Predicado CENTRAL con dispatch de POLARIDAD: denylist (WebAssembly) → miembro ∈ set;
-      // allowlist (performance/console) → ∉ set; allowlist import.meta (SAFE_IMPORT_META_MEMBERS).
-      // Cualquier candidato denegado (fail-closed sobre las alternativas).
+      // Predicado CENTRAL con dispatch de POLARIDAD: denylist (WebAssembly) → miembro ∈ set; allowlist
+      // (performance/console) → ∉ set; allowlist import.meta (SAFE_IMPORT_META_MEMBERS). import.meta se
+      // maneja AQUÍ tanto DIRECTO (`import.meta.dirname`) como por alias/proyección (`m.dirname`) — Fable
+      // cross-review 3 (#3): UNIFICADO. Se eliminó el bloque dedicado de import.meta + la supresión
+      // `importMetaDirect`, de modo que el safe-probe/optional-chain de abajo aplica también al directo
+      // (`typeof import.meta.dirname`, `import.meta.resolve?.()` → PASA), cerrando el FP por construcción y
+      // eliminando la asimetría de dos implementaciones de la misma policy.
       const partialMember =
-        resolvedPartialRoot && !importMetaDirect && memberCandidates.length > 0
+        resolvedPartialRoot && memberCandidates.length > 0
           ? (memberCandidates.find((m) =>
               partialMemberDenied(resolvedPartialRoot, m),
             ) ?? null)
