@@ -496,6 +496,37 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
   });
 
+  // RAÍZ C (re-hunt rc.1 + Fable cross-review): `import.meta` no estaba enrolado en la maquinaria
+  // partial-root (exprPartialRoot solo reconocía roots-IDENTIFIER), así que el DESTRUCTURE
+  // (`const {resolve}=import.meta`) y el CONST-ALIAS (`const m=import.meta; m.resolve()`) evadían el
+  // check (el directo `import.meta.resolve` sí se cazaba). Se enrola como root-sentinel con dispatch
+  // de POLARIDAD (import.meta = ALLOWLIST, no denylist) — el riesgo crítico que Fable marcó.
+  it("destructure/const-alias de import.meta se cazan con polaridad ALLOWLIST preservada (root C)", () => {
+    const flags = (b: string) =>
+      checkSourceFile(`/** @server-safe */\n${b}`, "imroot.fixture.tsx").length > 0;
+    // Fail-open cerrado — destructure de miembro Node-only:
+    expect(flags(`const { dirname } = import.meta;\nexport const d = dirname;`)).toBe(true); // C1 idiom Node 20.11+
+    expect(flags(`const { resolve } = import.meta;\nexport const r = () => resolve("./x");`)).toBe(true); // C2
+    expect(flags(`const { filename } = import.meta;\nexport const f = filename;`)).toBe(true);
+    // Const-alias del objeto entero → miembro Node-only:
+    expect(flags(`const m = import.meta;\nexport const r = () => m.resolve("./x");`)).toBe(true); // C3
+    // Assignment-pattern:
+    expect(flags(`let resolve: any;\nexport const r = () => { ({ resolve } = import.meta); return resolve; };`)).toBe(true);
+    // POLARIDAD (fixtures obligatorios de Fable) — allowlist preservada a través de destructure Y alias:
+    expect(flags(`const { url } = import.meta;\nexport const u = url;`)).toBe(false); // allowlist
+    expect(flags(`const m = import.meta;\nexport const u = m.url;`)).toBe(false); // allowlist vía alias
+    expect(flags(`const m = import.meta;\nexport const x = m.loQueSea;`)).toBe(true); // desconocido → deny (allowlist NO se vuelve denylist)
+    // §141 ratificado: object-rest (data-flow por la copia) — NO cerrable, NO debe FP con la polaridad allowlist:
+    expect(flags(`const { ...rest } = import.meta;\nexport const x = rest;`)).toBe(false);
+    // El directo sigue cazado UNA sola vez (sin doble-flag por el enrolado):
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const d = import.meta.dirname;`, "imdirect.fixture.tsx").length,
+    ).toBe(1);
+    // NO regresión: los roots-identifier conservan su polaridad DENYLIST (rest no es FP ahí):
+    expect(flags(`const { ...r } = WebAssembly;\nexport const x = r;`)).toBe(false);
+    expect(flags(`const { now } = performance;\nexport const n = now;`)).toBe(false);
+  });
+
   it("detección de `import.meta.glob` desenvuelve la KEY erased del bracket (`[\"glob\" as const]`, `[(\"glob\")]`) → fail-closed; key variable/no-glob siguen no-glob (codex P2)", () => {
     const detects = (b: string) =>
       checkSourceFile(

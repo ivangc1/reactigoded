@@ -671,6 +671,20 @@ function isDeniedPartialMember(root, member) {
   return false;
 }
 
+// Root-sentinel de `import.meta` (Fable cross-review rc.1, root C). No es un identifier
+// válido (contiene `.`) → no colisiona con ningún root-identifier ni puede ser shadowed.
+const IMPORT_META_ROOT = "import.meta";
+
+// Predicado CENTRAL con dispatch de POLARIDAD (Fable: el riesgo crítico de enrolar
+// import.meta). `import.meta` usa ALLOWLIST (deny-unknown: miembro ∉ SAFE_IMPORT_META_MEMBERS);
+// los roots-identifier (performance/WebAssembly/…) usan la polaridad de `isDeniedPartialMember`
+// (denylist bucket-2 / allowlist bucket-1 / wholesale-safe bucket-3). Rutear los alias de
+// import.meta por la denylist abriría fail-open en miembros desconocidos → dispatch por familia.
+function partialMemberDenied(root, member) {
+  if (root === IMPORT_META_ROOT) return !SAFE_IMPORT_META_MEMBERS.has(member);
+  return isDeniedPartialMember(root, member);
+}
+
 // Sinks de evaluación dinámica. NO son "browser globals" — existen
 // también en Node — pero PERMITEN bypassear el análisis estático del
 // gate evaluando código arbitrario desde un string en runtime. Usados
@@ -2808,6 +2822,16 @@ function exprPartialRoot(expr, context) {
       ) {
         return leaf.text;
       }
+    } else if (
+      ts.isMetaProperty(leaf) &&
+      leaf.keywordToken === ts.SyntaxKind.ImportKeyword
+    ) {
+      // `import.meta` como root-sentinel (Fable cross-review rc.1, root C): enrola el
+      // destructure (`const {resolve}=import.meta`, c.1c) y el const-alias (`const
+      // m=import.meta; m.resolve()`, scopePartialAliases) — el gate ya cierra esa clase
+      // para los roots-identifier. NO es identifier → no shadowable (`import` es reserved).
+      // La POLARIDAD la despacha `partialMemberDenied` (import.meta = ALLOWLIST, no denylist).
+      return IMPORT_META_ROOT;
     } else if (ts.isElementAccessExpression(leaf)) {
       // Proyección array-literal-index `[WebAssembly][0]`. Base value-transparente
       // (`(c ? [WebAssembly] : [WebAssembly])[0]`) → arrayLiteralAlternatives (codex P2).
@@ -6746,12 +6770,24 @@ function checkSourceFile(
       // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
       // Se resuelve SIEMPRE (también con memberCandidates=[]) para cazar el miembro COMPUTADO de abajo.
       const resolvedPartialRoot = exprPartialRoot(node.expression, context);
-      // Predicado CENTRAL: denylist (WebAssembly) → miembro ∈ set; allowlist (performance/console) →
-      // miembro ∉ set. Cualquier candidato denegado (fail-closed sobre las alternativas).
+      // import.meta enrolado como root-sentinel (root C): el acceso DIRECTO (`import.meta.x`) lo
+      // caza el check dedicado de import.meta (arriba) — aquí solo se llega vía ALIAS (`const
+      // m=import.meta; m.x`); suprimimos el directo para NO doble-flaggear. Discriminador: un
+      // MetaProperty en las hojas value-survival = directo (mismo predicado que el check dedicado).
+      const importMetaDirect =
+        resolvedPartialRoot === IMPORT_META_ROOT &&
+        valueSurvivalLeaves(node.expression).some(
+          (l) =>
+            ts.isMetaProperty(l) &&
+            l.keywordToken === ts.SyntaxKind.ImportKeyword,
+        );
+      // Predicado CENTRAL con dispatch de POLARIDAD: denylist (WebAssembly) → miembro ∈ set;
+      // allowlist (performance/console) → ∉ set; allowlist import.meta (SAFE_IMPORT_META_MEMBERS).
+      // Cualquier candidato denegado (fail-closed sobre las alternativas).
       const partialMember =
-        resolvedPartialRoot && memberCandidates.length > 0
+        resolvedPartialRoot && !importMetaDirect && memberCandidates.length > 0
           ? (memberCandidates.find((m) =>
-              isDeniedPartialMember(resolvedPartialRoot, m),
+              partialMemberDenied(resolvedPartialRoot, m),
             ) ?? null)
           : null;
       // MIEMBRO COMPUTADO (`performance[m]()`, m variable/expr → memberCandidates=[]) sobre raíz default-
@@ -6954,6 +6990,16 @@ function checkSourceFile(
             // iteración (no member-access). init ES el root → sin literal anidado que recursar.
             if (!isObjPat) return;
             for (const el of elems) {
+              // Object-REST (`const {...rest}=import.meta`, `({...rest}=import.meta)`) NO es un
+              // member-access literal: la lectura divergente ocurre en la copia y el uso de `rest`
+              // es data-flow → §141 residual (Fable ratificado). Skip; crítico con la polaridad
+              // ALLOWLIST de import.meta (sin skip, `rest` ∉ SAFE_IMPORT_META_MEMBERS → FP).
+              if (
+                (ts.isBindingElement(el) && el.dotDotDotToken) ||
+                ts.isSpreadAssignment(el)
+              ) {
+                continue;
+              }
               const kn = ts.isBindingElement(el)
                 ? el.propertyName || el.name
                 : ts.isPropertyAssignment(el) ||
@@ -6961,10 +7007,11 @@ function checkSourceFile(
                   ? el.name
                   : null;
               // Key con ALTERNATIVAS (`[c ? "compile" : "validate"]`) → cualquier rama denegada
-              // cuenta, fail-closed; predicado central (denylist O allowlist) (codex P2).
+              // cuenta, fail-closed; predicado central con polaridad (denylist / allowlist /
+              // allowlist import.meta) (codex P2 + root C).
               const key =
                 structuralKeyTexts(kn).find((k) =>
-                  isDeniedPartialMember(partialRootName, k),
+                  partialMemberDenied(partialRootName, k),
                 ) ?? null;
               // ¿DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` / `{ x: y = d }` (assign).
               // Miembro AUSENTE (performance.measure undefined) → default SE ACTIVA → seguro. Root
