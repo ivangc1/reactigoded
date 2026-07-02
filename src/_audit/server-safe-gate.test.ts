@@ -2562,6 +2562,35 @@ describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)
     const code = `/** texto \u200B@server-safe en prosa */\nexport const X = () => 1;`;
     expect(isContentServerSafeMarked(code, "zwsp-prose.tsx")).toBe(false);
   });
+
+  // RAÍZ G (re-hunt rc.1 + Fable cross-review): un `@server-safe` que sigue a
+  // OTRO tag JSDoc en la misma línea (`@internal @server-safe`) era un fail-open
+  // SILENCIOSO — el filtro de prefijo-blank hacía `continue` y el archivo entero
+  // quedaba SIN auditar. Ahora un prefijo LIMPIO (decoración + tags hermanos
+  // completos) marca; prosa mixta (tag + texto) falla-ruidoso; prosa pura tolera.
+  it("tag hermano previo `@internal @server-safe` SÍ marca (fail-open cerrado)", () => {
+    const code = `/** @internal @server-safe */\nexport function Card() { return 1; }`;
+    expect(isContentServerSafeMarked(code, "sibling-tag.tsx")).toBe(true);
+  });
+
+  it("varios tags hermanos `@packageDocumentation @beta @server-safe` marca", () => {
+    const code = `/** @packageDocumentation @beta @server-safe */\nexport const X = 1;`;
+    expect(isContentServerSafeMarked(code, "multi-sibling.tsx")).toBe(true);
+  });
+
+  it("tag hermano en línea propia multi-línea marca", () => {
+    const code = `/**\n * @internal\n * @server-safe\n */\nexport const X = 1;`;
+    expect(isContentServerSafeMarked(code, "sibling-multiline.tsx")).toBe(true);
+  });
+
+  it("mixto `@internal foo @server-safe` (tag + prosa) LANZA fail-loud", () => {
+    // Invariante: un tag parseado ni marca ni falla en silencio. Con un tag
+    // hermano PERO prosa entre medias, la intención es ambigua → fail-loud.
+    const code = `/** @internal foo @server-safe */\nexport const X = 1;`;
+    expect(() => isContentServerSafeMarked(code, "mixed-prose.tsx")).toThrow(
+      /embebido en prosa/,
+    );
+  });
 });
 
 /**

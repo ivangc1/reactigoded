@@ -7655,6 +7655,7 @@ function detectServerSafeMarker(sourceFile, relPath) {
   const topLevel = new Set(sourceFile.statements);
   let marked = false;
   const misplacedLines = [];
+  const proseLines = [];
 
   const visit = (node) => {
     // `node.jsDoc`: array de bloques JSDoc attachados a este host (no se
@@ -7665,12 +7666,14 @@ function detectServerSafeMarker(sourceFile, relPath) {
       for (const block of jsDocBlocks) {
         for (const tag of block.tags ?? []) {
           if (tag.tagName.text !== "server-safe") continue;
-          // Solo cuenta si el tag está en posición CANÓNICA: al inicio de
-          // una línea del JSDoc (tras `/**` o ` * `), no embebido en prosa.
-          // TS parsea `@server-safe` como tag aunque aparezca mid-sentence
-          // ("no es @server-safe por sí sola"); sin este filtro, prosa en un
-          // JSDoc anidado lanzaría un fail-loud FALSO (build break) y prosa
-          // top-level marcaría el archivo por error. beta.27 BLOCKER-1.
+          // INVARIANTE FAIL-LOUD (Fable cross-review rc.1): un `@server-safe`
+          // que TS PARSEA como tag DEBE marcar o fallar-ruidoso — nunca ser un
+          // no-op silencioso (fail-open: el archivo dejaría de auditarse). El
+          // predecesor hacía `continue` sobre CUALQUIER prefijo no-blank,
+          // silenciando tanto prosa como el tag-tras-tag legítimo → hueco:
+          // `/** @internal @server-safe */` se saltaba y el archivo quedaba sin
+          // auditar. Ahora se clasifica el prefijo (limpio → marca; prosa →
+          // fail-loud). beta.27 BLOCKER-1.
           const tagPos = tag.getStart(sourceFile);
           const { line, character } =
             sourceFile.getLineAndCharacterOfPosition(tagPos);
@@ -7683,11 +7686,31 @@ function detectServerSafeMarker(sourceFile, relPath) {
           const linePrefix = sourceFile.text
             .slice(tagPos - character, tagPos)
             .replace(/[\u200B-\u200D\uFEFF]/g, "");
-          if (!/^[\s*/]*$/.test(linePrefix)) continue;
-          if (topLevel.has(node)) {
-            marked = true;
+          // Prefijo LIMPIO = solo decoración JSDoc (`/**`, ` * `, whitespace) y
+          // tags hermanos COMPLETOS (`@internal`, `@packageDocumentation`, …),
+          // sin prosa entre medias. `@internal @server-safe` es limpio → marca;
+          // `resumen. @server-safe` (prosa) y `@internal foo @server-safe`
+          // (mixto) NO lo son → intención ambigua → fail-loud.
+          const cleanPrefix = /^[\s*/]*(@[A-Za-z][\w-]*\s+)*$/.test(linePrefix);
+          if (cleanPrefix) {
+            // decoración + tags hermanos COMPLETOS → posición válida de marker.
+            if (topLevel.has(node)) {
+              marked = true;
+            } else {
+              misplacedLines.push(line + 1);
+            }
+          } else if (/@[A-Za-z]/.test(linePrefix)) {
+            // Hay un tag hermano PERO con prosa entre medias (`@internal foo
+            // @server-safe`) → marker malformado, intención ambigua → fail-loud.
+            proseLines.push(line + 1);
           } else {
-            misplacedLines.push(line + 1);
+            // Prosa PURA sin tag previo (`todavía no es @server-safe del todo`):
+            // el token es incidental en documentación. Tolerado — decisión
+            // RATIFICADA y fixtureada (tests "prosa @server-safe mid-sentence NO
+            // marca ni lanza" / "en JSDoc anidado NO lanza fail-loud FALSO"). Un
+            // archivo sin marker simplemente no se audita → no es fail-open. Es
+            // la rama EXPLÍCITA de prosa-pura, no un `continue` ciego del parser.
+            continue;
           }
         }
       }
@@ -7704,6 +7727,18 @@ function detectServerSafeMarker(sourceFile, relPath) {
         `El marker SOLO es válido en el JSDoc de un statement top-level del ` +
         `módulo — un marker anidado pasaría inadvertido (fail-open silencioso). ` +
         `Mueve el JSDoc al export/declaración top-level del componente.`,
+    );
+  }
+  if (proseLines.length > 0) {
+    const plural = proseLines.length > 1;
+    throw new Error(
+      `[server-safe gate] marker \`@server-safe\` embebido en prosa ` +
+        `en ${relPath} (línea${plural ? "s" : ""} ${proseLines.join(", ")}). ` +
+        `TS lo parsea como tag pero hay texto no-tag antes de \`@server-safe\` en ` +
+        `su línea; un tag parseado que ni marca ni falla sería un fail-open ` +
+        `silencioso (el archivo dejaría de auditarse). Mueve \`@server-safe\` a su ` +
+        `propia línea del JSDoc (o quita el \`@\` si de verdad es prosa). Un tag ` +
+        `hermano previo en la misma línea (\`@internal @server-safe\`) sí es válido.`,
     );
   }
   return marked;
