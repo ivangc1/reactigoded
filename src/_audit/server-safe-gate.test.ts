@@ -5179,6 +5179,62 @@ describe("server-safe gate — frontera eval-sink: token-unidad caza, ensamblaje
   });
 });
 
+// RAÍZ A (re-hunt rc.1 + Fable cross-review): el motor value-survival (`valueTransparentChildren`)
+// descendía erased/ternario/coma/&&/||/??/= pero NO la proyección CONTAINER-LITERAL `[X][0]` (array-
+// index literal) ni `({k:X}).k` (object-member literal). 8 fail-opens de distintos ejes (construcción
+// wasm, partial-member, import()-builtin, import()-follow, import.meta, crypto-unbound, string-timer)
+// evadían por proyección. Un solo descenso central los cierra; el receiver-detach lo hace por su set
+// SPLIT. Fail-CLOSED (§141) ante índice no-literal/fuera-de-rango/spread, key computada, spread/accessor.
+describe("server-safe gate — RAÍZ A: proyección container-literal en value-survival", () => {
+  const flags = (b: string) =>
+    checkSourceFile(`/** @server-safe */\n${b}`, "rootA.fixture.tsx").length > 0;
+
+  it.each([
+    ["A1 construcción wasm array-index", `export const f = (b: BufferSource) => new [WebAssembly.Module][0](b);`],
+    ["A2 partial-member object-literal", `export const x = ({ p: performance }).p.eventLoopUtilization();`],
+    ["A3 import()-builtin array-index", `export function C() { return import(["node:fs"][0]); }`],
+    ["A5a import.meta object-literal", `export const r = () => ({ m: import.meta }).m.resolve("./x");`],
+    ["A5b import.meta array-index", `export const d = [import.meta][0].dirname;`],
+    ["A6 construcción wasm object-member", `export const f = (b: BufferSource) => new ({ m: WebAssembly.Module }).m(b);`],
+    ["A7 crypto-unbound array-index (detach)", `export const f = (b: Uint8Array) => [crypto.getRandomValues][0](b);`],
+    ["A7b crypto-unbound object-member (detach)", `export const f = (b: Uint8Array) => ({ g: crypto.getRandomValues }).g(b);`],
+    ["A8 string-timer array-index", `export function C() { setTimeout(["alert(1)"][0], 0); return null; }`],
+    ["nesting [[X][0]][0]", `export const f = (b: BufferSource) => new [[WebAssembly.Module][0]][0](b);`],
+    ["shorthand ({performance}).performance", `export const x = ({ performance }).performance.eventLoopUtilization();`],
+  ])("CIERRA proyección container: %s", (_l, code) => {
+    expect(flags(code)).toBe(true);
+  });
+
+  it("A4 import()-follow por proyección audita el módulo entero (window en dep)", () => {
+    const v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nexport function C() { import(["./dirty"][0]); return null; }`,
+        "/repo/src/dirty.ts": `export const x = window.location.href;\n`,
+      }),
+    );
+    expect(v.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["valor Edge-safe array-index", `export const x = [performance][0].now();`],
+    ["valor Edge-safe object-member", `export const x = ({ p: performance }).p.timeOrigin;`],
+    ["crypto bound directo (no detach)", `export const f = (b: Uint8Array) => crypto.getRandomValues(b);`],
+  ])("CERO FP (proyección de valor Edge-safe): %s", (_l, code) => {
+    expect(flags(code)).toBe(false);
+  });
+
+  it.each([
+    ["índice fuera de rango", `export const f = (b: BufferSource) => new [WebAssembly.Module][5](b);`],
+    ["índice variable", `export const f = (i: number, b: BufferSource) => new [WebAssembly.Module][i](b);`],
+    ["spread en array", `export const f = (a: any[], b: BufferSource) => new [...a][0](b);`],
+    ["spread en object", `export const f = (s: object) => ({ ...s, p: performance }).p.eventLoopUtilization();`],
+    ["key computada en object", `export const f = (k: string, b: BufferSource) => new ({ [k]: WebAssembly.Module }).x(b);`],
+  ])("frontera §141 (no decidible en-sitio → exime): %s", (_l, code) => {
+    expect(flags(code)).toBe(false);
+  });
+});
+
 describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)", () => {
   const flagged = (code: string) =>
     checkSourceFile(code, "fp.fixture.tsx").length > 0;

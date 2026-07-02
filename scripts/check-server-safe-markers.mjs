@@ -3567,6 +3567,36 @@ function valueTransparentChildren(node) {
     }
     if (op === ts.SyntaxKind.EqualsToken) return [node.right];
   }
+  // Proyección CONTAINER-LITERAL (Fable cross-review rc.1, root A): `[X][0]` (array-index literal) y
+  // `({k:X}).k` / `({k:X})["k"]` (object-member literal). El VALOR llega EN-SITIO (índice/key literal,
+  // decidible sin data-flow) → descender para que TODOS los checks value-survival (eval-sink,
+  // construcción, import.meta, import(), string-timer) lo vean; cierra la familia de 8 fail-opens del
+  // re-hunt de una vez. Fail-CLOSED (queda §141) ante índice no-literal/negativo/float/fuera-de-rango,
+  // spread en el array, key computada/variable, y spread/accessor/método en el object.
+  if (ts.isElementAccessExpression(node)) {
+    const idx = node.argumentExpression
+      ? unwrapErased(node.argumentExpression)
+      : null;
+    if (idx && ts.isNumericLiteral(idx)) {
+      const i = Number(idx.text);
+      if (Number.isInteger(i) && i >= 0) {
+        const out = [];
+        for (const arr of arrayLiteralAlternatives(node.expression)) {
+          if (arr.elements.some(ts.isSpreadElement)) continue; // spread → índice indeterminado
+          const el = arr.elements[i];
+          if (el && !ts.isOmittedExpression(el)) out.push(el);
+        }
+        if (out.length > 0) return out;
+      }
+    } else if (idx && ts.isStringLiteralLike(idx)) {
+      const vals = objectLiteralMemberValues(node.expression, idx.text);
+      if (vals.length > 0) return vals;
+    }
+  }
+  if (ts.isPropertyAccessExpression(node)) {
+    const vals = objectLiteralMemberValues(node.expression, node.name.text);
+    if (vals.length > 0) return vals;
+  }
   return [];
 }
 
@@ -3723,6 +3753,48 @@ function arrayLiteralAlternatives(expr) {
   return valueTransparentLeaves(expr).filter((l) =>
     ts.isArrayLiteralExpression(l),
   );
+}
+
+// Ramas object-literal que un expr puede tomar value-transparentemente (`({k:X}).k`, o vía VT
+// `(c ? {k:X} : {k:Y}).k`). Espejo de arrayLiteralAlternatives para el eje object-member (root A).
+function objectLiteralAlternatives(expr) {
+  return valueTransparentLeaves(expr).filter((l) =>
+    ts.isObjectLiteralExpression(l),
+  );
+}
+
+// Valores de la propiedad `key` (literal) en los object-literals a los que `baseExpr` se reduce
+// value-transparentemente (`({k:X}).k`, key literal). Fail-CLOSED — un object con CUALQUIER spread,
+// accessor (get/set), método, o key COMPUTADA no se desciende (§141: la resolución de la key deja de
+// ser decidible en-sitio). LAST-WINS entre propiedades con la misma key (semántica JS). root A / Fable.
+function objectLiteralMemberValues(baseExpr, key) {
+  const out = [];
+  for (const obj of objectLiteralAlternatives(baseExpr)) {
+    const indeterminate = obj.properties.some(
+      (p) =>
+        ts.isSpreadAssignment(p) ||
+        ts.isGetAccessorDeclaration(p) ||
+        ts.isSetAccessorDeclaration(p) ||
+        ts.isMethodDeclaration(p) ||
+        (p.name && ts.isComputedPropertyName(p.name)),
+    );
+    if (indeterminate) continue;
+    let val = null; // last-wins
+    for (const p of obj.properties) {
+      const name = p.name;
+      const nameText =
+        name && (ts.isIdentifier(name) || ts.isStringLiteralLike(name))
+          ? name.text
+          : name && ts.isNumericLiteral(name)
+            ? name.text
+            : null;
+      if (nameText !== key) continue;
+      if (ts.isPropertyAssignment(p)) val = p.initializer;
+      else if (ts.isShorthandPropertyAssignment(p)) val = p.name;
+    }
+    if (val) out.push(val);
+  }
+  return out;
 }
 
 // Enumera las listas de args APLANADAS posibles, RAMIFICANDO en cada spread de ALTERNATIVAS de
@@ -5640,13 +5712,17 @@ function checkSourceFile(
       // todos pelan hasta el member base). Una hoja CallExpression (`.bind(…)` call) es candidata pelable.
       const boundMemberOf = (expr) => {
         const lu = unwrapErased(expr);
+        // Proyección container-literal (`[crypto.getRandomValues][0]`, `({m:crypto.getRandomValues}).m`):
+        // DETACHA el this (receiver = array/objeto ≠ crypto) → this-detaching → descender por
+        // valueTransparentChildren PRIMERO. Un member-access REAL (`crypto.getRandomValues`,
+        // `crypto["getRandomValues"]`) tiene 0 hijos VT → cae a `[lu]` (candidato directo). root A / Fable.
         const candidates =
-          ts.isPropertyAccessExpression(lu) ||
-          ts.isElementAccessExpression(lu) ||
-          ts.isCallExpression(lu)
-            ? [lu]
-            : valueTransparentChildren(lu).length > 0
-              ? valueTransparentLeaves(lu).map(unwrapErased)
+          valueTransparentChildren(lu).length > 0
+            ? valueTransparentLeaves(lu).map(unwrapErased)
+            : ts.isPropertyAccessExpression(lu) ||
+                ts.isElementAccessExpression(lu) ||
+                ts.isCallExpression(lu)
+              ? [lu]
               : [];
         for (const cand of candidates) {
           const c = peelReceiverChain(cand);
