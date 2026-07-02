@@ -5263,6 +5263,88 @@ describe("server-safe gate — RAÍZ B: Reflect.get member-read con key literal"
   });
 });
 
+// RE-HUNT 2 (post-fix + Fable cross-review 2): los 8 fixes rc.1 eran correctos pero INCOMPLETOS — cerraron
+// las formas LITERALES pero dejaron abiertas las value-transparent / coercidas / proyectadas del MISMO eje.
+// Fix predicate-by-space: resolveKeyCandidates (VT-fold + canonicalización numérica) rutea toda resolución
+// de índice/key; objectLiteralMemberValues per-key (sin poison-amplifier); forceDir chequea package.json.
+describe("server-safe gate — RE-HUNT 2: formas VT/coercidas/proyectadas de índice/key", () => {
+  const flags = (b: string) =>
+    checkSourceFile(`/** @server-safe */\n${b}`, "rh2.fixture.tsx").length > 0;
+  const B = "new Uint8Array()";
+
+  it.each([
+    // A2 — key numérica en object-literal + canonicalización por valor + string-index sobre array:
+    ["({0:X})[0] key numérica", `export const a = new (({0:WebAssembly})[0]).Module(${B});`],
+    ["({1e2:X})[100] canon 1e2", `export const a = new (({1e2:WebAssembly})[100]).Module(${B});`],
+    ["({0x10:X})[16] canon hex", `export const a = new (({0x10:WebAssembly})[16]).Module(${B});`],
+    ['[X]["0"] string-index sobre array', `export const a = new ([WebAssembly]["0"]).Module(${B});`],
+    // A4 — índice VT (ternario-const, &&):
+    ["[X][true?0:1] índice ternario", `export const x = new ([WebAssembly][true?0:1]).Module(${B});`],
+    ["[X][1&&0] índice &&", `export const x = new ([WebAssembly][1&&0]).Module(${B});`],
+    // A5 — computed-literal + SIN poison-amplifier (sibling benigno no opaca la key):
+    ['({["m"]:X}).m computed-literal', `export const a = new (({["m"]:WebAssembly.Module}).m)(${B});`],
+    ['({["zz"]:1, m:X}).m poison', `export const a = new (({["zz"]:1, m:WebAssembly.Module}).m)(${B});`],
+    ["({noop(){}, m:X}).m método-sibling", `export const a = new (({noop(){}, m:WebAssembly.Module}).m)(${B});`],
+    ["({get g(){return 1}, m:X}).m getter-sibling", `export const a = new (({get g(){return 1}, m:WebAssembly.Module}).m)(${B});`],
+    // B2 — Reflect.get key VT/proyectada/ternario + cross A2×B2:
+    ['Reflect.get(perf,(0,"nodeTiming")) coma', `export const x = Reflect.get(performance, (0,"nodeTiming"));`],
+    ['Reflect.get(perf,["nodeTiming"][0]) proyectada', `export const x = Reflect.get(performance, ["nodeTiming"][0]);`],
+    ['Reflect.get(perf,c?"nodeTiming":"now") ternario', `export const x = (c: boolean) => Reflect.get(performance, c?"nodeTiming":"now");`],
+    ['Reflect.get(({0:perf})[0],["nodeTiming"][0]) cross A2×B2', `export const x = Reflect.get(({0:performance})[0], ["nodeTiming"][0]);`],
+  ])("CIERRA (VT/coercida/proyectada): %s", (_l, code) => {
+    expect(flags(code)).toBe(true);
+  });
+
+  it.each([
+    ["({0:performance})[0].now() safe", `export const x = ({0:performance})[0].now();`],
+    ['Reflect.get(performance,["now"][0]) safe', `export const x = Reflect.get(performance, ["now"][0]);`],
+    ['Reflect.get(import.meta,true?"url":"url") safe', `export const x = Reflect.get(import.meta, true?"url":"url");`],
+    ["({1e2:crypto})[100].randomUUID() safe (canon + bound)", `export const x = ({1e2:crypto})[100].randomUUID();`],
+  ])("NO FP: %s", (_l, code) => {
+    expect(flags(code)).toBe(false);
+  });
+
+  // A2 en el follow de import() (el motor value-survival compartido): un módulo dirty proyectado se sigue.
+  it("import(({0:'./dirty'})[0]) sigue+flaggea el módulo dirty", () => {
+    const v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nexport function C() { import(({0:"./dirty"})[0]); return null; }`,
+        "/repo/src/dirty.ts": `export const x = window.location.href;\n`,
+      }),
+    );
+    expect(v.length).toBeGreaterThan(0);
+  });
+
+  // D2 (REGRESIÓN del fix D): forceDir debe chequear package.json (Vite resuelve main/exports antes del index).
+  it.each([
+    ["main→edge.ts sucio", { "pkg/index.tsx": `/** @server-safe */\nexport const c = 1;\n`, "pkg/edge.ts": `export const d = process.cwd();\n`, "pkg/package.json": `{"main":"./edge.ts"}` }, "./pkg/"],
+    ["alias @/pkg/", { "pkg/index.tsx": `/** @server-safe */\nexport const c = 1;\n`, "pkg/edge.ts": `export const d = process.cwd();\n`, "pkg/package.json": `{"main":"./edge.ts"}` }, "@/pkg/"],
+    ["package.json {} (frontera, fail-closed §373)", { "pkg/index.tsx": `/** @server-safe */\nexport const c = 1;\n`, "pkg/package.json": `{}` }, "./pkg/"],
+    ["hermano pkg.ts + package.json (sub-caso)", { "pkg/index.tsx": `/** @server-safe */\nexport const c = 1;\n`, "pkg/edge.ts": `export const d = process.cwd();\n`, "pkg/package.json": `{"main":"./edge.ts"}`, "pkg.ts": `/** @server-safe */\nexport const clean = 1;\n` }, "./pkg/"],
+  ])("D2 forceDir + package.json → unresolved-import (%s)", (_l, files, spec) => {
+    const v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport "${spec}";\nexport const x = 1;`,
+        ...Object.fromEntries(Object.entries(files).map(([k, val]) => [`/repo/src/${k}`, val])),
+      }),
+    );
+    expect(v.some((x) => x.rule === "unresolved-import")).toBe(true);
+  });
+
+  it("D2 control: ./pkg/ SIN package.json audita el dir-index limpio → PASA", () => {
+    const v = runWithVfs(
+      "/repo/src/c.tsx",
+      vfs({
+        "/repo/src/c.tsx": `/** @server-safe */\nimport { c } from "./pkg/";\nexport const x = c;`,
+        "/repo/src/pkg/index.tsx": `/** @server-safe */\nexport const c = 1;\n`,
+      }),
+    );
+    expect(v).toEqual([]);
+  });
+});
+
 // RAÍZ E (re-hunt rc.1 + Fable cross-review): VITE_ASSET_RE aplicaba UN `/i` a toda la unión, pero Vite
 // matchea css-langs (CSS_LANGS_RE) + json + wasm CASE-SENSITIVE y solo KNOWN_ASSET_TYPES (media/font)
 // case-insensitive (DEFAULT_ASSETS_RE = `new RegExp(…,"i")`). `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset

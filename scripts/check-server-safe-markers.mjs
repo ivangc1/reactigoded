@@ -3458,6 +3458,38 @@ function foldConstString(node) {
   return undefined;
 }
 
+// Índice numérico entero → su KEY DE PROPIEDAD JS canonicalizada (Fable cross-review 2): en runtime
+// `Object.keys({1e2:1})` es `["100"]`, `{0x10:1}` es `["16"]`, y `({0:X})[0] === ({0:X})["0"]`. Se
+// canonicaliza por VALOR (`String(Number(text))`), NO por `.text` crudo. Float/negativo/NaN → null
+// (§141: `[X][1.5]`/`[X][-1]` no es una key de propiedad enumerable decidible). Desenvuelve erased.
+function canonicalNumericKey(node) {
+  const u = unwrapErased(node);
+  if (!ts.isNumericLiteral(u)) return null;
+  const n = Number(u.text);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return String(n);
+}
+
+// INV-VT (Fable cross-review 2): helper CENTRALIZADO de resolución de índice/key/selector. TODA
+// resolución de key en el gate rutea por aquí — NUNCA `isNumericLiteral(unwrapErased(...))` ni `.text`
+// crudo. Devuelve el Set de KEYS canónicas a las que `argExpr` puede VT-foldar: string-literals
+// (`foldConstString`: unidad + erased + VT ternario/coma/`&&`/`||`) ∪ enteros canonicalizados
+// (`canonicalNumericKey`). Key VARIABLE/ENSAMBLADA → hoja no-foldable → sin candidata → §141 (paridad
+// `R[dynKey]`). Múltiples hojas VT (`c?"a":"b"`) → múltiples candidatas; el consumidor cuantifica la
+// polaridad (∃-deny para rutas denegación; ∀-safe para allowlist — vía `partialMemberDenied` que ya
+// codifica la polaridad por-root).
+function resolveKeyCandidates(argExpr) {
+  const out = new Set();
+  if (!argExpr) return out;
+  for (const leaf of valueTransparentLeaves(argExpr)) {
+    const s = foldConstString(leaf);
+    if (s !== undefined) out.add(s);
+    const n = canonicalNumericKey(leaf);
+    if (n !== null) out.add(n);
+  }
+  return out;
+}
+
 function isConstructorMemberAccess(node) {
   return accessedMemberName(node) === "constructor";
 }
@@ -3591,24 +3623,26 @@ function valueTransparentChildren(node) {
   // re-hunt de una vez. Fail-CLOSED (queda §141) ante índice no-literal/negativo/float/fuera-de-rango,
   // spread en el array, key computada/variable, y spread/accessor/método en el object.
   if (ts.isElementAccessExpression(node)) {
-    const idx = node.argumentExpression
-      ? unwrapErased(node.argumentExpression)
-      : null;
-    if (idx && ts.isNumericLiteral(idx)) {
-      const i = Number(idx.text);
-      if (Number.isInteger(i) && i >= 0) {
-        const out = [];
+    // El ÍNDICE/KEY se resuelve por resolveKeyCandidates (INV-VT, re-hunt2 + Fable): VT-fold
+    // (ternario/coma/erased) + canonicalización numérica por valor. Cada key candidata desciende
+    // AMBOS contenedores — array si es índice entero (`[X][0]`, `[X]["0"]`: string-index coacciona
+    // sobre arrays) Y object-member (la key coacciona a string: `({0:X})[0] ≡ ({0:X})["0"]`; `{1e2:X}`
+    // canonicaliza a "100"). UNIÓN, no fallback: una alternativa VT mixta `(c?[X]:{0:Y})[0]` desciende
+    // ambas ramas. Fail-CLOSED (§141) ante key variable/ensamblada, spread en el array, índice
+    // float/negativo (canonicalNumericKey→null → sin candidata).
+    const out = [];
+    for (const key of resolveKeyCandidates(node.argumentExpression)) {
+      if (/^(0|[1-9]\d*)$/.test(key)) {
+        const i = Number(key);
         for (const arr of arrayLiteralAlternatives(node.expression)) {
           if (arr.elements.some(ts.isSpreadElement)) continue; // spread → índice indeterminado
           const el = arr.elements[i];
           if (el && !ts.isOmittedExpression(el)) out.push(el);
         }
-        if (out.length > 0) return out;
       }
-    } else if (idx && ts.isStringLiteralLike(idx)) {
-      const vals = objectLiteralMemberValues(node.expression, idx.text);
-      if (vals.length > 0) return vals;
+      out.push(...objectLiteralMemberValues(node.expression, key));
     }
+    if (out.length > 0) return out;
   }
   if (ts.isPropertyAccessExpression(node)) {
     const vals = objectLiteralMemberValues(node.expression, node.name.text);
@@ -3757,9 +3791,12 @@ function reflectGetMemberRead(n) {
         return ts.isIdentifier(oo) && oo.text === "Reflect";
       });
     if (isReflect) {
-      const key = unwrapErased(n.arguments[1]);
-      if (ts.isStringLiteralLike(key)) {
-        return { receiver: n.arguments[0], member: key.text };
+      // La KEY se resuelve por resolveKeyCandidates (INV-VT): paridad byte-a-byte con `R[key]` (coma/
+      // ternario/`&&`/`||`/proyección/canonicalización), NO solo unwrapErased. Key variable/ensamblada →
+      // Set vacío → §141. Fable cross-review 2 (B2).
+      const members = resolveKeyCandidates(n.arguments[1]);
+      if (members.size > 0) {
+        return { receiver: n.arguments[0], members };
       }
     }
   }
@@ -3813,36 +3850,56 @@ function objectLiteralAlternatives(expr) {
   );
 }
 
-// Valores de la propiedad `key` (literal) en los object-literals a los que `baseExpr` se reduce
-// value-transparentemente (`({k:X}).k`, key literal). Fail-CLOSED — un object con CUALQUIER spread,
-// accessor (get/set), método, o key COMPUTADA no se desciende (§141: la resolución de la key deja de
-// ser decidible en-sitio). LAST-WINS entre propiedades con la misma key (semántica JS). root A / Fable.
+// Nombre(s) canónico(s) de una PropertyName (INV-VT / Fable cross-review 2): identifier/string → [text];
+// numeric → key JS canonicalizada (`{1e2:…}`→"100"); computed-LITERAL → foldeada (`["m"]`→"m", `` [`m`] ``→"m",
+// `[0]`→"0"). Computed NO-foldable (ensamblaje/variable) → [] (indeterminada).
+function propNameCanonical(name) {
+  if (!name) return [];
+  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return [name.text];
+  if (ts.isNumericLiteral(name)) {
+    const c = canonicalNumericKey(name);
+    return [c === null ? name.text : c];
+  }
+  if (ts.isComputedPropertyName(name)) return [...resolveKeyCandidates(name.expression)];
+  return [];
+}
+
+// Valores de la propiedad `key` (canónica) en los object-literals a los que `baseExpr` se reduce
+// value-transparentemente (`({k:X}).k`, `({0:X})[0]`, `({["m"]:X}).m`). Resolución PER-KEY (Fable
+// cross-review 2 — evita el POISON-AMPLIFIER: un sibling benigno NO opaca la key objetivo):
+//   - property (assignment/shorthand) con nombre canónico == key → candidato = initializer (last-wins).
+//   - accessor/método con nombre == key → OPACO (getter/setter/método → no descender).
+//   - sibling con nombre != key → IGNORAR (no envenena).
+//   - spread (cualquier posición) o computed NO-foldable (cualquier posición) → INDETERMINADO (§141:
+//     podría definir/sombrear la key).
 function objectLiteralMemberValues(baseExpr, key) {
   const out = [];
   for (const obj of objectLiteralAlternatives(baseExpr)) {
-    const indeterminate = obj.properties.some(
-      (p) =>
-        ts.isSpreadAssignment(p) ||
-        ts.isGetAccessorDeclaration(p) ||
-        ts.isSetAccessorDeclaration(p) ||
-        ts.isMethodDeclaration(p) ||
-        (p.name && ts.isComputedPropertyName(p.name)),
-    );
-    if (indeterminate) continue;
-    let val = null; // last-wins
+    let val = null; // último candidato (PropertyAssignment/shorthand) para la key
+    let blocked = false; // spread/computed-nofold (indet) u opaco (accessor/método con la key)
     for (const p of obj.properties) {
-      const name = p.name;
-      const nameText =
-        name && (ts.isIdentifier(name) || ts.isStringLiteralLike(name))
-          ? name.text
-          : name && ts.isNumericLiteral(name)
-            ? name.text
-            : null;
-      if (nameText !== key) continue;
-      if (ts.isPropertyAssignment(p)) val = p.initializer;
-      else if (ts.isShorthandPropertyAssignment(p)) val = p.name;
+      if (ts.isSpreadAssignment(p)) {
+        blocked = true; // §141: el spread podría aportar/sombrear la key
+        break;
+      }
+      const names = propNameCanonical(p.name);
+      if (p.name && ts.isComputedPropertyName(p.name) && names.length === 0) {
+        blocked = true; // computed no-foldable → podría ser la key → §141
+        break;
+      }
+      if (!names.includes(key)) continue; // sibling != key → no envenena
+      if (ts.isPropertyAssignment(p)) {
+        val = p.initializer;
+        blocked = false;
+      } else if (ts.isShorthandPropertyAssignment(p)) {
+        val = p.name;
+        blocked = false;
+      } else {
+        val = null; // accessor/método con nombre == key → opaco
+        blocked = true;
+      }
     }
-    if (val) out.push(val);
+    if (!blocked && val) out.push(val);
   }
   return out;
 }
@@ -5188,6 +5245,18 @@ function resolveImportPath(
         const noExt = crossOsResolve(projectRoot, targetPrefix + tail);
         // Barra final → DIRECTORIO-only (root D): solo la cascada dir-index, saltando exact/file-beats-dir.
         if (forceDir) {
+          // package.json en el dir sombrea el /index (Vite resuelve main/module/exports → posible código
+          // ejecutable ANTES del index; skipPackageJson=false en alias/relativos). Bajo forceDir Vite NO
+          // considera hermanos `<base>.<ext>` (la barra fuerza dir) → basta la EXISTENCIA de package.json,
+          // sin la exclusión file-winner de dirEntryShadowedByPackageJson (que sí aplica a la rama sin-barra).
+          // El gate no lee package.json → fail-closed (§373), paridad de TRATAMIENTO con la rama sin-barra.
+          // Cierra la REGRESIÓN D2 (Fable cross-review 2), incl. el sub-caso con hermano `pkg.ts`.
+          if (fileExists(`${noExt}/package.json`)) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` (barra final) resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+            };
+          }
           const dirHit = resolveDirIndex(noExt, fileExists);
           if (!dirHit) {
             return {
@@ -5259,6 +5328,13 @@ function resolveImportPath(
   const noExt = crossOsResolve(importerDir, specifier);
   // Barra final → DIRECTORIO-only (root D): solo la cascada dir-index, saltando exact/file-beats-dir.
   if (forceDir) {
+    // package.json en el dir sombrea el /index (ver rama alias) → fail-closed. Cierra REGRESIÓN D2.
+    if (fileExists(`${noExt}/package.json`)) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` (barra final) resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+      };
+    }
     const dirHit = resolveDirIndex(noExt, fileExists);
     if (!dirHit) {
       return {
@@ -6058,16 +6134,20 @@ function checkSourceFile(
         });
       }
     }
-    // `Reflect.get(R, "k")` con key STRING-LITERAL ≡ `R["k"]` (root B / Fable): member-read decidible
+    // `Reflect.get(R, "k")` con key (VT-fold canónica) ≡ `R["k"]` (root B / Fable): member-read decidible
     // EN-SITIO. Reusa exprPartialRoot (resuelve R: performance/WebAssembly/console/crypto/process E
     // import.meta, con alias y proyección) + partialMemberDenied (dispatch de polaridad). B2
     // (`Reflect.get(import.meta,"dirname")`) se cierra gratis con el enrolado de import.meta (root C).
-    // Key variable → §141 (reflectGetMemberRead devuelve null).
+    // POLARIDAD: ∃-candidato-denegado → FLAG (partialMemberDenied ya codifica denylist/allowlist por-root,
+    // así que `R[c?"url":"dirname"]` flaggea por la rama denegada). Key variable/ensamblada → Set vacío → §141.
     if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
       const rget = reflectGetMemberRead(node);
       if (rget) {
         const rgRoot = exprPartialRoot(rget.receiver, context);
-        if (rgRoot && partialMemberDenied(rgRoot, rget.member)) {
+        const denied = rgRoot
+          ? [...rget.members].find((m) => partialMemberDenied(rgRoot, m))
+          : undefined;
+        if (denied !== undefined) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
           const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
@@ -6075,7 +6155,7 @@ function checkSourceFile(
             file: relPath,
             rule: "no-bare-dom-access",
             line: line + 1,
-            detail: `\`Reflect.get(${rgRoot}, "${rget.member}")\` ≡ \`${rgRoot}.${rget.member}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
+            detail: `\`Reflect.get(${rgRoot}, "${denied}")\` ≡ \`${rgRoot}.${denied}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
           });
         }
       }
