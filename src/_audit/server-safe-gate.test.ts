@@ -5235,6 +5235,34 @@ describe("server-safe gate — RAÍZ A: proyección container-literal en value-s
   });
 });
 
+// RAÍZ B (re-hunt rc.1 + Fable cross-review): `Reflect.get(R, "k")` con key STRING-LITERAL es un
+// member-read EN-SITIO ≡ `R["k"]`, decidible con los resolvers existentes (R por exprPartialRoot, k
+// literal). El gate modelaba Reflect.construct/apply pero NO 'get' para el eje presencia-de-miembro.
+// DISTINTO del residual §141 del eval-sink (`Reflect.get(x,"constructor")()`: x variable + result-chasing).
+describe("server-safe gate — RAÍZ B: Reflect.get member-read con key literal", () => {
+  const flags = (b: string) =>
+    checkSourceFile(`/** @server-safe */\n${b}`, "rootB.fixture.tsx").length > 0;
+
+  it.each([
+    ["performance member Node-only", `export const x = Reflect.get(performance, "eventLoopUtilization")();`],
+    ["import.meta member Node-only (vía root C)", `export const d = Reflect.get(import.meta, "dirname");`],
+    ["process denegado", `export const x = Reflect.get(process, "cwd");`],
+    ["callee value-transparent", `export const x = (0, Reflect).get(performance, "eventLoopUtilization");`],
+  ])("CIERRA Reflect.get member-read: %s", (_l, code) => {
+    expect(flags(code)).toBe(true);
+  });
+
+  it.each([
+    ["miembro allowlist performance.now", `export const x = Reflect.get(performance, "now");`],
+    ["miembro allowlist import.meta.url", `export const u = Reflect.get(import.meta, "url");`],
+    ["key variable → §141", `export const f = (k: string) => Reflect.get(performance, k);`],
+    ["no-Reflect (Foo.get)", `const Foo = { get: (_a: unknown, _b: unknown) => 1 };\nexport const x = Foo.get(performance, "eventLoopUtilization");`],
+    ["residual §141 eval-sink (receiver variable)", `export const f = (g: unknown) => Reflect.get(g as any, "constructor")();`],
+  ])("no FP / frontera preservada: %s", (_l, code) => {
+    expect(flags(code)).toBe(false);
+  });
+});
+
 describe("server-safe gate — DEEPEST re-hunt #173: FPs fase calidad (lote 1)", () => {
   const flagged = (code: string) =>
     checkSourceFile(code, "fp.fixture.tsx").length > 0;

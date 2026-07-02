@@ -3716,6 +3716,39 @@ function reflectCallTarget(n) {
   return null;
 }
 
+// ¿`n` es `Reflect.get(R, "k")` con key STRING-LITERAL? → {receiver: R, member: "k"}. Es un member-read
+// EN-SITIO ≡ `R["k"]`, decidible con los MISMOS resolvers (R por exprPartialRoot, k literal), NO data-flow
+// → gap a cerrar para el eje PRESENCIA-DE-MIEMBRO (root B / Fable). El gate ya modela Reflect.construct/
+// apply (reflectCallTarget); 'get' faltaba para este eje. DISTINTO del residual §141 documentado de
+// `Reflect.get(x,"constructor")()` (eje EVAL-SINK: x variable + result-chasing por invocación). Key
+// VARIABLE (`Reflect.get(R,k)`) → §141 (paridad con `R[dynKey]`). Callee value-transparent (`(0,Reflect).get`).
+function reflectGetMemberRead(n) {
+  if (!ts.isCallExpression(n) || n.arguments.length < 2) return null;
+  for (const callee of valueTransparentLeaves(unwrapErased(n.expression))) {
+    const c = unwrapErased(callee);
+    if (
+      !ts.isPropertyAccessExpression(c) &&
+      !ts.isElementAccessExpression(c)
+    ) {
+      continue;
+    }
+    const isGet = accessedMemberNames(c).some((x) => x === "get");
+    const isReflect =
+      isGet &&
+      valueTransparentLeaves(c.expression).some((o) => {
+        const oo = unwrapErased(o);
+        return ts.isIdentifier(oo) && oo.text === "Reflect";
+      });
+    if (isReflect) {
+      const key = unwrapErased(n.arguments[1]);
+      if (ts.isStringLiteralLike(key)) {
+        return { receiver: n.arguments[0], member: key.text };
+      }
+    }
+  }
+  return null;
+}
+
 // Targets de CONSTRUCCIÓN de `expr`: hojas value-survival, DESLIGANDO `.bind(...)` recursivamente (un
 // constructor LIGADO, al `new`, construye el ORIGINAL: `new (X.M.bind(t,...a))()` ≡ `new X.M(...a)`).
 // SIN cap (termina por descenso del AST). Compartido por el check `NewExpression` Y `Reflect.construct`
@@ -5931,6 +5964,28 @@ function checkSourceFile(
           line: line + 1,
           detail: `\`import.meta.${unsafe}\` — miembro Node-only, ausente del \`import.meta\` del baseline Edge/web-standard → lanza en SSR/render. Disponible-en-Edge: ${[...SAFE_IMPORT_META_MEMBERS].join("/")} (subset definitivo en #190): ${lineText}`,
         });
+      }
+    }
+    // `Reflect.get(R, "k")` con key STRING-LITERAL ≡ `R["k"]` (root B / Fable): member-read decidible
+    // EN-SITIO. Reusa exprPartialRoot (resuelve R: performance/WebAssembly/console/crypto/process E
+    // import.meta, con alias y proyección) + partialMemberDenied (dispatch de polaridad). B2
+    // (`Reflect.get(import.meta,"dirname")`) se cierra gratis con el enrolado de import.meta (root C).
+    // Key variable → §141 (reflectGetMemberRead devuelve null).
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      const rget = reflectGetMemberRead(node);
+      if (rget) {
+        const rgRoot = exprPartialRoot(rget.receiver, context);
+        if (rgRoot && partialMemberDenied(rgRoot, rget.member)) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail: `\`Reflect.get(${rgRoot}, "${rget.member}")\` ≡ \`${rgRoot}.${rget.member}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
+          });
+        }
       }
     }
     // `import.meta.glob(...)` / `import.meta.globEager(...)` — bulk-import de Vite que carga N módulos por
