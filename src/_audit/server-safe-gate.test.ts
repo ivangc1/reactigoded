@@ -6269,3 +6269,246 @@ describe("server-safe gate — Auditoría B R5 (PR-R5-A): 6 unificaciones + O4 +
     });
   });
 });
+
+describe("server-safe gate — #7 (D1-b): hoist monotónico de asignaciones a bindings exteriores", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "d7.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  describe("target (el fix): asignación en scope anidado → binding exterior", () => {
+    it.each([
+      ["B block→outer", `export function f(){ let c:any; { c = performance; } return c.eventLoopUtilization(); }`],
+      ["C fn→outer", `export function f(){ let c:any; function g(){ c = performance; } g(); return c.eventLoopUtilization(); }`],
+      ["C-split ??= en closure", `export function f(){ let cached:any; function ensure(){ cached ??= performance; } ensure(); return cached.eventLoopUtilization(); }`],
+      ["RHS multi-rama en block", `export function f(k:boolean){ let c:any; { c = k?crypto:performance; } return c.eventLoopUtilization(); }`],
+      ["var en block, leída fuera (function-scoped)", `export function f(){ { var c:any = performance; } return c.eventLoopUtilization(); }`],
+    ])("FLAG: %s", (_n, body) => {
+      expect(flagged(`${W}${body}`)).toBe(true);
+    });
+  });
+
+  describe("shadowing POR-BINDING (el criterio de validez): interior FLAG, exterior SILENT", () => {
+    it("shadow en block: el interior no contamina el exterior", () => {
+      // exterior aislado (interior usa .now, safe) → el binding exterior NO se taintea.
+      expect(
+        flagged(`${W}export function f(){ let c:any; { let c:any = performance; void c; } return c.eventLoopUtilization(); }`),
+      ).toBe(false);
+    });
+    it("shadow a través de frontera de FUNCIÓN (donde un mapa por-nombre fallaría): exterior SILENT", () => {
+      expect(
+        flagged(`${W}export function f(){ let c:any; function g(){ let c:any = performance; return c.now; } g(); return c.eventLoopUtilization(); }`),
+      ).toBe(false);
+    });
+    it("param-shadow: fn(x){ x = performance } no taintea el exterior x", () => {
+      expect(
+        flagged(`${W}export function f(){ let x:any; function g(x:any){ x = performance; return x; } return g(1); }`),
+      ).toBe(false);
+    });
+  });
+
+  describe("coste ratificado — DOS caras (fail-closed FP); read-before-assign es out-of-mandate, no coste", () => {
+    it("no-kill / O1: reasignar a un valor seguro no purga → FLAG (monotónico, sin kill-set)", () => {
+      expect(
+        flagged(`${W}export function f(){ let p:any; { p = performance; } p = { eventLoopUtilization(){ return 1; } }; return p.eventLoopUtilization(); }`),
+      ).toBe(true);
+    });
+    it("asignación INALCANZABLE (rama muerta) → FLAG (monotónico, sin alcanzabilidad)", () => {
+      expect(
+        flagged(`${W}export function f(){ let p:any; if (false) { p = performance; } return p.eventLoopUtilization(); }`),
+      ).toBe(true);
+    });
+    it("read-before-assign → SILENT: es out-of-mandate (undefined.member crashea UNIVERSAL, no divergencia-Edge)", () => {
+      expect(
+        flagged(`${W}export function f(){ let p:any; const r = p.eventLoopUtilization(); { p = performance; } return r; }`),
+      ).toBe(false);
+      // paridad con la forma directa (idéntico out-of-mandate):
+      expect(
+        flagged(`${W}export function f(){ let p:any; return p.eventLoopUtilization(); }`),
+      ).toBe(false);
+    });
+  });
+
+  describe("renunciados (medidos SILENT) + preexistentes pineados", () => {
+    it.each([
+      ["member-LHS obj.p=performance", `export function f(){ const o:any={}; { o.p = performance; } return o.p.eventLoopUtilization(); }`, true],
+      ["call-flow c=g() (RHS retorno de fn)", `function g():any{ return performance; }\nexport function f(){ let c:any; { c = g(); } return c.eventLoopUtilization(); }`, true],
+      ["copia-como-RHS c={...performance}", `export function f(){ let c:any; { c = {...performance}; } return c.eventLoopUtilization(); }`, true],
+      ["A same-scope (preexistente, pin)", `export function f(){ let c:any; c = performance; return c.eventLoopUtilization(); }`, false],
+      ["E assign+use en la misma fn (preexistente, pin)", `export function f(){ let c:any; function g(){ c = performance; return c.eventLoopUtilization(); } return g(); }`, false],
+      ["F pattern-assign [c]=[performance] (preexistente, pin: FLAG, no renunciado)", `export function f(){ let c:any; [c] = [performance]; return c.eventLoopUtilization(); }`, false],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${W}${body}`)).toBe(!silent);
+    });
+  });
+});
+
+describe("server-safe gate — #7 vista diferida + INV-ORDER (D1-b rama 2)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "d7def.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  describe("lecturas diferidas (cuerpo de función/arrow) ven la unión full-scope insensible al orden", () => {
+    it.each([
+      ["P-DEF-1 split use()arriba setUp()abajo", `export function f(){ let c:any; function use(){ return c.eventLoopUtilization(); } function setUp(){ c = performance; } setUp(); return use(); }`],
+      ["P-DEF-2 assign top-level tras la fn que lee", `export function f(){ let c:any; function use(){ return c.eventLoopUtilization(); } c = performance; return use(); }`],
+      ["P-DEF-4 arrow const", `export function f(){ let c:any; const use = () => c.eventLoopUtilization(); c = performance; return use(); }`],
+      ["diferido + assign en block anidado", `export function f(){ let c:any; const use = () => c.eventLoopUtilization(); { c = performance; } return use(); }`],
+    ])("FLAG: %s", (_n, body) => {
+      expect(flagged(`${W}${body}`)).toBe(true);
+    });
+  });
+
+  it("vista FORWARD preservada: read-before-assign en posición-statement = out-of-mandate SILENT", () => {
+    expect(
+      flagged(`${W}export function f(){ let p:any; const r = p.eventLoopUtilization(); { p = performance; } return r; }`),
+    ).toBe(false);
+  });
+
+  describe("shadowing por-binding a través de frontera de función (la vista diferida NO contamina el shadow)", () => {
+    it.each([
+      ["body local c shadow", `export function f(){ let c:any; function g(){ let c:any = performance; return c.now; } g(); return c.eventLoopUtilization(); }`],
+      ["param shadow", `export function f(){ let c:any; function g(cc:any){ return cc.eventLoopUtilization(); } c = performance; return g(1); }`],
+      ["const alias + param shadow (regresión del test previo)", `export function f(){ const WA = WebAssembly; function g(WA:any){ return WA.compile("x"); } return g; }`],
+    ])("SILENT: %s", (_n, body) => {
+      expect(flagged(`${W}${body}`)).toBe(false);
+    });
+  });
+
+  // INV-ORDER: simetría de orden de DECLARACIÓN para pares (asignación, lectura-DIFERIDA). Tercer invariante de
+  // simetría (operandos: INV-SYM; wrappers: INV-WRAP; orden de declaración: INV-ORDER). Habría cazado el FN
+  // orden-dependiente de la vista forward pura (P-DEF).
+  describe("INV-ORDER: veredicto(D_assign; D_use) === veredicto(D_use; D_assign) para lectura diferida", () => {
+    it.each<[string, (order: "au" | "ua") => string]>([
+      [
+        "fn-decl split",
+        (o) =>
+          o === "au"
+            ? `let c:any; function setUp(){ c = performance; } function use(){ return c.eventLoopUtilization(); } setUp(); return use();`
+            : `let c:any; function use(){ return c.eventLoopUtilization(); } function setUp(){ c = performance; } setUp(); return use();`,
+      ],
+      [
+        "arrow + top-level assign",
+        (o) =>
+          o === "au"
+            ? `let c:any; c = performance; const use = () => c.eventLoopUtilization(); return use();`
+            : `let c:any; const use = () => c.eventLoopUtilization(); c = performance; return use();`,
+      ],
+    ])("%s: ambos órdenes coinciden y FLAG", (_n, form) => {
+      const au = flagged(`${W}export function f(){ ${form("au")} }`);
+      const ua = flagged(`${W}export function f(){ ${form("ua")} }`);
+      expect(au).toBe(ua);
+      expect(au).toBe(true);
+    });
+  });
+});
+
+describe("server-safe gate — #7 dos vistas: INV-VIEW + celdas diferidas (P-DEF-6, shadow, field-init)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "invview.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  describe("P-DEF-6 / P-CHAIN: RHS alias en diferida = ∃ sobre órdenes (punto fijo → INV-VIEW por construcción)", () => {
+    it.each([
+      ["const A=performance; c=A; use() diferido → FLAG", `let c:any; function use(){ return c.eventLoopUtilization(); } const A = performance; c = A; return use();`, false],
+      ["forward const A=performance; c=A; c.elu() → FLAG", `let c:any; const A = performance; c = A; return c.eventLoopUtilization();`, false],
+      // let-ASSIGNMENT-chain: la diferida es ∃ sobre órdenes (punto fijo) → `c=d` taintea c con lo que d pueda
+      // valer → FLAG en AMBOS órdenes. La forward mantiene precisión de orden (o1 FLAG, o2 out-of-mandate SILENT).
+      ["let-chain d=perf; c=d DIFERIDO → FLAG (∃ órdenes)", `let c:any; let d:any; function use(){ return c.eventLoopUtilization(); } d = performance; c = d; return use();`, false],
+      ["let-chain c=d; d=perf DIFERIDO → FLAG (∃ órdenes, inverso)", `let c:any; let d:any; function use(){ return c.eventLoopUtilization(); } c = d; d = performance; return use();`, false],
+      ["let-chain d=perf; c=d FORWARD → FLAG (orden favorable)", `let c:any; let d:any; d = performance; c = d; return c.eventLoopUtilization();`, false],
+      ["let-chain c=d; d=perf FORWARD → SILENT (out-of-mandate: c=undefined)", `let c:any; let d:any; c = d; d = performance; return c.eventLoopUtilization();`, true],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${W}export function f(){ ${body} }`)).toBe(!silent);
+    });
+  });
+
+  describe("P-SHADOW-DEF: la vista diferida no filtra por-nombre al redeclarar", () => {
+    it("inner lee la c LOCAL de outer (redeclarada, ={}) → el módulo c=performance NO filtra", () => {
+      expect(
+        flagged(`${W}let c:any;\nexport function outer(){ let c:any; function inner(){ return c.eventLoopUtilization(); } c = {}; return inner(); }\nc = performance; outer();`),
+      ).toBe(false);
+    });
+    it("control sin shadow: inner ve el módulo c=performance (diferido) → FLAG", () => {
+      expect(
+        flagged(`${W}let c:any;\nexport function outer(){ function inner(){ return c.eventLoopUtilization(); } return inner(); }\nc = performance; outer();`),
+      ).toBe(true);
+    });
+  });
+
+  describe("contexto diferido (predicado F4): field-init/param-default diferidos, static-field eager", () => {
+    it.each([
+      ["field-init de INSTANCIA (corre en new) → diferido FLAG", `let c:any; class K { p:any = c.eventLoopUtilization(); } c = performance; return new K();`, false],
+      ["param-default (corre al llamar) → diferido FLAG", `let c:any; function g(x:any = c.eventLoopUtilization()){ return x; } c = performance; return g();`, false],
+      ["static-field EAGER pre-assign → forward SILENT", `let c:any; class K { static p:any = c.eventLoopUtilization(); } c = performance; return K;`, true],
+      ["static-field EAGER post-assign → forward FLAG", `let c:any; c = performance; class K { static p:any = c.eventLoopUtilization(); } return K;`, false],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${W}export function f(){ ${body} }`)).toBe(!silent);
+    });
+  });
+
+  // INV-VIEW (cuarto invariante del kit): MONOTONICIDAD ENTRE VISTAS — si una lectura en posición-statement al
+  // FINAL del scope flaggea, toda lectura DIFERIDA del mismo binding flaggea (`diferida ⊇ forward-fin-de-scope`).
+  // Habría cazado el desacuerdo entre vistas de P-DEF-6 (que INV-ORDER no ve, ambos órdenes diferidos simétricos).
+  describe("INV-VIEW: diferida ⊇ forward-fin-de-scope", () => {
+    it.each([
+      ["assign top-level", `c = performance;`],
+      ["assign en block", `{ c = performance; }`],
+      ["const-alias chain", `const A = performance; c = A;`],
+      ["assign en fn anidada", `function setUp(){ c = performance; } setUp();`],
+    ])("%s: forward-fin FLAG ⟹ diferida FLAG", (_n, assign) => {
+      const fwd = flagged(`${W}export function f(){ let c:any; ${assign} return c.eventLoopUtilization(); }`);
+      const def = flagged(`${W}export function f(){ let c:any; const use = () => c.eventLoopUtilization(); ${assign} return use(); }`);
+      expect(fwd).toBe(true); // los cuatro son hazards al fin de scope
+      expect(def).toBe(true); // ⟹ la vista diferida también flaggea (monotonicidad)
+    });
+  });
+});
+
+describe("server-safe gate — #7 celdas del cuantificador diferido (batería adversarial de Fable)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "cells.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  describe("P-DEF-7: declaración const ANIDADA resuelta por decl-threading", () => {
+    it.each([
+      ["forward { const A=perf; c=A; } c.elu()", `let c:any; { const A = performance; c = A; } return c.eventLoopUtilization();`, false],
+      ["diferido use(){c.elu()} { const A=perf; c=A; } use()", `let c:any; function use(){ return c.eventLoopUtilization(); } { const A = performance; c = A; } return use();`, false],
+    ])("FLAG: %s", (_n, body) => {
+      expect(flagged(`${W}export function f(){ ${body} }`)).toBe(true);
+    });
+  });
+
+  describe("P-SHADOW-CASE: `let` directo en clause (CaseBlock-scoped) no fuga a la unión exterior", () => {
+    it("let c interior en case + c=perf; use() exterior → SILENT (no fuga por-nombre)", () => {
+      expect(
+        flagged(`${W}export function f(k:number){ let c:any; function use(){ return c.eventLoopUtilization(); } switch(k){ case 1: let c:any; c = performance; break; } return use(); }`),
+      ).toBe(false);
+    });
+    it("control: assign a la c EXTERIOR en el case → FLAG (diferido lo ve)", () => {
+      expect(
+        flagged(`${W}export function f(k:number){ let c:any; function use(){ return c.eventLoopUtilization(); } switch(k){ case 1: c = performance; break; } return use(); }`),
+      ).toBe(true);
+    });
+  });
+
+  describe("P-KEY-EAGER: la clave computada de un field-init es EAGER (forward), no diferida", () => {
+    it("[c.elu()] key eager pre-assign → SILENT (class-eval, c undefined = out-of-mandate)", () => {
+      expect(
+        flagged(`${W}export function f(){ let c:any; class K { [c.eventLoopUtilization()]:any = 1; } c = performance; return K; }`),
+      ).toBe(false);
+    });
+    it("el INICIALIZADOR del field (diferido) sí ve la unión → FLAG", () => {
+      expect(
+        flagged(`${W}export function f(){ let c:any; class K { p:any = c.eventLoopUtilization(); } c = performance; return new K(); }`),
+      ).toBe(true);
+    });
+  });
+
+  describe("P-CLASSEXPR: class expression anónima (HOC) recibe la inyección diferida", () => {
+    it("const K = class { p = c.elu() }; c = performance; new K() → FLAG", () => {
+      expect(
+        flagged(`${W}export function f(){ let c:any; const K = class { p:any = c.eventLoopUtilization(); }; c = performance; return new K(); }`),
+      ).toBe(true);
+    });
+  });
+});

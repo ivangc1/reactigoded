@@ -3010,6 +3010,180 @@ function addPartialAliases(context, stmt) {
 }
 
 /**
+ * HOIST de aliases de asignación a bindings EXTERIORES desde los scopes anidados de `stmt` (Auditoría B R5 /
+ * #7, D1-b — enmienda medida de la frontera FIX-2). El tracking base (addPartialAliases / eachEmbeddedAssignment)
+ * YA cubre same-scope y pattern-assign estructural; el gap MEDIDO era la asignación DENTRO de un block/función
+ * anidada a un binding declarado FUERA, usado tras el scope anidado (`let c; { c = performance; } c.elu()` y
+ * `let c; function g(){ c = performance; } g(); c.elu()`). Unión MONOTÓNICA: sin kill-set, orden ni alcanzabilidad
+ * — léxico y sintáctico; orden/camino/llamadas siguen §141. POR-BINDING (criterio de shadowing): un let/const/
+ * param/class/función INTERIOR sombrea → sus asignaciones NO propagan (el interior NO contamina el exterior).
+ * `var` es function-scoped → SÍ propaga. RHS por `exprPartialRoots` (multi-rama gratis; copias {...R}/assign NO
+ * resuelven → renunciadas por medición). member-LHS y pattern-LHS renunciados (solo identifier-LHS). Devuelve
+ * Map<name, Set<root>> de los bindings EXTERIORES enrolados.
+ */
+function hoistNestedAssignmentAliases(stmt, context) {
+  const out = new Map();
+  const emit = (name, roots) => {
+    if (!roots || roots.size === 0) return;
+    const prev = out.get(name);
+    out.set(name, prev ? new Set([...prev, ...roots]) : roots);
+  };
+  const isAliasOp = (k) =>
+    k === ts.SyntaxKind.EqualsToken ||
+    k === ts.SyntaxKind.QuestionQuestionEqualsToken ||
+    k === ts.SyntaxKind.BarBarEqualsToken ||
+    k === ts.SyntaxKind.AmpersandAmpersandEqualsToken;
+  const isFnLike = (n) =>
+    ts.isFunctionDeclaration(n) ||
+    ts.isFunctionExpression(n) ||
+    ts.isArrowFunction(n) ||
+    ts.isMethodDeclaration(n) ||
+    ts.isConstructorDeclaration(n) ||
+    ts.isGetAccessorDeclaration(n) ||
+    ts.isSetAccessorDeclaration(n);
+  // Declaraciones const/structural DIRECTAS de una lista de statements — para DECL-THREADING al descender
+  // (P-DEF-7): un `{ const A = performance; c = A; }` debe resolver `c = A` contra la `A` LOCAL del bloque
+  // (posición-independiente por la misma lógica call-time). Solo declaraciones (VariableStatement/import-equals),
+  // NO assignments (esos son value-flow orden-dependiente = el punto fijo del scope los maneja como ∃).
+  const declAliasesOf = (stmts, ctx) => {
+    const m = new Map();
+    for (const s of stmts) {
+      if (ts.isVariableStatement(s) || ts.isImportEqualsDeclaration(s)) {
+        for (const [n, r] of partialAliasesDeclaredBy(s, ctx)) m.set(n, r);
+      }
+    }
+    return m;
+  };
+  const walk = (node, shadowed, ctx) => {
+    if (!node) return;
+    // (1) var-decl con init a un binding NO sombreado (`var` = function-scoped → propaga al scope de función).
+    if (
+      ts.isVariableStatement(node) &&
+      !isBlockScopedDeclList(node.declarationList.flags)
+    ) {
+      for (const d of node.declarationList.declarations) {
+        if (
+          ts.isIdentifier(d.name) &&
+          d.initializer &&
+          !shadowed.has(d.name.text)
+        ) {
+          emit(d.name.text, exprPartialRoots(d.initializer, ctx));
+        }
+      }
+    }
+    // (2) asignación identifier-LHS (=, ??=, ||=, &&=) a un binding NO sombreado. RHS contra `ctx` (enriquecido
+    // con las declaraciones del nivel + el punto fijo del scope) → `c = A`/`c = d` resuelven donde deban.
+    if (
+      ts.isBinaryExpression(node) &&
+      isAliasOp(node.operatorToken.kind) &&
+      ts.isIdentifier(node.left) &&
+      !shadowed.has(node.left.text)
+    ) {
+      emit(node.left.text, exprPartialRoots(node.right, ctx));
+    }
+    // (3) descender, SOMBREANDO los block-scoped del scope anidado (por-binding) + DECL-THREADING del nivel.
+    let childShadow = shadowed;
+    let childCtx = ctx;
+    if (ts.isBlock(node) || ts.isModuleBlock(node)) {
+      childShadow = new Set(shadowed);
+      for (const n of gatherBlockLexicalNames(node.statements)) childShadow.add(n);
+      const decls = declAliasesOf(node.statements, ctx);
+      if (decls.size) childCtx = mergePartialAliases(ctx, decls);
+    } else if (ts.isCaseBlock(node)) {
+      // CaseBlock = UN scope léxico compartido por TODAS las clauses (P-SHADOW-CASE): sus let/const sombran el
+      // subtree (un `let c` directo en un `case` es CaseBlock-scoped → su asignación NO fuga al exterior).
+      childShadow = new Set(shadowed);
+      const allStmts = node.clauses.flatMap((cl) => cl.statements);
+      for (const n of gatherBlockLexicalNames(allStmts)) childShadow.add(n);
+      const decls = declAliasesOf(allStmts, ctx);
+      if (decls.size) childCtx = mergePartialAliases(ctx, decls);
+    } else if (isFnLike(node)) {
+      childShadow = new Set(shadowed);
+      for (const p of node.parameters) {
+        addBindingNamesFromPattern(p.name, childShadow);
+      }
+      if (node.name && ts.isIdentifier(node.name)) childShadow.add(node.name.text);
+    } else if (
+      ts.isForStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isForOfStatement(node)
+    ) {
+      const init = node.initializer;
+      if (
+        init &&
+        ts.isVariableDeclarationList(init) &&
+        isBlockScopedDeclList(init.flags)
+      ) {
+        childShadow = new Set(shadowed);
+        for (const d of init.declarations) {
+          addBindingNamesFromPattern(d.name, childShadow);
+        }
+      }
+    } else if (ts.isCatchClause(node) && node.variableDeclaration) {
+      childShadow = new Set(shadowed);
+      addBindingNamesFromPattern(node.variableDeclaration.name, childShadow);
+    }
+    ts.forEachChild(node, (c) => walk(c, childShadow, childCtx));
+  };
+  walk(stmt, new Set(), context);
+  return out;
+}
+
+/** Une (monotónico) el Map<name,Set<root>> `extra` en el scopePartialAliases de `context` (Auditoría B R5 / #7). */
+function mergePartialAliases(context, extra) {
+  if (!extra || extra.size === 0) return context;
+  const merged = new Map(context.scopePartialAliases ?? []);
+  for (const [name, roots] of extra) {
+    const prev = merged.get(name);
+    merged.set(name, prev ? new Set([...prev, ...roots]) : roots);
+  }
+  return { ...context, scopePartialAliases: merged };
+}
+
+/**
+ * VISTA DIFERIDA (Auditoría B R5 / #7, D1-b rama 2): unión FULL-SCOPE de los aliases de asignación de una lista
+ * de statements, resuelta a PUNTO FIJO. Un cuerpo diferido (fn/arrow/método/field-init/param-default) LEE a
+ * call-time → la vista diferida es ∃ SOBRE ÓRDENES DE EJECUCIÓN (la doctrina ∃ del gate en el eje temporal):
+ * `c = d` taintea `c` con TODO lo que `d` pueda llegar a valer. El punto fijo (`ctx = context ⊕ unión-parcial`,
+ * iterar hasta estable; dominio finito de roots → ≤ #stmts pasos) cierra las cadenas por asignación en CUALQUIER
+ * orden, y hace que **INV-VIEW** (`diferida ⊇ forward-fin-de-scope`) se cumpla POR CONSTRUCCIÓN: el punto-fijo-
+ * DESordenado ⊇ cualquier aplicación ordenada = forward-fin. Contrasta con la vista FORWARD (posición-statement:
+ * solo asignaciones anteriores, con PRECISIÓN de orden → preserva read-before-assign SILENT out-of-mandate). El
+ * orden inverso `c = d; d = performance` es forward-SILENT (out-of-mandate) pero diferida-FLAG (∃ órdenes) —
+ * divergencia PERMITIDA porque INV-VIEW es ⊇ unidireccional. Custodia: INV-ORDER + INV-VIEW. Mismo eje que F4.
+ */
+function scopeAssignmentUnion(statements, context) {
+  let acc = new Map();
+  for (let iter = 0; iter <= statements.length; iter++) {
+    const ctx = acc.size ? mergePartialAliases(context, acc) : context;
+    const next = new Map();
+    for (const stmt of statements) {
+      for (const [name, roots] of hoistNestedAssignmentAliases(stmt, ctx)) {
+        const prev = next.get(name);
+        next.set(name, prev ? new Set([...prev, ...roots]) : roots);
+      }
+    }
+    let stable = next.size === acc.size;
+    if (stable) {
+      for (const [name, roots] of next) {
+        const prev = acc.get(name);
+        if (
+          !prev ||
+          prev.size !== roots.size ||
+          [...roots].some((r) => !prev.has(r))
+        ) {
+          stable = false;
+          break;
+        }
+      }
+    }
+    acc = next;
+    if (stable) break;
+  }
+  return acc;
+}
+
+/**
  * Purga de `scopeTimerAliases` / `scopePartialAliases` los nombres que `names` REDECLARA en este
  * scope (param/const/función/…). Un binding homónimo SOMBREA el alias → en este scope ya no es el
  * global (codex P2: `const later = setTimeout; function f(later){ later("x") }`). Devuelve solo los
@@ -6696,10 +6870,32 @@ function checkSourceFile(
       ) {
         fnScopeBindings.add(node.name.text);
       }
+      // VISTA DIFERIDA (#7, D1-b rama 2): el body lee a call-time → ve la unión FULL-SCOPE de asignaciones de
+      // los scopes ENCLOSING (`deferredAssignAliases`), insensible al orden textual — no solo las forward-
+      // acumuladas hasta la posición de la función. EXCLUYE los bindings PROPIOS del body (params/var/nombre):
+      // sombrean el enclosing → no se inyecta su alias (criterio por-binding a través de la frontera de función).
+      // Base = scopePartialAliases YA purgado por addToScope (shadow de params/locals sobre el alias del
+      // enclosing — p.ej. `const WA=WebAssembly; function g(WA){ WA.compile() }` purga WA). Sobre esa base se
+      // mergea la unión diferida (excluyendo los bindings propios del body, mismo criterio de shadow).
+      const scoped = addToScope(context, fnScopeBindings);
+      const deferredForBody = context.deferredAssignAliases;
+      const bodyPartialAliases =
+        deferredForBody && deferredForBody.size > 0
+          ? (() => {
+              const m = new Map(scoped.scopePartialAliases ?? []);
+              for (const [name, roots] of deferredForBody) {
+                if (fnScopeBindings.has(name)) continue;
+                const prev = m.get(name);
+                m.set(name, prev ? new Set([...prev, ...roots]) : roots);
+              }
+              return m;
+            })()
+          : scoped.scopePartialAliases;
       // Acumular con outer scope. Estas bindings son TODAS non-import
       // (parameters + var hoisted dentro del fn body).
       const bodyContext = {
-        ...addToScope(context, fnScopeBindings),
+        ...scoped,
+        scopePartialAliases: bodyPartialAliases,
         // Dentro de un cuerpo de función: los reads son call-time. Un nombre
         // declarado a NIVEL DE MÓDULO leído aquí ya está inicializado al llamarse
         // (módulo evaluado) → es un local, no un global, independientemente del
@@ -6889,12 +7085,47 @@ function checkSourceFile(
     // self-reference se flaggeaba como global bare (FP, re-hunt). El nombre no es
     // un global → añadirlo solo quita FP; si colisiona con un global, la clase
     // LO SOMBREA de verdad (runtime). beta.27 BLOCKER-1.
-    if (
-      (ts.isClassDeclaration(node) || ts.isClassExpression(node)) &&
-      node.name
-    ) {
-      const classCtx = addToScope(context, new Set([node.name.text]));
-      ts.forEachChild(node, (child) => visit(child, classCtx));
+    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+      // El nombre de la clase (si lo tiene) es un binding en scope dentro de su cuerpo (self-ref). Una class
+      // EXPRESSION anónima (`const K = class { … }`, patrón HOC) no tiene nombre → classCtx = context (P-CLASSEXPR).
+      const classCtx =
+        node.name && ts.isIdentifier(node.name)
+          ? addToScope(context, new Set([node.name.text]))
+          : context;
+      // Field-inits de INSTANCIA corren en `new` (DIFERIDO) → su INICIALIZADOR ve la unión FULL-SCOPE (celda
+      // field-init). La CLAVE COMPUTADA es EAGER (class-eval, como el static-block) → forward (classCtx),
+      // P-KEY-EAGER. Static field-inits / static blocks siguen EAGER. Métodos tienen su propio bodyContext.
+      const du = context.deferredAssignAliases;
+      const deferredClassCtx =
+        du && du.size > 0
+          ? (() => {
+              const m = new Map(classCtx.scopePartialAliases ?? []);
+              for (const [name, roots] of du) {
+                const prev = m.get(name);
+                m.set(name, prev ? new Set([...prev, ...roots]) : roots);
+              }
+              return { ...classCtx, scopePartialAliases: m };
+            })()
+          : classCtx;
+      ts.forEachChild(node, (child) => {
+        const isInstanceFieldInit =
+          ts.isPropertyDeclaration(child) &&
+          child.initializer &&
+          !(ts.getModifiers(child) ?? []).some(
+            (mo) => mo.kind === ts.SyntaxKind.StaticKeyword,
+          );
+        if (isInstanceFieldInit) {
+          // clave computada (`[c.x]`) = EAGER → classCtx; inicializador = DIFERIDO → deferredClassCtx.
+          ts.forEachChild(child, (part) =>
+            visit(
+              part,
+              part === child.initializer ? deferredClassCtx : classCtx,
+            ),
+          );
+        } else {
+          visit(child, classCtx);
+        }
+      });
       return;
     }
 
@@ -7120,6 +7351,12 @@ function checkSourceFile(
           clauseCtx = addTimerAliases(clauseCtx, stmt);
           // Alias de root parcial-safe (`const WA = WebAssembly`) — codex P2.
           clauseCtx = addPartialAliases(clauseCtx, stmt);
+          // #7 (D1-b): HOIST de asignaciones a bindings exteriores desde scopes anidados (paridad con
+          // visitOrderedStatements — walker paralelo del CaseBlock).
+          clauseCtx = mergePartialAliases(
+            clauseCtx,
+            hoistNestedAssignmentAliases(stmt, clauseCtx),
+          );
           // Guard alias `const has = typeof X !== "undefined"` (narrowing — se resuelve contra
           // clauseCtx.guardAliases; propaga al siguiente clause solo con fall-through).
           const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
@@ -8193,6 +8430,48 @@ function checkSourceFile(
       ...addToScope(context, preloadedFns),
       blockEntryGuards: context.activeGuards,
     };
+    // VISTA DIFERIDA (#7, D1-b rama 2): la unión FULL-SCOPE (insensible al orden) de las asignaciones de ESTE
+    // scope, acumulada con la de los scopes ENCLOSING, se thread-ea en `deferredAssignAliases` para que los
+    // cuerpos de función/arrow declarados aquí (reads call-time) la vean sin importar la posición textual de la
+    // asignación. Las lecturas en posición-de-statement siguen la vista FORWARD (scopePartialAliases threadeado).
+    {
+      // Fix 2 (P-SHADOW-DEF): purga del mapa diferido HEREDADO los nombres que ESTE scope REDECLARA
+      // (block-lexical) → un `let c` local no hereda el `c→root` de un scope exterior (evita en la vista
+      // diferida el mismo FP por-nombre que la forward doma). Los bindings PROPIOS de este scope sí entran.
+      const shadowedHere = gatherBlockLexicalNames(statements);
+      const du = new Map();
+      for (const [name, roots] of context.deferredAssignAliases ?? []) {
+        if (!shadowedHere.has(name)) du.set(name, roots);
+      }
+      // Fix 1 (P-DEF-6 / INV-VIEW): la unión resuelve el RHS contra un contexto ENRIQUECIDO con los alias
+      // const/structural DECLARADOS en el scope (declaraciones = independientes de posición, misma lógica
+      // call-time que F4) → `const A = performance; c = A` taintea `c` en la diferida igual que en la forward.
+      // Las cadenas por let-ASIGNACIÓN (`d = performance; c = d`) siguen §141 (no son declaraciones).
+      let unionCtx = context;
+      const scopeConstAliases = new Map();
+      for (const stmt of statements) {
+        // SOLO DECLARACIONES (const/let/var-con-init + import-equals) — independientes de posición (el binding
+        // se inicializa una vez, call-time). Las ExpressionStatement ASIGNACIONES (`d = performance`) NO se
+        // enriquecen: la cadena `d = performance; c = d` es value-flow ORDEN-dependiente (§141) — `c = d` vale
+        // lo que valga `d` en ESE punto, que la unión insensible al orden no puede modelar.
+        if (
+          ts.isVariableStatement(stmt) ||
+          ts.isImportEqualsDeclaration(stmt)
+        ) {
+          for (const [name, roots] of partialAliasesDeclaredBy(stmt, context)) {
+            scopeConstAliases.set(name, roots);
+          }
+        }
+      }
+      if (scopeConstAliases.size > 0) {
+        unionCtx = mergePartialAliases(context, scopeConstAliases);
+      }
+      for (const [name, roots] of scopeAssignmentUnion(statements, unionCtx)) {
+        const prev = du.get(name);
+        du.set(name, prev ? new Set([...prev, ...roots]) : roots);
+      }
+      current = { ...current, deferredAssignAliases: du };
+    }
     // TDZ / lexical scope: un `const`/`let`/`class`/`function` block-scoped con el nombre
     // de un guard-alias OUTER lo SOMBREA para TODO el bloque (no solo tras su declaración).
     // La purga posicional de addToScope no cubre los usos ANTERIORES a la declaración
@@ -8232,6 +8511,9 @@ function checkSourceFile(
       current = addTimerAliases(current, stmt);
       // Alias de root parcial-safe (`const WA = WebAssembly`) → reconocer `WA.compile()` (codex P2).
       current = addPartialAliases(current, stmt);
+      // #7 (D1-b): HOIST de asignaciones a bindings EXTERIORES desde scopes anidados de `stmt` (block/función)
+      // → los statements POSTERIORES del scope actual las ven (`let c; { c=performance; } c.elu()`). Por-binding.
+      current = mergePartialAliases(current, hoistNestedAssignmentAliases(stmt, current));
       // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
       // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
       // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
