@@ -3054,6 +3054,21 @@ function hoistNestedAssignmentAliases(stmt, context) {
     }
     return m;
   };
+  // ctx de resolución del scope hijo (BLOQUEO 2): PURGA los nombres redeclarados (sombreados) del alias-map
+  // ANTES de mergear las decls locales. Sin la purga, el RHS de una asignación en el hijo (`c = x`) resolvería
+  // `x` contra el alias EXTERIOR de un homónimo local → FP. Orden purge→merge OBLIGATORIO: mergePartialAliases
+  // es UNIÓN — una decl local homónima (`const x = WebAssembly`) se MEZCLARÍA con el exterior (`x→{perf, WA}`)
+  // en vez de sustituirlo. Aplica en TODA rama que amplía childShadow (Block/CaseBlock/fnLike/for/catch).
+  const descendCtx = (ctx, newNames, decls) => {
+    let base = ctx;
+    if (ctx.scopePartialAliases && newNames.size) {
+      const purged = new Map(ctx.scopePartialAliases);
+      let changed = false;
+      for (const n of newNames) if (purged.delete(n)) changed = true;
+      if (changed) base = { ...ctx, scopePartialAliases: purged };
+    }
+    return decls && decls.size ? mergePartialAliases(base, decls) : base;
+  };
   const walk = (node, shadowed, ctx) => {
     if (!node) return;
     // (1) var-decl con init a un binding NO sombreado (`var` = function-scoped → propaga al scope de función).
@@ -3081,28 +3096,47 @@ function hoistNestedAssignmentAliases(stmt, context) {
     ) {
       emit(node.left.text, exprPartialRoots(node.right, ctx));
     }
-    // (3) descender, SOMBREANDO los block-scoped del scope anidado (por-binding) + DECL-THREADING del nivel.
+    // (2b) PATTERN-assign (`[c] = [performance]`, `({ c } = { c: performance })`) — mismo matcher estructural
+    // que la vista forward (partialAliasesDeclaredBy usa resolvePartialRootSet), gateado por shadow. Cierra la
+    // asimetría diferida-vs-same-scope de la frontera pattern-anidado (Auditoría B R5). Solo `=` destructura.
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      (ts.isObjectLiteralExpression(node.left) ||
+        ts.isArrayLiteralExpression(node.left))
+    ) {
+      collectStructuralAliases(
+        node.left,
+        node.right,
+        ctx,
+        resolvePartialRootSet,
+        (name, roots) => {
+          if (!shadowed.has(name)) emit(name, roots);
+        },
+        true,
+      );
+    }
+    // (3) descender, SOMBREANDO los block-scoped del scope anidado (por-binding) + DECL-THREADING + PURGA del
+    // ctx (descendCtx) para los redeclarados — en TODA rama que amplía childShadow.
     let childShadow = shadowed;
     let childCtx = ctx;
     if (ts.isBlock(node) || ts.isModuleBlock(node)) {
-      childShadow = new Set(shadowed);
-      for (const n of gatherBlockLexicalNames(node.statements)) childShadow.add(n);
-      const decls = declAliasesOf(node.statements, ctx);
-      if (decls.size) childCtx = mergePartialAliases(ctx, decls);
+      const newNames = gatherBlockLexicalNames(node.statements);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, declAliasesOf(node.statements, ctx));
     } else if (ts.isCaseBlock(node)) {
       // CaseBlock = UN scope léxico compartido por TODAS las clauses (P-SHADOW-CASE): sus let/const sombran el
       // subtree (un `let c` directo en un `case` es CaseBlock-scoped → su asignación NO fuga al exterior).
-      childShadow = new Set(shadowed);
       const allStmts = node.clauses.flatMap((cl) => cl.statements);
-      for (const n of gatherBlockLexicalNames(allStmts)) childShadow.add(n);
-      const decls = declAliasesOf(allStmts, ctx);
-      if (decls.size) childCtx = mergePartialAliases(ctx, decls);
+      const newNames = gatherBlockLexicalNames(allStmts);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, declAliasesOf(allStmts, ctx));
     } else if (isFnLike(node)) {
-      childShadow = new Set(shadowed);
-      for (const p of node.parameters) {
-        addBindingNamesFromPattern(p.name, childShadow);
-      }
-      if (node.name && ts.isIdentifier(node.name)) childShadow.add(node.name.text);
+      const newNames = new Set();
+      for (const p of node.parameters) addBindingNamesFromPattern(p.name, newNames);
+      if (node.name && ts.isIdentifier(node.name)) newNames.add(node.name.text);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, null);
     } else if (
       ts.isForStatement(node) ||
       ts.isForInStatement(node) ||
@@ -3114,14 +3148,18 @@ function hoistNestedAssignmentAliases(stmt, context) {
         ts.isVariableDeclarationList(init) &&
         isBlockScopedDeclList(init.flags)
       ) {
-        childShadow = new Set(shadowed);
+        const newNames = new Set();
         for (const d of init.declarations) {
-          addBindingNamesFromPattern(d.name, childShadow);
+          addBindingNamesFromPattern(d.name, newNames);
         }
+        childShadow = new Set([...shadowed, ...newNames]);
+        childCtx = descendCtx(ctx, newNames, null);
       }
     } else if (ts.isCatchClause(node) && node.variableDeclaration) {
-      childShadow = new Set(shadowed);
-      addBindingNamesFromPattern(node.variableDeclaration.name, childShadow);
+      const newNames = new Set();
+      addBindingNamesFromPattern(node.variableDeclaration.name, newNames);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, null);
     }
     ts.forEachChild(node, (c) => walk(c, childShadow, childCtx));
   };
@@ -3153,8 +3191,27 @@ function mergePartialAliases(context, extra) {
  * divergencia PERMITIDA porque INV-VIEW es ⊇ unidireccional. Custodia: INV-ORDER + INV-VIEW. Mismo eje que F4.
  */
 function scopeAssignmentUnion(statements, context) {
+  // ITERAR HASTA ESTABILIDAD (Auditoría B R5 / BLOQUEO 1): `iter <= statements.length` era una COTA FALSA — una
+  // cadena de asignaciones en UN solo statement (`{ f=perf; e=f; …; a=b }`, o condensada por coma) es más larga
+  // que el nº de statements top-level, y salir sin estabilidad devolvía un SUB-punto-fijo en silencio. Termina
+  // por MONOTONICIDAD: `acc` solo crece (ctx crece ⇒ emits ⊇), cada pasada INESTABLE añade ≥1 par (nombre,root),
+  // dominio finito (nombres × roots) ⇒ ≤ longitud-de-cadena+1 pasadas. Cap = # nodos de asignación/decl del
+  // subtree + 1 (cota REAL de la cadena) como cinturón anti-bucle — jamás `statements.length`.
+  let cap = 1;
+  const countAssignNodes = (n) => {
+    if (!n) return;
+    if (
+      (ts.isBinaryExpression(n) && ts.isIdentifier(n.left)) ||
+      (ts.isVariableDeclaration(n) && n.initializer)
+    ) {
+      cap++;
+    }
+    ts.forEachChild(n, countAssignNodes);
+  };
+  for (const s of statements) countAssignNodes(s);
   let acc = new Map();
-  for (let iter = 0; iter <= statements.length; iter++) {
+  let stable = false;
+  for (let iter = 0; !stable && iter <= cap; iter++) {
     const ctx = acc.size ? mergePartialAliases(context, acc) : context;
     const next = new Map();
     for (const stmt of statements) {
@@ -3163,7 +3220,7 @@ function scopeAssignmentUnion(statements, context) {
         next.set(name, prev ? new Set([...prev, ...roots]) : roots);
       }
     }
-    let stable = next.size === acc.size;
+    stable = next.size === acc.size;
     if (stable) {
       for (const [name, roots] of next) {
         const prev = acc.get(name);
@@ -3178,7 +3235,6 @@ function scopeAssignmentUnion(statements, context) {
       }
     }
     acc = next;
-    if (stable) break;
   }
   return acc;
 }
@@ -7285,6 +7341,18 @@ function checkSourceFile(
         }
       }
       current = purgeGuardAliasShadows(current, caseLexical);
+      // PARIDAD DIFERIDA (Auditoría B R5 / BLOQUEO 2 CaseBlock): purgar el mapa `deferredAssignAliases` de los
+      // block-lexical del CaseBlock — un `let c` en una clause sombrea el `c→root` heredado (la unión de la
+      // función ya lo threadeó al descender por el switch), así que un cuerpo DIFERIDO dentro de la clause NO
+      // debe heredarlo. Espejo del threading de visitOrderedStatements en este walker paralelo (evita el FP
+      // por-nombre en la vista diferida, la misma clase domada en P-SHADOW-DEF).
+      if (current.deferredAssignAliases && caseLexical.size > 0) {
+        const du = new Map();
+        for (const [n, r] of current.deferredAssignAliases) {
+          if (!caseLexical.has(n)) du.set(n, r);
+        }
+        current = { ...current, deferredAssignAliases: du };
+      }
       // PRE-CARGA de sombras léxicas no-react (codex P1 round-10) — todo el CaseBlock es
       // UN scope léxico, así que un `const useEffect = Sync.run` en cualquier clause sombrea
       // las funciones de cualquier otro.

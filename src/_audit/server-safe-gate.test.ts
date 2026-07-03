@@ -6553,3 +6553,89 @@ describe("server-safe gate — marcador M1 (near-miss /* */) + O2 (@internal@ser
     });
   });
 });
+
+describe("server-safe gate — #7 punto fijo: cota real, descendCtx, paridad CaseBlock, pattern (batería 3 de Fable)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "audit3.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  describe("BLOQUEO 1: while-stable — la cota `statements.length` era falsa (cadena > #statements)", () => {
+    it("cadena condensada por coma (1 statement) diferida → FLAG", () => {
+      const names = Array.from({ length: 9 }, (_, i) => `x${String(i)}`);
+      const decls = `let ${names.map((nm) => `${nm}:any`).join(", ")};`;
+      const seq = ["x8 = performance"];
+      for (let i = 7; i >= 0; i--) seq.push(`x${String(i)} = x${String(i + 1)}`);
+      expect(
+        flagged(
+          `${W}export function f(){ ${decls} function use(){ return x0.eventLoopUtilization(); } ${seq.join(", ")}; return use(); }`,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("BLOQUEO 2: descendCtx purga el ctx de resolución (childShadow gateaba emisión, no resolución)", () => {
+    it.each<[string, string, boolean]>([
+      ["Block: local x seguro; c=x → SILENT", `let c:any; function use(){ return c.eventLoopUtilization(); } const x = performance; { let x:any = { eventLoopUtilization(){ return 0; } }; c = x; } return use();`, true],
+      ["fnLike param x sombrea; c=x → SILENT", `let c:any; function use(){ return c.eventLoopUtilization(); } const x = performance; function setup(x:any){ c = x; } setup({ eventLoopUtilization(){ return 0; } }); return use();`, true],
+      ["control: local x2=WebAssembly (peligroso) NO se mezcla con exterior → FLAG", `let c:any; function use(){ return new (c as any).Module(new Uint8Array()); } const x = performance; { const x2 = WebAssembly; c = x2; } return use();`, false],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${W}export function f(){ ${body} }`)).toBe(!silent);
+    });
+  });
+
+  describe("Paridad CaseBlock: el walker paralelo purga deferredAssignAliases como visitOrderedStatements", () => {
+    it("let redeclarada en clause + fn interior homónimo; exterior tainted → interior SILENT (no fuga)", () => {
+      expect(
+        flagged(`${W}export function f(k:number){ let c:any; c = performance; switch(k){ case 1: let c:any = { eventLoopUtilization(){ return 0; } }; (function(){ return c.eventLoopUtilization(); })(); break; } return c; }`),
+      ).toBe(false);
+    });
+    it("control: fn exterior lee c asignada dentro de una clause → FLAG", () => {
+      expect(
+        flagged(`${W}export function f(k:number){ let c:any; function use(){ return c.eventLoopUtilization(); } switch(k){ case 1: c = performance; break; } return use(); }`),
+      ).toBe(true);
+    });
+  });
+
+  describe("Pattern-assign en el hoist (asimetría diferida-vs-same-scope cerrada)", () => {
+    it.each<[string, string]>([
+      ["diferido { [c]=[performance]; } use()", `let c:any; function use(){ return c.eventLoopUtilization(); } { [c] = [performance]; } return use();`],
+      ["same-scope forward [c]=[performance]; c.elu()", `let c:any; [c] = [performance]; return c.eventLoopUtilization();`],
+      ["object-pattern diferido ({c}={c:performance}) use()", `let c:any; function use(){ return c.eventLoopUtilization(); } ({ c } = { c: performance }); return use();`],
+    ])("FLAG: %s", (_n, body) => {
+      expect(flagged(`${W}export function f(){ ${body} }`)).toBe(true);
+    });
+  });
+
+  describe("Frontera renunciada con línea: for-of iteration-assignment target (§141, LIMITATIONS)", () => {
+    it("for (c of [performance]) {} + use() → SILENT (renuncia documentada)", () => {
+      expect(
+        flagged(`${W}export function f(){ let c:any; function use(){ return c.eventLoopUtilization(); } for (c of [performance]) {} return use(); }`),
+      ).toBe(false);
+    });
+  });
+
+  // INV-VIEW GENERATIVO (Auditoría B R5, custodio del punto fijo): "por construcción" sin test generativo es
+  // prosa. Para toda cadena de longitud N≤8, `diferida ⊇ forward-fin-de-scope`. Una celda enumerada jamás
+  // habría encontrado la cota falsa `iter <= statements.length` — este generador SÍ (N > #statements-top-level).
+  describe("INV-VIEW generativo: diferida ⊇ forward-fin sobre cadenas N=1..8", () => {
+    const chainBody = (n: number) => {
+      const names = Array.from({ length: n + 1 }, (_, i) => `x${String(i)}`);
+      const decls = `let ${names.map((nm) => `${nm}:any`).join(", ")};`;
+      const assigns = [`x${String(n)} = performance;`];
+      for (let i = n - 1; i >= 0; i--)
+        assigns.push(`x${String(i)} = x${String(i + 1)};`);
+      return { decls, body: assigns.join(" ") };
+    };
+    it.each(Array.from({ length: 8 }, (_, i) => i + 1))(
+      "cadena N=%i: forward-fin FLAG ⟹ diferida FLAG",
+      (n) => {
+        const { decls, body } = chainBody(n);
+        const read = "x0.eventLoopUtilization()";
+        const fwd = flagged(`${W}export function f(){ ${decls} ${body} return ${read}; }`);
+        const def = flagged(`${W}export function f(){ ${decls} function use(){ return ${read}; } ${body} return use(); }`);
+        expect(fwd).toBe(true);
+        expect(def).toBe(true);
+      },
+    );
+  });
+});

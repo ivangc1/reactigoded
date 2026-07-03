@@ -61,6 +61,12 @@ Catches the dangerous token **in its site** and through value-transparent wrappe
 rc.1). It does **not** follow values through variables, arguments, or cross-statement aliases — that is
 data-flow, renounced by design (catching only the obvious syntactic subset would be false coverage).
 
+- **`for (x of <iterable>) {}` iteration-assignment target.** The deferred-assignment hoist (two-view model)
+  tracks `x = <root>`, `var x = <root>` and destructuring `[x] = [<root>]` to outer bindings. A for-of whose
+  target is an *existing* binding (`for (c of [performance]) {}`, not `for (const c of …)`) assigns `c` the
+  iterable's elements — following that requires element-of-iterable value-flow (§141). Renounced: the loop
+  target sees the value only through iteration, and the pattern (assign into a pre-declared binding via for-of)
+  is rare. `for (const c of …)` declares a fresh block-scoped binding and is unaffected.
 - **`import(variable)` / assembled specifier.** Caught: `import("fs")` literal (and container projection
   `import(["fs"][0])`). Residual: the specifier assembled from variables.
 - **`WebAssembly.instantiate(bytes)`.** Caught: `compile` / `compileStreaming` / `instantiateStreaming` /
