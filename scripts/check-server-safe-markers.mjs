@@ -549,6 +549,13 @@ const PARTIAL_SAFE_GLOBAL_MEMBERS = {
   // CONSTRUCCIÓN `new WebAssembly.Module(bytes)` (compila bytes SIEMPRE — sin overload estático, a
   // diferencia de `instantiate(Module)`), que se caza en posición `new` aparte. codex P2 (review genérico).
   WebAssembly: new Set(["compile", "compileStreaming", "instantiateStreaming"]),
+  // `URL` existe en el baseline Edge (root SAFE, `new URL()`/`canParse`/`parse` corren), pero
+  // `createObjectURL`/`revokeObjectURL` son el patrón blob-URL browser/Node-only: en workerd `typeof` da
+  // `function` y la LLAMADA lanza `URL.createObjectURL() is not implemented` (MEDIDO contra workerd real,
+  // Auditoría B R5 §2.1 / #11 / D3) → present-but-throws. Denylist MÍNIMA (no registrar URL entera: canParse/
+  // parse/new URL miden correctamente-silenciosos; un ∃ blanket los FP-earía). La remediación NO sugiere `?.()`
+  // (el miembro existe; la sonda no protege) → rediseño (el patrón blob-URL no existe en Workers) o disable.
+  URL: new Set(["createObjectURL", "revokeObjectURL"]),
 };
 
 // Roots de PARTIAL_SAFE_GLOBAL_MEMBERS cuyos miembros están PRESENTES en el floor pero LANZAN al
@@ -556,7 +563,7 @@ const PARTIAL_SAFE_GLOBAL_MEMBERS = {
 // miembro es undefined). Consecuencia para el safe-probe: `WebAssembly.compile?.()` SÍ invoca →
 // lanza, así que el optional-CALL NO es probe seguro (sí lo siguen siendo `typeof` y el optional-
 // ACCESS `?.name`, que no compilan). Para los AUSENTES, `?.()` corta a undefined = seguro.
-const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly"]);
+const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly", "URL"]);
 
 // NAMESPACES HOST-POPULATED — TRES BUCKETS por la relación runtime↔namespace (el bucket NO se elige,
 // lo determina la relación; test checkeable):
@@ -2862,14 +2869,32 @@ function exprPartialRoots(expr, context) {
  * Compartido por las posiciones `new` y `Reflect.construct` (≡ new).
  */
 function resolveConstructionDeny(target, context) {
-  const roots = exprPartialRoots(target.expression, context);
-  const candidates = roots.size ? accessedMemberNames(target) : [];
-  for (const root of roots) {
-    if (candidates.length > 0) {
-      const m = candidates.find((mm) => isConstructionDeniedMember(root, mm));
-      if (m) return { ctorRoot: root, ctorMember: m, ctorComputedDenied: false };
-    } else if (CONSTRUCTION_DENIED_MEMBERS[root] !== undefined) {
-      return { ctorRoot: root, ctorMember: null, ctorComputedDenied: true };
+  // Orígenes-global del ctor: DIRECTOS (`exprPartialRoots` del receptor, con members = accessedMemberNames del
+  // target) + REFLEXIVOS (idiomas property-copy que leen `R.Module`: Object.assign/create/gOPDs/gOPD.value —
+  // Auditoría B R5 / U4, cierra #8). Paridad read-vs-construct: la construcción consume el MISMO pass reflexivo
+  // que el member-read. `new (Object.assign(WebAssembly,{}).Module)(b)` resuelve WebAssembly.Module → denegado.
+  const originSets = [
+    { roots: exprPartialRoots(target.expression, context), members: null },
+  ];
+  for (const rv of reflectiveValueReads(target)) {
+    originSets.push({
+      roots: exprPartialRoots(rv.receiver, context),
+      members: rv.members,
+    });
+  }
+  for (const { roots, members } of originSets) {
+    const candidates = members
+      ? [...members]
+      : roots.size
+        ? accessedMemberNames(target)
+        : [];
+    for (const root of roots) {
+      if (candidates.length > 0) {
+        const m = candidates.find((mm) => isConstructionDeniedMember(root, mm));
+        if (m) return { ctorRoot: root, ctorMember: m, ctorComputedDenied: false };
+      } else if (CONSTRUCTION_DENIED_MEMBERS[root] !== undefined) {
+        return { ctorRoot: root, ctorMember: null, ctorComputedDenied: true };
+      }
     }
   }
   return { ctorRoot: null, ctorMember: null, ctorComputedDenied: false };
@@ -3851,7 +3876,13 @@ function reflectCallTarget(n) {
         return ts.isIdentifier(oo) && oo.text === "Reflect";
       })
     ) {
-      return { method, target: n.arguments[0] };
+      // Aplanar spread-de-array-literal de los args ANTES de tomar el target (arg0) — Auditoría B R5 / U5,
+      // cierra #9: `Reflect.construct(...[WebAssembly.Module, [b]])` / `Reflect.apply(...[X.m, t, a])` esconden
+      // el target tras un SpreadElement. Mismo helper de FIX-5 (spreadFlattenedElements). Spread de VARIABLE
+      // (`...args`) no resuelve → target irresoluble → null (§141).
+      const effectiveArgs = spreadFlattenedElements(n.arguments, []);
+      if (effectiveArgs.length === 0) return null;
+      return { method, target: effectiveArgs[0] };
     }
   }
   return null;
@@ -3937,8 +3968,15 @@ function reflectiveValueReads(node) {
   const add = (receiver, members) => {
     if (receiver && members && members.size > 0) out.push({ receiver, members });
   };
-  // (A/A2) `<descriptor>.value` — el idioma getOwnPropertyDescriptor(s).
-  if (ts.isPropertyAccessExpression(node) && node.name.text === "value") {
+  // (A/A2) `<descriptor>.value` — el idioma getOwnPropertyDescriptor(s). La lectura de `.value` se resuelve
+  // por el resolver COMPARTIDO `accessedMemberNames` (Auditoría B R5 / U3, cierra #4): bracket `["value"]` ≡
+  // dotted `.value` ≡ template, gratis. El ENSAMBLADO (`["va"+"lue"]`) sigue §141 (accessedMemberNames no folda
+  // concat, #173) — coherente con el rechazo de #2.
+  if (
+    (ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)) &&
+    accessedMemberNames(node).includes("value")
+  ) {
     const inner = unwrapErased(node.expression);
     if (
       ts.isCallExpression(inner) &&
@@ -3963,7 +4001,10 @@ function reflectiveValueReads(node) {
       }
     }
   }
-  // (B) `<copia/proto>.k` / `["k"]` — Object.assign / Object.create / spread-de-root.
+  // (B) `<copia/proto/descriptor-transfer>.k` / `["k"]` — Object.assign / Object.create / spread-de-root +
+  // la familia descriptor-transfer (Auditoría B R5 / #5, D2): create(_, gOPDs(R)) / defineProperties(_, gOPDs(R))
+  // / defineProperty(_, "k", gOPD(R,"k")). Frontera = property-copy (transfiere own-props/descriptores de R);
+  // los round-trips de representación (entries/values/fromEntries/JSON/structuredClone) quedan RENUNCIADOS.
   if (
     ts.isPropertyAccessExpression(node) ||
     ts.isElementAccessExpression(node)
@@ -3971,6 +4012,15 @@ function reflectiveValueReads(node) {
     const members = new Set(accessedMemberNames(node));
     if (members.size > 0) {
       const recv = unwrapErased(node.expression);
+      // R de un descriptor-MAP `Object.getOwnPropertyDescriptors(R)` (arg de create/defineProperties).
+      const gOPDsRoot = (arg) => {
+        const a = unwrapErased(arg);
+        return ts.isCallExpression(a) &&
+          a.arguments.length >= 1 &&
+          staticNamespaceCall(a, "Object", "getOwnPropertyDescriptors")
+          ? a.arguments[0]
+          : null;
+      };
       if (ts.isCallExpression(recv) && staticNamespaceCall(recv, "Object", "assign")) {
         // Object.assign(target, ...sources).k → CUALQUIER arg (target o source) puede aportar k. Un
         // SpreadElement de arg (`Object.assign({}, ...srcs)`) es §141 (fuentes desconocidas) → skip.
@@ -3981,6 +4031,36 @@ function reflectiveValueReads(node) {
         staticNamespaceCall(recv, "Object", "create")
       ) {
         add(recv.arguments[0], members); // Object.create(R).k → lectura vía prototipo (V3)
+        // Object.create(proto, gOPDs(R)).k → el 2º arg (descriptor-map) transfiere own-props de R.
+        if (recv.arguments.length >= 2) {
+          const r = gOPDsRoot(recv.arguments[1]);
+          if (r) add(r, members);
+        }
+      } else if (
+        ts.isCallExpression(recv) &&
+        recv.arguments.length >= 2 &&
+        staticNamespaceCall(recv, "Object", "defineProperties")
+      ) {
+        const r = gOPDsRoot(recv.arguments[1]); // defineProperties(_, gOPDs(R)).k
+        if (r) add(r, members);
+      } else if (
+        ts.isCallExpression(recv) &&
+        recv.arguments.length >= 3 &&
+        staticNamespaceCall(recv, "Object", "defineProperty")
+      ) {
+        // defineProperty(_, keyArg, gOPD(R, k2)).<read> → define keyArg con el valor de R.k2; leerlo lee R.k2.
+        const desc = unwrapErased(recv.arguments[2]);
+        if (
+          ts.isCallExpression(desc) &&
+          desc.arguments.length >= 2 &&
+          (staticNamespaceCall(desc, "Object", "getOwnPropertyDescriptor") ||
+            staticNamespaceCall(desc, "Reflect", "getOwnPropertyDescriptor"))
+        ) {
+          const defKeys = resolveKeyCandidates(recv.arguments[1]);
+          if ([...members].some((m) => defKeys.has(m))) {
+            add(desc.arguments[0], resolveKeyCandidates(desc.arguments[1]));
+          }
+        }
       } else if (ts.isObjectLiteralExpression(recv)) {
         for (const p of recv.properties) {
           if (ts.isSpreadAssignment(p)) add(p.expression, members); // ({...R}).k
@@ -4045,7 +4125,10 @@ function objectLiteralAlternatives(expr) {
 function propNameCanonical(name) {
   if (!name) return [];
   if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return [name.text];
-  if (ts.isNumericLiteral(name)) {
+  // Nombre-de-propiedad literal-numérico → MISMA función que use-side (canonicalNumericKey): NumericLiteral
+  // Y BigIntLiteral (`({100n:X})` es un nombre válido, canoniza a "100" como use-side; Auditoría B R5 / U2.2,
+  // cierra #3 def-side). PrefixUnary(±) NO puede ser nombre directo (syntax) → solo llega vía ComputedPropertyName.
+  if (ts.isNumericLiteral(name) || ts.isBigIntLiteral(name)) {
     const c = canonicalNumericKey(name);
     return c === null ? [] : [c];
   }
@@ -4427,9 +4510,31 @@ function isWeaponizedConstructorAccess(node) {
   // (quizá envuelto) que es hijo directo de ese ancestro.
   let child = node;
   let parent = node.parent;
-  while (parent && isValueTransparentParent(parent, child)) {
-    child = parent;
-    parent = parent.parent;
+  while (parent) {
+    if (isValueTransparentParent(parent, child)) {
+      child = parent;
+      parent = parent.parent;
+      continue;
+    }
+    // ASCENSO = DESCENSO (Auditoría B R5 / U6, cierra #10): `child` está dentro de un container-literal
+    // INMEDIATAMENTE proyectado — array `[..child..][idx]` (child = elemento, 1 nivel a la proyección) u
+    // objeto `({k:child}).k`/`["k"]` (child = valor de propiedad, 2 niveles: PropertyAssignment→ObjectLiteral→
+    // selección). El descenso (valueTransparentChildren) YA baja la proyección a `child`; el ascenso de la
+    // weaponización era asimétrico y `[x.constructor][0]("code")()` se saltaba. Simetrizado: saltar a la
+    // proyección-ancestro (≤3 niveles) cuyo descenso VT resuelva a `child`.
+    let proj = parent.parent;
+    let advanced = false;
+    for (let i = 0; i < 3 && proj; i++) {
+      if (isValueTransparentParent(proj, child)) {
+        child = proj;
+        parent = proj.parent;
+        advanced = true;
+        break;
+      }
+      proj = proj.parent;
+    }
+    if (advanced) continue;
+    break;
   }
   if (!parent) return false;
   // (b) callee de CallExpression: `x.constructor("code")` (incl. optional call).
@@ -7339,6 +7444,15 @@ function checkSourceFile(
       const partialRootName = partialMember
         ? resolvedPartialRoot
         : computedDefaultDenyRoot;
+      // present-throws sobre CUALQUIER root resuelto que deniega el miembro (∀-lift, U1 + O4): decide si el
+      // hazard vive en la LLAMADA (dynamic codegen). Lo consumen (a) el downgrade de la sonda `?.()` invocante
+      // y (b) el value-fallback `?? fb`/`|| fb` — ninguna de las dos protege un present-throws (el miembro
+      // EXISTE; el `?? fb` no se activa y la llamada compila/lanza). Absence sí lo protegen ambas.
+      const anyPresentThrows = [...resolvedPartialRoots].some(
+        (r) =>
+          PARTIAL_PRESENT_THROWS_ROOTS.has(r) &&
+          memberCandidates.some((m) => partialMemberDenied(r, m)),
+      );
       // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
       // (`typeof performance.x` → "undefined", no lee); (2) short-circuit opcional (`x?.()`,
       // `x?.foo`, `x?.[i]` → undefined si el miembro falta). Reading el miembro ausente da
@@ -7408,12 +7522,12 @@ function checkSourceFile(
       //   - optional-ACCESS a `call`/`apply`/`bind` `compile?.call(null,bytes)` — Function.prototype
       //     invoca igual → compila → lanza (codex P1). El optional-access a METADATA (`?.name`,
       //     `?.length`) NO compila → sigue exento. (≠ miembro AUSENTE, donde `?.x` corta a undefined.)
-      if (
-        isSafeOptionalProbe &&
-        p &&
-        partialRootName &&
-        PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
-      ) {
+      // ∀-LIFT (Auditoría B R5 / U1, cierra #1): POLARIDAD DE DECISIÓN suppress=∀. Esta sub-decisión leía el
+      // root FIRST-MATCH (`partialRootName`) → `(perf?WA).compile?.(b)` enmascaraba WebAssembly (present-throws)
+      // tras performance (absent, probe legítimo) → PASS. FIX-1 existencializó QUÉ root deniega, pero no este
+      // punto de decisión hermano. Fix (vía `anyPresentThrows` hoistado): degradar el probe si ∃ ALGÚN candidato
+      // resuelto que deniega el miembro accedido Y es present-throws (el probe invocante NO lo protege).
+      if (isSafeOptionalProbe && p && anyPresentThrows) {
         if (ts.isCallExpression(p)) {
           isSafeOptionalProbe = false;
         } else if (
@@ -7426,7 +7540,31 @@ function checkSourceFile(
           }
         }
       }
-      const safelyProbed = isTypeofProbe || isSafeOptionalProbe;
+      // (3) VALUE-FALLBACK probe (Auditoría B R5 / O4, cierra FP #4): `R.m ?? fb` / `R.m || fb` en posición-
+      // valor — el fallback maneja la AUSENCIA del miembro (undefined → fb, incl. `(R.m ?? fb)(x)` donde fb es
+      // la rama viva en Edge). Tercera forma de la familia de sondas sancionadas {call: `?.()`, bind:
+      // destructuring-default, value: `?? fb`}. Sanciona SOLO hazard=absence (misma ley parametrizada que `?.()`,
+      // vía `!anyPresentThrows`): para present-throws el miembro EXISTE, el `?? fb` no se activa y la llamada
+      // compila/lanza → la ley ya lo cubre. El nodo llega tras wrappers erased (`(R.m as any) ?? fb`).
+      let vfNode = node;
+      let vfParent = node.parent;
+      while (
+        vfParent &&
+        isErasedOuterExpr(vfParent) &&
+        vfParent.expression === vfNode
+      ) {
+        vfNode = vfParent;
+        vfParent = vfParent.parent;
+      }
+      const isValueFallbackProbe =
+        !anyPresentThrows &&
+        vfParent &&
+        ts.isBinaryExpression(vfParent) &&
+        (vfParent.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+          vfParent.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
+        vfParent.left === vfNode;
+      const safelyProbed =
+        isTypeofProbe || isSafeOptionalProbe || isValueFallbackProbe;
       // shadow/forward value-read ya resueltos en exprPartialRoot (directo) o en la purga del alias.
       if (
         partialRootName &&

@@ -268,6 +268,8 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     expect(deny).toEqual({
       // WebAssembly: ban-de-LLAMADA (los que compilan bytes); `Module` va en construction-ban aparte.
       WebAssembly: ["compile", "compileStreaming", "instantiateStreaming"],
+      // URL: blob-URL browser/Node-only, present-but-throws en workerd (Auditoría B R5 §2.1 / #11 / D3).
+      URL: ["createObjectURL", "revokeObjectURL"],
     });
     const ctor = Object.fromEntries(
       Object.entries(

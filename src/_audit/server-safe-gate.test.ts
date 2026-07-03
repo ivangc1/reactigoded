@@ -6116,3 +6116,156 @@ describe("server-safe gate — Auditoría B (re-hunt 4): ∃-quantificación de 
     });
   });
 });
+
+describe("server-safe gate — Auditoría B R5 (PR-R5-A): 6 unificaciones + O4 + URL + meta-lints", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "r5.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\nconst b = new Uint8Array();\n";
+
+  // U1 (#1) — ∀-lift de la sub-decisión present-throws del safe-probe (suppress=∀).
+  describe("U1: safe-probe present-throws ∀-lift", () => {
+    it.each([
+      ["(k?performance:WebAssembly).compile?.(b)", `(k?performance:WebAssembly).compile?.(b)`, false],
+      ["(performance??WebAssembly).compile?.(b)", `(performance??WebAssembly).compile?.(b)`, false],
+      ["(WebAssembly??console).compileStreaming?.(b)", `(WebAssembly??console).compileStreaming?.(b)`, false],
+      ["(k?performance:WebAssembly).compile?.call(null,b)", `(k?performance:WebAssembly).compile?.call(null,b)`, false],
+      ["alias R=k?performance:WebAssembly; R.compile?.(b)", `((): unknown => { const R = k?performance:WebAssembly; return R.compile?.(b); })()`, false],
+      ["AUSENCIA performance.eventLoopUtilization?.() SILENT", `performance.eventLoopUtilization?.()`, true],
+      ["AUSENCIA (k?performance:console).eventLoopUtilization?.() SILENT", `(k?performance:console).eventLoopUtilization?.()`, true],
+      ["typeof (k?performance:WebAssembly).compile SILENT", `typeof (k?performance:WebAssembly).compile`, true],
+      ["WebAssembly.compile?.name metadata SILENT", `WebAssembly.compile?.name`, true],
+    ])("%s", (_n, expr, silent) => {
+      expect(flagged(`${W}export function f(k:boolean){ return ${expr}; }`)).toBe(!silent);
+    });
+  });
+
+  // U2.2 (#3) + #2 RENUNCIADO (ratificación R5-A1: assembled = §141 vía #173, la sonda discriminante pineada).
+  describe("U2.2: clave única def/use (#3) + #2 renunciado (#173)", () => {
+    it.each([
+      ["#3 ({100n:WebAssembly})[100].compile FLAG", `export const x = ({100n: WebAssembly})[100].compile;`, false],
+      ["#3 ({100n:WebAssembly})[\"100\"].compile FLAG", `export const x = ({100n: WebAssembly})["100"].compile;`, false],
+      ["#3 [WebAssembly][0n].compile use-side FLAG", `export const x = [WebAssembly][0n].compile;`, false],
+      ["safe ({100n:performance})[100].now SILENT", `export const x = ({100n: performance})[100].now;`, true],
+      // SONDA DISCRIMINANTE (R5-A1): now está permitido; FLAG prueba que el gate NO folda ensamblado (fail-closed allowlist).
+      ["discriminante performance['n'+'ow']() FLAG-as-is (no-fold + allowlist fail-closed)", `export function f(){ return performance['n'+'ow'](); }`, false],
+      ["#2 WebAssembly['comp'+'ile'](b) SILENT-renunciado (§141 #173 + polaridad denylist)", `export function f(){ return WebAssembly['comp'+'ile'](b); }`, true],
+      ["WebAssembly[m](b) variable SILENT-renunciado", `export function f(m:string){ return WebAssembly[m](b); }`, true],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${W}${body}`)).toBe(!silent);
+    });
+  });
+
+  // U3 (#4) — recognizer reflexivo vía resolver compartido (bracket ≡ dotted ≡ template).
+  describe("U3: reflexión .value vía resolver compartido (#4)", () => {
+    it.each([
+      ["gOPD(im,'dirname')['value'] bracket FLAG", `Object.getOwnPropertyDescriptor(import.meta,'dirname')['value']`, false],
+      ["gOPD(im,'dirname')[`value`] template FLAG", "Object.getOwnPropertyDescriptor(import.meta,'dirname')[`value`]", false],
+      ["gOPD(im,'dirname')['va'+'lue'] ensamblado SILENT (#173)", `Object.getOwnPropertyDescriptor(import.meta,'dirname')['va'+'lue']`, true],
+      ["safe gOPD(im,'url')['value'] SILENT", `Object.getOwnPropertyDescriptor(import.meta,'url')['value']`, true],
+    ])("%s", (_n, expr, silent) => {
+      expect(flagged(`/** @server-safe */\nexport const x = ${expr};`)).toBe(!silent);
+    });
+  });
+
+  // #5 (D2) descriptor-transfer IN + #6/round-trips RENUNCIADOS.
+  describe("#5 descriptor-transfer (D2) + round-trips renunciados", () => {
+    it.each([
+      ["#5 Object.create(null,gOPDs(im)).dirname FLAG", `Object.create(null, Object.getOwnPropertyDescriptors(import.meta)).dirname`, false],
+      ["#5 Object.defineProperties({},gOPDs(im)).dirname FLAG", `Object.defineProperties({}, Object.getOwnPropertyDescriptors(import.meta)).dirname`, false],
+      ["#5 Object.defineProperty({},'dirname',gOPD(im,'dirname')).dirname FLAG", `Object.defineProperty({}, 'dirname', Object.getOwnPropertyDescriptor(import.meta,'dirname')).dirname`, false],
+      ["#6 JSON.parse(JSON.stringify(im)).dirname SILENT-renunciado", `JSON.parse(JSON.stringify(import.meta)).dirname`, true],
+      ["fromEntries∘entries SILENT-renunciado", `Object.fromEntries(Object.entries(import.meta)).dirname`, true],
+      ["structuredClone(im).dirname SILENT (out-of-mandate)", `structuredClone(import.meta).dirname`, true],
+    ])("%s", (_n, expr, silent) => {
+      expect(flagged(`/** @server-safe */\nexport const x = ${expr};`)).toBe(!silent);
+    });
+  });
+
+  // U4 (#8) construcción reflexiva + U5 (#9) Reflect spread arg0 + U6 (#10) ascenso eval-sink.
+  describe("U4/U5/U6: construcción reflexiva, Reflect spread, ascenso eval-sink", () => {
+    it.each([
+      ["U4 new (Object.assign(WebAssembly,{}).Module)(b) FLAG", `export function f(){ return new (Object.assign(WebAssembly, {}).Module)(b); }`, false],
+      ["U4 new (Object.create(WebAssembly).Module)(b) FLAG", `export function f(){ return new (Object.create(WebAssembly).Module)(b); }`, false],
+      ["U5 Reflect.construct(...[WebAssembly.Module,[b]]) FLAG", `export function f(){ return Reflect.construct(...[WebAssembly.Module, [b]]); }`, false],
+      ["U5 doble-spread Reflect.construct(...[...[WebAssembly.Module],[b]]) FLAG", `export function f(){ return Reflect.construct(...[...[WebAssembly.Module], [b]]); }`, false],
+      ["U5 §141 Reflect.construct(...args) SILENT", `export function f(args:unknown[]){ return Reflect.construct(...(args as [Function, unknown[]])); }`, true],
+      ["U6 [x.constructor][0]('return window')() FLAG", `export function f(x:object){ return [x.constructor][0]('return window')(); }`, false],
+      ["U6 ({k:x.constructor}).k('code')() FLAG", `export function f(x:object){ return ({k:x.constructor}).k('code')(); }`, false],
+      ["U6 safe [({}).constructor][0](3) SILENT", `export function f(){ return [({}).constructor][0](3); }`, true],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${W}${body}`)).toBe(!silent);
+    });
+  });
+
+  // O4 (FP #4) — value-fallback tri-forma.
+  describe("O4: value-fallback `?? fb` / `|| fb` (absence SILENT, present-throws FLAG)", () => {
+    const H = "/** @server-safe */\nconst fb = () => 0;\n";
+    it.each([
+      ["performance.eventLoopUtilization ?? fb SILENT", `export const elu = performance.eventLoopUtilization ?? fb;`, true],
+      ["performance.eventLoopUtilization || fb SILENT", `export const elu = performance.eventLoopUtilization || fb;`, true],
+      ["(performance.eventLoopUtilization ?? fb)() SILENT", `export const r = (performance.eventLoopUtilization ?? fb)();`, true],
+      ["present-throws WebAssembly.compile ?? fb FLAG", `export const c = WebAssembly.compile ?? fb;`, false],
+      ["∀ (k?performance:WebAssembly).compile ?? fb FLAG", `export function f(k:boolean){ return (k?performance:WebAssembly).compile ?? fb; }`, false],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`${H}${body}`)).toBe(!silent);
+    });
+  });
+
+  // URL (#11, D3) — denylist-style present-throws.
+  describe("URL (#11): denylist createObjectURL/revokeObjectURL present-throws", () => {
+    it.each([
+      ["URL.createObjectURL(new Blob()) FLAG", `export function f(){ return URL.createObjectURL(new Blob()); }`, false],
+      ["URL.revokeObjectURL(u) FLAG", `export function f(u:string){ return URL.revokeObjectURL(u); }`, false],
+      ["URL.createObjectURL?.(x) present-throws FLAG (sonda no protege)", `export function f(x:Blob){ return URL.createObjectURL?.(x); }`, false],
+      ["(k?crypto:URL).createObjectURL(x) ∀ FLAG", `export function f(k:boolean,x:Blob){ return (k?crypto:URL).createObjectURL(x); }`, false],
+      ["URL.canParse(x) SILENT", `export function f(x:string){ return URL.canParse(x); }`, true],
+      ["new URL(x).pathname SILENT", `export function f(x:string){ return new URL(x).pathname; }`, true],
+    ])("%s", (_n, body, silent) => {
+      expect(flagged(`/** @server-safe */\n${body}`)).toBe(!silent);
+    });
+  });
+
+  // INV-WRAP consumer-edge (§8 PRED-WRAP): envolver un hazard catalogado en wrappers value-transparent, en
+  // el EDGE DE CONSUMO (callee eval-sink, target de construcción, target Reflect), no cambia el veredicto.
+  describe("INV-WRAP consumer-edge: wrapper value-transparent × consumidor", () => {
+    it.each<[string, (h: string) => string]>([
+      ["callee eval-sink: (W)('code')()", (h) => `(${h})('code')()`],
+      ["ctor: new (W)(b)", (h) => `new (${h})(b)`],
+      ["Reflect.construct(W,[b])", (h) => `Reflect.construct(${h}, [b])`],
+    ])("%s invariante bajo paren/proyección/coma", (_n, consume) => {
+      // hazard callee = x.constructor; hazard ctor/Reflect = WebAssembly.Module. Se testea por consumidor.
+      const isCtor = _n.startsWith("ctor") || _n.startsWith("Reflect");
+      const hazard = isCtor ? "WebAssembly.Module" : "x.constructor";
+      const wrappers = [hazard, `(${hazard})`, `[${hazard}][0]`, `(0, ${hazard})`];
+      for (const w of wrappers) {
+        expect(
+          flagged(`${W}export function f(x:object){ return ${consume(w)}; }`),
+        ).toBe(true);
+      }
+    });
+  });
+
+  // META-LINTS de sitio (§3 patrón INV-VT): el fuente del gate no debe reintroducir las formas crudas fuera
+  // de los helpers canónicos. Defensa-en-profundidad (el cierre primario son los invariantes conductuales).
+  describe("meta-lints de sitio sobre el fuente del gate", () => {
+    const src = readFileSync(
+      "scripts/check-server-safe-markers.mjs",
+      "utf8",
+    );
+    const noComments = src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    it("resolveKeyCandidates/accessedMemberNames es la ruta de nombre de miembro (no node.name.text=='value' hardcode)", () => {
+      expect(noComments.includes(`node.name.text === "value"`)).toBe(false);
+    });
+    it("el downgrade del safe-probe present-throws consulta ∀ (anyPresentThrows), no un root first-match", () => {
+      // El bug de #1 era `if (isSafeOptionalProbe && p && partialRootName && PARTIAL_PRESENT_THROWS_ROOTS.has(
+      // partialRootName))` — first-match. Debe estar el ∀-lift. (El uso de `.has(partialRootName)` en el TEXTO
+      // del detail es legítimo: elige el mensaje, no decide el flag.)
+      expect(noComments.includes("const anyPresentThrows =")).toBe(true);
+      expect(
+        noComments.includes("isSafeOptionalProbe && p && anyPresentThrows"),
+      ).toBe(true);
+    });
+  });
+});

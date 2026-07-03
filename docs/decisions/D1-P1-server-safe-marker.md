@@ -574,3 +574,15 @@ D1-P1 modela `typeof X !== "undefined"` para roots cuyo hazard es AUSENCIA (`win
 **Precondición de la Opción B (reconocer member-guards), diferida post-RC1, PR separado:** columna `hazard-kind` auditada en la tabla de divergencia completa + auditoría de formas de guard. La puerta queda DOCUMENTADA, no abierta.
 
 **Pin:** la tabla medida se fija como fixtures de regresión (`server-safe-gate.test.ts`, describe "P3: guard nivel-miembro NO suprime"): root-guard expr+stmt → FLAG; member-guard `typeof`/`in` expr+stmt → FLAG; present-but-throws member-guard → FLAG (el crítico); `R.m?.()` → SILENT. La medición P3 ES el test P3 — ningún refactor futuro deriva esta política en silencio (misma disciplina que Test H y el pin de SAFE_GLOBALS).
+
+### Doctrina R5 (Auditoría B ronda 5 — propagación por-clase + polaridad de decisión)
+
+La ronda 5 (generalista, ver `docs/AUDITORIA-B-REHUNT5.md`) falsó R5-CODE con 11 FN, casi todos la MISMA clase de R4 sin propagar a sitios hermanos. Doctrina ratificada:
+
+- **Polaridad de DECISIÓN (completa la de RESOLUCIÓN de R4):** **deny = ∃** sobre candidatos resueltos; **suppress = ∀**. Un first-match está mal en ambas, en direcciones opuestas (deny→FN por rama no comprobada; suppress→FN por rama que valida la supresión indebida). Cerró #1 (U1: el ∀-lift de la sub-decisión present-throws del safe-probe) y O4 (value-fallback `?? fb`).
+- **Alcance de un claim de cierre = lo que cuantifica su invariante custodio.** INV-SYM/INV-WRAP (R4) cuantificaban formas en sitios FIJOS, no sitios que comparten una semántica → R5-CODE cayó sin que fallara ningún test. Toda predicción se registra POR EJE atada a su invariante (PRED-WRAP/SYM/KEY/PROBE/ORACLE, §8 del doc R5).
+- **hazard-kind = peor caso sobre los targets donde el miembro diverge** (heterogeneidad por-runtime real: `console.table` funciona en workerd, falta en EdgeVM; `createObjectURL` lanza en workerd, funciona en EdgeVM). Si algún target divergente es present-but-throws → la entrada es present-but-throws (la sanción nunca suprime).
+- **Punto ciego del discriminador asimetría⇒gap:** presupone que ambas formas están dentro del mismo mandato. Asimetría que coincide con una frontera de renuncia DECLARADA = diseño, no gap (aplica a #7/alias).
+- **Tercer discriminador (R5-A1):** un control a nivel de VEREDICTO prueba DIFERENCIA, no MECANISMO. Ninguna afirmación de mecanismo entra en un spec sin una sonda donde los mecanismos candidatos predigan resultados DISTINTOS. Fundacional: #2 (`WebAssembly['comp'+'ile']`) parecía gap; la sonda `performance['n'+'ow']()`→FLAG probó que el gate NO folda (era §141+polaridad, no gap) → U2.1 ANULADA (habría reintroducido el mecanismo que #173 rechazó). Ver [[feedback_mechanism_probe_discriminator]].
+
+**Cierre por construcción (6 unificaciones U1–U6 + #5/O4/URL):** mismo predicado, cuantificador/ruta correctos — no rediseñar la decisión, enrutar la existente por el camino canónico. Meta-lints de sitio + invariantes conductuales ampliados (INV-WRAP consumer-edge) como custodia. El oráculo de runtime (`scripts/runtime-oracle/`) absorbe #190: premisas medidas contra workerd real, no asertadas.
