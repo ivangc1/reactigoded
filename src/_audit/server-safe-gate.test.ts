@@ -2595,27 +2595,31 @@ describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)
     expect(isContentServerSafeMarked(code, "zwsp-prose.tsx")).toBe(false);
   });
 
-  // RAÍZ G (re-hunt rc.1 + Fable cross-review): un `@server-safe` que sigue a
-  // OTRO tag JSDoc en la misma línea (`@internal @server-safe`) era un fail-open
-  // SILENCIOSO — el filtro de prefijo-blank hacía `continue` y el archivo entero
-  // quedaba SIN auditar. Ahora un prefijo LIMPIO (decoración + tags hermanos
-  // completos) marca; prosa mixta (tag + texto) falla-ruidoso; prosa pura tolera.
-  it("tag hermano previo `@internal @server-safe` SÍ marca (fail-open cerrado)", () => {
+  // RAÍZ G (re-hunt rc.1) + M2 (line-start, ratificada 2026-07-04): un `@server-safe` que sigue a OTRO tag JSDoc
+  // en la MISMA línea (`@internal @server-safe`) era un fail-open SILENCIOSO en el predecesor. BLOCKER-1 lo hizo
+  // MARCAR; M2 lo hace HIGIENE fail-loud ("línea propia") — la invariante (un tag parseado NUNCA es no-op
+  // silencioso) se mantiene, ahora exigiendo line-start. `@server-safe` en su propia línea (aunque haya otros
+  // tags en OTRAS líneas del bloque) marca; tag hermano en la MISMA línea o prosa antes → fail-loud.
+  it("tag hermano `@internal @server-safe` en la MISMA línea → higiene M2 (línea propia), NO marca en silencio", () => {
     const code = `/** @internal @server-safe */\nexport function Card() { return 1; }`;
-    expect(isContentServerSafeMarked(code, "sibling-tag.tsx")).toBe(true);
+    expect(() => isContentServerSafeMarked(code, "sibling-tag.tsx")).toThrow(
+      /NO está en línea propia/,
+    );
   });
 
-  it("varios tags hermanos `@packageDocumentation @beta @server-safe` marca", () => {
+  it("varios tags hermanos en la misma línea `@packageDocumentation @beta @server-safe` → higiene M2", () => {
     const code = `/** @packageDocumentation @beta @server-safe */\nexport const X = 1;`;
-    expect(isContentServerSafeMarked(code, "multi-sibling.tsx")).toBe(true);
+    expect(() =>
+      isContentServerSafeMarked(code, "multi-sibling.tsx"),
+    ).toThrow(/NO está en línea propia/);
   });
 
-  it("tag hermano en línea propia multi-línea marca", () => {
+  it("tag hermano en OTRA línea + `@server-safe` en LÍNEA PROPIA (multi-línea) → SÍ marca (line-start)", () => {
     const code = `/**\n * @internal\n * @server-safe\n */\nexport const X = 1;`;
     expect(isContentServerSafeMarked(code, "sibling-multiline.tsx")).toBe(true);
   });
 
-  it("mixto `@internal foo @server-safe` (tag + prosa) LANZA fail-loud", () => {
+  it("mixto `@internal foo @server-safe` (tag + prosa) LANZA fail-loud (embebido en prosa)", () => {
     // Invariante: un tag parseado ni marca ni falla en silencio. Con un tag
     // hermano PERO prosa entre medias, la intención es ambigua → fail-loud.
     const code = `/** @internal foo @server-safe */\nexport const X = 1;`;
@@ -6401,6 +6405,51 @@ describe("server-safe gate — #7 vista diferida + INV-ORDER (D1-b rama 2)", () 
       expect(au).toBe(true);
     });
   });
+
+  // INV-ORDER PARAMETRIZADO por CLASE DE CONTEXTO DIFERIDO (Auditoría B R5, sweep): la simetría de orden se
+  // cumple para TODA lectura call-time — cuerpo fn, arrow, field-init de instancia, param-default. field-init
+  // y param-default entran como CLASES de contexto en la matriz, no como celdas sueltas.
+  describe("INV-ORDER por clase de contexto (fn-body / arrow / field-init / param-default)", () => {
+    const CONTEXTS: [string, (order: "au" | "ua") => string][] = [
+      [
+        "fn-body",
+        (o) =>
+          o === "au"
+            ? `let c:any; c = performance; function use(){ return c.eventLoopUtilization(); } return use();`
+            : `let c:any; function use(){ return c.eventLoopUtilization(); } c = performance; return use();`,
+      ],
+      [
+        "arrow-body",
+        (o) =>
+          o === "au"
+            ? `let c:any; c = performance; const use = () => c.eventLoopUtilization(); return use();`
+            : `let c:any; const use = () => c.eventLoopUtilization(); c = performance; return use();`,
+      ],
+      [
+        "field-init (instancia)",
+        (o) =>
+          o === "au"
+            ? `let c:any; c = performance; class K { p:any = c.eventLoopUtilization(); } return new K();`
+            : `let c:any; class K { p:any = c.eventLoopUtilization(); } c = performance; return new K();`,
+      ],
+      [
+        "param-default",
+        (o) =>
+          o === "au"
+            ? `let c:any; c = performance; function g(x:any = c.eventLoopUtilization()){ return x; } return g();`
+            : `let c:any; function g(x:any = c.eventLoopUtilization()){ return x; } c = performance; return g();`,
+      ],
+    ];
+    it.each(CONTEXTS)(
+      "%s: veredicto(D_assign; D_use) === veredicto(D_use; D_assign) y FLAG (call-time)",
+      (_n, form) => {
+        const au = flagged(`${W}export function f(){ ${form("au")} }`);
+        const ua = flagged(`${W}export function f(){ ${form("ua")} }`);
+        expect(au).toBe(ua);
+        expect(au).toBe(true);
+      },
+    );
+  });
 });
 
 describe("server-safe gate — #7 dos vistas: INV-VIEW + celdas diferidas (P-DEF-6, shadow, field-init)", () => {
@@ -6535,21 +6584,44 @@ describe("server-safe gate — marcador M1 (near-miss /* */) + O2 (@internal@ser
     });
   });
 
-  describe("O2: @internal@server-safe (pegado, sin espacio) → higiene, no 'embebido en prosa'", () => {
-    it("pegado → throw con mensaje de whitespace (no de prosa)", () => {
+  describe("O2/M2: tag hermano en la misma línea (pegado o con espacio) → higiene line-start, no 'prosa'", () => {
+    it("pegado @internal@server-safe → throw higiene M2 (línea propia)", () => {
       expect(() =>
         isContentServerSafeMarked("/** @internal@server-safe */" + body, "x.ts"),
-      ).toThrow(/PEGADO a un tag hermano sin whitespace/);
+      ).toThrow(/NO está en línea propia/);
     });
-    it("con espacio @internal @server-safe → marca (sin throw)", () => {
-      expect(
+    it("con espacio @internal @server-safe → throw higiene M2 (no marca en silencio)", () => {
+      expect(() =>
         isContentServerSafeMarked("/** @internal @server-safe */" + body, "x.ts"),
-      ).toBe(true);
+      ).toThrow(/NO está en línea propia/);
     });
-    it("prosa real @internal foo @server-safe → throw de prosa (distinto de O2)", () => {
+    it("prosa real @internal foo @server-safe → throw de prosa (distinto de M2)", () => {
       expect(() =>
         isContentServerSafeMarked("/** @internal foo @server-safe */" + body, "x.ts"),
       ).toThrow(/embebido en prosa/);
+    });
+  });
+
+  // P-M2-PROSE (residual preexistente, ratificado rc.1): prosa PURA (sin tag) antes del marker en la misma
+  // línea → bucket "prosa pura → tolera" → NO marca y NO suena (clase M1). Se mantiene porque el discriminador
+  // intención-vs-mención dentro de prosa es genuinamente ambiguo: `not yet @server-safe` es mención legítima
+  // que NO debe tronar. Fixtures pinean AMBOS lados (si ronda-6 añade el trailing-token, estos documentan el
+  // shift). Ver docs/server-safe-limitations.md §2 (M2 residual).
+  describe("P-M2-PROSE: prosa antes del marker en la misma línea (residual tolerado)", () => {
+    it("`/** Does X. @server-safe */` (intención plausible) → NO marca (tolerado, silencioso)", () => {
+      expect(
+        isContentServerSafeMarked("/** Does X. @server-safe */" + body, "x.ts"),
+      ).toBe(false);
+    });
+    it("`/** not yet @server-safe */` (mención legítima) → NO marca y NO truena (ambigüedad intencional)", () => {
+      expect(
+        isContentServerSafeMarked("/** not yet @server-safe */" + body, "x.ts"),
+      ).toBe(false);
+    });
+    it("control: `/** @server-safe does X */` (marker primero, prosa después) → SÍ marca (line-start)", () => {
+      expect(
+        isContentServerSafeMarked("/** @server-safe does X */" + body, "x.ts"),
+      ).toBe(true);
     });
   });
 });

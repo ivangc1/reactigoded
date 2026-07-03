@@ -618,3 +618,34 @@ Baseline MEDIDO (protocolo R5-A1: toda fila as-is/renunciado es [ASUMIDO] hasta 
 - **Frontera:** pattern-assign anidado (`[c] = [performance]` diferido) EXTENDIDO reusando el matcher estructural (`collectStructuralAliases` + `resolvePartialRootSet`) — cierra la asimetría diferida-vs-same-scope; cadena entre bloques hermanos cubierta por el punto fijo corregido (pineada); **for-of iteration-assignment target RENUNCIADO con línea en LIMITATIONS** (§141, value-flow por elementos, patrón raro).
 
 Moraleja acumulada: código 9, autores 1 — cada autor (mi prosa, mis sondas, la V7/enumeración/ratificación de Fable, sus PROPIAS sondas) ha caído ≥1 vez; el sistema funciona contra cada uno por igual. Lo que cierra NO es el diseño (correcto desde la vista-diferida-∃) sino el CUSTODIO GENERATIVO del cuantificador: while-stable + INV-VIEW generativo hacen que "por construcción" sea verdad, no aspiración.
+
+## D2 ratificada (2026-07-04) — familia property-copy vs round-trips de representación
+El reconocedor reflexivo cubre lecturas KEY-EXPLÍCITAS y EXPRESSION-LOCAL a través de la familia
+property-copy — intrínsecos cuya semántica es transferencia de own-properties/descriptores:
+gOPD/gOPDs, Object.assign, spread, Object.create(_, gOPDs(R)), defineProperty/defineProperties —
+incluidas composiciones INTRA-familia (el segundo parámetro de create/defineProperties existe para
+consumir gOPDs). Renunciados: los ROUND-TRIPS DE REPRESENTACIÓN (entries/values/fromEntries,
+JSON.parse∘stringify; structuredClone eliminado empíricamente — lanza DataCloneError): destruyen y
+reconstruyen la identidad a través de una representación intermedia, el inicio del data-flow
+arbitrario. La familia sigue ACOTADA, no cerrada por construcción (ratificación R4 intacta).
+
+## M2 ratificada (2026-07-04) — regla LINE-START del marcador
+El marcador `@server-safe` cuenta SOLO en LÍNEA PROPIA: en su línea únicamente puede haber decoración
+JSDoc (`/**`, ` * `, whitespace) antes del tag. Un tag hermano en la MISMA línea (`@internal @server-safe`,
+pegado o con espacio) o prosa antes NO marca → diagnóstico de HIGIENE fail-loud ("ponlo en línea propia"),
+NUNCA un des-marcado silencioso (sería fail-open — la razón de BLOCKER-1). Prosa/otro tag DESPUÉS en la
+línea sí marca (es la descripción del propio tag); tags hermanos en OTRAS líneas del bloque no afectan.
+Δ2: medido contra el detector PROPIO del gate (no `getJSDocTags` — no son el mismo oráculo). Subsume O2
+(glued `@internal@server-safe`) como la misma clase. Los 39 markers del DS son line-start → cero
+des-marcados. Hermana de M1 (near-miss `/* */`): ambas convierten un marcador mal-puesto en fail-loud.
+
+## PRED-annex (§8) — actualización ciclo #7
+- **Fuera de predicción (renunciado con línea):** member-LHS (`obj.p = performance`), copias-RHS (`{...R}`/
+  `Object.assign` como valor), call-flow (`c = getRoot()`), round-trips de representación (D2), y
+  **for-of iteration-assignment target** (`for (c of [performance]) {}` — value-flow por elementos, §141,
+  nuevo este ciclo; ver LIMITATIONS §3).
+- **Predicciones POR EJE (atadas a su invariante custodio):** PRED-WRAP/SYM/KEY/PROBE/ORACLE (R5) +
+  **PRED-ORDER** (INV-ORDER: simetría de orden de declaración en contextos diferidos) + **PRED-VIEW**
+  (INV-VIEW: `diferida ⊇ forward-fin`, custodiado GENERATIVAMENTE por el punto fijo while-stable, cadena
+  N=1..8). Todo claim de cierre tiene su invariante custodio; "por construcción" sin custodio generativo es
+  prosa (lección de la 3ª batería).

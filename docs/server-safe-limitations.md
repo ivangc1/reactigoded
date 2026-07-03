@@ -98,14 +98,25 @@ subsystem the gate renounces. Never hides anything executable.
   Vercel-Edge-missing set, with `SharedArrayBuffer` additionally removed (Cloudflare disables it — Spectre).
   A fully systematic `{workerd ∩ Deno ∩ Vercel-Edge}` intersection (and the `Atomics` / high-resolution-timer
   questions) is pending a real-runtime globalThis dump.
-- **Marker mentioned inside another JSDoc tag (M2, round-5 policy call).** A prose mention of `@server-safe`
-  inside the text of a *different* tag — `/** @param x the @server-safe flag */` — registers `server-safe` as
-  a JSDoc tag → the file is treated as marked and linted, without the maintainer intending it. Fail-closed
-  direction (a spurious lint, not a missed one), but surprising. Whether the marker must be its own
-  block-level tag is a policy decision deferred to round 5. *Workaround: don't mention `@server-safe` inside
-  another tag's text; put it on its own line.*
+- **Marker must be on its own line (M2 — resolved 2026-07-04, line-start rule).** `@server-safe` counts only
+  when its line has nothing but JSDoc decoration (`/**`, ` * `, whitespace) before it. A sibling tag on the
+  *same* line (`/** @internal @server-safe */`) or prose before it (`/** @param x the @server-safe flag */`)
+  no longer marks — it raises a **fail-loud hygiene diagnostic** ("put it on its own line"), never a silent
+  un-mark (which would be fail-open). Prose/other tags *after* it on the line, or sibling tags on *other*
+  lines of the block, are fine. Sister of the M1 near-miss (`/* */` single-star): both turn a mis-placed
+  marker into a loud error rather than a silent skip. *No workaround needed — the diagnostic tells you.*
+  - **Residual (P-M2-PROSE) — plain prose *before* the marker on the same line is tolerated silently.**
+    `/** Does X. @server-safe */` (no sibling tag, just prose then the marker) does **not** mark and does
+    **not** warn — a plausible marking intent dies quietly, the M1 class. This is *pre-existing* (BLOCKER-1's
+    "pure prose → tolerate" bucket, not introduced by the line-start rule) and **kept for rc.1 by design**:
+    the intent-vs-mention discriminator inside prose is genuinely ambiguous — `/** not yet @server-safe */`
+    is a legitimate mention that must **not** throw. Tolerating both is the safe default; the cost is that a
+    real "prose then marker on one line" is silent. *Workaround: put `@server-safe` on its own line (or make
+    it the line's first token).* A finer trailing-token heuristic (marker as the last token before `*/` →
+    hygiene) is round-6 backlog.
 
 ---
 
 *Internal rationale and ratifications live in `docs/decisions/D1-P1-server-safe-marker.md`. Groups 2–4 are
-by-design boundaries (2 = won't, 3 = can't, 4 = over-flags); group 5 is the only TODO.*
+by-design boundaries (2 = won't, 3 = can't, 4 = over-flags). Group 5 (marker policy) is closed: M1 near-miss
+and M2 line-start both ship as fail-loud hygiene diagnostics.*

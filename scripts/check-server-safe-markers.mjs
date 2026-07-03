@@ -8766,25 +8766,27 @@ function detectServerSafeMarker(sourceFile, relPath) {
             .replace(/[\u200B-\u200D\uFEFF]/g, "");
           // Prefijo LIMPIO = solo decoración JSDoc (`/**`, ` * `, whitespace) y
           // tags hermanos COMPLETOS (`@internal`, `@packageDocumentation`, …),
-          // sin prosa entre medias. `@internal @server-safe` es limpio → marca;
-          // `resumen. @server-safe` (prosa) y `@internal foo @server-safe`
-          // (mixto) NO lo son → intención ambigua → fail-loud.
-          const cleanPrefix = /^[\s*/]*(@[A-Za-z][\w-]*\s+)*$/.test(linePrefix);
+          // REGLA LINE-START (M2, ratificada 2026-07-04): el marker cuenta SOLO si en su línea hay ÚNICAMENTE
+          // decoración JSDoc (`/**`, ` * `, whitespace) antes del `@server-safe`. Un tag hermano en la MISMA
+          // línea (`@internal @server-safe`) o prosa antes NO marca → diagnóstico de higiene (fail-loud, NUNCA
+          // silencioso: un des-marcado invisible sería fail-open — la razón de BLOCKER-1). `@server-safe` con
+          // prosa/otro tag DESPUÉS en la línea sí marca (es la descripción del propio tag). Los 39 markers del
+          // DS son line-start → cero des-marcados. Δ2: medido contra el detector PROPIO, no getJSDocTags.
+          const cleanPrefix = /^[\s*/]*$/.test(linePrefix);
           if (cleanPrefix) {
-            // decoración + tags hermanos COMPLETOS → posición válida de marker.
+            // SOLO decoración antes → posición válida de marker (line-start).
             if (topLevel.has(node)) {
               marked = true;
             } else {
               misplacedLines.push(line + 1);
             }
-          } else if (/^[\s*/]*@[A-Za-z][\w-]*$/.test(linePrefix)) {
-            // Tag hermano PEGADO sin whitespace (`@internal@server-safe`): el prefijo es JUSTO un tag
-            // completo, sin espacio antes del `@server-safe`. NO es prosa — es un desliz de higiene (O2).
-            // Mensaje específico (separa con espacio), no el de "embebido en prosa".
+          } else if (/^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix)) {
+            // Uno o más tags hermanos ANTES en la misma línea (`@internal @server-safe`, `@internal@server-safe`
+            // glued, `@a @b @server-safe`) → M2: el marker debe ir en LÍNEA PROPIA. Higiene fail-loud, NO
+            // des-marca en silencio. Subsume el O2 glued (misma clase: no-line-start por tag hermano).
             misspacedLines.push(line + 1);
           } else if (/@[A-Za-z]/.test(linePrefix)) {
-            // Hay un tag hermano PERO con prosa entre medias (`@internal foo
-            // @server-safe`) → marker malformado, intención ambigua → fail-loud.
+            // Prosa + tag antes (`@internal foo @server-safe`, `@param x the @server-safe`) → embebido en prosa.
             proseLines.push(line + 1);
           } else {
             // Prosa PURA sin tag previo (`todavía no es @server-safe del todo`):
@@ -8815,10 +8817,11 @@ function detectServerSafeMarker(sourceFile, relPath) {
   if (misspacedLines.length > 0) {
     const plural = misspacedLines.length > 1;
     throw new Error(
-      `[server-safe gate] marker \`@server-safe\` PEGADO a un tag hermano sin whitespace ` +
+      `[server-safe gate] marker \`@server-safe\` NO está en línea propia ` +
         `en ${relPath} (línea${plural ? "s" : ""} ${misspacedLines.join(", ")}). ` +
-        `\`@internal@server-safe\` no separa los tags; TS parsea \`@server-safe\` pero la intención ` +
-        `es ambigua. Separa los tags con un espacio: \`@internal @server-safe\`. (O2, higiene de marcador.)`,
+        `Hay un tag hermano antes en su línea (\`@internal @server-safe\` o pegado \`@internal@server-safe\`); ` +
+        `TS lo parsea como tag pero el marcador debe ir en LÍNEA PROPIA (solo \`/**\`/\` * \`/espacios antes). ` +
+        `Muévelo a su propia línea del JSDoc. (M2, higiene de marcador — line-start.)`,
     );
   }
   if (proseLines.length > 0) {

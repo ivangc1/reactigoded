@@ -100,6 +100,7 @@
     "test:state-css-exclusion": "node scripts/check-state-css-exclusion.mjs",
     "test:no-dev-warns": "node scripts/check-no-dev-warns.mjs",
     "test:server-safe-markers": "node scripts/check-server-safe-markers.mjs",
+    "oracle": "node scripts/runtime-oracle/run.mjs",
     "test:publint": "publint",
     "test:rsc-fixture": "tsc -p fixtures/rsc/tsconfig.json --noEmit",
     "test:consumer-types": "tsc -p fixtures/consumer-types/tsconfig.json --noEmit",

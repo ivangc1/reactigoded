@@ -1,34 +1,54 @@
-// Oráculo de runtime del catálogo @server-safe (Auditoría B R5 §4.2 / D3, absorbe #190).
-// Se ejecuta DENTRO de workerd (el baseline Edge REAL, no una emulación con fugas como @edge-runtime/vm)
-// y reporta el hazard-kind medido de cada premisa del catálogo. El spec de CI arranca este worker en un
-// puerto efímero, fetch-ea, y compara el JSON con las premisas pineadas — convirtiendo "premisa asertada"
-// en "premisa medida-continuamente". Si workerd cambia una premisa (o un miembro migra absence↔present-throws),
-// el diff de test lo revela ANTES de que el gate clasifique mal (la lección root-H: medir, no asumir).
+/**
+ * Oráculo de runtime — fixture worker (Auditoría B R5 §4.2 / D3).
+ * Corre DENTRO de workerd y reporta las premisas del catálogo del gate `@server-safe`.
+ * Cada entrada nueva del catálogo añade aquí su sonda (typeof + llamada si el hazard es
+ * present-but-throws) y su aserción en run.mjs. Las premisas pineadas provienen de la
+ * medición del 2026-07-03 (workerd 2026-07-03, compat 2025-05-01 y 2026-07-01, idénticas).
+ */
 export default {
   async fetch() {
     const out = {
-      // absence-hazard: el miembro FALTA en workerd (undefined) → `?.()`/`?? fb` lo protegen.
+      perf: typeof performance,
       elu: typeof performance?.eventLoopUtilization,
-      table: typeof console.table,
+      createObjectURL: typeof URL.createObjectURL,
+      canParse: typeof URL.canParse,
+      blob: typeof Blob,
+      consoleTable: typeof console.table,
+      waCompile: typeof WebAssembly.compile,
     };
-    // present-but-throws: typeof da "function" pero la LLAMADA lanza → la sonda NO protege.
     try {
-      URL.createObjectURL(new Blob(["x"]));
-      out.createObjectURL = "OK";
+      out.newURL = new URL("https://a.b/c").href;
     } catch (e) {
-      out.createObjectURL = "THROWS:" + e.message.slice(0, 40);
+      out.newURL = "THROWS: " + String(e.message);
+    }
+    try {
+      out.createObjectURLCall = String(URL.createObjectURL(new Blob(["x"])));
+    } catch (e) {
+      out.createObjectURLCall = "THROWS: " + String(e.message);
+    }
+    try {
+      URL.revokeObjectURL("blob:x");
+      out.revokeCall = "OK";
+    } catch (e) {
+      out.revokeCall = "THROWS: " + String(e.message);
     }
     try {
       await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
-      out.waCompile = "OK";
+      out.waCompileCall = "OK";
     } catch (e) {
-      out.waCompile = "THROWS:" + e.constructor.name;
+      out.waCompileCall = "THROWS " + e.constructor.name + ": " + String(e.message);
     }
     try {
       new Function("return 1");
       out.fnCtor = "OK";
     } catch (e) {
-      out.fnCtor = "THROWS:" + e.constructor.name;
+      out.fnCtor = "THROWS " + e.constructor.name;
+    }
+    try {
+      console.table([{ a: 1 }]);
+      out.tableCall = "OK";
+    } catch (e) {
+      out.tableCall = "THROWS: " + String(e.message);
     }
     return new Response(JSON.stringify(out));
   },
