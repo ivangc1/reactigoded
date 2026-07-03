@@ -8665,6 +8665,7 @@ function detectServerSafeMarker(sourceFile, relPath) {
   let marked = false;
   const misplacedLines = [];
   const proseLines = [];
+  const misspacedLines = []; // tag hermano PEGADO sin whitespace (`@internal@server-safe`) — O2, higiene
 
   const visit = (node) => {
     // `node.jsDoc`: array de bloques JSDoc attachados a este host (no se
@@ -8708,6 +8709,11 @@ function detectServerSafeMarker(sourceFile, relPath) {
             } else {
               misplacedLines.push(line + 1);
             }
+          } else if (/^[\s*/]*@[A-Za-z][\w-]*$/.test(linePrefix)) {
+            // Tag hermano PEGADO sin whitespace (`@internal@server-safe`): el prefijo es JUSTO un tag
+            // completo, sin espacio antes del `@server-safe`. NO es prosa — es un desliz de higiene (O2).
+            // Mensaje específico (separa con espacio), no el de "embebido en prosa".
+            misspacedLines.push(line + 1);
           } else if (/@[A-Za-z]/.test(linePrefix)) {
             // Hay un tag hermano PERO con prosa entre medias (`@internal foo
             // @server-safe`) → marker malformado, intención ambigua → fail-loud.
@@ -8736,6 +8742,15 @@ function detectServerSafeMarker(sourceFile, relPath) {
         `El marker SOLO es válido en el JSDoc de un statement top-level del ` +
         `módulo — un marker anidado pasaría inadvertido (fail-open silencioso). ` +
         `Mueve el JSDoc al export/declaración top-level del componente.`,
+    );
+  }
+  if (misspacedLines.length > 0) {
+    const plural = misspacedLines.length > 1;
+    throw new Error(
+      `[server-safe gate] marker \`@server-safe\` PEGADO a un tag hermano sin whitespace ` +
+        `en ${relPath} (línea${plural ? "s" : ""} ${misspacedLines.join(", ")}). ` +
+        `\`@internal@server-safe\` no separa los tags; TS parsea \`@server-safe\` pero la intención ` +
+        `es ambigua. Separa los tags con un espacio: \`@internal @server-safe\`. (O2, higiene de marcador.)`,
     );
   }
   if (proseLines.length > 0) {
@@ -8839,6 +8854,41 @@ function markerNeedsHygiene(sourceFile, content, relPath) {
   return detectServerSafeMarker(normSF, relPath);
 }
 
+/**
+ * NEAR-MISS del marker (Auditoría B R5 / M1): `@server-safe` en un BLOCK-COMMENT NO-JSDoc (un bloque abierto con
+ * UNA estrella en vez de DOS) → TS no emite el tag → el fichero se SALTA silenciosamente y el maintainer CREE que
+ * está auditado. Blast-radius de fichero completo, MÁS probable que un Cc invisible (una estrella en vez de dos
+ * es un typo trivial). Devuelve las líneas de los near-miss (el CLI las reporta fail-loud sobre ficheros NO
+ * marcados). Solo `@server-safe` en POSICIÓN de tag (tras el abre-bloque / estrella / whitespace), no incidental.
+ */
+export function markerNearMissLines(sourceFile) {
+  const text = sourceFile.text;
+  const out = [];
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    /* skipTrivia */ false,
+    sourceFile.languageVariant,
+    text,
+  );
+  let tok = scanner.scan();
+  while (tok !== ts.SyntaxKind.EndOfFileToken) {
+    if (tok === ts.SyntaxKind.MultiLineCommentTrivia) {
+      const c = scanner.getTokenText();
+      if (
+        !c.startsWith("/**") &&
+        /(?:^\/\*|\s|\*)@server-safe(?:\s|\*|$)/.test(c)
+      ) {
+        const { line } = sourceFile.getLineAndCharacterOfPosition(
+          scanner.getTokenPos(),
+        );
+        out.push(line + 1);
+      }
+    }
+    tok = scanner.scan();
+  }
+  return out;
+}
+
 export function isContentServerSafeMarked(content, relPath) {
   const sourceFile = ts.createSourceFile(
     relPath,
@@ -8890,6 +8940,27 @@ if (isCliEntry) {
   // reporting de la cadena correcta (cada entry necesita ver el path
   // completo desde sí mismo). Lo que SÍ se comparte es el parseCache.
   const allViolations = [];
+  // M1 (Auditoría B R5): NEAR-MISS del marker en ficheros NO marcados — `@server-safe` en un `/* */` (una
+  // estrella, no-JSDoc) → TS lo ignora → el fichero se salta silenciosamente sin auditar. Fail-loud para que el
+  // maintainer corrija `/*`→`/**` (blast-radius de fichero completo, más probable que un Cc). Solo auditables.
+  {
+    const markedSet = new Set(markedFiles);
+    for (const file of allFiles) {
+      if (markedSet.has(file) || !isAuditableExt(file)) continue;
+      const cached = parseCache.get(file);
+      if (!cached) continue;
+      const nmLines = markerNearMissLines(cached.sourceFile);
+      if (nmLines.length > 0) {
+        const relPath = relative(repoRoot, file).split(pathSep).join("/");
+        const plural = nmLines.length > 1;
+        allViolations.push({
+          rule: "server-safe-marker",
+          file: relPath,
+          detail: `\`@server-safe\` en un comentario NO-JSDoc (\`/* */\`, una estrella) en la línea${plural ? "s" : ""} ${nmLines.join(", ")} — TS solo reconoce el marker en un bloque JSDoc (\`/** */\`, doble estrella) → este fichero se saltaba SIN auditar. ¿Querías \`/** @server-safe */\`? Cámbialo a doble estrella (o quita el token si no es un marker). M1.`,
+        });
+      }
+    }
+  }
   for (const file of markedFiles) {
     const relPath = relative(repoRoot, file).split(pathSep).join("/");
     if (!isAuditableExt(file)) {

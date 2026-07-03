@@ -31,6 +31,7 @@ import {
   checkFileWithImports,
   resolveImportPath,
   isContentServerSafeMarked,
+  markerNearMissLines,
 } from "../../scripts/check-server-safe-markers.mjs";
 
 /**
@@ -6509,6 +6510,46 @@ describe("server-safe gate — #7 celdas del cuantificador diferido (batería ad
       expect(
         flagged(`${W}export function f(){ let c:any; const K = class { p:any = c.eventLoopUtilization(); }; c = performance; return new K(); }`),
       ).toBe(true);
+    });
+  });
+});
+
+describe("server-safe gate — marcador M1 (near-miss /* */) + O2 (@internal@server-safe higiene)", () => {
+  const body = "\nexport const x = 1;\n";
+
+  describe("M1: @server-safe en comentario NO-JSDoc (una estrella) → near-miss (blast-radius fichero)", () => {
+    const nm = (src: string) =>
+      markerNearMissLines(
+        ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true),
+      ).length > 0;
+    it.each<[string, string, boolean]>([
+      ["/* @server-safe */ una-estrella → near-miss", "/* @server-safe */" + body, true],
+      ["/*@server-safe*/ sin espacios → near-miss", "/*@server-safe*/" + body, true],
+      ["multi-línea una-estrella → near-miss", "/*\n * @server-safe\n */" + body, true],
+      ["/** @server-safe */ JSDoc → NO near-miss", "/** @server-safe */" + body, false],
+      ["// @server-safe line-comment → NO", "// @server-safe" + body, false],
+      ["prosa foo@server-safe pegado → NO (incidental)", "/* nota: foo@server-safe */" + body, false],
+      ["string literal → NO", 'const s = "@server-safe";' + body, false],
+    ])("%s", (_n, src, isNearMiss) => {
+      expect(nm(src)).toBe(isNearMiss);
+    });
+  });
+
+  describe("O2: @internal@server-safe (pegado, sin espacio) → higiene, no 'embebido en prosa'", () => {
+    it("pegado → throw con mensaje de whitespace (no de prosa)", () => {
+      expect(() =>
+        isContentServerSafeMarked("/** @internal@server-safe */" + body, "x.ts"),
+      ).toThrow(/PEGADO a un tag hermano sin whitespace/);
+    });
+    it("con espacio @internal @server-safe → marca (sin throw)", () => {
+      expect(
+        isContentServerSafeMarked("/** @internal @server-safe */" + body, "x.ts"),
+      ).toBe(true);
+    });
+    it("prosa real @internal foo @server-safe → throw de prosa (distinto de O2)", () => {
+      expect(() =>
+        isContentServerSafeMarked("/** @internal foo @server-safe */" + body, "x.ts"),
+      ).toThrow(/embebido en prosa/);
     });
   });
 });

@@ -190,3 +190,9 @@ export declare function isContentServerSafeMarked(
   content: string,
   relPath: string,
 ): boolean;
+
+/**
+ * NEAR-MISS del marker (M1): líneas donde `@server-safe` aparece en un block-comment NO-JSDoc (una estrella en
+ * vez de dos) → TS no lo reconoce como tag → el fichero se salta sin auditar. Vacío si no hay near-miss.
+ */
+export declare function markerNearMissLines(sourceFile: ts.SourceFile): number[];
