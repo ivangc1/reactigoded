@@ -57,9 +57,13 @@ mandate.
 ## 3. Not followed — indirect / data-flow forms (`§141`, the gate *cannot*)
 
 Catches the dangerous token **in its site** and through value-transparent wrappers (cast/paren/`!`/comma/
-`&&`/`||`/`??`/ternary/assignment) and **container-literal projection** (`[X][0]`, `({k:X}).k` — closed in
-rc.1). It does **not** follow values through variables, arguments, or cross-statement aliases — that is
-data-flow, renounced by design (catching only the obvious syntactic subset would be false coverage).
+`&&`/`||`/`??`/ternary/assignment), **container-literal projection** (`[X][0]`, `({k:X}).k`, and spread of an
+*in-site literal* `({...{k:X}}).k` — closed in rc.1 / R6), and **in-scope declaration & assignment aliases**
+(`const p = performance; … p.member` in either textual order, forward and call-time deferred views — the
+two-view fixed point). It does **not** follow values through **calls, parameters, cross-module boundaries,
+representation round-trips** (`Object.entries`/`JSON`/`structuredClone`), or a spread/copy of a **variable**
+(`const b = {k:X}; ({...b}).k`) — that is data-flow provenance, renounced by design (catching only the obvious
+syntactic subset would be false coverage).
 
 - **`for (x of <iterable>) {}` iteration-assignment target.** The deferred-assignment hoist (two-view model)
   tracks `x = <root>`, `var x = <root>` and destructuring `[x] = [<root>]` to outer bindings. A for-of whose
@@ -118,5 +122,12 @@ subsystem the gate renounces. Never hides anything executable.
 ---
 
 *Internal rationale and ratifications live in `docs/decisions/D1-P1-server-safe-marker.md`. Groups 2–4 are
-by-design boundaries (2 = won't, 3 = can't, 4 = over-flags). Group 5 (marker policy) is closed: M1 near-miss
-and M2 line-start both ship as fail-loud hygiene diagnostics.*
+by-design boundaries (2 = won't, 3 = can't, 4 = over-flags). Group 5 (marker policy) ships fail-loud
+diagnostics guarded by a generative **position-axis invariant over the full domain the detector enumerates**
+(*every well-formed `@server-safe`, in any position, marks (top-level) or throws (else) — never a silent
+skip*): M1 near-miss (single-star, symmetric to leading/trailing punctuation + invisibles, R6/H4), M2
+line-start, EOF-orphan (R6/H5), and **nested markers** (in a method, inner function, or block — R6.1: a
+well-formed `/** @server-safe */` off the module header now throws `per-FICHERO, move to the header`, closing
+the asymmetry where the *wrong* single-star syntax warned but the *correct* double-star nested died silent).
+The one tolerated-silent residual is P-M2-PROSE (plain prose adjacent to the marker — a mention, not an
+intent — in any position), kept by design (intent-vs-mention ambiguity is irreducible at the text level).*

@@ -1220,10 +1220,13 @@ function caseClauseTerminates(statements) {
  * cualquier colisión mismo-scope → no-instanciado). Solo puede AÑADIR flagging (nunca quitar)
  * → no puede introducir bypass; el único riesgo es over-flag de un constructo contrivado.
  */
-function namespaceCollidesWithAmbientSibling(moduleDecl) {
-  if (!moduleDecl.name || !ts.isIdentifier(moduleDecl.name)) return false;
-  const name = moduleDecl.name.text;
-  const parent = moduleDecl.parent;
+// Predicado GENÉRICo nombre+scope (Auditoría B R6 / H6): ¿el binding de valor `namedDecl` (namespace-de-valor,
+// enum, …) colisiona con un ambient sibling homónimo del mismo scope? La misma merge-elision de rolldown/OXC
+// borra el `var` local → el read filtra al global. Order-independiente + fail-closed (solo AÑADE flagging).
+function collidesWithAmbientSibling(namedDecl) {
+  if (!namedDecl.name || !ts.isIdentifier(namedDecl.name)) return false;
+  const name = namedDecl.name.text;
+  const parent = namedDecl.parent;
   const siblings =
     parent && ts.isSourceFile(parent)
       ? parent.statements
@@ -1232,7 +1235,7 @@ function namespaceCollidesWithAmbientSibling(moduleDecl) {
         : null;
   if (!siblings) return false;
   for (const s of siblings) {
-    if (s === moduleDecl || !isAmbientDeclaration(s)) continue;
+    if (s === namedDecl || !isAmbientDeclaration(s)) continue;
     if (ts.isVariableStatement(s)) {
       for (const d of s.declarationList.declarations) {
         const declNames = new Set();
@@ -1293,7 +1296,7 @@ function namespaceIsInstantiated(moduleDecl) {
   // bundler (rolldown/vite 8) ELIDE el `var N` local → `N` NO es shadow runtime, el read
   // `N.x` filtra al global → debe flaggearse. Ver `namespaceCollidesWithAmbientSibling`.
   // FAIL-CLOSED (solo añade flagging). beta.27 BLOCKER-1 (workflow adversarial).
-  if (namespaceCollidesWithAmbientSibling(moduleDecl)) return false;
+  if (collidesWithAmbientSibling(moduleDecl)) return false;
   const body = moduleDecl.body;
   if (!body) return false;
   // `namespace X.Y { … }`: el body es otro ModuleDeclaration (forma dotted).
@@ -1401,7 +1404,13 @@ function buildInstantiatesViaStatement(stmt) {
 function producesRuntimeValue(decl) {
   if (!decl || isAmbientDeclaration(decl)) return false;
   if (ts.isClassDeclaration(decl)) return true;
-  if (ts.isEnumDeclaration(decl)) return true;
+  // H6 (Auditoría B R6): un enum top-level cuyo nombre COLISIONA con un ambient sibling homónimo
+  // (`declare namespace performance` + `enum performance`) sufre la MISMA merge-elision que el namespace-de-valor
+  // (rolldown/OXC elide el `var` del enum → el read filtra al GLOBAL, no a un local). No produce un binding local
+  // que sombree el global → false. Order-independiente y fail-closed: en ambient-first OXC elide (divergencia
+  // node-vs-Edge, in-mandate); en enum-first emite local (crash universal out-of-mandate) → flaggearlo es
+  // sobre-aproximación fail-closed (drift de emisores), no accidente. El oráculo de emit vive en el eje ERASE.
+  if (ts.isEnumDeclaration(decl)) return !collidesWithAmbientSibling(decl);
   if (ts.isFunctionDeclaration(decl)) return decl.body !== undefined;
   if (
     ts.isVariableDeclaration(decl) ||
@@ -4374,38 +4383,67 @@ function propNameCanonical(name) {
 //   - sibling con nombre != key → IGNORAR (no envenena).
 //   - spread (cualquier posición) o computed NO-foldable (cualquier posición) → INDETERMINADO (§141:
 //     podría definir/sombrear la key).
-function objectLiteralMemberValues(baseExpr, key) {
+// Resuelve la `key` en UN object-literal → { val, blocked }. POSICIONAL last-wins (Fable cross-review 3 #2 —
+// SIN `break`): spread/computed-nofold bloquean, pero un PropertyAssignment/shorthand POSTERIOR con la key gana
+// por orden de fuente y restaura el override determinista. `({...o, m:X}).m`→X; `({m:X, ...o}).m`→bloqueado;
+// `({...a, m:MALO, m:X}).m`→X (duplicate last-wins).
+function resolveKeyInLiteral(obj, key, depth) {
+  let val = null;
+  let blocked = false;
+  for (const p of obj.properties) {
+    if (ts.isSpreadAssignment(p)) {
+      // H3 (Auditoría B R6): un spread de OBJECT-LITERAL resoluble EN-SITIO es decidible SIN data-flow
+      // (`{...{m:X}}.m` === X — el valor sobrevive el spread). Si el spread-source resuelve ENTERAMENTE a
+      // object-literals, DESCENDER per-alternativa con last-wins y bound de profundidad; solo aporta la key
+      // si la definen, y si ALGUNA alternativa queda blocked el spread queda blocked (sound). Un spread
+      // NO-resoluble a literal (variable/call/Object.assign) o profundidad excedida → §141 blocked (el gemelo
+      // ARRAY ya tenía esta refinación en FIX-5 / spreadFlattenedElements; el lado objeto no la recibió).
+      const leaves = valueTransparentLeaves(p.expression);
+      const litAlts = leaves.filter((l) => ts.isObjectLiteralExpression(l));
+      if (depth > 16 || litAlts.length === 0 || litAlts.length !== leaves.length) {
+        blocked = true; // no resuelve ENTERAMENTE a literales → indeterminado (§141)
+        continue;
+      }
+      let anyBlocked = false;
+      let spreadVal = null;
+      for (const alt of litAlts) {
+        const r = resolveKeyInLiteral(alt, key, depth + 1);
+        if (r.blocked) anyBlocked = true;
+        if (r.val) spreadVal = r.val;
+      }
+      if (anyBlocked) {
+        blocked = true;
+      } else if (spreadVal) {
+        val = spreadVal; // el spread aporta la key → gana por orden (una prop POSTERIOR lo sobreescribe)
+        blocked = false;
+      }
+      // si no anyBlocked y no spreadVal: las alternativas literales NO definen la key → no aporta, val se mantiene.
+      continue;
+    }
+    const names = propNameCanonical(p.name);
+    if (p.name && ts.isComputedPropertyName(p.name) && names.length === 0) {
+      blocked = true; // computed no-foldable → podría ser la key → §141
+      continue;
+    }
+    if (!names.includes(key)) continue; // sibling != key → no envenena
+    if (ts.isPropertyAssignment(p)) {
+      val = p.initializer;
+      blocked = false;
+    } else if (ts.isShorthandPropertyAssignment(p)) {
+      val = p.name;
+      blocked = false;
+    } else {
+      val = null; // accessor/método con nombre == key → opaco
+      blocked = true;
+    }
+  }
+  return { val, blocked };
+}
+
+function objectLiteralMemberValues(baseExpr, key, depth = 0) {
   const out = [];
   for (const obj of objectLiteralAlternatives(baseExpr)) {
-    let val = null; // último candidato (PropertyAssignment/shorthand) para la key
-    let blocked = false; // spread/computed-nofold (indet) u opaco (accessor/método con la key)
-    for (const p of obj.properties) {
-      // POSICIONAL last-wins (Fable cross-review 3 #2 — SIN `break`): spread/computed-nofold bloquean,
-      // pero un PropertyAssignment/shorthand POSTERIOR con la key gana por orden de fuente y restaura el
-      // override determinista. `({...o, m:X}).m`→X (spread antes); `({m:X, ...o}).m`→bloqueado (spread
-      // después); `({...a, m:MALO, m:X}).m`→X (duplicate last-wins). El `break` anterior descartaba el
-      // override posterior → fail-open.
-      if (ts.isSpreadAssignment(p)) {
-        blocked = true; // §141: el spread podría aportar/sombrear la key
-        continue;
-      }
-      const names = propNameCanonical(p.name);
-      if (p.name && ts.isComputedPropertyName(p.name) && names.length === 0) {
-        blocked = true; // computed no-foldable → podría ser la key → §141
-        continue;
-      }
-      if (!names.includes(key)) continue; // sibling != key → no envenena
-      if (ts.isPropertyAssignment(p)) {
-        val = p.initializer;
-        blocked = false;
-      } else if (ts.isShorthandPropertyAssignment(p)) {
-        val = p.name;
-        blocked = false;
-      } else {
-        val = null; // accessor/método con nombre == key → opaco
-        blocked = true;
-      }
-    }
+    const { val, blocked } = resolveKeyInLiteral(obj, key, depth);
     if (!blocked && val) out.push(val);
   }
   return out;
@@ -6059,6 +6097,24 @@ function extractModuleReferences(sourceFile) {
         specifier: stmt.moduleSpecifier.text,
         kind: isTypeOnly ? "type-only" : "value",
         modulePos: stmt.moduleSpecifier.getStart(sourceFile),
+      });
+      continue;
+    }
+    // import-equals con external-module-reference (`import X = require("m")`, incl. `export import X = require`)
+    // — Auditoría B R6 / H1: el statement-kind se caía del enumerador → ni el check no-node-builtin ni el
+    // follow transitivo corrían → ocultaba subárboles relativos ENTEROS del auditor (soundness del grafo, no
+    // solo el eje builtin). El statement-kind es conocido por otros subsistemas (producesRuntimeValue L1418,
+    // alias R4) — solo faltaba aquí. Respeta `isTypeOnly` (coherente con producesRuntimeValue(importEquals)=
+    // !isTypeOnly, D1-P1 R8). El modificador `export` es el MISMO nodo → cae en esta rama igual.
+    if (
+      ts.isImportEqualsDeclaration(stmt) &&
+      ts.isExternalModuleReference(stmt.moduleReference) &&
+      ts.isStringLiteral(stmt.moduleReference.expression)
+    ) {
+      refs.push({
+        specifier: stmt.moduleReference.expression.text,
+        kind: stmt.isTypeOnly ? "type-only" : "value",
+        modulePos: stmt.moduleReference.expression.getStart(sourceFile),
       });
       continue;
     }
@@ -8534,6 +8590,17 @@ function checkSourceFile(
       if (scopeConstAliases.size > 0) {
         unionCtx = mergePartialAliases(context, scopeConstAliases);
       }
+      // H2 (Auditoría B R6): SEMBRAR las declaraciones-alias de ESTE scope en `du` — un cuerpo diferido que LEE
+      // el binding declarado (`const p = performance; … p.eventLoopUtilization()`) debe verlo, no solo cuando es
+      // RHS de otra asignación (antes `scopeConstAliases` solo alimentaba `unionCtx`, nunca `du` → SILENT). SIN
+      // filtrar por `shadowedHere`: son los bindings PROPIOS de este nivel (el filtro shadowedHere es para el
+      // mapa HEREDADO — un homónimo local lo sombrea; filtrar aquí saltaría JUSTO lo que hay que sembrar = el
+      // fix auto-anulado que cazó Fable). Orden: purge-heredado (arriba) → SEED-local (aquí) → unión-asignaciones
+      // (abajo). El shadow hacia scopes anidados lo maneja descendCtx. Cubre const/let-init (var ya vía var-hoist).
+      for (const [name, roots] of scopeConstAliases) {
+        const prev = du.get(name);
+        du.set(name, prev ? new Set([...prev, ...roots]) : roots);
+      }
       for (const [name, roots] of scopeAssignmentUnion(statements, unionCtx)) {
         const prev = du.get(name);
         du.set(name, prev ? new Set([...prev, ...roots]) : roots);
@@ -8803,15 +8870,74 @@ function detectServerSafeMarker(sourceFile, relPath) {
     ts.forEachChild(node, visit);
   };
   for (const stmt of sourceFile.statements) visit(stmt);
+  // EOF-orphan (Auditoría B R6 / H5): TS adjunta un JSDoc TRAILING (tras el último statement) al
+  // `endOfFileToken`, no a un statement. Sin visitarlo, un `@server-safe` ahí es un no-op SILENCIOSO — viola
+  // el invariante fail-loud (BLOCKER-1: un tag TS-parseado nunca skipea en silencio). `topLevel` nunca contiene
+  // el EOF token → se clasifica como misplaced → lanza el error "posición no soportada" existente, coherente
+  // con el path nested.
+  visit(sourceFile.endOfFileToken);
+
+  // Opción 2 (Auditoría B R6.1): ENUMERACIÓN de rangos de comentario para markers double-star NO anclados a un
+  // statement top-level. Medido (P-ORACLE-SPLIT, TS 6.0.3 del repo): un `/** @server-safe */` en posición NESTED
+  // (método, función interna, bloque) no se adjunta como jsDoc a NINGÚN nodo — `node.jsDoc` Y `getJSDocTags`
+  // vacíos → el traversal jsDoc no lo ve → moría en SILENCIO, mientras el single-star nested SÍ disparaba el
+  // near-miss (asimetría insostenible: la sintaxis equivocada avisa, la correcta calla). Este scan reutiliza el
+  // clasificador LINE-START de M2 (position-agnostic, ratificado) sobre TODOS los rangos double-star; un marker
+  // BIEN-FORMADO cuyo comentario NO ancla un statement top-level → misplaced fail-loud. NO cambia de oráculo
+  // (Δ2 intacto: `getJSDocTags` — solo-último-bloque + herencia — sigue sin usarse). Una mención en PROSA cae en
+  // el bucket tolerado del mismo clasificador, en cualquier posición (P-M2-PROSE, position-agnostic).
+  {
+    const validAnchors = new Set();
+    for (const stmt of sourceFile.statements) {
+      for (const r of ts.getLeadingCommentRanges(
+        sourceFile.text,
+        stmt.getFullStart(),
+      ) ?? []) {
+        validAnchors.add(r.pos);
+      }
+    }
+    const scanner = ts.createScanner(
+      ts.ScriptTarget.Latest,
+      /* skipTrivia */ false,
+      sourceFile.languageVariant,
+      sourceFile.text,
+    );
+    let tok = scanner.scan();
+    while (tok !== ts.SyntaxKind.EndOfFileToken) {
+      if (tok === ts.SyntaxKind.MultiLineCommentTrivia) {
+        const pos = scanner.getTokenPos();
+        const raw = scanner.getTokenText();
+        if (raw.startsWith("/**") && !validAnchors.has(pos)) {
+          const norm = normalizeMarkerText(raw);
+          const m = /(?<![\w-])@server-safe(?![\w-])/.exec(norm);
+          if (m) {
+            const before = norm.slice(0, m.index);
+            const linePrefix = before.slice(before.lastIndexOf("\n") + 1);
+            // clean (line-start) o sibling-tag → intención de marcar bien-formada → misplaced; prosa → tolera.
+            const clean = /^[\s*/]*$/.test(linePrefix);
+            const sibling = /^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix);
+            if (clean || sibling) {
+              const { line } = sourceFile.getLineAndCharacterOfPosition(pos);
+              if (!misplacedLines.includes(line + 1)) {
+                misplacedLines.push(line + 1);
+              }
+            }
+          }
+        }
+      }
+      tok = scanner.scan();
+    }
+  }
 
   if (misplacedLines.length > 0) {
     const plural = misplacedLines.length > 1;
     throw new Error(
       `[server-safe gate] marker \`@server-safe\` en posición no soportada ` +
         `en ${relPath} (línea${plural ? "s" : ""} ${misplacedLines.join(", ")}). ` +
-        `El marker SOLO es válido en el JSDoc de un statement top-level del ` +
-        `módulo — un marker anidado pasaría inadvertido (fail-open silencioso). ` +
-        `Mueve el JSDoc al export/declaración top-level del componente.`,
+        `\`@server-safe\` es un marcador PER-FICHERO, no per-declaración como \`@internal\`/\`@deprecated\` — ` +
+        `un marker anidado (método, función interna, bloque, o tras el último statement) no marca el fichero ` +
+        `y pasaría inadvertido (fail-open silencioso). Muévelo a la CABECERA del módulo, en su propia línea ` +
+        `del JSDoc del primer export/declaración top-level.`,
     );
   }
   if (misspacedLines.length > 0) {
@@ -8944,11 +9070,14 @@ export function markerNearMissLines(sourceFile) {
   let tok = scanner.scan();
   while (tok !== ts.SyntaxKind.EndOfFileToken) {
     if (tok === ts.SyntaxKind.MultiLineCommentTrivia) {
-      const c = scanner.getTokenText();
-      if (
-        !c.startsWith("/**") &&
-        /(?:^\/\*|\s|\*)@server-safe(?:\s|\*|$)/.test(c)
-      ) {
+      // Auditoría B R6 / H4: normalizar invisibles con el MISMO normalizador que FIX-4 (una definición de
+      // "invisible", dos consumidores) → un ZWSP pegado al token no rompe el borde. Y borde SIMÉTRICO
+      // `(?<![\w-])…(?![\w-])`: el predecesor `(?:\s|\*|$)` solo cubría el lado TRAILING → puntuación LEADING
+      // (`note:@server-safe`, `(@server-safe)`) y trailing (`@server-safe:`) se colaban en silencio. La forma
+      // simétrica cierra las 5 celdas medidas y mantiene los negativos (`@server-safefoo`, `@server-safe-foo`:
+      // `f`/`-` ∈ `[\w-]`).
+      const c = normalizeMarkerText(scanner.getTokenText());
+      if (!c.startsWith("/**") && /(?<![\w-])@server-safe(?![\w-])/.test(c)) {
         const { line } = sourceFile.getLineAndCharacterOfPosition(
           scanner.getTokenPos(),
         );

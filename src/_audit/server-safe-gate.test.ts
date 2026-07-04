@@ -6711,3 +6711,230 @@ describe("server-safe gate — #7 punto fijo: cota real, descendCtx, paridad Cas
     );
   });
 });
+
+// ============================================================================
+// Ronda 6 (Auditoría B) — 6 raíces cerradas + custodios. Cada hallazgo con su PRED-X.
+// ============================================================================
+describe("server-safe gate — Ronda 6 (Auditoría B): 6 raíces + custodios", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "r6.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+  const B = "\nexport const x = import.meta.dirname;\n";
+
+  // ---- H1 [HIGH] import-equals invisible al grafo · IMPORT ----
+  describe("H1: import-equals enumerado en el grafo (extractModuleReferences) · PRED-IMPORT", () => {
+    it.each<[string, string, boolean]>([
+      ["import fs = require('fs') node builtin", `${W}import fs = require("fs");\nexport const x = fs;`, true],
+      ["export import fs = require('fs') (modif export, mismo nodo)", `${W}export import fs = require("fs");\nexport const x = fs;`, true],
+      ["import p = require('node:path')", `${W}import p = require("node:path");\nexport const x = p;`, true],
+      ["import type F = require('fs') → erased, SILENT", `${W}import type F = require("fs");\nexport const x = 1;`, false],
+    ])("%s", (_n, code, flag) => {
+      expect(runWithVfs("/repo/src/c.tsx", vfs({ "/repo/src/c.tsx": code })).length > 0).toBe(flag);
+    });
+
+    it("amplificación: import-equals oculta un SUBÁRBOL relativo entero", () => {
+      const files = vfs({
+        "/repo/src/c.tsx": `${W}import D = require("./dirty");\nexport const x = D;`,
+        "/repo/src/dirty.tsx": `export const bad = performance.eventLoopUtilization();`,
+      });
+      expect(runWithVfs("/repo/src/c.tsx", files).length).toBeGreaterThan(0);
+    });
+
+    // Custodio de PARIDAD statement-kind (Fable R6): toda forma que produce un ref de módulo de runtime
+    // es enumerada por extractModuleReferences. Behavioral (un dep relativo sucio se sigue por cada forma).
+    it("PARIDAD: toda forma import de-valor sigue el dep sucio (import-decl / export-decl / import-equals)", () => {
+      const dirty = `export const bad = performance.eventLoopUtilization();`;
+      const forms: Array<[string, string]> = [
+        ["import-decl", `import { bad } from "./dirty";\nexport const x = bad;`],
+        ["export-decl", `export { bad } from "./dirty";`],
+        ["import-equals", `import D = require("./dirty");\nexport const x = D;`],
+        ["export-import-equals", `export import D = require("./dirty");\nexport const x = D;`],
+      ];
+      for (const [name, entry] of forms) {
+        const files = vfs({ "/repo/src/c.tsx": `${W}${entry}`, "/repo/src/dirty.tsx": dirty });
+        expect(runWithVfs("/repo/src/c.tsx", files).length, name).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  // ---- H2 [MED] alias identifier-root order-gated a nivel scope · VIEW/PRED-VIEW ----
+  describe("H2: declaración-alias sembrada en la vista diferida (const/let-init) · PRED-VIEW", () => {
+    it.each<[string, string, boolean]>([
+      ["const p=perf ABAJO, fn diferida lee → FLAG", `${W}export function g(){ return p.eventLoopUtilization(); }\nconst p = performance;`, true],
+      ["let p=perf ABAJO (P-H2-LET) → FLAG", `${W}export function g(){ return p.eventLoopUtilization(); }\nlet p = performance;`, true],
+      ["WA construction diferido → FLAG", `${W}export function g(b:any){ return new WA.Module(b); }\nconst WA = WebAssembly;`, true],
+      ["URL present-throws diferido → FLAG", `${W}export function g(b:any){ return U.createObjectURL(b); }\nconst U = URL;`, true],
+    ])("%s", (_n, code, flag) => {
+      expect(flagged(code)).toBe(flag);
+    });
+
+    // INV-ORDER ampliado: la simetría de orden ahora incluye la forma decl-alias (const/let-init), no solo
+    // asignación, × clases de contexto diferido. veredicto(decl; use) === veredicto(use; decl) y FLAG.
+    describe("INV-ORDER × forma-de-binding {const-init, let-init} × contexto diferido", () => {
+      const CTX: Array<[string, (o: "du" | "ud") => string]> = [
+        ["const→fn-body", (o) => o === "du" ? `const p = performance; export function g(){ return p.eventLoopUtilization(); }` : `export function g(){ return p.eventLoopUtilization(); } const p = performance;`],
+        ["let→arrow", (o) => o === "du" ? `let p = performance; export const g = () => p.eventLoopUtilization();` : `export const g = () => p.eventLoopUtilization(); let p = performance;`],
+        ["const→field-init", (o) => o === "du" ? `const p = performance; export class K { m = p.eventLoopUtilization(); }` : `export class K { m = p.eventLoopUtilization(); } const p = performance;`],
+        ["const→param-default", (o) => o === "du" ? `const p = performance; export function g(a = p.eventLoopUtilization()){ return a; }` : `export function g(a = p.eventLoopUtilization()){ return a; } const p = performance;`],
+      ];
+      it.each(CTX)("%s: du === ud y FLAG", (_n, form) => {
+        const du = flagged(`${W}${form("du")}`);
+        const ud = flagged(`${W}${form("ud")}`);
+        expect(du).toBe(ud);
+        expect(du).toBe(true);
+      });
+    });
+
+    it("regresión: var-init reverse ya lo cazaba (var-hoist), P-SHADOW-DEF no fuga, descendCtx intacto", () => {
+      expect(flagged(`${W}export function g(){ return p.eventLoopUtilization(); }\nvar p = performance;`)).toBe(true);
+      expect(flagged(`let c:any;\n${W}export function outer(){ let c:any; function inner(){ return c.eventLoopUtilization(); } c={}; return inner(); }\nc=performance; outer();`)).toBe(false);
+      expect(flagged(`${W}export function f(){ let c:any; function use(){ return c.eventLoopUtilization(); } const x=performance; { let x:any={eventLoopUtilization(){return 0;}}; c=x; } return use(); }`)).toBe(false);
+    });
+
+    // Item 1 (delta-a de Fable RECHAZADO-CON-MEDICIÓN): el seed CaseBlock del walker paralelo NO era necesario.
+    // Cuantificador completo — cross-clause (CaseBlock = un scope léxico, P-SHADOW-CASE) y switch a nivel MÓDULO
+    // (sin función envolvente): ambos FLAG sin seed adicional.
+    it.each<[string, string]>([
+      ["P-CASE-X1 cross-clause (use en case1, const p en case2)", `${W}export function f(k:number){ switch(k){ case 1: function use(){ return p.eventLoopUtilization(); } break; case 2: { const p = performance; return use(); } } }`],
+      ["P-CASE-X2 switch a nivel MÓDULO (sin función envolvente)", `${W}let out:any;\nswitch(1){ case 1: function use(){ return p.eventLoopUtilization(); } const p = performance; out = use(); break; }\nexport { out };`],
+    ])("%s → FLAG (seed rechazado con cuantificador)", (_n, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    // Pin TDZ (Fable R6): la diferida es ∃-sobre-órdenes por DISEÑO — `g(); const p = performance;` (llamada
+    // ANTES del const → ReferenceError universal en runtime, out-of-mandate) FLAGgea por ∃, misma clase que
+    // forward-o2. Sin este pin, un futuro "arreglo del FP" reintroduce el order-gating por la puerta buena.
+    it("pin TDZ: g(); const p=performance → FLAG (coste ∃-sobre-órdenes diseñado, no FP)", () => {
+      expect(flagged(`${W}export function f(){ function g(){ return p.eventLoopUtilization(); } g(); const p = performance; }`)).toBe(true);
+    });
+  });
+
+  // ---- H3 [MED] spread-de-object-literal en-sitio · CONTAINER ----
+  describe("H3: spread-de-object-literal resoluble en-sitio + INV-PARITY array↔objeto", () => {
+    it.each<[string, string, boolean]>([
+      ["{...{m:perf}}.m.elu() → FLAG", `${W}export const x = ({ ...{ m: performance } }).m.eventLoopUtilization();`, true],
+      ["{...{k:import.meta}}.k.dirname → FLAG", `${W}export const x = ({ ...{ k: import.meta } }).k.dirname;`, true],
+      ["anidado {...{...{m:perf}}}.m → FLAG", `${W}export const x = ({ ...{ ...{ m: performance } } }).m.eventLoopUtilization();`, true],
+      ["last-wins inverso {...{m:0}, m:perf}.m → FLAG", `${W}export const x = ({ ...{ m: 0 }, m: performance }).m.eventLoopUtilization();`, true],
+      ["spread-de-VARIABLE {...b}.m → §141 SILENT", `${W}const b = { m: performance }; export const x = ({ ...b }).m.eventLoopUtilization();`, false],
+      ["nested-blocked {...{...b}}.m → §141 SILENT", `${W}const b = { m: performance }; export const x = ({ ...{ ...b } }).m.eventLoopUtilization();`, false],
+      ["last-wins safe {...{m:perf}, m:0}.m → SILENT", `${W}export const x = ({ ...{ m: performance }, m: 0 }).m;`, false],
+    ])("%s", (_n, code, flag) => {
+      expect(flagged(code)).toBe(flag);
+    });
+
+    // INV-PARITY (Fable R6, asciende a custodio): array↔objeto deben tener PARIDAD de trato del spread-de-literal.
+    // La asimetría H3 vivió 2 rondas por falta de este test.
+    it.each<[string, string, string]>([
+      ["spread-literal", `[...[performance]][0]`, `({ ...{ m: performance } }).m`],
+      ["directo (control)", `[performance][0]`, `({ m: performance }).m`],
+    ])("INV-PARITY %s: array y objeto coinciden y FLAG", (_n, arr, obj) => {
+      const a = flagged(`${W}export const x = ${arr}.eventLoopUtilization();`);
+      const o = flagged(`${W}export const x = ${obj}.eventLoopUtilization();`);
+      expect(a).toBe(o);
+      expect(a).toBe(true);
+    });
+  });
+
+  // ---- H4 [MED] near-miss M1 con puntuación pegada · MARKER ----
+  describe("H4: markerNearMissLines borde SIMÉTRICO + normalizador FIX-4 · PRED-MARKER", () => {
+    const fires = (src: string) =>
+      markerNearMissLines(ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true)).length > 0;
+    it.each<[string, string, boolean]>([
+      ["trailing colon", "/* @server-safe: props */" + B, true],
+      ["trailing semicolon", "/* @server-safe; x */" + B, true],
+      ["trailing dot", "/* @server-safe. x */" + B, true],
+      ["leading note:@server-safe", "/* note:@server-safe */" + B, true],
+      ["leading (@server-safe)", "/* (@server-safe) */" + B, true],
+      ["ZWSP pegado", "/*​@server-safe*/" + B, true],
+      ["single-star + space (control previo)", "/* @server-safe props */" + B, true],
+      ["multiline single-star + colon", "/*\n * @server-safe: n\n */" + B, true],
+      ["negativo @server-safefoo", "/* @server-safefoo */" + B, false],
+      ["negativo @server-safe-foo", "/* @server-safe-foo */" + B, false],
+      ["negativo double-star (marker real)", "/** @server-safe: */" + B, false],
+      ["negativo email me@server-safe.com", "/* ping me@server-safe.com */" + B, false],
+    ])("%s", (_n, src, fire) => {
+      expect(fires(src)).toBe(fire);
+    });
+  });
+
+  // ---- H5 [MED] @server-safe EOF-orphan viola fail-loud · MARKER ----
+  describe("H5: invariante generativo del marcador — todo @server-safe TS-parseado marca o LANZA · PRED-MARKER", () => {
+    it("EOF-orphan (marker tras el último statement) → fail-loud, no no-op silencioso", () => {
+      expect(() =>
+        isContentServerSafeMarked("export const x = performance.eventLoopUtilization();\n/** @server-safe */", "x.ts"),
+      ).toThrow(/posición no soportada/);
+    });
+    it("fichero-solo-marcador (sin statements) → fail-loud (comportamiento elegido)", () => {
+      expect(() => isContentServerSafeMarked("/** @server-safe */", "x.ts")).toThrow(/posición no soportada/);
+    });
+    // Invariante GENERATIVO a DOMINIO COMPLETO (Auditoría B R6.1, opción 2): todo `@server-safe` bien-formado
+    // según el clasificador (line-start), en CUALQUIER posición, o MARCA (top-level) o LANZA (else) — nunca skip
+    // silencioso. El dominio son "posiciones que el DETECTOR VE por ENUMERACIÓN DE RANGOS" (no getJSDocTags — que
+    // TS 6.0.3 del repo deja vacío en nested, medido P-ORACLE-SPLIT). Las 5 celdas nested + EOF + top-level.
+    it.each<[string, string, "marks" | "throws"]>([
+      ["pre-statement (top-level, línea propia)", "/** @server-safe */\nexport const x = 1;", "marks"],
+      ["EOF-orphan", "export const x = 1;\n/** @server-safe */", "throws"],
+      ["misma-línea tag hermano (M2)", "/** @internal @server-safe */\nexport const x = 1;", "throws"],
+      ["prosa antes en la línea", "/** @internal foo @server-safe */\nexport const x = 1;", "throws"],
+      ["nested: stmt en Block", "export function f(){ { /** @server-safe */ const z = performance.eventLoopUtilization(); return z; } }", "throws"],
+      ["nested: stmt en cuerpo de función", "export function f(){ /** @server-safe */ const z = performance.eventLoopUtilization(); return z; }", "throws"],
+      ["nested: función anidada", "export function f(){ /** @server-safe */ function g(){ return performance.eventLoopUtilization(); } return g; }", "throws"],
+      ["nested: método de clase", "export class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }", "throws"],
+      ["nested: property de clase", "export class K { /** @server-safe */ p = performance.eventLoopUtilization(); }", "throws"],
+    ])("posición %s ⇒ %s (nunca silencioso)", (_n, src, outcome) => {
+      if (outcome === "marks") {
+        expect(isContentServerSafeMarked(src, "x.ts")).toBe(true);
+      } else {
+        expect(() => isContentServerSafeMarked(src, "x.ts")).toThrow();
+      }
+    });
+    it("mensaje pedagógico: per-FICHERO no per-declaración", () => {
+      expect(() =>
+        isContentServerSafeMarked("export class K { /** @server-safe */ m(){ return 1; } }", "x.ts"),
+      ).toThrow(/per-FICHERO|CABECERA/);
+    });
+    it("P-NEST-PROSE: mención en prosa nested → tolera (mismo bucket que P-M2-PROSE, position-agnostic)", () => {
+      expect(
+        isContentServerSafeMarked("export class K { /** helper; not yet @server-safe */ m(){ return 1; } }", "x.ts"),
+      ).toBe(false);
+    });
+    // Par de ASIMETRÍA resuelto (antes: single-star nested avisaba, double-star nested callaba).
+    it("asimetría resuelta: single-star nested → near-miss; double-star nested → misplaced (ambos fail-loud)", () => {
+      const singleStar = "export class K { /* @server-safe */ m(){ return performance.eventLoopUtilization(); } }";
+      const doubleStar = "export class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }";
+      expect(
+        markerNearMissLines(ts.createSourceFile("x.ts", singleStar, ts.ScriptTarget.Latest, true)).length,
+      ).toBeGreaterThan(0); // single-star → near-miss
+      expect(() => isContentServerSafeMarked(doubleStar, "x.ts")).toThrow(); // double-star → misplaced
+    });
+    // Multi-bloque (Δ2 anti-regresión): el fix NO cambió de oráculo a getJSDocTags (solo-último-bloque) — un
+    // marker top-level seguido de OTRO JSDoc, o con un JSDoc nested benigno, sigue marcando.
+    it.each<[string, string]>([
+      ["marker top-level + segundo JSDoc top-level", "/** @server-safe */\nexport const a = 1;\n/** otro doc */\nexport const b = 2;"],
+      ["marker top-level + método con @param nested (no es marker)", "/** @server-safe */\nexport class K { /** @param x */ m(x: number){ return x; } }"],
+    ])("Δ2: %s → MARCA", (_n, src) => {
+      expect(isContentServerSafeMarked(src, "x.ts")).toBe(true);
+    });
+  });
+
+  // ---- H6 [MED] enum top-level fusionado con declare namespace · ERASE ----
+  describe("H6: enum × ambient-sibling merge-elision (matriz emisor×orden) · PRED-ERASE", () => {
+    // Oráculo de emit (Fable R6, oxc-transform 0.138 / esbuild 0.28 / tsc 6.0.3): OXC ELIDE el var del enum en
+    // orden AMBIENT-FIRST → el read filtra al global (divergencia node-vs-Edge, in-mandate). tsc/esbuild emiten
+    // local en ambos órdenes; OXC en enum-first emite local (crash universal, out-of-mandate). El gate flaggea
+    // AMBOS órdenes = sobre-aproximación fail-closed (drift de emisores), no accidente. Aquí se pinea el GATE.
+    it.each<[string, string, boolean]>([
+      ["ambient-first (in-mandate, OXC elide) → FLAG", `${W}declare namespace performance { const q: number }\nenum performance { a }\nexport const out = () => performance.eventLoopUtilization();`, true],
+      ["enum-first (out-of-mandate, sobre-aprox fail-closed) → FLAG", `${W}enum performance { a }\ndeclare namespace performance { const q: number }\nexport const out = () => performance.eventLoopUtilization();`, true],
+      ["enum SIN ambient (binding local real) → SILENT", `${W}enum performance { a }\nexport const out = () => performance.eventLoopUtilization();`, false],
+      ["ambient sibling de OTRO nombre (no colisiona) → SILENT", `${W}declare namespace performance { const q: number }\nenum foo { a }\nexport const out = () => foo.a;`, false],
+    ])("%s", (_n, code, flag) => {
+      expect(flagged(code)).toBe(flag);
+    });
+    it("regresión: namespace-value × ambient sigue FLAG; namespace normal instanciado SILENT", () => {
+      expect(flagged(`${W}declare namespace performance { const q: number }\nnamespace performance { export const now = 1; }\nexport const out = () => performance.eventLoopUtilization();`)).toBe(true);
+      expect(flagged(`${W}namespace performance { export const now = 1; }\nexport const out = () => performance.now;`)).toBe(false);
+    });
+  });
+});
