@@ -6938,3 +6938,258 @@ describe("server-safe gate — Ronda 6 (Auditoría B): 6 raíces + custodios", (
     });
   });
 });
+
+// ============================================================================
+// Ronda 7 (Auditoría B) — 4 raíces cerradas (3 son regresiones del código R6/R6.1). Cada una con su PRED-X.
+// ============================================================================
+describe("server-safe gate — Ronda 7 (Auditoría B): 4 raíces + custodios", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(code, "r7.fixture.tsx").length > 0;
+  const W = "/** @server-safe */\n";
+
+  // ---- R7-A [MED] enmascaramiento ∃ de la key: rama foldable-safe tapa rama irresoluble · KEY ----
+  describe("R7-A: key incompleta (ternario safe + rama irresoluble) → conservador, no masked · PRED-KEY", () => {
+    it.each<[string, string, boolean]>([
+      ["read performance[c?'now':dyn]() masked → FLAG", `const c = Math.random() < 0.5; const dyn = "eventLoopUtilization"; export const x = performance[c ? "now" : dyn]();`, true],
+      ["construct new WebAssembly[c?'Instance':mm](b) → FLAG", `const b = new Uint8Array(0); const c = Math.random() < 0.5; const mm = "Module"; export const x = new WebAssembly[c ? "Instance" : mm](b);`, true],
+      ["Reflect.get(performance, c?'now':k) → FLAG", `const c = Math.random() < 0.5; const k = "eventLoopUtilization"; export const x = Reflect.get(performance, c ? "now" : k);`, true],
+      ["ternario COMPLETO safe c?'now':'timeOrigin' → SILENT", `const c = Math.random() < 0.5; export const x = performance[c ? "now" : "timeOrigin"];`, false],
+      ["ternario COMPLETO danger (ambos literales) → FLAG", `const c = Math.random() < 0.5; export const x = performance[c ? "now" : "eventLoopUtilization"]();`, true],
+      ["dotted safe performance.now() → SILENT", `export const x = performance.now();`, false],
+      ["variable-key sola performance[dyn]() → FLAG (conservador, ya lo hacía)", `const dyn = "eventLoopUtilization"; export const x = performance[dyn]();`, true],
+    ])("%s", (_n, body, flag) => {
+      expect(flagged(`${W}${body}`)).toBe(flag);
+    });
+  });
+
+  // ---- R7-B [MED] cadena de DECLARACIÓN-alias multi-salto en la vista diferida · VIEW/TWOPASS ----
+  describe("R7-B: seed diferido con PUNTO FIJO — cadena const-alias multi-salto · PRED-VIEW", () => {
+    it.each<[string, string, boolean]>([
+      ["two-hop fn q=p=performance → FLAG", `export function f(){ return q.eventLoopUtilization(); }\nconst p = performance;\nconst q = p;`, true],
+      ["two-hop getter → FLAG", `export class Clock { get elapsed(){ return c.eventLoopUtilization(); } }\nconst p = performance;\nconst c = p;`, true],
+      ["three-hop r=q=p=performance → FLAG", `export function f(){ return r.eventLoopUtilization(); }\nconst p = performance;\nconst q = p;\nconst r = q;`, true],
+      ["two-hop WA construction → FLAG", `export function f(b:any){ return new W2.Module(b); }\nconst W1 = WebAssembly;\nconst W2 = W1;`, true],
+      ["regresión one-hop (H2) → FLAG", `export function f(){ return p.eventLoopUtilization(); }\nconst p = performance;`, true],
+      ["regresión forward two-hop → FLAG", `const p = performance; const q = p; export const x = q.eventLoopUtilization();`, true],
+      ["§141 let-chain ASIGNACIÓN diferido → FLAG (∃-órdenes)", `export function f(){ let c:any; let d:any; function use(){ return c.eventLoopUtilization(); } d=performance; c=d; return use(); }`, true],
+      ["const q=safeVar (no root) → SILENT", `export function f(){ return q.subtle; }\nconst p = crypto;\nconst q = p;`, false],
+    ])("%s", (_n, body, flag) => {
+      expect(flagged(`${W}${body}`)).toBe(flag);
+    });
+  });
+
+  // ---- R7-C [MED] spread de object-literal: ∃-unión de alternativas, no last-wins overwrite · CONTAINER ----
+  describe("R7-C: resolveKeyInLiteral ∃-une las alternativas del spread (INV-PARITY) · PRED-CONTAINER", () => {
+    it.each<[string, string, boolean]>([
+      ["disjunción danger-rama-1 {...(c?{k:WA.Module}:{k:Object})}.k → FLAG", `export function f(cond:boolean){return new (({...(cond ? {k: WebAssembly.Module} : {k: Object})}).k)(0);}`, true],
+      ["disjunción danger-rama-2 (inverso) → FLAG", `export function f(cond:boolean){return new (({...(cond ? {k: Object} : {k: WebAssembly.Module})}).k)(0);}`, true],
+      ["disjunción performance {...(c?{m:performance}:{m:Date})}.m.elu() → FLAG", `export function f(cond:boolean){return ({...(cond ? {m: performance} : {m: Date})}).m.eventLoopUtilization();}`, true],
+      ["safe-only disjunción {...(c?{k:Object}:{k:Date})}.k → SILENT", `export function f(cond:boolean){return new (({...(cond ? {k: Object} : {k: Date})}).k)(0);}`, false],
+      ["regresión H3 {...{m:performance}}.m.elu() → FLAG", `export const x = ({ ...{ m: performance } }).m.eventLoopUtilization();`, true],
+      ["regresión last-wins safe {...{m:performance}, m:0}.m → SILENT", `export const x = ({ ...{ m: performance }, m: 0 }).m;`, false],
+      ["regresión spread-de-VARIABLE §141 → SILENT", `const b = { m: performance }; export const x = ({ ...b }).m.eventLoopUtilization();`, false],
+      ["gemelo array (INV-PARITY) [...(c?[WA.Module]:[Object])][0] → FLAG", `export function f(cond:boolean){return new ([...(cond ? [WebAssembly.Module] : [Object])][0])(0);}`, true],
+    ])("%s", (_n, body, flag) => {
+      expect(flagged(`${W}${body}`)).toBe(flag);
+    });
+  });
+
+  // ---- R7-D [MED] enumeración de comentarios ROBUSTA a templates (scanner template-aware) · MARKER ----
+  describe("R7-D: allBlockCommentRanges template-aware — un marker tras un template no se pierde · PRED-MARKER", () => {
+    const M = (s: string) => {
+      try {
+        return isContentServerSafeMarked(s, "x.ts") ? "MARKED" : "silent";
+      } catch {
+        return "THROW";
+      }
+    };
+    const fires = (s: string) =>
+      markerNearMissLines(
+        ts.createSourceFile("x.ts", s, ts.ScriptTarget.Latest, true),
+      ).length > 0;
+    it("template + marker en línea propia top-level → MARCA (no se pierde)", () => {
+      expect(M("const s = `${1}`;\n/** @server-safe */\nexport const b = 2;")).toBe("MARKED");
+    });
+    it("template + marker double-star nested → THROW misplaced (no silent)", () => {
+      expect(() =>
+        isContentServerSafeMarked("const s = `${1}`;\nexport class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }", "x.ts"),
+      ).toThrow(/posición no soportada/);
+    });
+    it("template + single-star nested → near-miss dispara", () => {
+      expect(fires("export function B(p: any){ const c = `x-${p.v}`; /* @server-safe */ return c; }")).toBe(true);
+    });
+    it("template ANIDADO + marker → MARCA (scanner no se desincroniza)", () => {
+      expect(M("const s = `a${`b${1}c`}d`;\n/** @server-safe */\nexport const b = 2;")).toBe("MARKED");
+    });
+    it("regresión SIN template: nested single-star → near-miss; nested double-star → misplaced", () => {
+      expect(fires("export class K { /* @server-safe */ m(){ return 1; } }")).toBe(true);
+      expect(() =>
+        isContentServerSafeMarked("export class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }", "x.ts"),
+      ).toThrow(/posición no soportada/);
+    });
+  });
+});
+
+// ============================================================================
+// Ronda 7 — auditoría de Fable: BLOQUEO-A (subset,bit por polaridad), BLOQUEO-B (punto fijo), R7-D (getChildren).
+// ============================================================================
+describe("server-safe gate — R7 auditoría (Fable): BLOQUEO A/B + R7-D robusto", () => {
+  const flagged = (code: string, fn = "r7b.fixture.tsx") =>
+    checkSourceFile(code, fn).length > 0;
+  const W = "/** @server-safe */\n";
+
+  // ---- BLOQUEO A: (subset, bit-incompleto) por POLARIDAD de catálogo · KEY ----
+  describe("BLOQUEO A: key incompleta = ∃(subset∩denegados) ∨ (incompleto ∧ polaridad-fail-closed)", () => {
+    // Δ2: fixtures en AMBAS polaridades × {read, construct, Reflect}. R7-A pasó verde porque la suite miró un lado.
+    it.each<[string, string, boolean]>([
+      // DENYLIST (WebAssembly) con subset DENEGADO → FLAG por ∃-subset (mi return [] lo regresaba)
+      ["denylist read subset-denegado WebAssembly[c?'compile':m]", `const c = Math.random() < 0.5; const m = "instantiate"; export const x = WebAssembly[c ? "compile" : m](new Uint8Array(0));`, true],
+      ["denylist Reflect subset-denegado", `const c = Math.random() < 0.5; const k = "instantiate"; export const x = Reflect.get(WebAssembly, c ? "compile" : k);`, true],
+      ["denylist construct subset-denegado new WebAssembly[c?'Module':m]", `const c = Math.random() < 0.5; const m = "Instance"; export const x = new WebAssembly[c ? "Module" : m](new Uint8Array(0));`, true],
+      ["denylist construct fail-closed incompleto new WebAssembly[c?'Instance':mm]", `const c = Math.random() < 0.5; const mm = "Module"; export const x = new WebAssembly[c ? "Instance" : mm](new Uint8Array(0));`, true],
+      // ALLOWLIST (performance) con subset SAFE + incompleto → FLAG por polaridad (masking R7-A original)
+      ["allowlist read masking performance[c?'now':dyn]()", `const c = Math.random() < 0.5; const dyn = "eventLoopUtilization"; export const x = performance[c ? "now" : dyn]();`, true],
+      ["allowlist Reflect masking Reflect.get(performance, c?'now':k)", `const c = Math.random() < 0.5; const k = "eventLoopUtilization"; export const x = Reflect.get(performance, c ? "now" : k);`, true],
+      // DENYLIST con subset SAFE + incompleto → SILENT (renunciado, adjudicación #2)
+      ["denylist renuncia WebAssembly[c?'validate':m] (safe+var)", `const c = Math.random() < 0.5; const m = "foo"; export const x = WebAssembly[c ? "validate" : m];`, false],
+      // completos safe → SILENT (no sobre-flag); var-key allowlist → FLAG (ya)
+      ["allowlist completo safe performance[c?'now':'timeOrigin']", `const c = Math.random() < 0.5; export const x = performance[c ? "now" : "timeOrigin"];`, false],
+      ["allowlist var-key sola performance[dyn]()", `const dyn = "eventLoopUtilization"; export const x = performance[dyn]();`, true],
+      // menor: gOPD partial key — rama resoluble peligrosa → FLAG vía subset
+      ["gOPD(import.meta, c?'dirname':dyn).value", `const c = Math.random() < 0.5; const dyn = "x"; export const v = Object.getOwnPropertyDescriptor(import.meta, c ? "dirname" : dyn).value;`, true],
+    ])("%s", (_n, body, flag) => {
+      expect(flagged(`${W}${body}`)).toBe(flag);
+    });
+  });
+
+  // ---- BLOQUEO B: punto fijo while-stable + unión (no cota-por-statements) · VIEW ----
+  describe("BLOQUEO B: cadena de declaración-alias — punto fijo también intra-statement y en bloques", () => {
+    it.each<[string, string, boolean]>([
+      // intra-statement por comas (excede cualquier cota-por-#statements = el cap falso de BLOQUEO-1)
+      ["comma-chain 5-hop en 1 statement diferido", `export function f(){ return e.eventLoopUtilization(); }\nconst a = performance, b = a, c = b, d = c, e = d;`, true],
+      ["comma-chain 3-hop diferido", `export function f(){ return r.eventLoopUtilization(); }\nconst p = performance, q = p, r = q;`, true],
+      // sibling declAliasesOf: cadena const DENTRO de un bloque / CaseBlock
+      ["block-chain {const A=perf;const B=A;c=B} c.elu()", `export function f(){ let c:any; { const A = performance; const B = A; c = B; } return c.eventLoopUtilization(); }`, true],
+      ["block-chain 3-hop {A;B=A;C=B;c=C}", `export function f(){ let c:any; { const A = performance; const B = A; const C = B; c = C; } return c.eventLoopUtilization(); }`, true],
+      ["CaseBlock-chain {case1: const A=perf;const B=A;c=B}", `export function f(k:number){ let c:any; switch(k){ case 1: { const A = performance; const B = A; c = B; } break; } return c.eventLoopUtilization(); }`, true],
+      // regresión: multi-hop separado (R7-B) + §141 asignación + shadow
+      ["separado two-hop q=p=performance diferido", `export function f(){ return q.eventLoopUtilization(); }\nconst p = performance;\nconst q = p;`, true],
+      ["§141 let-chain asignación diferido", `export function f(){ let c:any; let d:any; function use(){ return c.eventLoopUtilization(); } d = performance; c = d; return use(); }`, true],
+      ["block shadow local safe (descendCtx) → SILENT", `export function f(){ let c:any; function use(){ return c.eventLoopUtilization(); } const x = performance; { let x:any = { eventLoopUtilization(){ return 0; } }; c = x; } return use(); }`, false],
+    ])("%s", (_n, body, flag) => {
+      expect(flagged(`${W}${body}`)).toBe(flag);
+    });
+  });
+
+  // ---- R7-D: enumeración de comentarios por TOKENS (getChildren) — robusta a regex/JSX/templates ----
+  describe("R7-D: allBlockCommentRanges robusto (regex/JSX/template) sin punto ciego class-member", () => {
+    const M = (s: string, k = "x.ts") => {
+      try {
+        return isContentServerSafeMarked(s, k) ? "MARKED" : "silent";
+      } catch (e) {
+        return /posición no soportada/.test((e as Error).message) ? "THROW" : "THROW2";
+      }
+    };
+    const fires = (s: string, k = "x.tsx") =>
+      markerNearMissLines(
+        ts.createSourceFile(k, s, ts.ScriptTarget.Latest, true, k.endsWith("tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS),
+      ).length > 0;
+    it("INTERSECCIÓN regex + class-member double-star → misplaced (no silent)", () => {
+      expect(M("const re = /a}`b/;\nexport class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }")).toBe("THROW");
+    });
+    it("regex + single-star → near-miss dispara", () => {
+      expect(fires("const re = /x}`/;\n/* @server-safe */\nexport const x=1;")).toBe(true);
+    });
+    it("JSX-text brace + single-star → near-miss dispara", () => {
+      expect(fires('export const E = () => <div>{"}"} t</div>;\n/* @server-safe */\nexport const x=1;')).toBe(true);
+    });
+    it("template + nested double-star → misplaced; marker línea propia → marca", () => {
+      expect(M("const s = `${1}`;\nexport class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }")).toBe("THROW");
+      expect(M("const s = `${1}`;\n/** @server-safe */\nexport const b = 2;")).toBe("MARKED");
+    });
+    it("regresión: class-member single-star/double-star + EOF-orphan + control", () => {
+      expect(fires("export class K { /* @server-safe */ m(){ return 1; } }")).toBe(true);
+      expect(M("export class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }")).toBe("THROW");
+      expect(M("export const x=1;\n/** @server-safe */")).toBe("THROW");
+      expect(M("/** @server-safe */\nexport const z=1;")).toBe("MARKED");
+    });
+  });
+});
+
+// ============================================================================
+// R7 — añadidos de acta de Fable: asimetría read/construct DOCUMENTADA, corpus del enumerador, custodios de clase.
+// ============================================================================
+describe("server-safe gate — R7 acta: asimetría documentada + corpus enumerador + custodios de clase", () => {
+  const flagged = (code: string, fn = "r7a2.fixture.tsx") =>
+    checkSourceFile(code, fn).length > 0;
+  const W = "/** @server-safe */\n";
+
+  // ---- (1) DOCUMENTED-ASYMMETRY: read renuncia vs construct fail-cierra en denylist con key desconocida ----
+  // NO es inconsistencia de polaridad — es DISEÑO (ver ADR §R7): el espacio de ctors WASM es minúsculo (fail-closed
+  // barato) y la construcción WASM es el hazard MÁS severo del catálogo (codegen present-but-throws). El bit de
+  // incompletitud extiende el fail-closed preexistente de construcción; el read mantiene la renuncia (adjudicación #2).
+  describe("documented-asymmetry: WebAssembly[m] read=renuncia vs new WebAssembly[m] construct=fail-closed", () => {
+    it("read con key VARIABLE → SILENT (renuncia, polaridad denylist)", () => {
+      expect(flagged(`${W}const m = "compile"; export const x = WebAssembly[m](new Uint8Array(0));`)).toBe(false);
+    });
+    it("construct con key VARIABLE → FLAG (fail-cierra en ctor desconocido)", () => {
+      expect(flagged(`${W}const m = "Module"; export const x = new WebAssembly[m](new Uint8Array(0));`)).toBe(true);
+    });
+    it("read INCOMPLETO safe+var → SILENT; construct INCOMPLETO safe+var → FLAG (mismo par, el bit extiende)", () => {
+      expect(flagged(`${W}const c = Math.random() < 0.5; const m = "x"; export const r = WebAssembly[c ? "validate" : m];`)).toBe(false);
+      expect(flagged(`${W}const c = Math.random() < 0.5; const m = "x"; export const r = new WebAssembly[c ? "Instance" : m](new Uint8Array(0));`)).toBe(true);
+    });
+  });
+
+  // ---- (2) CORPUS del enumerador: JSX comments (idiomático React) + combo de las celdas que mataron scanner+unión ----
+  describe("corpus enumerador: JSX comments + combo (regex+template+JSX+class-member) — custodio permanente", () => {
+    const M = (s: string, k = "x.tsx") => {
+      try {
+        return isContentServerSafeMarked(s, k) ? "MARKED" : "silent";
+      } catch (e) {
+        return /posición no soportada/.test((e as Error).message) ? "THROW" : "THROW2";
+      }
+    };
+    const fires = (s: string, k = "x.tsx") =>
+      markerNearMissLines(
+        ts.createSourceFile(k, s, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX),
+      ).length > 0;
+    it("JSX single-star {/* @server-safe */} → near-miss dispara (forma idiomática React)", () => {
+      expect(fires("export const E = () => <div>{/* @server-safe */}txt</div>;\nexport const x = performance.eventLoopUtilization();")).toBe(true);
+    });
+    it("JSX double-star {/** @server-safe */} → misplaced (nested en JsxExpression)", () => {
+      expect(M("export const E = () => <div>{/** @server-safe */}txt</div>;\nexport const x = performance.eventLoopUtilization();")).toBe("THROW");
+    });
+    it("COMBO near-miss: regex + template + JSX ANTES de un class-member single-star → dispara igual", () => {
+      const combo =
+        "const re = /a}`b/;\nconst t = `x${re.source}y`;\nexport const E = () => <div>{/* c */}{t}</div>;\nexport class K { /* @server-safe */ m(){ return 1; } }";
+      expect(fires(combo)).toBe(true);
+    });
+    it("COMBO misplaced: regex + template + JSX ANTES de un class-member double-star → misplaced igual", () => {
+      const combo =
+        "const re = /a}`b/;\nconst t = `x${re.source}y`;\nexport const E = () => <div>{/* c */}{t}</div>;\nexport class K { /** @server-safe */ m(){ return performance.eventLoopUtilization(); } }";
+      expect(M(combo)).toBe("THROW");
+    });
+    it("COMBO marca: marker top-level SOBREVIVE a regex+template+JSX posteriores (range-scan no falsea)", () => {
+      const combo =
+        "/** @server-safe */\nexport const A = 1;\nconst re = /a}`b/;\nconst t = `x${re.source}y`;\nexport const E = () => <div>{/* c */}{t}</div>;";
+      expect(M(combo)).toBe("MARKED");
+    });
+  });
+
+  // ---- (3) META-LINT de clase (confirmación a): prohíbe la COTA FALSA `iter <= X.length` en loops de resolución ----
+  it("meta-lint: ningún fixed-point de resolución usa cota `iter <= *.length` (3ª aparición del patrón — BLOQUEO-1/B)", () => {
+    const gate = readFileSync(
+      `${process.cwd()}/scripts/check-server-safe-markers.mjs`,
+      "utf8",
+    );
+    // Cinturón sintáctico de los custodios BEHAVIORAL (comma-5-hop / block-chain): una cota por longitud-de-array
+    // en un contador de punto-fijo es sub-punto-fijo silencioso. Los loops legítimos son `while (changed)` o
+    // `for (let iter…; iter <= cap` con `cap` = nº REAL de nodos de la cadena. Matchea SOLO la CABECERA
+    // `for (let iter = 0; … <= X.length` (la forma EXACTA del anti-patrón), NO la prosa que lo documenta (L3230
+    // del gate cita `iter <= statements.length` como cota FALSA) ni `arr[arr.length-1]`.
+    expect(gate).not.toMatch(
+      /for\s*\(\s*let\s+iter\s*=\s*0\s*;[^;)]*<=\s*[\w.]+\.length/,
+    );
+  });
+});

@@ -2897,11 +2897,22 @@ function resolveConstructionDeny(target, context) {
       : roots.size
         ? accessedMemberNames(target)
         : [];
+    // BLOQUEO-A: key INCOMPLETA de un element-access directo (ternario `new WebAssembly[c?'Instance':mm]` con
+    // rama irresoluble) → la construcción FAIL-CIERRA (no renuncia como el read): un ctor desconocido sobre un
+    // root con ctors denegados podría ser el denegado. El subset resoluble ya se comprobó arriba.
+    const incomplete =
+      !members &&
+      ts.isElementAccessExpression(target) &&
+      !keyExprComplete(target.argumentExpression);
     for (const root of roots) {
       if (candidates.length > 0) {
         const m = candidates.find((mm) => isConstructionDeniedMember(root, mm));
         if (m) return { ctorRoot: root, ctorMember: m, ctorComputedDenied: false };
-      } else if (CONSTRUCTION_DENIED_MEMBERS[root] !== undefined) {
+      }
+      if (
+        (candidates.length === 0 || incomplete) &&
+        CONSTRUCTION_DENIED_MEMBERS[root] !== undefined
+      ) {
         return { ctorRoot: root, ctorMember: null, ctorComputedDenied: true };
       }
     }
@@ -3056,9 +3067,25 @@ function hoistNestedAssignmentAliases(stmt, context) {
   // NO assignments (esos son value-flow orden-dependiente = el punto fijo del scope los maneja como ∃).
   const declAliasesOf = (stmts, ctx) => {
     const m = new Map();
-    for (const s of stmts) {
-      if (ts.isVariableStatement(s) || ts.isImportEqualsDeclaration(s)) {
-        for (const [n, r] of partialAliasesDeclaredBy(s, ctx)) m.set(n, r);
+    // R7-B / BLOQUEO-B (sibling): PUNTO FIJO while-stable con update por UNIÓN — encadena las declaraciones-alias
+    // DENTRO del bloque/CaseBlock (`const A = performance; const B = A`) resolviendo el RHS contra `ctx ⊕
+    // m-hasta-ahora`. One-pass perdía la cadena intra-bloque (B no veía su propio A → P-DEF-7 solo pineó one-hop).
+    // Monotónico (unión, dominio finito) → termina.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const ectx = m.size ? mergePartialAliases(ctx, m) : ctx;
+      for (const s of stmts) {
+        if (ts.isVariableStatement(s) || ts.isImportEqualsDeclaration(s)) {
+          for (const [n, r] of partialAliasesDeclaredBy(s, ectx)) {
+            const prev = m.get(n);
+            const merged = prev ? new Set([...prev, ...r]) : new Set(r);
+            if (!prev || merged.size !== prev.size) {
+              m.set(n, merged);
+              changed = true;
+            }
+          }
+        }
       }
     }
     return m;
@@ -3694,6 +3721,12 @@ function accessedMemberName(node) {
 function accessedMemberNames(node) {
   if (ts.isPropertyAccessExpression(node)) return [node.name.text];
   if (ts.isElementAccessExpression(node)) {
+    // Devuelve el SUBSET resoluble de member-names (las hojas VT que foldean). Las irresolubles se DROPEAN aquí
+    // — pero el caller NO debe confiar solo en el subset: R7-A / BLOQUEO-A. Un ternario `x[c ? 'now' : dyn]`
+    // (dyn = const-string-alias a un denegado) → subset `['now']`; la rama irresoluble la decide el caller vía
+    // `keyExprComplete` + la POLARIDAD del root (allowlist → fail-closed; denylist → renunciado). La forma es
+    // `deny ⟺ ∃(subset ∩ denegados) ∨ (incompleto ∧ polaridad-fail-closed)`. El subset SIEMPRE se comprueba
+    // (por eso NO devolver []: eso tiraba la mitad ∃ y regresaba `WebAssembly[c?'compile':m]` a SILENT).
     return valueTransparentLeaves(node.argumentExpression)
       .map(foldConstString)
       .filter((s) => s !== undefined);
@@ -3788,6 +3821,18 @@ function resolveKeyCandidates(argExpr) {
     if (n !== null) out.add(n);
   }
   return out;
+}
+
+// ¿la key resuelve COMPLETAMENTE (TODAS las hojas VT foldean a string/numérico)? false si alguna es irresoluble
+// (variable/ensamblada). Contextos ∃-DENY (Reflect.get, defineProperty) deben tratar una key INCOMPLETA como
+// conservadora (members VACÍO → fail-closed sobre root allowlist), NO confiar en el subconjunto foldeado — una
+// rama safe en un ternario `c ? 'now' : dyn` taparía la irresoluble (R7-A). El def-side (propNameCanonical) NO
+// lo usa: allí el subconjunto foldeado es preciso (matchea una key específica del literal).
+function keyExprComplete(argExpr) {
+  if (!argExpr) return true;
+  return valueTransparentLeaves(argExpr).every(
+    (l) => foldConstString(l) !== undefined || canonicalNumericKey(l) !== null,
+  );
 }
 
 function isConstructorMemberAccess(node) {
@@ -4155,7 +4200,14 @@ function reflectGetMemberRead(n) {
       // ternario/`&&`/`||`/proyección/canonicalización). Se devuelve SIEMPRE (incl. members VACÍO = key
       // variable/ensamblada) para que el caller espeje `computedDefaultDenyRoot` (`R[dynKey]` fail-cierra
       // sobre root allowlist). Fable cross-review 2 (B2) + 3 (#4).
-      return { receiver: n.arguments[0], members: resolveKeyCandidates(n.arguments[1]) };
+      // BLOQUEO-A: devolver el SUBSET resoluble (∃-deny lo comprueba SIEMPRE → `Reflect.get(WebAssembly,
+      // c?'compile':m)` FLAG por 'compile') + el flag `complete`; la rama irresoluble la decide el caller según
+      // la polaridad del root (allowlist fail-closed / denylist renunciado), espejo de `R[dynKey]`.
+      return {
+        receiver: n.arguments[0],
+        members: resolveKeyCandidates(n.arguments[1]),
+        complete: keyExprComplete(n.arguments[1]),
+      };
     }
   }
   return null;
@@ -4388,16 +4440,17 @@ function propNameCanonical(name) {
 // por orden de fuente y restaura el override determinista. `({...o, m:X}).m`→X; `({m:X, ...o}).m`→bloqueado;
 // `({...a, m:MALO, m:X}).m`→X (duplicate last-wins).
 function resolveKeyInLiteral(obj, key, depth) {
-  let val = null;
+  let vals = []; // conjunto de valores POSIBLES de la key en este punto (positional last-wins; un spread de
+  // disjunción `cond ? A : B` puede aportar VARIOS a la vez → ∃-unión, no un único valor)
   let blocked = false;
   for (const p of obj.properties) {
     if (ts.isSpreadAssignment(p)) {
-      // H3 (Auditoría B R6): un spread de OBJECT-LITERAL resoluble EN-SITIO es decidible SIN data-flow
-      // (`{...{m:X}}.m` === X — el valor sobrevive el spread). Si el spread-source resuelve ENTERAMENTE a
-      // object-literals, DESCENDER per-alternativa con last-wins y bound de profundidad; solo aporta la key
-      // si la definen, y si ALGUNA alternativa queda blocked el spread queda blocked (sound). Un spread
-      // NO-resoluble a literal (variable/call/Object.assign) o profundidad excedida → §141 blocked (el gemelo
-      // ARRAY ya tenía esta refinación en FIX-5 / spreadFlattenedElements; el lado objeto no la recibió).
+      // H3 (Auditoría B R6) + R7-C: un spread de OBJECT-LITERAL resoluble EN-SITIO es decidible SIN data-flow
+      // (`{...{m:X}}.m` === X). Si el spread-source resuelve ENTERAMENTE a object-literals, ∃-UNIONAR los vals de
+      // TODAS las alternativas (la fuente es una DISJUNCIÓN runtime `cond ? A : B` → la key puede ser la de A O
+      // la de B → si ALGUNA es danger, FLAG). El predecesor SOBRESCRIBÍA (`spreadVal = r.val`) → una rama safe
+      // POSTERIOR tapaba la danger (R7-C, ruptura de INV-PARITY: el gemelo array ∃-une en `out`). Un spread
+      // NO-resoluble a literal (variable/call/Object.assign) o profundidad excedida → §141 blocked.
       const leaves = valueTransparentLeaves(p.expression);
       const litAlts = leaves.filter((l) => ts.isObjectLiteralExpression(l));
       if (depth > 16 || litAlts.length === 0 || litAlts.length !== leaves.length) {
@@ -4405,19 +4458,19 @@ function resolveKeyInLiteral(obj, key, depth) {
         continue;
       }
       let anyBlocked = false;
-      let spreadVal = null;
+      const spreadVals = [];
       for (const alt of litAlts) {
         const r = resolveKeyInLiteral(alt, key, depth + 1);
         if (r.blocked) anyBlocked = true;
-        if (r.val) spreadVal = r.val;
+        if (r.vals.length > 0) spreadVals.push(...r.vals);
       }
       if (anyBlocked) {
         blocked = true;
-      } else if (spreadVal) {
-        val = spreadVal; // el spread aporta la key → gana por orden (una prop POSTERIOR lo sobreescribe)
+      } else if (spreadVals.length > 0) {
+        vals = spreadVals; // el spread aporta la key (∃-unión de sus ramas) → gana por orden; una prop POSTERIOR lo sobreescribe
         blocked = false;
       }
-      // si no anyBlocked y no spreadVal: las alternativas literales NO definen la key → no aporta, val se mantiene.
+      // si no anyBlocked y spreadVals vacío: ninguna alternativa define la key → no aporta, vals se mantiene.
       continue;
     }
     const names = propNameCanonical(p.name);
@@ -4427,24 +4480,24 @@ function resolveKeyInLiteral(obj, key, depth) {
     }
     if (!names.includes(key)) continue; // sibling != key → no envenena
     if (ts.isPropertyAssignment(p)) {
-      val = p.initializer;
+      vals = [p.initializer];
       blocked = false;
     } else if (ts.isShorthandPropertyAssignment(p)) {
-      val = p.name;
+      vals = [p.name];
       blocked = false;
     } else {
-      val = null; // accessor/método con nombre == key → opaco
+      vals = []; // accessor/método con nombre == key → opaco
       blocked = true;
     }
   }
-  return { val, blocked };
+  return { vals, blocked };
 }
 
 function objectLiteralMemberValues(baseExpr, key, depth = 0) {
   const out = [];
   for (const obj of objectLiteralAlternatives(baseExpr)) {
-    const { val, blocked } = resolveKeyInLiteral(obj, key, depth);
-    if (!blocked && val) out.push(val);
+    const { vals, blocked } = resolveKeyInLiteral(obj, key, depth);
+    if (!blocked) out.push(...vals);
   }
   return out;
 }
@@ -6710,7 +6763,14 @@ function checkSourceFile(
               break;
             }
           }
-        } else {
+        }
+        // members VACÍO (key variable/ensamblada) O key INCOMPLETA (ternario `Reflect.get(R, c?'safe':dyn)`) sin
+        // denegado en el subset → allowlist default-deny (BLOQUEO-A: el ∃-deny del subset ya corrió; esto decide
+        // la rama irresoluble por polaridad — allowlist FLAG, denylist renunciado). Espejo de `R[computado]`.
+        if (
+          denied === undefined &&
+          (rget.members.size === 0 || rget.complete === false)
+        ) {
           rgRoot =
             [...rgRoots].find(
               (root) => SAFE_PARTIAL_MEMBERS[root] !== undefined,
@@ -7796,8 +7856,15 @@ function checkSourceFile(
       // (Auditoría B §1: set mixto `(b?crypto:performance)[m]` → performance avisa aunque crypto sea
       // wholesale-safe). Mismo contrato fail-closed que single-root; no sobre-avisa (la rama puede tomarse
       // en runtime), salvo la sobre-aproximación documentada de rama-muerta de `||`/`??`.
+      // BLOQUEO-A: la rama default-deny (allowlist) dispara con members VACÍO (key totalmente variable) O con key
+      // INCOMPLETA (ternario `x[c?'safe':dyn]` con rama irresoluble) — el ∃-deny de arriba ya cazó el subset
+      // resoluble; esto decide la rama IRRESOLUBLE según la polaridad del root: allowlist (performance/console) ∈
+      // SAFE_PARTIAL_MEMBERS → fail-closed FLAG; denylist (WebAssembly) NO está aquí → renunciado (adjudicación #2).
+      const keyIncomplete =
+        ts.isElementAccessExpression(node) &&
+        !keyExprComplete(node.argumentExpression);
       const computedDefaultDenyRoot =
-        memberCandidates.length === 0
+        memberCandidates.length === 0 || keyIncomplete
           ? ([...resolvedPartialRoots].find(
               (root) => SAFE_PARTIAL_MEMBERS[root] !== undefined,
             ) ?? null)
@@ -8573,17 +8640,35 @@ function checkSourceFile(
       // Las cadenas por let-ASIGNACIÓN (`d = performance; c = d`) siguen §141 (no son declaraciones).
       let unionCtx = context;
       const scopeConstAliases = new Map();
-      for (const stmt of statements) {
-        // SOLO DECLARACIONES (const/let/var-con-init + import-equals) — independientes de posición (el binding
-        // se inicializa una vez, call-time). Las ExpressionStatement ASIGNACIONES (`d = performance`) NO se
-        // enriquecen: la cadena `d = performance; c = d` es value-flow ORDEN-dependiente (§141) — `c = d` vale
-        // lo que valga `d` en ESE punto, que la unión insensible al orden no puede modelar.
-        if (
-          ts.isVariableStatement(stmt) ||
-          ts.isImportEqualsDeclaration(stmt)
-        ) {
-          for (const [name, roots] of partialAliasesDeclaredBy(stmt, context)) {
-            scopeConstAliases.set(name, roots);
+      // SOLO DECLARACIONES (const/let/var-con-init + import-equals) — independientes de posición (el binding se
+      // inicializa una vez, call-time). Las ExpressionStatement ASIGNACIONES (`d = performance`) NO se enriquecen:
+      // la cadena `d = performance; c = d` es value-flow ORDEN-dependiente (§141).
+      // R7-B: PUNTO FIJO — resolver cada RHS contra `context ⊕ scopeConstAliases-hasta-ahora` hasta estabilizar,
+      // para encadenar `const p = performance; const q = p` (q → performance TRANSITIVO) en la vista diferida
+      // igual que la forward. El predecesor era one-pass contra `context` → `const q = p` no veía el `p` del
+      // mismo scope (R7-B). Termina por monotonicidad (dominio finito de roots, ≤ #decls pasadas).
+      const declStmts = statements.filter(
+        (s) => ts.isVariableStatement(s) || ts.isImportEqualsDeclaration(s),
+      );
+      // R7-B / BLOQUEO-B: PUNTO FIJO while-stable con update por UNIÓN (no reemplazo). Terminación POR
+      // CONSTRUCCIÓN: cada pasada que cambia UNE ≥1 par (nombre,root); el dominio (nombres × roots del scope) es
+      // finito y el acumulado crece ESTRICTAMENTE → termina en ≤ |nombres×roots| pasadas. NUNCA cota-por-#stmts:
+      // una cadena intra-statement por comas (`const p=perf, q=p, r=q`) excede #statements — el mismo cap falso de
+      // BLOQUEO-1 (3ª aparición del patrón; el kit lo prohíbe: resolver-contra-contexto = while-stable o rationale).
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const ctx = scopeConstAliases.size
+          ? mergePartialAliases(context, scopeConstAliases)
+          : context;
+        for (const stmt of declStmts) {
+          for (const [name, roots] of partialAliasesDeclaredBy(stmt, ctx)) {
+            const prev = scopeConstAliases.get(name);
+            const merged = prev ? new Set([...prev, ...roots]) : new Set(roots);
+            if (!prev || merged.size !== prev.size) {
+              scopeConstAliases.set(name, merged);
+              changed = true;
+            }
           }
         }
       }
@@ -8764,6 +8849,47 @@ const isCliEntry =
   process.argv[1] !== undefined &&
   pathToFileURL(process.argv[1]).href === import.meta.url;
 
+// Enumera TODOS los rangos de block-comment del fichero (ambos estilos de bloque), ROBUSTO a template literals
+// (Auditoría B R7 / R7-D). El scanner crudo (`ts.createScanner`) se DESINCRONIZA en un template con sustitución
+// (sin `reScanTemplateToken` trata la llave-cierre + backtick como CloseBrace + template-head nuevo) → pierde
+// los comentarios POSTERIORES → un marker tras un template moría en SILENCIO (blast-radius de fichero). Las
+// posiciones del AST (`getFullStart`/`getEnd`) son parser-correctas y `getLeadingCommentRanges`/
+// `getTrailingCommentRanges` solo escanean la trivia en esos puntos → inmunes al desync. Rangos deduplicados
+// por pos, ordenados.
+function allBlockCommentRanges(sourceFile) {
+  const text = sourceFile.text;
+  const seen = new Set();
+  const out = [];
+  const collect = (ranges) => {
+    if (!ranges) return;
+    for (const r of ranges) {
+      if (
+        r.kind === ts.SyntaxKind.MultiLineCommentTrivia &&
+        !seen.has(r.pos)
+      ) {
+        seen.add(r.pos);
+        out.push({ pos: r.pos, end: r.end, kind: r.kind });
+      }
+    }
+  };
+  // R7-D / BLOQUEO-D: recorre TODOS los TOKENS (`getChildren` incluye la puntuación — `{`, `;`, keywords —, no
+  // solo los nodos de `forEachChild`) y recoge sus comment-ranges leading/trailing. Es PARSER-CORRECTO en las
+  // posiciones → robusto a REGEX literals, JSX-text braces y TEMPLATES (donde el scanner crudo se desincroniza
+  // por falta de contexto: `/x}\`/`, `<div>}`, `}\`` — enseñarle esa gramática al scanner es emular el parser,
+  // pozo sin fondo) Y a los comentarios de MIEMBRO-DE-CLASE (que `forEachChild`-por-nodo NO ve —
+  // `getLeadingCommentRanges(method.pos)`=∅— pero el TOKEN `m`/`{` SÍ; medido). Cierra la intersección de los
+  // dos puntos ciegos (scanner ∩ AST-por-nodo) sin la unión de dos enumeradores. `endOfFileToken` es hijo de
+  // `sourceFile` → el EOF-orphan entra por la misma vía.
+  const walk = (node) => {
+    collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
+    collect(ts.getTrailingCommentRanges(text, node.getEnd()));
+    for (const child of node.getChildren(sourceFile)) walk(child);
+  };
+  walk(sourceFile);
+  out.sort((a, b) => a.pos - b.pos);
+  return out;
+}
+
 /**
  * Recorre el AST COMPLETO buscando el tag JSDoc `@server-safe` y:
  *   - devuelve `true` si hay un marker en posición CANÓNICA (JSDoc de un
@@ -8896,36 +9022,27 @@ function detectServerSafeMarker(sourceFile, relPath) {
         validAnchors.add(r.pos);
       }
     }
-    const scanner = ts.createScanner(
-      ts.ScriptTarget.Latest,
-      /* skipTrivia */ false,
-      sourceFile.languageVariant,
-      sourceFile.text,
-    );
-    let tok = scanner.scan();
-    while (tok !== ts.SyntaxKind.EndOfFileToken) {
-      if (tok === ts.SyntaxKind.MultiLineCommentTrivia) {
-        const pos = scanner.getTokenPos();
-        const raw = scanner.getTokenText();
-        if (raw.startsWith("/**") && !validAnchors.has(pos)) {
-          const norm = normalizeMarkerText(raw);
-          const m = /(?<![\w-])@server-safe(?![\w-])/.exec(norm);
-          if (m) {
-            const before = norm.slice(0, m.index);
-            const linePrefix = before.slice(before.lastIndexOf("\n") + 1);
-            // clean (line-start) o sibling-tag → intención de marcar bien-formada → misplaced; prosa → tolera.
-            const clean = /^[\s*/]*$/.test(linePrefix);
-            const sibling = /^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix);
-            if (clean || sibling) {
-              const { line } = sourceFile.getLineAndCharacterOfPosition(pos);
-              if (!misplacedLines.includes(line + 1)) {
-                misplacedLines.push(line + 1);
-              }
+    // R7-D: enumeración por AST (robusta a templates), no scanner crudo (se desincronizaba con `${...}`).
+    for (const r of allBlockCommentRanges(sourceFile)) {
+      const pos = r.pos;
+      const raw = sourceFile.text.slice(r.pos, r.end);
+      if (raw.startsWith("/**") && !validAnchors.has(pos)) {
+        const norm = normalizeMarkerText(raw);
+        const m = /(?<![\w-])@server-safe(?![\w-])/.exec(norm);
+        if (m) {
+          const before = norm.slice(0, m.index);
+          const linePrefix = before.slice(before.lastIndexOf("\n") + 1);
+          // clean (line-start) o sibling-tag → intención de marcar bien-formada → misplaced; prosa → tolera.
+          const clean = /^[\s*/]*$/.test(linePrefix);
+          const sibling = /^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix);
+          if (clean || sibling) {
+            const { line } = sourceFile.getLineAndCharacterOfPosition(pos);
+            if (!misplacedLines.includes(line + 1)) {
+              misplacedLines.push(line + 1);
             }
           }
         }
       }
-      tok = scanner.scan();
     }
   }
 
@@ -9059,32 +9176,20 @@ function markerNeedsHygiene(sourceFile, content, relPath) {
  * marcados). Solo `@server-safe` en POSICIÓN de tag (tras el abre-bloque / estrella / whitespace), no incidental.
  */
 export function markerNearMissLines(sourceFile) {
-  const text = sourceFile.text;
   const out = [];
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    /* skipTrivia */ false,
-    sourceFile.languageVariant,
-    text,
-  );
-  let tok = scanner.scan();
-  while (tok !== ts.SyntaxKind.EndOfFileToken) {
-    if (tok === ts.SyntaxKind.MultiLineCommentTrivia) {
-      // Auditoría B R6 / H4: normalizar invisibles con el MISMO normalizador que FIX-4 (una definición de
-      // "invisible", dos consumidores) → un ZWSP pegado al token no rompe el borde. Y borde SIMÉTRICO
-      // `(?<![\w-])…(?![\w-])`: el predecesor `(?:\s|\*|$)` solo cubría el lado TRAILING → puntuación LEADING
-      // (`note:@server-safe`, `(@server-safe)`) y trailing (`@server-safe:`) se colaban en silencio. La forma
-      // simétrica cierra las 5 celdas medidas y mantiene los negativos (`@server-safefoo`, `@server-safe-foo`:
-      // `f`/`-` ∈ `[\w-]`).
-      const c = normalizeMarkerText(scanner.getTokenText());
-      if (!c.startsWith("/**") && /(?<![\w-])@server-safe(?![\w-])/.test(c)) {
-        const { line } = sourceFile.getLineAndCharacterOfPosition(
-          scanner.getTokenPos(),
-        );
-        out.push(line + 1);
-      }
+  // R7-D: enumeración por AST (robusta a templates), no scanner crudo (se desincronizaba con `${...}` → un
+  // single-star tras un template no disparaba el near-miss).
+  for (const r of allBlockCommentRanges(sourceFile)) {
+    // Auditoría B R6 / H4: normalizar invisibles con el MISMO normalizador que FIX-4 (una definición de
+    // "invisible", dos consumidores) → un ZWSP pegado al token no rompe el borde. Y borde SIMÉTRICO
+    // `(?<![\w-])…(?![\w-])`: el predecesor `(?:\s|\*|$)` solo cubría el lado TRAILING → puntuación LEADING
+    // (`note:@server-safe`, `(@server-safe)`) y trailing (`@server-safe:`) se colaban en silencio. La forma
+    // simétrica cierra las 5 celdas medidas y mantiene los negativos (`@server-safefoo`, `@server-safe-foo`).
+    const c = normalizeMarkerText(sourceFile.text.slice(r.pos, r.end));
+    if (!c.startsWith("/**") && /(?<![\w-])@server-safe(?![\w-])/.test(c)) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(r.pos);
+      out.push(line + 1);
     }
-    tok = scanner.scan();
   }
   return out;
 }
