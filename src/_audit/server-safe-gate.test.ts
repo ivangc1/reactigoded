@@ -7193,3 +7193,125 @@ describe("server-safe gate — R7 acta: asimetría documentada + corpus enumerad
     );
   });
 });
+
+// ============================================================================
+// R8 — custodios ampliados (capa RECOGNIZER). Escritos ANTES de los fixes (protocolo pre-registrado):
+// fallan ahora, los fixes los ponen verdes. Clasificación MEDIDA (runtime own+enum) — incluye out-of-mandate
+// (SILENT-correcto pineado) y over-aproximación fail-closed documentada.
+// ============================================================================
+describe("server-safe gate — R8 custodios (recognizer bajo invariantes)", () => {
+  const flagged = (code: string, fn = "r8.fixture.tsx") =>
+    checkSourceFile(`/** @server-safe */\n${code}`, fn).length > 0;
+
+  // ---- MEC-A · INV-WRAP gana el eje deref-de-resultado-de-sonda-`?.()` (value-transparent, no solo erased) ----
+  describe("MEC-A: deref del resultado de una sonda ?.() tras wrapper value-transparent → FLAG", () => {
+    // matriz: wrapper {ternario,coma,&&,||,asignación} × deref {.p,[k],()} sobre partial-deny root (performance).
+    // E = `performance.eventLoopUtilization?.()`.
+    it.each<[string, string, boolean]>([
+      ["ternario .p  (c ? E : o).foo", `export function f(o,c){ return (c ? performance.eventLoopUtilization?.() : o).foo; }`, true],
+      ["ternario [k] (c ? E : o)['foo']", `export function f(o,c){ return (c ? performance.eventLoopUtilization?.() : o)["foo"]; }`, true],
+      ["ternario ()  (c ? E : o)()", `export function f(o,c){ return (c ? performance.eventLoopUtilization?.() : o)(); }`, true],
+      ["coma  (0, E).foo", `export function f(){ return (0, performance.eventLoopUtilization?.()).foo; }`, true],
+      ["and   (E && o).foo", `export function f(o){ return (performance.eventLoopUtilization?.() && o).foo; }`, true],
+      ["or    (E || o).foo", `export function f(o){ return (performance.eventLoopUtilization?.() || o).foo; }`, true],
+      ["asign (o.x = E).foo", `export function f(o){ return (o.x = performance.eventLoopUtilization?.()).foo; }`, true],
+      ["reflective bajo ternario (true ? Object.create(perf) : 0).elu()", `export const a = (true ? Object.create(performance) : 0).eventLoopUtilization();`, true],
+      // frontera §141 pineada: el deref es del RETORNO de g, no del resultado de la sonda → SILENT correcto
+      ["wrapper-consume g(E).foo → SILENT", `export function f(o){ function g(z){return o;} return g(performance.eventLoopUtilization?.()).foo; }`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- MEC-B · reflectiveValueReads: tres familias con condición de aplicabilidad distinta (matriz MEDIDA) ----
+  describe("MEC-B: catálogo reflexivo tres-familias (identity-return / proto-walk / own-copy)", () => {
+    it.each<[string, string, boolean]>([
+      // identity-return (arg0/target idéntico → cadena intacta → cualquier miembro) → FLAG
+      ["identity freeze read WA.compile", `export const x = Object.freeze(WebAssembly).compile;`, true],
+      ["identity freeze call perf.elu()", `export const x = Object.freeze(performance).eventLoopUtilization();`, true],
+      ["identity seal perf.elu()", `export const x = Object.seal(performance).eventLoopUtilization();`, true],
+      ["identity preventExtensions perf.elu()", `export const x = Object.preventExtensions(performance).eventLoopUtilization();`, true],
+      ["identity defineProperty(perf) target.elu()", `export const x = Object.defineProperty(performance,"z",{value:1}).eventLoopUtilization();`, true],
+      ["identity defineProperties(perf) target.elu()", `export const x = Object.defineProperties(performance,{}).eventLoopUtilization();`, true],
+      ["identity freeze construct new(WA).Module", `const b=new Uint8Array(8); export const x = new (Object.freeze(WebAssembly)).Module(b);`, true],
+      // proto-walk (R como prototipo → lee heredado) → FLAG
+      ["proto setPrototypeOf({},perf).elu()", `export const x = Object.setPrototypeOf({}, performance).eventLoopUtilization();`, true],
+      ["proto getPrototypeOf(create(perf)).elu()", `export const x = Object.getPrototypeOf(Object.create(performance)).eventLoopUtilization();`, true],
+      ["proto __proto__ literal .elu()", `export const x = ({__proto__: performance}).eventLoopUtilization();`, true],
+      // B3 composición que LEE (medido runtime = función) → FLAG
+      ["compose create∘create WA.compile", `export const x = Object.create(Object.create(WebAssembly)).compile;`, true],
+      ["compose {...{...WA}}.compile (own+enum)", `export const x = ({...{...WebAssembly}}).compile;`, true],
+      ["compose freeze(create(WA)).compile", `export const x = Object.freeze(Object.create(WebAssembly)).compile;`, true],
+      // own-copy que ALCANZA (own+ENUMERABLE) → FLAG-genuino
+      ["own-copy {...WA}.compile (own+enum)", `export const x = ({...WebAssembly}).compile;`, true],
+      ["own-copy {...console}.table (own+enum)", `export const x = ({...console}).table;`, true],
+      // own-copy que NO alcanza en runtime → OUT-OF-MANDATE, SILENT-correcto (NO fixear = sería FP). PINEADO.
+      ["OOM assign({},create(WA)).compile → SILENT", `export const x = Object.assign({}, Object.create(WebAssembly)).compile;`, false],
+      ["OOM {...create(WA)}.compile → SILENT", `export const x = ({...Object.create(WebAssembly)}).compile;`, false],
+      // negativos de catálogo: Reflect.defineProperty/setPrototypeOf devuelven boolean → NO añadir → SILENT
+      ["NEG Reflect.defineProperty → SILENT", `export const x = Reflect.defineProperty(performance,"z",{value:1});`, false],
+      ["NEG Reflect.setPrototypeOf → SILENT", `export const x = Reflect.setPrototypeOf(performance, null);`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+    // over-aproximación fail-closed DOCUMENTADA: own-copy de miembro heredado/non-enum → undefined en runtime,
+    // pero el gate FLAG (conservador, jamás sub-flag). Ratificado como política (ADR §R8), no bug.
+    it("over-aprox documentada: {...performance}.elu() → FLAG (elu heredado, undefined en runtime; fail-closed)", () => {
+      expect(flagged(`export const x = ({...performance}).eventLoopUtilization();`)).toBe(true);
+    });
+  });
+
+  // ---- MEC-C · ∃ completo en destructure-default + spread-drop ----
+  describe("MEC-C: ∃ sobre roots en destructure-default (C1) + spread en enum conservadora (C2)", () => {
+    it.each<[string, string, boolean]>([
+      ["C1 bug multi-rama+default {compile=fb}=c?perf:WA", `export function f(c){ const {compile = () => 0} = c ? performance : WebAssembly; return compile; }`, true],
+      ["C1 cross-family {createObjectURL=fb}=c?console:URL", `export function f(c){ const {createObjectURL = () => 0} = c ? console : URL; return createObjectURL; }`, true],
+      // no regresar: absence-only con default en TODOS los roots → SILENT (el default se activa, seguro)
+      ["C1 absence-only {measure=fb}=c?perf:console → SILENT", `export function f(c){ const {measure = () => 0} = c ? performance : console; return measure; }`, false],
+      ["C1 single-root+default present-throws {compile=fb}=WA", `export function f(){ const {compile = () => 0} = WebAssembly; return compile; }`, true],
+      // C2 spread-drop: key irresoluble sobre {...{a:R}} → los tres sinks
+      ["C2 read {...{a:perf}}[k].elu()", `export function f(k){ return ({...{a:performance}})[k].eventLoopUtilization(); }`, true],
+      ["C2 construct new({...{a:WA}})[k].Module()", `export function f(k,u){ return new (({...{a:WebAssembly}})[k]).Module(u); }`, true],
+      ["C2 import {...{a:'node:fs'}}[k]", `export function f(k){ return import(({...{a:"node:fs"}})[k]); }`, true],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- MEC-D · param-hermano en el default de un param posterior (extiende el mecanismo body-read L2R) ----
+  describe("MEC-D: alias de param-hermano visible en el default de un param posterior", () => {
+    it.each<[string, string, boolean]>([
+      ["param-sibling eager f(p=perf, x=p.elu())", `export function f(p=performance, x=p.eventLoopUtilization()){ return x; }`, true],
+      ["param-sibling closure f(p=perf, x=()=>p.elu())", `export function f(p=performance, x=()=>p.eventLoopUtilization()){ return x; }`, true],
+      // no regresar: body-read (ya FLAG) + destructured (ya FLAG)
+      ["body-read f(p=perf){ p.elu() }", `export function f(p = performance){ return p.eventLoopUtilization(); }`, true],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- MEC-E · degradación de cap: excedido → fail-closed, JAMÁS fail-open ----
+  describe("MEC-E: cap de profundidad excedido degrada fail-closed (blocked), no oculta el root", () => {
+    const nest = (n: number, inner: string) => "[...".repeat(n) + inner + "]".repeat(n);
+    it("17 spreads anidados read → FLAG (no dropea el root)", () => {
+      expect(flagged(`export const x = ${nest(17, "[performance]")}[0].eventLoopUtilization();`)).toBe(true);
+    });
+    it("17 spreads anidados construct → FLAG", () => {
+      expect(flagged(`export const x = new ${nest(17, "[WebAssembly]")}[0].Module();`)).toBe(true);
+    });
+    it("cap fail-closed no invierte: 5 spreads normales siguen FLAG (no over-block espurio)", () => {
+      expect(flagged(`export const x = ${nest(5, "[performance]")}[0].eventLoopUtilization();`)).toBe(true);
+    });
+    // Custodio DURABLE (Auditoría B R8, adjudicado en vez del meta-lint sintáctico — la dirección de degradación
+    // es semántica, no matcheable por regex): un fixture conductual PROFUNDO (muy por encima de cualquier cota
+    // razonable) revienta si alguien reintroduce un cap que degrade FAIL-OPEN. La doctrina escrita + la tabla
+    // custodio-audit + este fixture son el guardián; un lint sintáctico de "return de lo acumulado" dispararía
+    // sobre recursión legítima por todo el gate (bajo valor, no se añade).
+    it("40 spreads anidados read → FLAG (guarda contra reintroducir un cap fail-open)", () => {
+      expect(flagged(`export const x = ${nest(40, "[performance]")}[0].eventLoopUtilization();`)).toBe(true);
+    });
+    it("40 spreads anidados construct → FLAG", () => {
+      expect(flagged(`export const x = new ${nest(40, "[WebAssembly]")}[0].Module();`)).toBe(true);
+    });
+  });
+});

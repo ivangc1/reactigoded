@@ -3932,17 +3932,40 @@ function wrapperEnclosingMemberAccess(node) {
  * demás elementos ya es fail-closed). El VALOR sobrevive el spread-de-literal EN-SITIO (decidible sin data-
  * flow), igual que la proyección container. `depth` acota recursión patológica.
  */
-function spreadFlattenedElements(elements, out, depth = 0) {
-  if (depth > 16) return out;
+function spreadFlattenedElements(elements, out) {
+  // R8 / MEC-E: SIN cap de profundidad. El predecesor `if (depth > 16) return out` degradaba FAIL-OPEN — truncaba
+  // el aplanado → un root a profundidad 17+ se DROPEABA → oculto → SILENT. La recursión termina por DESCENSO del
+  // AST (cada nivel entra en un array-literal más interno, dominio finito), igual que los `.bind`-chains
+  // iterativos SIN cap (L4099: "un cap numérico es una frontera FALSA"). Doctrina de degradación de caps (kit):
+  // un límite de análisis excedido degrada FAIL-CLOSED (blocked/deny) o FAIL-LOUD, JAMÁS fail-open — aquí se
+  // elimina el límite (fail-CORRECTO) porque la terminación no lo necesita.
   for (const el of elements) {
     if (!el || ts.isOmittedExpression(el)) continue;
     if (ts.isSpreadElement(el)) {
       for (const arr of arrayLiteralAlternatives(el.expression)) {
-        spreadFlattenedElements(arr.elements, out, depth + 1);
+        spreadFlattenedElements(arr.elements, out);
       }
       continue;
     }
     out.push(el);
+  }
+  return out;
+}
+
+// R8 C2: recolecta TODOS los valores de las props de un object-literal Y de sus spreads ANIDADOS de
+// object-literal, para la enum conservadora de clave IRRESOLUBLE (`({...{a:R}})[k]`, k variable → cualquier
+// own-prop podría ser la seleccionada → ∃-peligro). El predecesor iteraba solo props directas y DROPEABA el
+// SpreadAssignment → el root del spread escapaba (read/construct/import). Un spread de VARIABLE/call (no literal)
+// queda §141 (objectLiteralAlternatives no lo resuelve → sin hoja).
+function allObjectLiteralValuesDeep(expr, out, depth = 0) {
+  if (depth > 64) return out;
+  for (const obj of objectLiteralAlternatives(expr)) {
+    for (const p of obj.properties) {
+      if (ts.isPropertyAssignment(p)) out.push(p.initializer);
+      else if (ts.isShorthandPropertyAssignment(p)) out.push(p.name);
+      else if (ts.isSpreadAssignment(p))
+        allObjectLiteralValuesDeep(p.expression, out, depth + 1);
+    }
   }
   return out;
 }
@@ -4012,12 +4035,7 @@ function valueTransparentChildren(node) {
         // FIX-5: aplana spread-de-array-literal (`[...['fs']][k]` → 'fs') además de los elementos directos.
         spreadFlattenedElements(arr.elements, out);
       }
-      for (const obj of objectLiteralAlternatives(node.expression)) {
-        for (const p of obj.properties) {
-          if (ts.isPropertyAssignment(p)) out.push(p.initializer);
-          else if (ts.isShorthandPropertyAssignment(p)) out.push(p.name);
-        }
-      }
+      allObjectLiteralValuesDeep(node.expression, out);
     } else {
       for (const key of keys) {
         // ARRAY: solo un índice ENTERO canónico en rango selecciona elemento (restricción del CONSUMIDOR,
@@ -4254,6 +4272,109 @@ function staticNamespaceCall(node, ns, method) {
  * RENUNCIADOS explícitos (tabla ADR): entries/values/keys→índice (key-implícita), fromEntries∘entries
  * (composición copia key-implícita), structuredClone (lanza DataCloneError, V4), Proxy (handler altera lectura).
  */
+// R8 MEC-B: fuentes value-carrier de un receptor reflexivo, recursivas y SEMÁNTICAS-por-familia (la matriz medida
+// en runtime, no recursión ciega — `assign({},create(R))`/`{...create(R)}` NO leen, medido undefined). Devuelve
+// las expresiones cuya lectura de un miembro alcanza el mismo miembro que leer `expr.k`.
+//   mode 'chain' = identity-return + proto-walk: lee TODA la cadena de la fuente (own+heredado).
+//   mode 'own'   = own-copy (spread `{...S}` / `Object.assign` sources): solo own-enumerable → un creador-de-
+//                  prototipo (`create`/`setPrototypeOf`/`{__proto__}`) sin own-props NO aporta (para).
+// Terminal = una raíz parcial directa (o alias); `exprPartialRoots` del caller filtra los no-root (§141).
+function reflectiveCarrierSources(expr, mode, depth = 0, viaReflective = false) {
+  if (!expr || depth > 64) return [];
+  const e = unwrapErased(expr);
+  const call = (ns, name) =>
+    ts.isCallExpression(e) && staticNamespaceCall(e, ns, name);
+  // rec por una capa REFLEXIVA (marca viaReflective) vs recV por un wrapper value-transparent (preserva la marca).
+  const rec = (x, m) => reflectiveCarrierSources(x, m, depth + 1, true);
+  const recV = (x, m) => reflectiveCarrierSources(x, m, depth + 1, viaReflective);
+  // identity-return arg0 (result === arg0, cadena intacta): freeze/seal/preventExtensions + el TARGET de
+  // defineProperty/defineProperties (rol arg0, ortogonal al rol descriptor-FUENTE que maneja el bloque B).
+  if (
+    (call("Object", "freeze") ||
+      call("Object", "seal") ||
+      call("Object", "preventExtensions") ||
+      call("Object", "defineProperty") ||
+      call("Object", "defineProperties")) &&
+    e.arguments.length >= 1
+  ) {
+    return rec(e.arguments[0], mode);
+  }
+  // prototype-creators: create(R)/setPrototypeOf(_,R) → proto = R. En 'chain' lee vía proto; en 'own' NO aporta.
+  if (call("Object", "create") && e.arguments.length >= 1) {
+    return mode === "chain" ? rec(e.arguments[0], "chain") : [];
+  }
+  if (call("Object", "setPrototypeOf") && e.arguments.length >= 2) {
+    return mode === "chain" ? rec(e.arguments[1], "chain") : [];
+  }
+  // getPrototypeOf(X) → el prototipo establecido en X (create/setPrototypeOf/{__proto__}).
+  if (
+    (call("Object", "getPrototypeOf") || call("Reflect", "getPrototypeOf")) &&
+    e.arguments.length >= 1
+  ) {
+    const x = unwrapErased(e.arguments[0]);
+    if (ts.isCallExpression(x) && staticNamespaceCall(x, "Object", "create"))
+      return rec(x.arguments[0], "chain");
+    if (
+      ts.isCallExpression(x) &&
+      staticNamespaceCall(x, "Object", "setPrototypeOf") &&
+      x.arguments.length >= 2
+    )
+      return rec(x.arguments[1], "chain");
+    if (ts.isObjectLiteralExpression(x)) {
+      const out = [];
+      for (const p of x.properties)
+        if (
+          ts.isPropertyAssignment(p) &&
+          !p.name.computed &&
+          (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) &&
+          p.name.text === "__proto__"
+        )
+          out.push(...rec(p.initializer, "chain"));
+      return out;
+    }
+    return [];
+  }
+  // Object.assign(t, ...s): result = t (identity) con own de cada s copiado → t en modo actual, cada s en 'own'.
+  if (call("Object", "assign")) {
+    const out = [];
+    e.arguments.forEach((a, i) => {
+      if (!ts.isSpreadElement(a)) out.push(...rec(a, i === 0 ? mode : "own"));
+    });
+    return out;
+  }
+  // object-literal: spreads `{...S}` = own-copy de S; `{__proto__: R}` (no-computed) = proto (chain).
+  if (ts.isObjectLiteralExpression(e)) {
+    const out = [];
+    for (const p of e.properties) {
+      if (ts.isSpreadAssignment(p)) out.push(...rec(p.expression, "own"));
+      else if (
+        mode === "chain" &&
+        ts.isPropertyAssignment(p) &&
+        !p.name.computed &&
+        (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) &&
+        p.name.text === "__proto__"
+      )
+        out.push(...rec(p.initializer, "chain"));
+    }
+    return out;
+  }
+  // wrappers VALUE-TRANSPARENT (ternario/coma/&&/||/asignación): el resultado fluye por ellos → el idiom
+  // reflexivo puede estar en una rama (`(true ? Object.create(R) : 0).k`). Recursa cada hoja PRESERVANDO la
+  // marca (recV) — cruzar un ternario NO es cruzar una capa reflexiva, así un root DESNUDO bajo el ternario
+  // sigue sin contar aquí (lo maneja el check directo con su probe).
+  const vtKids = valueTransparentChildren(e);
+  if (vtKids.length > 0) {
+    const out = [];
+    for (const k of vtKids) out.push(...recV(k, mode));
+    return out;
+  }
+  // terminal: raíz parcial directa/alias → fuente. SOLO cuenta si se atravesó ≥1 capa REFLEXIVA (viaReflective):
+  // un root DESNUDO (`performance.elu`, o `(cond ? performance : 0).elu`) NO es una lectura reflexiva — lo maneja
+  // el check de partial-member DIRECTO (con su lógica de safe-probe `?.()`); tratarlo aquí lo FLAGgearía
+  // saltándose el probe (regresión medida). own-copy sobre un root = over-aprox fail-closed (ADR §R8).
+  return viaReflective ? [e] : [];
+}
+
 function reflectiveValueReads(node) {
   const out = [];
   const add = (receiver, members) => {
@@ -4303,7 +4424,14 @@ function reflectiveValueReads(node) {
     const members = new Set(accessedMemberNames(node));
     if (members.size > 0) {
       const recv = unwrapErased(node.expression);
-      // R de un descriptor-MAP `Object.getOwnPropertyDescriptors(R)` (arg de create/defineProperties).
+      // R8 MEC-B: fuentes value-carrier por FAMILIA (identity-return arg0 / proto-walk / own-copy), RECURSIVAS —
+      // reemplaza el dispatch inline assign/create-arg0/spread (ahora un caso del helper) y AÑADE freeze/seal/
+      // preventExtensions/defineProperty-TARGET/defineProperties-TARGET/setPrototypeOf/getPrototypeOf/{__proto__}
+      // + la composición (create∘create, freeze∘create, {...{...R}}), con la matriz chain-vs-own que NO lee
+      // `assign({},create(R))`/`{...create(R)}` (medido undefined → SILENT-correcto).
+      for (const src of reflectiveCarrierSources(recv, "chain")) add(src, members);
+      // descriptor-transfer (R como FUENTE de descriptor, ORTOGONAL al value-carrier): gOPDs(R) → 2º arg de
+      // create/defineProperties; gOPD(R,k2) → 3er arg de defineProperty. El helper cubre el TARGET (arg0).
       const gOPDsRoot = (arg) => {
         const a = unwrapErased(arg);
         return ts.isCallExpression(a) &&
@@ -4312,27 +4440,13 @@ function reflectiveValueReads(node) {
           ? a.arguments[0]
           : null;
       };
-      if (ts.isCallExpression(recv) && staticNamespaceCall(recv, "Object", "assign")) {
-        // Object.assign(target, ...sources).k → CUALQUIER arg (target o source) puede aportar k. Un
-        // SpreadElement de arg (`Object.assign({}, ...srcs)`) es §141 (fuentes desconocidas) → skip.
-        for (const a of recv.arguments) if (!ts.isSpreadElement(a)) add(a, members);
-      } else if (
-        ts.isCallExpression(recv) &&
-        recv.arguments.length >= 1 &&
-        staticNamespaceCall(recv, "Object", "create")
-      ) {
-        add(recv.arguments[0], members); // Object.create(R).k → lectura vía prototipo (V3)
-        // Object.create(proto, gOPDs(R)).k → el 2º arg (descriptor-map) transfiere own-props de R.
-        if (recv.arguments.length >= 2) {
-          const r = gOPDsRoot(recv.arguments[1]);
-          if (r) add(r, members);
-        }
-      } else if (
+      if (
         ts.isCallExpression(recv) &&
         recv.arguments.length >= 2 &&
-        staticNamespaceCall(recv, "Object", "defineProperties")
+        (staticNamespaceCall(recv, "Object", "create") ||
+          staticNamespaceCall(recv, "Object", "defineProperties"))
       ) {
-        const r = gOPDsRoot(recv.arguments[1]); // defineProperties(_, gOPDs(R)).k
+        const r = gOPDsRoot(recv.arguments[1]); // create(proto, gOPDs(R)) / defineProperties(_, gOPDs(R))
         if (r) add(r, members);
       } else if (
         ts.isCallExpression(recv) &&
@@ -4351,10 +4465,6 @@ function reflectiveValueReads(node) {
           if ([...members].some((m) => defKeys.has(m))) {
             add(desc.arguments[0], resolveKeyCandidates(desc.arguments[1]));
           }
-        }
-      } else if (ts.isObjectLiteralExpression(recv)) {
-        for (const p of recv.properties) {
-          if (ts.isSpreadAssignment(p)) add(p.expression, members); // ({...R}).k
         }
       }
     }
@@ -7131,11 +7241,16 @@ function checkSourceFile(
       // left-to-right (`f(a = setTimeout, b = a)`), resuelto contra el scope de params (shadow-aware).
       // El partial-MEMBER de un pattern-param (`run({ compile } = WA)`) lo caza flagPartialDestructure.
       let bodyCtx = bodyContext;
+      // R8 MEC-D: snapshot L2R por-parámetro para VISITAR su default con los alias de los params 0..i-1
+      // (`f(p = performance, x = p.eventLoopUtilization())`). El threading de `pCtx` abajo ya los acumula;
+      // capturamos el contexto ANTES de procesar cada param (así el default de i ve p, no lo trata como opaco).
+      const paramDefaultCtx = new Map();
       {
         let pCtx = paramContext;
         const tAdds = new Set();
         const pAdds = new Map();
         for (const p of node.parameters) {
+          paramDefaultCtx.set(p, pCtx);
           // NO saltar por `!p.initializer`: un DEFAULT de binding-element dentro del pattern
           // (`run({ later = setTimeout })`) ejecuta aunque el parámetro no tenga default ENTERO —
           // collectStructuralAliases recursa esos defaults desde el pattern (codex P2).
@@ -7227,7 +7342,12 @@ function checkSourceFile(
           // param) → un `m(@(window.x) window)` lee el GLOBAL aunque el param se llame
           // window. Decompón: decoradores→externo, default/tipo/nombre→param (codex P1).
           ts.forEachChild(child, (pc) =>
-            visit(pc, ts.isDecorator(pc) ? context : paramContext),
+            visit(
+              pc,
+              ts.isDecorator(pc)
+                ? context
+                : (paramDefaultCtx.get(child) ?? paramContext), // R8 MEC-D: default ve params 0..i-1
+            ),
           );
         } else {
           // RETURN TYPE (un type-predicate `x is T` referencia el param → debe verlo;
@@ -7919,7 +8039,22 @@ function checkSourceFile(
         // erased-wrappers, pero exigir que se haya cruzado ≥1 paréntesis antes del deref.
         let r = p;
         let crossedParen = false;
-        while (r.parent && isErasedOuterExpr(r.parent)) {
+        // R8 MEC-A: ascender también por wrappers VALUE-TRANSPARENT (ternario/coma/&&/||/asignación), no solo
+        // erased — el resultado de la sonda `?.()` fluye por ellos hasta el paren-deref. `(cond ? X?.() : o).foo`
+        // ejecuta `undefined.foo` en Edge igual que `(X?.()).foo`. `g(X?.()).foo` queda seguro (un argumento de
+        // call NO es value-transparent → no se cruza → §141 pineado). Mismo SET que el ascenso de arriba (L7983).
+        while (
+          r.parent &&
+          (isErasedOuterExpr(r.parent) ||
+            valueTransparentChildren(r.parent).includes(r) ||
+            // `&&` con la sonda a la IZQUIERDA: un resultado FALSY (undefined en Edge = miembro ausente) ES el
+            // valor del `&&` y se deref'a → unsafe. `valueTransparentChildren(&&)=[right]` por convención de
+            // deny; el probe-ascent necesita también el left porque una sonda falsy es el caso de divergencia-Edge.
+            (ts.isBinaryExpression(r.parent) &&
+              r.parent.operatorToken.kind ===
+                ts.SyntaxKind.AmpersandAmpersandToken &&
+              r.parent.left === r))
+        ) {
           if (ts.isParenthesizedExpression(r.parent)) crossedParen = true;
           r = r.parent;
         }
@@ -8129,13 +8264,22 @@ function checkSourceFile(
                   ts.isBinaryExpression(el.initializer) &&
                   el.initializer.operatorToken.kind ===
                     ts.SyntaxKind.EqualsToken);
-              if (
-                key &&
-                hasDefault &&
-                !PARTIAL_PRESENT_THROWS_ROOTS.has(denyRoot)
-              ) {
-                continue; // miembro ausente con default → seguro
+              // R8 / BLOQUEO-C1: ∃ sobre TODOS los roots, no el first-match `denyRoot`. Con default, el miembro
+              // es seguro SOLO si es AUSENTE en todos (el default se activa); si ALGÚN root lo tiene
+              // present-throws (`WebAssembly.compile` EXISTE → el default NO se activa → sigue lanzando), no es
+              // seguro. First-match paraba en un root de AUSENCIA (`performance`, allowlist, compile ∉ safe →
+              // "denegado") y enmascaraba el hermano present-throws de una rama posterior del receptor multi-rama.
+              const presentThrowsRoot = key
+                ? ([...partialRoots].find(
+                    (root) =>
+                      PARTIAL_PRESENT_THROWS_ROOTS.has(root) &&
+                      partialMemberDenied(root, key),
+                  ) ?? null)
+                : null;
+              if (key && hasDefault && !presentThrowsRoot) {
+                continue; // miembro ausente (default se activa) en TODOS los roots → seguro
               }
+              if (presentThrowsRoot) denyRoot = presentThrowsRoot; // detail: el hazard real, no la ausencia
               if (key) {
                 const start = el.getStart(sourceFile);
                 const { line } =
