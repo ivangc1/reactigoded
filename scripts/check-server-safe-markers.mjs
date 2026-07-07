@@ -2632,6 +2632,15 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
       );
       if (ip) {
         collectStructuralAliases(sub, ip.initializer, context, resolve, emit, enrollRest);
+      } else {
+        // R10 DESTRUCT: la key puede llegar por un SPREAD de object-literal EN-SITIO
+        // (`{x} = {...{x: root}}`). objectLiteralMemberValues/resolveKeyInLiteral descienden el
+        // spread (last-wins, ∃-unión de ramas); un spread de VARIABLE queda `blocked` → [] → §141.
+        for (const key of structuralKeyTexts(keyNode)) {
+          for (const val of objectLiteralMemberValues(lit, key)) {
+            collectStructuralAliases(sub, val, context, resolve, emit, enrollRest);
+          }
+        }
       }
     }
   }
@@ -2640,21 +2649,26 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
     (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
     ts.isArrayLiteralExpression(lit)
   ) {
-    t.elements.forEach((e, i) => {
-      if (ts.isOmittedExpression(e)) return;
-      let sub = ts.isBindingElement(e) ? e.name : e;
-      // default en array assignment-destr `[WA = WebAssembly] = []`: el elemento es la
-      // BinaryExpression `WA = WebAssembly`. Desempaquetar: target=left, default=right (codex P2).
-      if (
-        sub &&
-        ts.isBinaryExpression(sub) &&
-        sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
-      ) {
-        collectStructuralAliases(sub.left, sub.right, context, resolve, emit, enrollRest);
-        sub = sub.left;
-      }
-      collectStructuralAliases(sub, lit.elements[i], context, resolve, emit, enrollRest);
-    });
+    // R10 DESTRUCT: aplanar spreads de LITERAL en-sitio para el match POSICIONAL (`[x]=[...[perf]]`);
+    // un spread de VARIABLE → null → §141 (no casar; los DEFAULTS ya se procesan fuera del lit-loop).
+    const posEls = positionalArrayElements(lit);
+    if (posEls) {
+      t.elements.forEach((e, i) => {
+        if (ts.isOmittedExpression(e)) return;
+        let sub = ts.isBindingElement(e) ? e.name : e;
+        // default en array assignment-destr `[WA = WebAssembly] = []`: el elemento es la
+        // BinaryExpression `WA = WebAssembly`. Desempaquetar: target=left, default=right (codex P2).
+        if (
+          sub &&
+          ts.isBinaryExpression(sub) &&
+          sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+          collectStructuralAliases(sub.left, sub.right, context, resolve, emit, enrollRest);
+          sub = sub.left;
+        }
+        collectStructuralAliases(sub, posEls[i], context, resolve, emit, enrollRest);
+      });
+    }
   }
   }
 }
@@ -3952,6 +3966,33 @@ function spreadFlattenedElements(elements, out) {
   return out;
 }
 
+// ¿Un array-literal aplana sus spreads SIN pérdida de posición? — cada SpreadElement resuelve
+// ENTERAMENTE (recursivo) a array-literals. Un spread de VARIABLE/call NO resuelve →
+// spreadFlattenedElements lo DROPEA → DESPLAZA las posiciones → el match POSICIONAL dejaría de ser
+// fiel. Espejo del guard `litAlts.length === leaves.length` de resolveKeyInLiteral (eje object). R10 DESTRUCT.
+function arrayLiteralSpreadsFullyResolve(lit) {
+  for (const el of lit.elements) {
+    if (!ts.isSpreadElement(el)) continue;
+    const leaves = valueTransparentLeaves(el.expression);
+    const arrs = leaves.filter((l) => ts.isArrayLiteralExpression(l));
+    if (leaves.length === 0 || arrs.length !== leaves.length) return false;
+    for (const arr of arrs) {
+      if (!arrayLiteralSpreadsFullyResolve(arr)) return false;
+    }
+  }
+  return true;
+}
+
+// Elementos POSICIONALES de un array-literal init para el match destructure/alias, aplanando spreads
+// de LITERAL en-sitio (`[...[perf]]` → posiciones EXACTAS). Sin spread → los elementos tal cual. Con
+// algún spread NO-resoluble (variable) → null: las posiciones son indeterminadas → §141 (el caller no
+// casa → SILENT, paridad con el spread-de-variable del eje object en resolveKeyInLiteral). R10 DESTRUCT.
+function positionalArrayElements(lit) {
+  if (!lit.elements.some(ts.isSpreadElement)) return lit.elements;
+  if (!arrayLiteralSpreadsFullyResolve(lit)) return null;
+  return spreadFlattenedElements(lit.elements, []);
+}
+
 // R8 C2: recolecta TODOS los valores de las props de un object-literal Y de sus spreads ANIDADOS de
 // object-literal, para la enum conservadora de clave IRRESOLUBLE (`({...{a:R}})[k]`, k variable → cualquier
 // own-prop podría ser la seleccionada → ∃-peligro). El predecesor iteraba solo props directas y DROPEABA el
@@ -4074,12 +4115,13 @@ function valueTransparentChildren(node) {
       if (out.length > 0) return out;
     }
     // `[containerLit].at(i)` de un array-literal → ∃-descenso a TODOS los elementos (fail-closed: `.at` admite
-    // índices NEGATIVOS = desde el final, así que no se mapea a una posición fija sin sobre-aproximar). Solo
-    // array-literal receptor; un `.at` sobre variable no es container-literal → sin descenso.
+    // índices NEGATIVOS = desde el final, así que no se mapea a posición fija sin sobre-aproximar). R10/R9FIX: el
+    // método `.at` se accede por DOT (`.at`) o BRACKET (`["at"]`) — `accessedMemberNames` folda ambos; y con o SIN
+    // argumento (`.at()` ≡ `.at(0)` → índice 0). Solo array-literal receptor; un `.at` sobre variable no lo es.
     if (
-      ts.isPropertyAccessExpression(callee) &&
-      callee.name.text === "at" &&
-      node.arguments.length >= 1
+      (ts.isPropertyAccessExpression(callee) ||
+        ts.isElementAccessExpression(callee)) &&
+      accessedMemberNames(callee).includes("at")
     ) {
       const out = [];
       for (const arr of arrayLiteralAlternatives(callee.expression)) {
@@ -6920,7 +6962,9 @@ function checkSourceFile(
         ) {
           rgRoot =
             [...rgRoots].find(
-              (root) => SAFE_PARTIAL_MEMBERS[root] !== undefined,
+              (root) =>
+                SAFE_PARTIAL_MEMBERS[root] !== undefined ||
+                root === IMPORT_META_ROOT,
             ) ?? null;
           computedDeny = rgRoot !== null;
         }
@@ -6933,7 +6977,7 @@ function checkSourceFile(
             rule: "no-bare-dom-access",
             line: line + 1,
             detail: computedDeny
-              ? `\`Reflect.get(${rgRoot}, <computado>)\` ≡ \`${rgRoot}[<computado>]\` — key no resoluble sobre global parcial default-deny (allow: ${[...SAFE_PARTIAL_MEMBERS[rgRoot]].join("/")}) → fail-closed: ${lineText}`
+              ? `\`Reflect.get(${rgRoot}, <computado>)\` ≡ \`${rgRoot}[<computado>]\` — key no resoluble sobre global parcial default-deny (allow: ${[...(SAFE_PARTIAL_MEMBERS[rgRoot] ?? SAFE_IMPORT_META_MEMBERS)].join("/")}) → fail-closed: ${lineText}`
               : `\`Reflect.get(${rgRoot}, "${denied}")\` ≡ \`${rgRoot}.${denied}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
           });
         }
@@ -6951,7 +6995,13 @@ function checkSourceFile(
       for (const { receiver, members } of reflectiveValueReads(node)) {
         let hitRoot = null;
         let hitMember = null;
-        for (const root of exprPartialRoots(receiver, context)) {
+        // R10 REFLECT: el receptor de una lectura reflexiva (`gOPD(R,"k").value`) pasa por el resolver de familias
+        // (reflectiveCarrierSources) además de exprPartialRoots — un carrier reflexivo (`Object.freeze(R)`) bajo el
+        // descriptor se resuelve igual que en el member-read directo y en Reflect.get (mismo cableado, R8 Causa 1).
+        const rroots = new Set(exprPartialRoots(receiver, context));
+        for (const src of reflectiveCarrierSources(receiver, "chain"))
+          for (const r of exprPartialRoots(src, context)) rroots.add(r);
+        for (const root of rroots) {
           const m = [...members].find((mm) => partialMemberDenied(root, mm));
           if (m !== undefined) {
             hitRoot = root;
@@ -8048,7 +8098,9 @@ function checkSourceFile(
       const computedDefaultDenyRoot =
         memberCandidates.length === 0 || keyIncomplete
           ? ([...resolvedPartialRoots].find(
-              (root) => SAFE_PARTIAL_MEMBERS[root] !== undefined,
+              (root) =>
+                SAFE_PARTIAL_MEMBERS[root] !== undefined ||
+                root === IMPORT_META_ROOT,
             ) ?? null)
           : null;
       const partialRootName = partialMember
@@ -8154,6 +8206,25 @@ function checkSourceFile(
             isSafeOptionalProbe = false; // `(x?.()).foo` → undefined deref'd → unsafe
           }
         }
+        // R10 PROBE: consumers que CRASHEAN sobre undefined SIN necesitar paréntesis (a diferencia de
+        // `(x?.()).foo`, que sí lo exige): DESTRUCTURING (`const {x}=probe`), array/call-SPREAD (`[...probe]`),
+        // FOR-OF iterable (`for (x of probe)`), y NEW-callee (`new (probe)()`). El resultado de la sonda
+        // (undefined en Edge) aterriza ahí y lanza. `r` es el tope del wrapper value-transparent del resultado.
+        const cons = r.parent;
+        if (
+          cons &&
+          (((ts.isVariableDeclaration(cons) ||
+            ts.isBindingElement(cons) ||
+            ts.isParameter(cons)) &&
+            cons.initializer === r &&
+            (ts.isObjectBindingPattern(cons.name) ||
+              ts.isArrayBindingPattern(cons.name))) ||
+            (ts.isSpreadElement(cons) && cons.expression === r) ||
+            (ts.isForOfStatement(cons) && cons.expression === r) ||
+            (ts.isNewExpression(cons) && cons.expression === r))
+        ) {
+          isSafeOptionalProbe = false;
+        }
       }
       // Miembro PRESENTE-pero-throws (WebAssembly.compile): NO es probe seguro si el optional-probe
       // INVOCA el método (dynamic codegen Edge → lanza):
@@ -8219,7 +8290,7 @@ function checkSourceFile(
           line: line + 1,
           detail:
             partialMember === null
-              ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un global parcial default-deny (allow: ${[...SAFE_PARTIAL_MEMBERS[partialRootName]].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro Node-only escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
+              ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un global parcial default-deny (allow: ${[...(SAFE_PARTIAL_MEMBERS[partialRootName] ?? SAFE_IMPORT_META_MEMBERS)].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro Node-only escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
               : PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
                 ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
                 : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR. Remedia con \`${partialRootName}.${partialMember}?.()\` (safe-probe sancionado; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
@@ -8447,19 +8518,35 @@ function checkSourceFile(
                     p.name &&
                     structuralKeysOverlap(p.name, kn),
                 );
-                if (ip) flagPartialDestructure(sub, ip.initializer);
+                if (ip) {
+                  flagPartialDestructure(sub, ip.initializer);
+                } else {
+                  // R10 DESTRUCT: la key puede venir por un SPREAD de object-literal EN-SITIO
+                  // (`{p:{compile}} = {...{p: WebAssembly}}`). Descender el spread con
+                  // objectLiteralMemberValues (fail-closed §141 ante spread de variable → []).
+                  for (const key of structuralKeyTexts(kn)) {
+                    for (const val of objectLiteralMemberValues(lit, key)) {
+                      flagPartialDestructure(sub, val);
+                    }
+                  }
+                }
               }
             } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
-              for (let i = 0; i < elems.length; i++) {
-                const el = elems[i];
-                if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) {
-                  continue;
-                }
-                const { sub } = subAndDefault(el);
-                if (!sub || !isDestructurePattern(sub)) continue;
-                const initEl = lit.elements[i];
-                if (initEl && !ts.isOmittedExpression(initEl)) {
-                  flagPartialDestructure(sub, initEl);
+              // R10 DESTRUCT: aplanar spreads de LITERAL en-sitio para el match POSICIONAL
+              // (`[{compile}] = [...[WebAssembly]]`); un spread de VARIABLE → null → §141.
+              const posEls = positionalArrayElements(lit);
+              if (posEls) {
+                for (let i = 0; i < elems.length; i++) {
+                  const el = elems[i];
+                  if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) {
+                    continue;
+                  }
+                  const { sub } = subAndDefault(el);
+                  if (!sub || !isDestructurePattern(sub)) continue;
+                  const initEl = posEls[i];
+                  if (initEl && !ts.isOmittedExpression(initEl)) {
+                    flagPartialDestructure(sub, initEl);
+                  }
                 }
               }
             }
@@ -8578,6 +8665,42 @@ function checkSourceFile(
         line: line + 1,
         detail: `acceso a \`.constructor.constructor\` / invocación de \`.constructor\` (Function constructor alcanzable desde cualquier base — dynamic eval sink que bypassea el AST gate): ${lineText}`,
       });
+    }
+
+    // (R10 EVAL) `.constructor` INVOCADO a través de una PROYECCIÓN de contenedor literal.
+    // `({...{k: fn.constructor}}).k("code")()`, `[{k: fn.constructor}][0].k("code")` — el
+    // `.constructor` no es el callee A LA VISTA, es el VALOR PROYECTADO de la member-access que
+    // se invoca. La rama (b) de isWeaponizedConstructorAccess sube UNA proyección por ASCENSO
+    // (`[x.constructor][0](…)`); dos proyecciones ENCADENADAS o un spread intermedio la superan y
+    // el `.constructor` se escapaba. Simetría ascenso=descenso (doctrina U): resolver el CALLEE por
+    // valueTransparentLeaves —que YA desciende proyecciones `.k`/`[i]`/`Reflect.get`/`.at` y spreads
+    // de object-literal EN-SITIO (resolveKeyInLiteral)— y flaggear si alguna hoja es un
+    // `.constructor` weaponizable (receiver NO provably-non-function). El guard
+    // `!isWeaponizedConstructorAccess(leaf)` evita DOBLE-REPORTE: solo añade lo que el ascenso NO
+    // alcanza. Token-en-su-sitio: contenedor/índice/key literales decidibles; un spread/índice/key
+    // de VARIABLE queda §141 (valueTransparentLeaves no lo resuelve → no aparece la hoja).
+    if (
+      !context.isInClientOnlyDeferredBody &&
+      (ts.isCallExpression(node) || ts.isTaggedTemplateExpression(node))
+    ) {
+      const invokedCallee = ts.isCallExpression(node) ? node.expression : node.tag;
+      const projectedCtor = valueTransparentLeaves(invokedCallee).find(
+        (leaf) =>
+          isConstructorMemberAccess(leaf) &&
+          !constructorReceiverIsProvablyNonFunction(leaf.expression) &&
+          !isWeaponizedConstructorAccess(leaf),
+      );
+      if (projectedCtor) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-dynamic-eval-sink",
+          line: line + 1,
+          detail: `invocación de \`.constructor\` (Function constructor) a través de una PROYECCIÓN de contenedor literal (dynamic eval sink que bypassea el AST gate): ${lineText}`,
+        });
+      }
     }
 
     // (c.3) STRING-HANDLER timer = eval IMPLÍCITO. `setTimeout("código", …)` /

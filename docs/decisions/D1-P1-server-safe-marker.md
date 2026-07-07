@@ -723,3 +723,31 @@ verify-cold verde (49 files, 2664 tests), gate-source 0, ESLint 0. 44 custodios 
 ### Pre-registro R10 (B-con-tope; antes de resultados)
 
 R10 = pasada de confirmación de SOLO-MEDICIÓN (mismo aparato: ejes + verificación adversarial + crítico, conteos per-eje MEDIDOS, "0" nunca inferido). Predicciones: 0–4 hallazgos in-mandate, mayoría sobre superficie R9-fresca (elementProjection / for-of / crossesToDeref), todos ≤MED; CERO de la clase bloqueante. Clase bloqueante (única que abre fix, pre-definida en la firma B): falsos positivos sobre las formas de remediación que el gate recomienda (`?.()`, `?? fallback`, default-destructuring) — sus custodios ya derivan del oráculo, la predicción es que no aparece. Todo lo demás, sea cual sea: clasificar → limitations.md verbatim (incl. residuales ya declarados: use-after-loop for-of, loop-var destructurado, divergencia `.at`, asimetría read/construct) → tag rc.1 sobre el commit resultante. Sin iteraciones adicionales: este documento ES el tope.
+
+### Acta R10 (resultado + enmienda de alcance, 2026-07-08)
+
+**Medición:** el TOPE se sostuvo — 14 hallazgos in-mandate ≤MED, CERO de la clase bloqueante (ningún FP sobre `?.()` / `?? fallback` / default-destructuring; verificado por custodios de remediación que siguen SILENT). La condición de bloqueo pre-firmada NO se activó → rc.1 no queda bloqueado por diseño.
+
+**Enmienda de alcance (autorizada explícitamente por Fable + Iván, sobre la firma B):** en vez de diferir los no-bloqueantes a limitations.md, se autorizó FIXearlos en R10. Se fijó una sub-regla: EVAL + DESTRUCT se cierran salvo tensión con un §141 ratificado (no la hubo — ambos son decidibles EN-SITIO). Custodios-primero (rojo baseline → verde por el fix), re-medición propia contra el oráculo, y en KEY una pasada adversarial de Fable antes de tocar la frontera.
+
+**7 clases, disposición:**
+- **R9FIX, REFLECT, PROBE** (3) — cerradas y verificadas antes de esta sesión (elementProjection `.at()`/`["at"]`; `gOPD(carrier(R)).value` une `reflectiveCarrierSources`; deref del resultado de una safe-probe `R.m?.()` vía destructure/spread/for-of/new).
+- **EVAL** — `.constructor` (Function) INVOCADO a través de una PROYECCIÓN de contenedor literal (`({...{k:fn.constructor}}).k("code")()`, `[{k:fn.constructor}][0].k("code")`) escapaba: la rama (b) de `isWeaponizedConstructorAccess` sube UNA proyección por ascenso; dos encadenadas o un spread intermedio la superan. Fix (simetría ascenso=descenso): resolver el CALLEE por `valueTransparentLeaves` —que YA desciende proyecciones y spreads de object-literal en-sitio— y flaggear la hoja `.constructor` weaponizable (receiver no provably-non-function); guard `!isWeaponizedConstructorAccess(leaf)` evita doble-reporte. Contenedor/índice/key de VARIABLE → §141.
+- **DESTRUCT** — spread INLINE de un LITERAL en el init de un destructure (`{p:{compile}}={...{p:WA}}` member-extract; `[x]=[...[performance]]` root-alias) escapaba en los DOS mecanismos (`flagPartialDestructure` + `collectStructuralAliases`) y los DOS ejes (object member-match `ip.find`, array `lit.elements[i]`). Fix en los 4 loci con helpers compartidos: object vía `objectLiteralMemberValues`/`resolveKeyInLiteral` (desciende spread, last-wins); array vía `positionalArrayElements` (aplana spreads de LITERAL preservando posición exacta; un spread de VARIABLE → indeterminado → §141). Gemelos simétricos cubiertos y testeados.
+- **KEY** — ver `#4-OVERTURNED R10` abajo.
+- **VIEW, SCOPE** (2) — NO tocadas: VIEW = FP de shadow-param (el gate ya no flaggea); SCOPE = namespace out-of-mandate (crash universal, no divergencia Edge). Fuera de mandato por diseño.
+
+**FP-cost:** gate contra el DS real (`test:server-safe-markers`) = 0 violaciones (39 marcados, 132 parseados) con los 3 fixes puestos. Suite del gate 1737/1737. verify-cold verde.
+
+#### #4-OVERTURNED R10 — `import.meta[<computado/incompleto>]` es in-mandate (default-deny fail-closed)
+
+**Overturn adjudicado por Fable** (rama FLAG de un probe discriminante PRE-REGISTRADO). El decisión previa #4 (`Reflect.get(import.meta, k) → §141`, SILENT) queda REVERTIDA.
+
+- **Razón:** indirección CERO — root conocido (`import.meta`), key no probable ∈ allowlist → fail-closed, la MISMA doctrina ya aplicada al hermano `performance[c]` / `Reflect.get(performance, k)` (ambos FLAG, medidos). El SILENT era un **fail-open del selector** `computedDefaultDenyRoot`, que solo cubría roots de `SAFE_PARTIAL_MEMBERS` y NO `import.meta` (que usa la allowlist separada `SAFE_IMPORT_META_MEMBERS`) — un accidente, no diseño. El #4 original ratificó ese accidente sin cuantificar sobre el sibling → su invariante nunca cubrió este caso.
+- **Probe discriminante (pre-registrado, decide el overturn):** `Reflect.get(performance, k)` con k dinámica → **FLAG** medido. Paridad confirmada ⇒ `Reflect.get(import.meta, k)` DEBE flaggear igual.
+- **Fix:** `|| root === IMPORT_META_ROOT` en los DOS selectores default-deny (member-read `computedDefaultDenyRoot` + `Reflect.get`), y `?? SAFE_IMPORT_META_MEMBERS` en el detail del Reflect.get (sin él, el mensaje crasheaba al no existir `SAFE_PARTIAL_MEMBERS["import.meta"]`).
+- **FP-cost:** 0 sobre el DS real. Formas de remediación preservadas (`import.meta[c]?.()`, `import.meta[c] ?? fb` → SILENT).
+- **FUERA del overturn (§141 GENUINO, siguen SILENT — verificados con probe de paridad contra el sibling):** object-rest `{...r}=import.meta`, spread-de-VARIABLE, assembled (`fromEntries∘entries`, `Object.entries(im)[0]`), `gOPD(im,k).value` con k variable, own-copy `{...im}.k`. El overturn se acota EXACTAMENTE a la indirección-cero directa; no toca la frontera §141 ensamblada.
+- Tests actualizados como parte del overturn: `#4` (renombrado `#4-OVERTURNED R10`), la aserción "§141 bracket dinámico" de la partición de miembros, y el bloque KEY de custodios.
+
+**TOPE (reafirmado):** R10-fix cierra el ciclo. Tag rc.1 sobre el commit resultante. Sin R11.

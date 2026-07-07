@@ -81,9 +81,14 @@ syntactic subset would be false coverage).
   Residual: a key built by concatenation / `join` / `fromCharCode` (`x["con" + "structor"]`) — needs a
   general constant-evaluator, renounced by design.
 - **Cross-statement alias / computed destructure of a member.** Caught: the in-site and container-projection
-  forms, and the alias of an identifier *root* (`const p = performance; p.eventLoopUtilization()`). Residual:
-  a cross-statement alias of a *member* (`const M = WebAssembly.Module; new M(b)`), a computed-key destructure
-  (`const {[k]: x} = performance`), `Reflect.get(R, variableKey)`, and object-rest (`const {...r} = import.meta`).
+  forms (incl. a spread of an *in-site literal* in a destructure init — `{p:{compile}}={...{p:WA}}` member-extract,
+  `[x]=[...[performance]]` root-alias — R10), the alias of an identifier *root* (`const p = performance;
+  p.eventLoopUtilization()`), and `<root>[variableKey]` / `Reflect.get(<root>, variableKey)` on a **default-deny
+  partial root** (`performance`, `console`, `import.meta` — fail-closed, indirection-zero; `#4-OVERTURNED R10`).
+  Residual: a cross-statement alias of a *member* (`const M = WebAssembly.Module; new M(b)`), a computed-key
+  destructure of a member (`const {[k]: x} = performance`), a spread/copy of a **variable** in a destructure init
+  (`const o={k:X}; ({...o}).k`, `const arr=[X]; [x]=[...arr]`), `Reflect.get(R, variableKey)` on a *wholesale-safe*
+  or *unknown* R, and object-rest own-copy (`const {...r} = import.meta`).
 - **for-of loop-var provenance (R9).** Caught: the loop variable bound from an *inline* array-literal, read
   *inside* the body (`for (const p of [performance]) { p.eventLoopUtilization() }` — positional extraction, same
   as `const [p] = [performance]`). Residual: (a) *use-after-loop* — a `let` var reassigned by a for-of head and

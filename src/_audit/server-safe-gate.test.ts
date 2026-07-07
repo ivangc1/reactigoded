@@ -493,8 +493,13 @@ describe("server-safe gate — DYNAMIC_EVAL_SINKS (eval / Function bypasses)", (
     expect(inEffect(`(import.meta as any).glob("./*", { import: "default", eager: false });`)).toBe(false);
     expect(inEffect(`(import.meta as any).glob("./*");`)).toBe(false); // lazy → on-call client
     expect(inEffect(`(import.meta as any).glob("./*", { eager: false });`)).toBe(false); // lazy explícito
-    // §141 residual: bracket dinámico.
-    expect(checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx")).toEqual([]);
+    // R10 OVERTURN (#4 revertido, adjudicación Fable): `import.meta[<computado>]` DIRECTO tiene indirección
+    // CERO (root conocido, key no probable ∈ allowlist) → default-deny fail-closed, PARIDAD con el hermano
+    // `performance[c]`. El SILENT previo era un fail-open del selector (import.meta ∉ SAFE_PARTIAL_MEMBERS),
+    // NO §141. Ver ADR D1-P1 "#4-OVERTURNED R10". (§141 GENUINO restante: assembled/spread-variable/own-copy.)
+    expect(
+      checkSourceFile(`/** @server-safe */\nexport const f = (k: string) => (import.meta as any)[k];`, "im2.fixture.tsx").length,
+    ).toBe(1);
   });
 
   // RAÍZ C (re-hunt rc.1 + Fable cross-review): `import.meta` no estaba enrolado en la maquinaria
@@ -5475,7 +5480,11 @@ describe("server-safe gate — RE-HUNT 3: canon fiel, spread posicional, Reflect
   it.each([
     ["Reflect.get(performance, m) → FLAG", `export const x = (m: string) => Reflect.get(performance, m);`, true],
     ["Reflect.get(console, m) → FLAG", `export const x = (m: string) => Reflect.get(console, m);`, true],
-    ["Reflect.get(import.meta, k) → PASA (§141)", `export const x = (k: string) => Reflect.get(import.meta, k);`, false],
+    // #4-OVERTURNED R10 (adjudicación Fable): `Reflect.get(import.meta, k)` ≡ `import.meta[k]` — indirección
+    // CERO → default-deny fail-closed, PARIDAD con el hermano `Reflect.get(performance, m)`. El SILENT previo
+    // era un fail-open del selector (import.meta usa SAFE_IMPORT_META_MEMBERS, no SAFE_PARTIAL_MEMBERS), NO
+    // §141; el #4 original ratificó ese accidente sin control hermano. Ver ADR D1-P1 "#4-OVERTURNED R10".
+    ["Reflect.get(import.meta, k) → FLAG (#4-OVERTURNED R10)", `export const x = (k: string) => Reflect.get(import.meta, k);`, true],
     ["Reflect.get(crypto, k) → PASA (wholesale-safe)", `export const x = (k: string) => Reflect.get(crypto, k);`, false],
     ['Reflect.get(performance, "now") → PASA', `export const x = Reflect.get(performance, "now");`, false],
   ])("#4 Reflect.get default-deny: %s", (_l, code, exp) => {
@@ -7449,6 +7458,120 @@ describe("server-safe gate — R9 custodios", () => {
     // allObjectLiteralValuesDeep (L3961, depth>64): 70 object-spreads + key irresoluble → root alcanzable
     it("allObjectLiteralValuesDeep: 70 object-spreads + key var → FLAG (no return out fail-open)", () => {
       expect(flagged(`export function f(k:string){ return (${nestObj(70)})[k].eventLoopUtilization(); }`)).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// R10 — custodios (Fable autorizó fixear la ronda, no-bloqueante). Fallan ahora, los fixes los ponen verdes.
+// Expected desde el ORÁCULO de runtime (doctrina R9-4b).
+// ============================================================================
+describe("server-safe gate — R10 custodios", () => {
+  const flagged = (code: string, fn = "r10.fixture.tsx") =>
+    checkSourceFile(`/** @server-safe */\n${code}`, fn).length > 0;
+
+  // ---- PROBE+CRITIC · consumers del resultado de `R.m?.()` que deref'an (crash sobre undefined en Edge) ----
+  describe("PROBE: destructure/spread/for-of/new del resultado de una safe-probe → FLAG", () => {
+    const E = "performance.eventLoopUtilization?.()";
+    const G = "performance.getEntries?.()";
+    it.each<[string, string, boolean]>([
+      ["destructure {x}=R.m?.()", `const {utilization} = ${E};`, true],
+      ["array-destructure [x]=R.m?.()", `const [a] = ${G};`, true],
+      ["array-spread [...R.m?.()]", `const z = [...${G}];`, true],
+      ["for-of R.m?.()", `for (const x of ${G}) {} export const q = 1;`, true],
+      ["new (R.m?.())()", `export const x = new (performance.timerify?.(function(){}))();`, true],
+      // controles (no romper): deref paren-directo ya FLAG; probe suelto safe SILENT; formas de remediación SILENT
+      ["control (probe).foo → FLAG", `export const x = (${E}).idle;`, true],
+      ["control probe suelto → SILENT", `export const x = ${E};`, false],
+      ["remediación ?? fallback → SILENT", `export const x = ${E} ?? 0;`, false],
+      ["remediación default-destructure {x=fb}=perf → SILENT", `export function f(){ const {eventLoopUtilization = () => 0} = performance; return eventLoopUtilization; }`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- REFLECT · gOPD(carrier(R)).value une reflectiveCarrierSources (= Causa 1 en la rama descriptor) ----
+  describe("REFLECT: gOPD/gOPDs(carrier(R)).value → FLAG (carrier reflexivo bajo el descriptor)", () => {
+    it.each<[string, string, boolean]>([
+      ["gOPD(freeze(import.meta)).value", `export const x = Object.getOwnPropertyDescriptor(Object.freeze(import.meta), "dirname").value;`, true],
+      ["gOPD(freeze(WA),'compile').value", `export const x = Object.getOwnPropertyDescriptor(Object.freeze(WebAssembly), "compile").value;`, true],
+      ["gOPD(create(performance),'elu').value", `export const x = Object.getOwnPropertyDescriptor(Object.create(performance), "eventLoopUtilization").value;`, true],
+      ["control gOPD(R,'k').value directo → FLAG", `export const x = Object.getOwnPropertyDescriptor(performance, "eventLoopUtilization").value;`, true],
+      // OOM pin: gOPD sobre own-copy-de-proto-carrier → SILENT (undefined runtime)
+      ["OOM gOPD({...create(R)}).value → SILENT", `export const x = Object.getOwnPropertyDescriptor({...Object.create(performance)}, "eventLoopUtilization")?.value;`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- EVAL · `.constructor` (Function) invocado vía proyección de contenedor literal ----
+  // EVAL · `.constructor` (Function) invocado a través de una PROYECCIÓN de contenedor literal → FLAG (codegen
+  // in-mandate; el contenedor es literal decidible, sin tensión §141).
+  describe("EVAL: .constructor vía proyección de contenedor → FLAG", () => {
+    it.each<[string, string, boolean]>([
+      ["spread {...{k:fn.ctor}}.k(str)()", `export function f(fn:Function){ return ({...{k: fn.constructor}}).k("return 1")(); }`, true],
+      ["array [{k:fn.ctor}][0].k(str)", `export function f(fn:Function){ return [{k: fn.constructor}][0].k("return 1")(); }`, true],
+      ["control directo fn.ctor(str)() → FLAG", `export function f(fn:Function){ return fn.constructor("return 1")(); }`, true],
+      ["FP e.constructor.name → SILENT", `export function f(e:Error){ return e.constructor.name; }`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // DESTRUCT · spread INLINE de un LITERAL en el init de un destructure → FLAG (decidible; spread de VARIABLE §141).
+  describe("DESTRUCT: spread inline (literal) en el init → FLAG", () => {
+    it.each<[string, string, boolean]>([
+      // member-extract vía flagPartialDestructure (objeto) + alias vía collectStructuralAliases (array)
+      ["object member {p:{compile}}={...{p:WA}}", `const {p:{compile}} = {...{p: WebAssembly}}; export const y = compile;`, true],
+      ["array alias [x]=[...[performance]]", `const [x] = [...[performance]]; export const y = x.eventLoopUtilization();`, true],
+      // gemelos simétricos: alias vía object-spread (collectStructuralAliases obj) + member vía array-spread (flagPartialDestructure arr)
+      ["object alias {x}={...{x:perf}}", `const {x} = {...{x: performance}}; export const y = x.eventLoopUtilization();`, true],
+      ["array member [{compile}]=[...[WA]]", `const [{compile}] = [...[WebAssembly]]; export const y = compile;`, true],
+      // §141 pins: spread de VARIABLE en el init (ambos ejes) → indeterminado → SILENT
+      ["§141 [x]=[...arr] (arr variable) → SILENT", `const arr = [performance]; const [x] = [...arr]; export const y = x.eventLoopUtilization();`, false],
+      ["§141 {x}={...o} (o variable) → SILENT", `const o = {x: performance}; const {x} = {...o}; export const y = x.eventLoopUtilization();`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- R9FIX · elementProjection: `.at()` sin-args e `["at"]` bracket-llamado (mi código R9) ----
+  describe("R9FIX: elementProjection .at() sin-args + ['at'] bracket → FLAG", () => {
+    it.each<[string, string, boolean]>([
+      [".at() sin-args new([WA].at().Module)", `export function f(buf:any){ return new ([WebAssembly].at().Module)(buf); }`, true],
+      ["['at'] bracket [perf]['at'](0)", `export const x = [performance]["at"](0).eventLoopUtilization();`, true],
+      // control: .at(0) dotted ya FLAG (R9)
+      ["control [perf].at(0) dotted → FLAG", `export const x = [performance].at(0).eventLoopUtilization();`, true],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- KEY · import.meta[computedKey] entra en el default-deny (#4-OVERTURNED R10) ----
+  // KEY · OVERTURN adjudicado por Fable (rama FLAG del probe discriminante): `import.meta[<computado/incompleto>]`
+  // DIRECTO es in-mandate — indirección CERO (root conocido, key no probable ∈ allowlist) → default-deny
+  // fail-closed, PARIDAD EXACTA con el hermano `performance[c]` (probe: FLAG). El SILENT previo era un fail-open
+  // del selector `computedDefaultDenyRoot` (import.meta usa SAFE_IMPORT_META_MEMBERS, no SAFE_PARTIAL_MEMBERS),
+  // NO §141; el #4 original ratificó ese accidente sin cuantificar sobre el sibling. Fix: `|| root ===
+  // IMPORT_META_ROOT` en los DOS selectores (read + Reflect.get) + `?? SAFE_IMPORT_META_MEMBERS` en el detail.
+  // FUERA del overturn (§141 GENUINO, siguen SILENT): object-rest {...r}=import.meta, spread-de-VARIABLE,
+  // assembled (fromEntries∘entries), gOPD(...,k).value con k variable, own-copy {...im}.k. Ver ADR D1-P1.
+  describe("KEY: import.meta[computed key] → FLAG (#4-OVERTURNED R10, paridad performance[c])", () => {
+    it.each<[string, string, boolean]>([
+      ["import.meta[c]() → FLAG", `export function f(c:string){ return import.meta[c](); }`, true],
+      ["import.meta[c?'url':d] incompleto → FLAG", `export function f(c:boolean,d:string){ return import.meta[c ? "url" : d]; }`, true],
+      ["const m=import.meta; m[c] → FLAG", `export function f(c:string){ const m = import.meta; return m[c]; }`, true],
+      ["let m; m=import.meta; m[c] → FLAG (forward-decidable)", `export function f(c:string){ let m:any; m = import.meta; return m[c]; }`, true],
+      ["Reflect.get(import.meta,k) → FLAG (#4-OVERTURNED)", `export function f(k:string){ return Reflect.get(import.meta, k); }`, true],
+      ["control import.meta['dirname'] → FLAG (resoluble deny)", `export const x = import.meta["dirname"];`, true],
+      // no regresar: safe SILENT; remediación sancionada SILENT
+      ["safe import.meta['url'] → SILENT", `export const x = import.meta["url"];`, false],
+      ["remediación import.meta[c]?.() → SILENT", `export function f(c:string){ return import.meta[c]?.(); }`, false],
+      // §141 GENUINO fuera del overturn: spread de VARIABLE + own-copy → SILENT
+      ["§141 {...rest}=import.meta → SILENT", `export function f(){ const { ...rest } = import.meta; return rest; }`, false],
+      ["§141 {...im}.dirname own-copy → SILENT", `export function f(){ const c = {...import.meta}; return c.dirname; }`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
     });
   });
 });
