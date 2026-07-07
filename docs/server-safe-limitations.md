@@ -84,6 +84,14 @@ syntactic subset would be false coverage).
   forms, and the alias of an identifier *root* (`const p = performance; p.eventLoopUtilization()`). Residual:
   a cross-statement alias of a *member* (`const M = WebAssembly.Module; new M(b)`), a computed-key destructure
   (`const {[k]: x} = performance`), `Reflect.get(R, variableKey)`, and object-rest (`const {...r} = import.meta`).
+- **for-of loop-var provenance (R9).** Caught: the loop variable bound from an *inline* array-literal, read
+  *inside* the body (`for (const p of [performance]) { p.eventLoopUtilization() }` — positional extraction, same
+  as `const [p] = [performance]`). Residual: (a) *use-after-loop* — a `let` var reassigned by a for-of head and
+  read *after* the loop; the for-of head is not an `AssignmentExpression` and is outside the operator set the
+  taint-union enumerates (`=`/`??=`/`||=`/`&&=`), so it falls outside that domain by the letter of the frontier
+  (rc.2: add the for-of head to the operator set). (b) *destructured loop-var* (`for (const [a] of [[performance]])`)
+  — a nested-pattern binding from the iterated element, not the positional identifier case. (c) *variable iterable*
+  (`const arr = [performance]; for (const p of arr)`) — data-flow through a variable, renounced by design.
 
 ## 4. Flagged wider than the danger (`§373`, on purpose)
 
@@ -92,6 +100,11 @@ subsystem the gate renounces. Never hides anything executable.
 
 - **Self-reference by the package's own name.** `import … from "<own-package>"` (and any subpath) is flagged.
   *Inside the package, import by relative path or the `@/` alias.*
+- **`.at()` positional projection (R9, Δ2).** `[X].at(i)` on an array literal descends to *all* elements
+  (`.at` accepts negative indices = from-the-end, so a fixed literal index cannot map to a fixed position without
+  over-approximating), while its twin `[X][i]` is precise: `[perf, 0].at(1).m` flags (over-approx) whereas
+  `[perf, 0][1].m` is silent. Fail-closed divergence between forms `INV-PARITY` calls twins; documented, never
+  hides anything (rc.2 option: precise map for a non-negative literal index).
 
 ## 5. Deferred — solvable, tracked for a later release
 

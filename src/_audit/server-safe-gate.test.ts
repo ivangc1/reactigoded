@@ -7213,7 +7213,9 @@ describe("server-safe gate — R8 custodios (recognizer bajo invariantes)", () =
       ["ternario ()  (c ? E : o)()", `export function f(o,c){ return (c ? performance.eventLoopUtilization?.() : o)(); }`, true],
       ["coma  (0, E).foo", `export function f(){ return (0, performance.eventLoopUtilization?.()).foo; }`, true],
       ["and   (E && o).foo", `export function f(o){ return (performance.eventLoopUtilization?.() && o).foo; }`, true],
-      ["or    (E || o).foo", `export function f(o){ return (performance.eventLoopUtilization?.() || o).foo; }`, true],
+      // R9-4b CORRECCIÓN (custodio R8 defendía un BUG): oráculo runtime `(E || o).foo` — E undefined en Edge → `||`
+      // cae a `o` → `o.foo` SEGURO → SILENT. `||`-izq = rama de RESCATE, no deref. El expected sale del oráculo.
+      ["or    (E || o).foo → SILENT", `export function f(o){ return (performance.eventLoopUtilization?.() || o).foo; }`, false],
       ["asign (o.x = E).foo", `export function f(o){ return (o.x = performance.eventLoopUtilization?.()).foo; }`, true],
       ["reflective bajo ternario (true ? Object.create(perf) : 0).elu()", `export const a = (true ? Object.create(performance) : 0).eventLoopUtilization();`, true],
       // frontera §141 pineada: el deref es del RETORNO de g, no del resultado de la sonda → SILENT correcto
@@ -7312,6 +7314,141 @@ describe("server-safe gate — R8 custodios (recognizer bajo invariantes)", () =
     });
     it("40 spreads anidados construct → FLAG", () => {
       expect(flagged(`export const x = new ${nest(40, "[WebAssembly]")}[0].Module();`)).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// R9 — custodios ampliados (protocolo pre-registrado B-con-tope). Fallan ahora, los fixes los ponen verdes.
+// DOCTRINA 4b: los valores esperados se derivan del ORÁCULO DE RUNTIME (medido en Node), jamás del fix.
+// ============================================================================
+describe("server-safe gate — R9 custodios", () => {
+  const flagged = (code: string, fn = "r9.fixture.tsx") =>
+    checkSourceFile(`/** @server-safe */\n${code}`, fn).length > 0;
+  const nestSpread = (n: number) => "{..." .repeat(n) + "{p: performance}" + "}".repeat(n);
+  const nestFreeze = (n: number) => "Object.freeze(".repeat(n) + "performance" + ")".repeat(n);
+  const nestObj = (n: number) => "{...".repeat(n) + "{a: performance}" + "}".repeat(n);
+
+  // ---- CAUSA 1 · Reflect.get comparte el resolver de familias (reflectiveCarrierSources) con sus hermanos ----
+  describe("Causa 1: Reflect.get sobre carrier reflexivo → FLAG (mismo cableado que member-read/construct)", () => {
+    it.each<[string, string, boolean]>([
+      ["identity freeze", `export const x = Reflect.get(Object.freeze(performance), "eventLoopUtilization");`, true],
+      ["proto create", `export const x = Reflect.get(Object.create(performance), "eventLoopUtilization");`, true],
+      ["proto setPrototypeOf", `export const x = Reflect.get(Object.setPrototypeOf({}, performance), "eventLoopUtilization");`, true],
+      ["proto __proto__", `export const x = Reflect.get({__proto__: performance}, "eventLoopUtilization");`, true],
+      ["compose getPrototypeOf∘create", `export const x = Reflect.get(Object.getPrototypeOf(Object.create(performance)), "eventLoopUtilization");`, true],
+      ["denylist WA freeze", `export const x = Reflect.get(Object.freeze(WebAssembly), "compile");`, true],
+      // OWN-COPY de un ROOT directo (`{...performance}`) = over-aproximación fail-closed DOCUMENTADA (R8) →
+      // FLAG, UNIFORME con el member-read directo `({...performance}).elu` (consistencia del resolver compartido).
+      ["own-copy Reflect.get({...perf}) → FLAG (over-aprox uniforme)", `export const x = Reflect.get({...performance}, "eventLoopUtilization");`, true],
+      // OOM real (own-copy sobre PROTO-CARRIER = sin own props = undefined runtime) → SILENT-correcto, NO tocar
+      ["OOM Reflect.get(assign({},create(R))) → SILENT", `export const x = Reflect.get(Object.assign({}, Object.create(performance)), "eventLoopUtilization");`, false],
+      // §141 pineado: DENYLIST (WebAssembly) + key variable → renunciado (asimetría read/construct #2)
+      ["§141 denylist+keyvar Reflect.get(freeze(WA),k) → SILENT", `export function f(k:string){ return Reflect.get(Object.freeze(WebAssembly), k); }`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- CAUSA 2 · paridad de proyección posicional: Reflect.get(lit,lit) + array.at(0) se pliegan como [X][0] ----
+  describe("Causa 2: proyección posicional gemela → FLAG (INV-PARITY forma-de-proyección)", () => {
+    it.each<[string, string, boolean]>([
+      ["Reflect.get([X],'0') member-read", `export const x = Reflect.get([performance],"0").eventLoopUtilization();`, true],
+      ["Reflect.get({p:X},'p') member-read", `export const x = Reflect.get({p:performance},"p").eventLoopUtilization();`, true],
+      ["[X].at(0) member-read", `export const x = [performance].at(0).eventLoopUtilization();`, true],
+      ["[WA].at(0) codegen-member read", `export const x = [WebAssembly].at(0).compile;`, true],
+      // Δ2 (over-aprox DOCUMENTADA, Fable): `.at(i)` hace ∃-DESCENSO TOTAL del array-literal (soporta índices
+      // NEGATIVOS = desde el final → no se mapea a posición fija sin sobre-aprox), mientras el gemelo `[X][i]` es
+      // preciso: `[perf,0].at(1)` → FLAG (over-aprox fail-closed) vs `[perf,0][1]` → SILENT. Divergencia entre
+      // formas que INV-PARITY declara gemelas, pineada como sobre-aprox (§373, dirección segura). No es hallazgo.
+      ["Δ2 [X,safe].at(1) ∃-total → FLAG (over-aprox; gemelo [X,safe][1] preciso SILENT)", `export const x = [performance, 0].at(1).valueOf();`, true],
+      ["Δ2 gemelo preciso [X,safe][1] → SILENT", `export const x = [performance, 0][1].valueOf();`, false],
+      ["import(Reflect.get(['node:fs'],'0'))", `export const x = import(Reflect.get(["node:fs"],"0"));`, true],
+      ["new ([WA].at(0)).Module() construct", `export const x = new ([WebAssembly].at(0)).Module();`, true],
+      // fail-closed: container o key/índice variable → §141 SILENT
+      // container LITERAL + key/índice VARIABLE → ∃-descenso fail-closed (consistente con `[X][k]`) → FLAG.
+      ["literal+keyvar Reflect.get([X],k) → FLAG", `export function f(k:string){ return Reflect.get([performance],k).eventLoopUtilization(); }`, true],
+      ["literal+idxvar [X].at(i) → FLAG", `export function f(i:number){ return [performance].at(i).eventLoopUtilization(); }`, true],
+      // §141 REAL: container vía VARIABLE (data-flow) → renunciado → SILENT.
+      ["§141 container-VARIABLE Reflect.get(c,'0') → SILENT", `export function f(){ const c=[performance]; return Reflect.get(c,"0").eventLoopUtilization(); }`, false],
+      ["§141 container-VARIABLE a.at(0) → SILENT", `export function f(){ const a=[performance]; return a.at(0).eventLoopUtilization(); }`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- CAUSA 3 · provenance de iteración for-of sobre literal inline (extracción posicional del destructuring) ----
+  describe("Causa 3: for-of sobre array-literal inline → FLAG (variable-iterable sigue §141)", () => {
+    it.each<[string, string, boolean]>([
+      ["const p of [perf]", `for (const p of [performance]) { p.eventLoopUtilization(); } export const x = 1;`, true],
+      ["let p reassign of [perf]", `let p:any; for (p of [performance]) { p.eventLoopUtilization(); } export const x = 1;`, true],
+      ["const M of [WA] construct", `for (const M of [WebAssembly]) { new M.Module(); } export const x = 1;`, true],
+      // RESIDUAL (R9→limitations, Δ1 Fable): el head de un for-of (`for (p of …)`) NO es un AssignmentExpression
+      // y NO está en el conjunto de operadores que enumera D1-b para la unión monotónica de taint (`=`, `??=`,
+      // `||=`, `&&=`) → la reasignación del loop-var queda FUERA del dominio de la unión por la LETRA de la
+      // frontera firmada. (NO es "el gate no propaga reasignaciones de cuerpo-de-loop": un `p = performance`
+      // explícito en el body SÍ hoistea y flaggea post-loop — fixture B del #7.) El caso IN-BODY (arriba) SÍ se
+      // modela (Causa 3, vía scopePartialAliases del body). Pin SILENT defendible; enmienda a rc.2 = añadir el
+      // head de for-of al conjunto de operadores (firma Iván, toca D1-b).
+      ["use-after-loop (for-of head fuera del set D1-b) → SILENT", `let p:any; for (p of [performance]) {} p.eventLoopUtilization(); export const x = 1;`, false],
+      // §141: iterable por VARIABLE (data-flow) → SILENT-correcto
+      ["§141 variable-iterable → SILENT", `const arr=[performance]; for (const p of arr) { p.eventLoopUtilization(); } export const x = 1;`, false],
+      // for-in (key=string, member undefined universal) → out-of-mandate SILENT
+      ["for-in → SILENT (out-of-mandate)", `for (const k in [performance]) { k; } export const x = 1;`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- 4b · FP de disyunción/fusión: el ascenso cruza el operando izq SOLO en conjunción (RELEASE-RELEVANTE) ----
+  describe("4b: sonda ?.() bajo ||/?? a la IZQUIERDA = rescate → SILENT; && a la izq = deref → FLAG", () => {
+    const E = "performance.eventLoopUtilization?.()";
+    it.each<[string, string, boolean]>([
+      // ORÁCULO RUNTIME: (E || o).foo — E undefined en Edge → || → o → o.foo SEGURO; E truthy en Node → E.foo (num, sin crash) → SILENT
+      ["|| left (E||o).foo → SILENT", `export function f(o){ return (${E} || o).foo; }`, false],
+      ["?? left (E??o).foo → SILENT", `export function f(o){ return (${E} ?? o).foo; }`, false],
+      ["|| left [k] (E||o)['x'] → SILENT", `export function f(o){ return (${E} || o)["x"]; }`, false],
+      // && a la izq: E falsy en Edge → && → E (undefined) → deref crashea → FLAG (MEC-A intacto)
+      ["&& left (E&&o).foo → FLAG (MEC-A)", `export function f(o){ return (${E} && o).foo; }`, true],
+      // consejo del propio gate (?? fallback / ?.()) NO se auto-flaggea
+      ["?? fallback directo (consejo gate) → SILENT", `export const x = ${E} ?? 0;`, false],
+      ["|| fallback directo → SILENT", `export const x = ${E} || 0;`, false],
+      // el deref-directo del probe sigue FLAG (no romper el core de MEC-A)
+      ["deref directo (E).foo → FLAG", `export function f(){ return (${E}).foo; }`, true],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- 4c · el ∃ present-throws del destructure-default cuantifica también sobre las alternativas de CLAVE ----
+  describe("4c: destructure-default con clave COMPUTADA multi-alternativa → ∃ sobre roots × claves", () => {
+    it.each<[string, string, boolean]>([
+      ["clave computada present-throws {[c?mark:compile]:fn=fb}=b?perf:WA", `export function f(c:boolean,b:boolean){ const {[c?"mark":"compile"]:fn=()=>0}=b?performance:WebAssembly; return fn; }`, true],
+      // no regresar: clave computada absence-only en todos → SILENT
+      ["clave computada absence-only → SILENT", `export function f(c:boolean){ const {[c?"mark":"measure"]:fn=()=>0}=performance; return fn; }`, false],
+      // regresión C1 (clave fija) intacta
+      ["C1 clave fija {compile=fb}=b?perf:WA → FLAG", `export function f(b:boolean){ const {compile=()=>0}=b?performance:WebAssembly; return compile; }`, true],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // ---- 4a · doctrina de degradación aplicada al CONJUNTO COMPLETO de caps (custodio conductual profundo/sitio) ----
+  describe("4a: los tres helpers recursivos con cap degradan sin fail-open (custodio profundo por sitio)", () => {
+    // reflectiveCarrierSources (L4283, depth>64): 70 Object.freeze anidados → el root sigue alcanzable
+    it("reflectiveCarrierSources: 70 freeze anidados → FLAG (no return [] fail-open)", () => {
+      expect(flagged(`export const x = Reflect.get(${nestFreeze(70)}, "eventLoopUtilization");`)).toBe(true);
+    });
+    it("member-read directo 70 freeze anidados → FLAG", () => {
+      expect(flagged(`export const x = ${nestFreeze(70)}.eventLoopUtilization();`)).toBe(true);
+    });
+    // resolveKeyInLiteral (L4566, depth>16): 20 spreads de objeto anidados → el root sigue alcanzable
+    it("resolveKeyInLiteral: 20 object-spreads anidados → FLAG (no blocked-como-fail-open)", () => {
+      expect(flagged(`export const x = (${nestSpread(20)}).p.eventLoopUtilization();`)).toBe(true);
+    });
+    // allObjectLiteralValuesDeep (L3961, depth>64): 70 object-spreads + key irresoluble → root alcanzable
+    it("allObjectLiteralValuesDeep: 70 object-spreads + key var → FLAG (no return out fail-open)", () => {
+      expect(flagged(`export function f(k:string){ return (${nestObj(70)})[k].eventLoopUtilization(); }`)).toBe(true);
     });
   });
 });

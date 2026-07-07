@@ -3957,14 +3957,49 @@ function spreadFlattenedElements(elements, out) {
 // own-prop podría ser la seleccionada → ∃-peligro). El predecesor iteraba solo props directas y DROPEABA el
 // SpreadAssignment → el root del spread escapaba (read/construct/import). Un spread de VARIABLE/call (no literal)
 // queda §141 (objectLiteralAlternatives no lo resuelve → sin hoja).
-function allObjectLiteralValuesDeep(expr, out, depth = 0) {
-  if (depth > 64) return out;
+function allObjectLiteralValuesDeep(expr, out) {
+  // R9-4a: SIN cap. El predecesor `if (depth > 64) return out` degradaba FAIL-OPEN (truncaba → el root profundo
+  // escapaba). Termina por descenso del AST (cada spread anidado es un literal más interno, dominio finito),
+  // como spreadFlattenedElements. Doctrina de degradación de caps (R8/MEC-E) aplicada al CONJUNTO completo.
   for (const obj of objectLiteralAlternatives(expr)) {
     for (const p of obj.properties) {
       if (ts.isPropertyAssignment(p)) out.push(p.initializer);
       else if (ts.isShorthandPropertyAssignment(p)) out.push(p.name);
       else if (ts.isSpreadAssignment(p))
-        allObjectLiteralValuesDeep(p.expression, out, depth + 1);
+        allObjectLiteralValuesDeep(p.expression, out);
+    }
+  }
+  return out;
+}
+
+// R9 Causa 2: proyección posicional de un contenedor LITERAL por clave/índice — el fold COMPARTIDO por
+// `container[key]` (element-access), `Reflect.get(container, key)` y `[container].at(index)` (gemelos
+// runtime-idénticos; INV-PARITY forma-de-proyección). Fail-CLOSED §141: clave IRRESOLUBLE (variable/ensamblada)
+// → ∃-descenso a TODOS los elementos/valores (un hueco degrada a FP, nunca a FN); container no-literal → vacío
+// (sin descenso — lo manejan computedDefaultDenyRoot etc.). Índice array entero-canónico-en-rango preciso;
+// spread desplaza posiciones → ∃-descenso aplanado.
+function elementProjection(containerExpr, keyExpr) {
+  const out = [];
+  const keys = resolveKeyCandidates(keyExpr);
+  if (keys.size === 0) {
+    for (const arr of arrayLiteralAlternatives(containerExpr)) {
+      spreadFlattenedElements(arr.elements, out);
+    }
+    allObjectLiteralValuesDeep(containerExpr, out);
+  } else {
+    for (const key of keys) {
+      if (/^(0|[1-9]\d*)$/.test(key)) {
+        const i = Number(key);
+        for (const arr of arrayLiteralAlternatives(containerExpr)) {
+          if (arr.elements.some(ts.isSpreadElement)) {
+            spreadFlattenedElements(arr.elements, out);
+            continue;
+          }
+          const el = arr.elements[i];
+          if (el && !ts.isOmittedExpression(el)) out.push(el);
+        }
+      }
+      out.push(...objectLiteralMemberValues(containerExpr, key));
     }
   }
   return out;
@@ -4021,49 +4056,37 @@ function valueTransparentChildren(node) {
     // canonicaliza a "100"). UNIÓN, no fallback: una alternativa VT mixta `(c?[X]:{0:Y})[0]` desciende
     // ambas ramas. Fail-CLOSED (§141) ante key variable/ensamblada, spread en el array, índice
     // float/negativo (canonicalNumericKey→null → sin candidata).
-    const out = [];
-    const keys = resolveKeyCandidates(node.argumentExpression);
-    if (keys.size === 0) {
-      // POLARIDAD FAIL-CLOSED (Fable cross-review 3): sobre un container LITERAL, una key IRRESOLUBLE
-      // (variable, ensamblada, o forma exótica no enumerada) podría seleccionar CUALQUIER elemento/valor
-      // → descender a TODOS (∃-peligro en el sink downstream). Consecuencia estructural: un hueco en
-      // canonicalNumericKey degrada a FP (over-flag), NUNCA a FN — la completitud de la enumeración deja de
-      // ser load-bearing para la soundness. Solo aplica a container LITERALES (`[...][i]`/`({...})[i]`); un
-      // `identifier[i]` no es container-literal → out vacío → sin descenso (lo manejan computedDefaultDenyRoot
-      // etc.). La rama RESUELTA (else) mantiene la precisión: solo el elemento específico.
-      for (const arr of arrayLiteralAlternatives(node.expression)) {
-        // FIX-5: aplana spread-de-array-literal (`[...['fs']][k]` → 'fs') además de los elementos directos.
-        spreadFlattenedElements(arr.elements, out);
-      }
-      allObjectLiteralValuesDeep(node.expression, out);
-    } else {
-      for (const key of keys) {
-        // ARRAY: solo un índice ENTERO canónico en rango selecciona elemento (restricción del CONSUMIDOR,
-        // no de la capa canónica — `[X]["-1"]`/`[X][0.5]` → undefined, no descienden el array).
-        if (/^(0|[1-9]\d*)$/.test(key)) {
-          const i = Number(key);
-          for (const arr of arrayLiteralAlternatives(node.expression)) {
-            if (arr.elements.some(ts.isSpreadElement)) {
-              // Un spread DESPLAZA las posiciones → el índice resuelto ya no mapea a un elemento fijo →
-              // ∃-peligro sobre los elementos NO-spread + el contenido APLANADO de spread-de-array-literal
-              // (fail-closed; `[...[0], X][1]` alcanza X, `[...[WA.Module]][0]` alcanza WA.Module). Fable
-              // cross-review 3 (variante array) + Auditoría B FIX-5 (flatten del spread-de-literal).
-              spreadFlattenedElements(arr.elements, out);
-              continue;
-            }
-            const el = arr.elements[i];
-            if (el && !ts.isOmittedExpression(el)) out.push(el);
-          }
-        }
-        // OBJECT: cualquier key string canónica (incl. "-1", "0.5", canonicalización numérica fiel).
-        out.push(...objectLiteralMemberValues(node.expression, key));
-      }
-    }
+    const out = elementProjection(node.expression, node.argumentExpression);
     if (out.length > 0) return out;
   }
   if (ts.isPropertyAccessExpression(node)) {
     const vals = objectLiteralMemberValues(node.expression, node.name.text);
     if (vals.length > 0) return vals;
+  }
+  // R9 Causa 2: gemelos runtime-idénticos de la proyección posicional `[X][i]`, en el eje value-survival.
+  if (ts.isCallExpression(node)) {
+    const callee = unwrapErased(node.expression);
+    // `Reflect.get(receiverLit, keyLit)` ≡ `receiverLit[keyLit]` en-sitio (espejo de reflectGetMemberRead, que
+    // ya lo modela en el eje member-read). elementProjection hereda la polaridad fail-closed (receiver/key
+    // no-literal → vacío/∃-descenso).
+    if (staticNamespaceCall(node, "Reflect", "get") && node.arguments.length >= 2) {
+      const out = elementProjection(node.arguments[0], node.arguments[1]);
+      if (out.length > 0) return out;
+    }
+    // `[containerLit].at(i)` de un array-literal → ∃-descenso a TODOS los elementos (fail-closed: `.at` admite
+    // índices NEGATIVOS = desde el final, así que no se mapea a una posición fija sin sobre-aproximar). Solo
+    // array-literal receptor; un `.at` sobre variable no es container-literal → sin descenso.
+    if (
+      ts.isPropertyAccessExpression(callee) &&
+      callee.name.text === "at" &&
+      node.arguments.length >= 1
+    ) {
+      const out = [];
+      for (const arr of arrayLiteralAlternatives(callee.expression)) {
+        spreadFlattenedElements(arr.elements, out);
+      }
+      if (out.length > 0) return out;
+    }
   }
   return [];
 }
@@ -4279,14 +4302,17 @@ function staticNamespaceCall(node, ns, method) {
 //   mode 'own'   = own-copy (spread `{...S}` / `Object.assign` sources): solo own-enumerable → un creador-de-
 //                  prototipo (`create`/`setPrototypeOf`/`{__proto__}`) sin own-props NO aporta (para).
 // Terminal = una raíz parcial directa (o alias); `exprPartialRoots` del caller filtra los no-root (§141).
-function reflectiveCarrierSources(expr, mode, depth = 0, viaReflective = false) {
-  if (!expr || depth > 64) return [];
+function reflectiveCarrierSources(expr, mode, viaReflective = false) {
+  // R9-4a: SIN cap. El predecesor `depth > 64` degradaba FAIL-OPEN (`return []` ocultaba el root). Termina por
+  // descenso del AST (cada rec entra en un sub-nodo, dominio finito). Doctrina de caps (R8/MEC-E) al conjunto —
+  // este cap estaba DENTRO de mi propio código R8, escapó a la auditoría single-site de MEC-E.
+  if (!expr) return [];
   const e = unwrapErased(expr);
   const call = (ns, name) =>
     ts.isCallExpression(e) && staticNamespaceCall(e, ns, name);
   // rec por una capa REFLEXIVA (marca viaReflective) vs recV por un wrapper value-transparent (preserva la marca).
-  const rec = (x, m) => reflectiveCarrierSources(x, m, depth + 1, true);
-  const recV = (x, m) => reflectiveCarrierSources(x, m, depth + 1, viaReflective);
+  const rec = (x, m) => reflectiveCarrierSources(x, m, true);
+  const recV = (x, m) => reflectiveCarrierSources(x, m, viaReflective);
   // identity-return arg0 (result === arg0, cadena intacta): freeze/seal/preventExtensions + el TARGET de
   // defineProperty/defineProperties (rol arg0, ortogonal al rol descriptor-FUENTE que maneja el bloque B).
   if (
@@ -4563,7 +4589,10 @@ function resolveKeyInLiteral(obj, key, depth) {
       // NO-resoluble a literal (variable/call/Object.assign) o profundidad excedida → §141 blocked.
       const leaves = valueTransparentLeaves(p.expression);
       const litAlts = leaves.filter((l) => ts.isObjectLiteralExpression(l));
-      if (depth > 16 || litAlts.length === 0 || litAlts.length !== leaves.length) {
+      // R9-4a: quitado el `depth > 16` — degradaba FAIL-OPEN (un spread anidado profundo pero RESOLUBLE se
+      // etiquetaba §141 y el root escapaba). El resto (no-literal / alternativas mixtas) SÍ es §141 genuino.
+      // Termina por descenso del AST. Doctrina de caps (R8/MEC-E) al conjunto.
+      if (litAlts.length === 0 || litAlts.length !== leaves.length) {
         blocked = true; // no resuelve ENTERAMENTE a literales → indeterminado (§141)
         continue;
       }
@@ -6858,7 +6887,15 @@ function checkSourceFile(
         // members RESUELTOS → ∃-candidato denegado. members VACÍO (key variable/ensamblada) sobre un root
         // allowlist default-deny (SAFE_PARTIAL_MEMBERS) → fail-closed, ESPEJO de `<root>[<computado>]`
         // (computedDefaultDenyRoot, codex P2): `Reflect.get(performance, k) ≡ performance[k]`. Fable #4.
-        const rgRoots = exprPartialRoots(rget.receiver, context);
+        // R9 Causa 1: el receptor de Reflect.get pasa por el MISMO resolver de familias (reflectiveCarrierSources)
+        // que el member-read DIRECTO y la construcción — sus hermanos ya lo usan; este locus quedó con exprPartialRoots
+        // solo. Un carrier reflexivo (`Object.freeze/create/setPrototypeOf/getPrototypeOf/{__proto__}(R)`) envolviendo
+        // el root es un CallExpression/objeto → hoja NO value-transparent → exprPartialRoots devuelve Set vacío; las
+        // familias identity-return/proto-walk las añade el resolver compartido (bare receiver → [] → sin cambio).
+        const rgRoots = new Set(exprPartialRoots(rget.receiver, context));
+        for (const src of reflectiveCarrierSources(rget.receiver, "chain")) {
+          for (const r of exprPartialRoots(src, context)) rgRoots.add(r);
+        }
         let rgRoot = null;
         let denied = undefined;
         let computedDeny = false;
@@ -7765,6 +7802,31 @@ function checkSourceFile(
         init && ts.isVariableDeclarationList(init)
           ? partialAliasesDeclaredBy(init, context)
           : new Map();
+      // R9 Causa 3: for-OF sobre un array-literal INLINE (`for (const p of [performance])`) enlaza el loop-var a
+      // los ELEMENTOS del literal — extracción POSICIONAL decidible en-sitio, como `const [p]=[performance]`. Cubre
+      // declaración (`const/let p of [X]`) y reasignación a binding existente (`p of [X]`). El iterable por VARIABLE
+      // (`const arr=[X]; for(p of arr)`) es data-flow → §141 (no entra). Solo loop-var IDENTIFIER simple.
+      if (ts.isForOfStatement(node)) {
+        let forOfVar = null;
+        if (
+          init &&
+          ts.isVariableDeclarationList(init) &&
+          init.declarations.length === 1 &&
+          ts.isIdentifier(init.declarations[0].name)
+        )
+          forOfVar = init.declarations[0].name.text;
+        else if (init && ts.isIdentifier(init)) forOfVar = init.text;
+        if (forOfVar) {
+          const elemRoots = new Set();
+          for (const arr of arrayLiteralAlternatives(node.expression)) {
+            const elems = [];
+            spreadFlattenedElements(arr.elements, elems);
+            for (const el of elems)
+              for (const r of exprPartialRoots(el, context)) elemRoots.add(r);
+          }
+          if (elemRoots.size > 0) forPartialAliases.set(forOfVar, elemRoots);
+        }
+      }
       // for-init que es una EXPRESIÓN (no declaración): assignments embebidas (`for (later =
       // setTimeout; later(…); )`) ejecutan ANTES de la condición/body → enrolar (codex P2).
       const forExprInit =
@@ -8039,22 +8101,36 @@ function checkSourceFile(
         // erased-wrappers, pero exigir que se haya cruzado ≥1 paréntesis antes del deref.
         let r = p;
         let crossedParen = false;
-        // R8 MEC-A: ascender también por wrappers VALUE-TRANSPARENT (ternario/coma/&&/||/asignación), no solo
-        // erased — el resultado de la sonda `?.()` fluye por ellos hasta el paren-deref. `(cond ? X?.() : o).foo`
-        // ejecuta `undefined.foo` en Edge igual que `(X?.()).foo`. `g(X?.()).foo` queda seguro (un argumento de
-        // call NO es value-transparent → no se cruza → §141 pineado). Mismo SET que el ascenso de arriba (L7983).
-        while (
-          r.parent &&
-          (isErasedOuterExpr(r.parent) ||
-            valueTransparentChildren(r.parent).includes(r) ||
-            // `&&` con la sonda a la IZQUIERDA: un resultado FALSY (undefined en Edge = miembro ausente) ES el
-            // valor del `&&` y se deref'a → unsafe. `valueTransparentChildren(&&)=[right]` por convención de
-            // deny; el probe-ascent necesita también el left porque una sonda falsy es el caso de divergencia-Edge.
-            (ts.isBinaryExpression(r.parent) &&
-              r.parent.operatorToken.kind ===
-                ts.SyntaxKind.AmpersandAmpersandToken &&
-              r.parent.left === r))
-        ) {
+        // R8 MEC-A + R9-4b: ascender por los wrappers que llevan el RESULTADO de la sonda `?.()` hasta el
+        // paren-deref — erased (paren/as/!) + value-transparent — CON la polaridad correcta de los operadores
+        // lógicos (el bug que R9 cazó: cruzar el izquierdo de `||`/`??` era un FALSO POSITIVO):
+        //  · conjunción `&&`: AMBOS operandos alcanzan el deref (izq = valor FALSY deref'd si la sonda da
+        //    undefined en Edge; der = pasa a deref) → unsafe.
+        //  · disyunción/fusión `||`/`??`: SOLO el operando DERECHO (fallback) alcanza el deref; el IZQUIERDO es la
+        //    RAMA DE RESCATE — si la sonda da undefined, `||`/`??` cae al derecho SEGURO → `(X?.() || o).foo` NO
+        //    rompe en Edge (cae a `o`). Cruzar el izq flaggeaba el consejo del propio gate (`?? fallback`).
+        //  · resto (ternario/coma/asignación/proyección) → valueTransparentChildren. `g(X?.()).foo` sigue §141
+        //    (arg de call no es value-transparent). DOCTRINA: el valor esperado sale del ORÁCULO de runtime.
+        const crossesToDeref = (parent, child) => {
+          if (isErasedOuterExpr(parent)) return true;
+          if (ts.isBinaryExpression(parent)) {
+            const op = parent.operatorToken.kind;
+            if (
+              op === ts.SyntaxKind.AmpersandAmpersandToken ||
+              op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+            )
+              return true; // ambos operandos deref'an
+            if (
+              op === ts.SyntaxKind.BarBarToken ||
+              op === ts.SyntaxKind.QuestionQuestionToken ||
+              op === ts.SyntaxKind.BarBarEqualsToken ||
+              op === ts.SyntaxKind.QuestionQuestionEqualsToken
+            )
+              return parent.right === child; // solo el fallback; el izquierdo RESCATA
+          }
+          return valueTransparentChildren(parent).includes(child);
+        };
+        while (r.parent && crossesToDeref(r.parent, r)) {
           if (ts.isParenthesizedExpression(r.parent)) crossedParen = true;
           r = r.parent;
         }
@@ -8269,17 +8345,29 @@ function checkSourceFile(
               // present-throws (`WebAssembly.compile` EXISTE → el default NO se activa → sigue lanzando), no es
               // seguro. First-match paraba en un root de AUSENCIA (`performance`, allowlist, compile ∉ safe →
               // "denegado") y enmascaraba el hermano present-throws de una rama posterior del receptor multi-rama.
-              const presentThrowsRoot = key
-                ? ([...partialRoots].find(
-                    (root) =>
-                      PARTIAL_PRESENT_THROWS_ROOTS.has(root) &&
-                      partialMemberDenied(root, key),
-                  ) ?? null)
-                : null;
-              if (key && hasDefault && !presentThrowsRoot) {
-                continue; // miembro ausente (default se activa) en TODOS los roots → seguro
+              // R9-4c: ∃ sobre roots × ALTERNATIVAS DE CLAVE, no la key FIJA. Una clave COMPUTADA
+              // (`{[c?"mark":"compile"]:fn=fb}`) tiene varias candidatas; el first-loop paraba en la 1ª con
+              // denyRoot (`mark` sobre performance = ausencia) y enmascaraba que OTRA candidata (`compile`) es
+              // present-throws sobre otro root (WebAssembly). El present-throws se decide sobre TODAS las claves.
+              const keyCands = structuralKeyTexts(kn);
+              let presentThrowsRoot = null;
+              let presentThrowsKey = null;
+              for (const root of partialRoots) {
+                if (!PARTIAL_PRESENT_THROWS_ROOTS.has(root)) continue;
+                const k = keyCands.find((kc) => partialMemberDenied(root, kc));
+                if (k) {
+                  presentThrowsRoot = root;
+                  presentThrowsKey = k;
+                  break;
+                }
               }
-              if (presentThrowsRoot) denyRoot = presentThrowsRoot; // detail: el hazard real, no la ausencia
+              if (key && hasDefault && !presentThrowsRoot) {
+                continue; // miembro ausente (default se activa) en TODOS los roots × claves → seguro
+              }
+              if (presentThrowsRoot) {
+                denyRoot = presentThrowsRoot; // detail: el hazard real, no la ausencia
+                key = presentThrowsKey;
+              }
               if (key) {
                 const start = el.getStart(sourceFile);
                 const { line } =
