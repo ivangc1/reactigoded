@@ -2877,23 +2877,37 @@ function exprPartialRoots(expr, context) {
 }
 
 /**
- * ∃-quantificación de construcción-denegada sobre `exprPartialRoots(target.expression)` (Auditoría B FIX-1):
+ * Resolver de raíces para consumidores en-sitio de un receptor.
+ *
+ * Compone las raíces directas/alias con carriers reflexivos sintácticos. No se
+ * usa al ENROLAR alias: una copia guardada y leída después continúa siendo flujo §141.
+ */
+function resolveRoots(expr, context) {
+  const out = exprPartialRoots(expr, context);
+  for (const source of reflectiveCarrierSources(expr, "chain")) {
+    for (const root of exprPartialRoots(source, context)) out.add(root);
+  }
+  return out;
+}
+
+/**
+ * ∃-quantificación de construcción-denegada sobre `resolveRoots(target.expression)` (Auditoría B FIX-1):
  * un ctor multi-rama (`new (b?crypto:WebAssembly).Module`) enmascaraba el root denegado tras uno safe/no-
  * denegante → FN. Devuelve el primer `(root, member)` construcción-denegado; o el primer root allowlist-style
  * con miembro COMPUTADO (fail-closed). `ctorCandidates` es root-independiente (accessedMemberNames del target).
  * Compartido por las posiciones `new` y `Reflect.construct` (≡ new).
  */
 function resolveConstructionDeny(target, context) {
-  // Orígenes-global del ctor: DIRECTOS (`exprPartialRoots` del receptor, con members = accessedMemberNames del
+  // Orígenes-global del ctor: DIRECTOS (`resolveRoots` del receptor, con members = accessedMemberNames del
   // target) + REFLEXIVOS (idiomas property-copy que leen `R.Module`: Object.assign/create/gOPDs/gOPD.value —
   // Auditoría B R5 / U4, cierra #8). Paridad read-vs-construct: la construcción consume el MISMO pass reflexivo
   // que el member-read. `new (Object.assign(WebAssembly,{}).Module)(b)` resuelve WebAssembly.Module → denegado.
   const originSets = [
-    { roots: exprPartialRoots(target.expression, context), members: null },
+    { roots: resolveRoots(target.expression, context), members: null },
   ];
   for (const rv of reflectiveValueReads(target)) {
     originSets.push({
-      roots: exprPartialRoots(rv.receiver, context),
+      roots: resolveRoots(rv.receiver, context),
       members: rv.members,
     });
   }
@@ -4248,7 +4262,7 @@ function reflectCallTarget(n) {
 }
 
 // ¿`n` es `Reflect.get(R, "k")` con key STRING-LITERAL? → {receiver: R, member: "k"}. Es un member-read
-// EN-SITIO ≡ `R["k"]`, decidible con los MISMOS resolvers (R por exprPartialRoots, k literal), NO data-flow
+// EN-SITIO ≡ `R["k"]`, decidible con los MISMOS resolvers (R por resolveRoots, k literal), NO data-flow
 // → gap a cerrar para el eje PRESENCIA-DE-MIEMBRO (root B / Fable). El gate ya modela Reflect.construct/
 // apply (reflectCallTarget); 'get' faltaba para este eje. DISTINTO del residual §141 documentado de
 // `Reflect.get(x,"constructor")()` (eje EVAL-SINK: x variable + result-chasing por invocación). Key
@@ -4318,8 +4332,8 @@ function staticNamespaceCall(node, ns, method) {
  * de `R.k` a través de un intrínseco de copia/reflexión, evadiendo el member-read directo. Lista FINITA
  * (denylist de idiomas dentro de una regla allowlist → espacio ABIERTO, no correct-by-construction; V3 halló
  * 2 idiomas fuera de la lista al 1er intento). Devuelve `[{receiver, members}]` (receiver = R-expr; members =
- * Set de nombres de miembro leídos), a ∃-quantificar por el caller vía `exprPartialRoots(receiver)` +
- * `partialMemberDenied`. `R` hereda cobertura multi-rama de exprPartialRoots.
+ * Set de nombres de miembro leídos), a ∃-quantificar por el caller vía `resolveRoots(receiver)` +
+ * `partialMemberDenied`. `R` hereda cobertura multi-rama de resolveRoots.
  *
  * SOUNDNESS de la equivalencia `X(R).k ≡ R.k`: exacta para miembros OWN-DATA (verificado import.meta.dirname/
  * filename/resolve en V1). Para miembros heredados/non-enumerable de otras raíces la equivalencia puede no
@@ -4335,7 +4349,7 @@ function staticNamespaceCall(node, ns, method) {
 //   mode 'chain' = identity-return + proto-walk: lee TODA la cadena de la fuente (own+heredado).
 //   mode 'own'   = own-copy (spread `{...S}` / `Object.assign` sources): solo own-enumerable → un creador-de-
 //                  prototipo (`create`/`setPrototypeOf`/`{__proto__}`) sin own-props NO aporta (para).
-// Terminal = una raíz parcial directa (o alias); `exprPartialRoots` del caller filtra los no-root (§141).
+// Terminal = una raíz parcial directa (o alias); `resolveRoots` del caller filtra los no-root (§141).
 function reflectiveCarrierSources(expr, mode, viaReflective = false) {
   // R9-4a: SIN cap. El predecesor `depth > 64` degradaba FAIL-OPEN (`return []` ocultaba el root). Termina por
   // descenso del AST (cada rec entra en un sub-nodo, dominio finito). Doctrina de caps (R8/MEC-E) al conjunto —
@@ -6749,10 +6763,10 @@ function checkSourceFile(
           ) {
             continue;
           }
-          // ∃-quantifica sobre exprPartialRoots(c.expression) (Auditoría B FIX-1): un receptor detach
+          // ∃-quantifica sobre resolveRoots(c.expression) (Auditoría B FIX-1): un receptor detach
           // multi-rama (`(b?WebAssembly:crypto).getRandomValues`) enmascaraba el root con el miembro bound
           // (crypto) tras uno sin ese bound (WebAssembly) → FN.
-          for (const r of exprPartialRoots(c.expression, context)) {
+          for (const r of resolveRoots(c.expression, context)) {
             const bound = RECEIVER_BOUND_MEMBERS[r];
             const member = bound
               ? accessedMemberNames(c).find((mm) => bound.has(mm))
@@ -6835,7 +6849,7 @@ function checkSourceFile(
           ) {
             continue;
           }
-          // ∃-quantifica construcción-denegada sobre exprPartialRoots(target) (Auditoría B FIX-1); el
+          // ∃-quantifica construcción-denegada sobre resolveRoots(target) (Auditoría B FIX-1); el
           // computado vía Reflect.construct (`Reflect.construct(WebAssembly[m],…)`, m variable) fail-cierra
           // igual que `new WebAssembly[m]()` (Reflect.construct ≡ new). No §141 (detecta el patrón).
           const { ctorRoot, ctorMember, ctorComputedDenied } =
@@ -6883,7 +6897,7 @@ function checkSourceFile(
         ) {
           continue;
         }
-        // ∃-quantifica construcción-denegada sobre exprPartialRoots(target) (Auditoría B FIX-1). El
+        // ∃-quantifica construcción-denegada sobre resolveRoots(target) (Auditoría B FIX-1). El
         // COMPUTADO en posición `new` (`new WebAssembly[m](bytes)`, m variable → sin candidatos) fail-CIERRA
         // (m podría ser "Module"); paridad con el literal-desconocido. Decidible SIN resolver m (detecta el
         // patrón, no §141). SOLO en posición `new` → preserva el value-read Edge-safe (`const C =
@@ -6913,7 +6927,7 @@ function checkSourceFile(
     // / `import.meta.resolve?.()` de más (FP). `import.meta.hot`/`url`/`env`/`glob` ∈ allowlist → PASA;
     // `import.meta[dynKey]` § 141; el CALL `import.meta.glob(...)` lo caza el check de glob dedicado (abajo).
     // `Reflect.get(R, "k")` con key (VT-fold canónica) ≡ `R["k"]` (root B / Fable): member-read decidible
-    // EN-SITIO. Reusa exprPartialRoot (resuelve R: performance/WebAssembly/console/crypto/process E
+    // EN-SITIO. Reusa resolveRoots (resuelve R: performance/WebAssembly/console/crypto/process E
     // import.meta, con alias y proyección) + partialMemberDenied (dispatch de polaridad). B2
     // (`Reflect.get(import.meta,"dirname")`) se cierra gratis con el enrolado de import.meta (root C).
     // POLARIDAD: ∃-candidato-denegado → FLAG (partialMemberDenied ya codifica denylist/allowlist por-root,
@@ -6921,20 +6935,15 @@ function checkSourceFile(
     if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
       const rget = reflectGetMemberRead(node);
       if (rget) {
-        // ∃-quantifica sobre exprPartialRoots(receiver) (Auditoría B FIX-1): un receiver multi-rama
+        // ∃-quantifica sobre resolveRoots(receiver) (Auditoría B FIX-1): un receiver multi-rama
         // `Reflect.get(b?crypto:performance, k)` enmascaraba el root denegado tras uno wholesale-safe → FN.
         // members RESUELTOS → ∃-candidato denegado. members VACÍO (key variable/ensamblada) sobre un root
         // allowlist default-deny (SAFE_PARTIAL_MEMBERS) → fail-closed, ESPEJO de `<root>[<computado>]`
         // (computedDefaultDenyRoot, codex P2): `Reflect.get(performance, k) ≡ performance[k]`. Fable #4.
-        // R9 Causa 1: el receptor de Reflect.get pasa por el MISMO resolver de familias (reflectiveCarrierSources)
-        // que el member-read DIRECTO y la construcción — sus hermanos ya lo usan; este locus quedó con exprPartialRoots
-        // solo. Un carrier reflexivo (`Object.freeze/create/setPrototypeOf/getPrototypeOf/{__proto__}(R)`) envolviendo
-        // el root es un CallExpression/objeto → hoja NO value-transparent → exprPartialRoots devuelve Set vacío; las
-        // familias identity-return/proto-walk las añade el resolver compartido (bare receiver → [] → sin cambio).
-        const rgRoots = new Set(exprPartialRoots(rget.receiver, context));
-        for (const src of reflectiveCarrierSources(rget.receiver, "chain")) {
-          for (const r of exprPartialRoots(src, context)) rgRoots.add(r);
-        }
+        // El receptor de Reflect.get pasa por el seam canónico resolveRoots: raíz directa/alias + familias
+        // identity-return/proto-walk/own-copy. El carrier se resuelve aquí sin contaminar el enrolado de alias
+        // (receiver-vía-flujo sigue §141).
+        const rgRoots = resolveRoots(rget.receiver, context);
         let rgRoot = null;
         let denied = undefined;
         let computedDeny = false;
@@ -6980,24 +6989,30 @@ function checkSourceFile(
         }
       }
     }
+    const inSiteMemberRoots =
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)
+        ? resolveRoots(node.expression, context)
+        : null;
     // Idiomas REFLEXIVOS de lectura-de-valor (`gOPD(R,"k").value`, `gOPDs(R).k.value`, `Object.assign({},R).k`,
     // `Object.create(R).k`, `({...R}).k`) ≡ `R.k` (Auditoría B FIX-3, ACOTA #3 — no cierra). ∃-quantifica sobre
-    // exprPartialRoots(receiver) + partialMemberDenied (dispatch de polaridad por-root, incl. import.meta
+    // resolveRoots(receiver) + partialMemberDenied (dispatch de polaridad por-root, incl. import.meta
     // allowlist). Fail-closed sobre-aproximado para miembros non-own-data (ver reflectiveValueReads).
     if (
       (ts.isPropertyAccessExpression(node) ||
         ts.isElementAccessExpression(node)) &&
-      !context.isInClientOnlyDeferredBody
+      !context.isInClientOnlyDeferredBody &&
+      // Si el receptor ya resuelve por el seam canónico de raíces (directo,
+      // alias o carrier), la rama c.1b de abajo aplica la semántica completa
+      // de safe-probe/present-throws. Este bloque queda para idiomas de
+      // descriptor-transfer cuyo receptor no es él mismo el root.
+      inSiteMemberRoots.size === 0
     ) {
       for (const { receiver, members } of reflectiveValueReads(node)) {
         let hitRoot = null;
         let hitMember = null;
-        // R10 REFLECT: el receptor de una lectura reflexiva (`gOPD(R,"k").value`) pasa por el resolver de familias
-        // (reflectiveCarrierSources) además de exprPartialRoots — un carrier reflexivo (`Object.freeze(R)`) bajo el
-        // descriptor se resuelve igual que en el member-read directo y en Reflect.get (mismo cableado, R8 Causa 1).
-        const rroots = new Set(exprPartialRoots(receiver, context));
-        for (const src of reflectiveCarrierSources(receiver, "chain"))
-          for (const r of exprPartialRoots(src, context)) rroots.add(r);
+        // El receptor descriptor pasa por el mismo resolveRoots que member-read/Reflect.get/construcción.
+        const rroots = resolveRoots(receiver, context);
         for (const root of rroots) {
           const m = [...members].find((mm) => partialMemberDenied(root, mm));
           if (m !== undefined) {
@@ -7869,7 +7884,7 @@ function checkSourceFile(
             const elems = [];
             spreadFlattenedElements(arr.elements, elems);
             for (const el of elems)
-              for (const r of exprPartialRoots(el, context)) elemRoots.add(r);
+              for (const r of resolveRoots(el, context)) elemRoots.add(r);
           }
           if (elemRoots.size > 0) forPartialAliases.set(forOfVar, elemRoots);
         }
@@ -8039,10 +8054,10 @@ function checkSourceFile(
       const memberCandidates = accessedMemberNames(node);
       // El receiver resuelve a un root parcial-safe DIRECTO (`performance`/`WebAssembly` no
       // sombreado) o vía ALIAS scope-aware (`const WA = WebAssembly; WA.compile()` — el root está en
-      // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). exprPartialRoot ya respeta
+      // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). resolveRoots respeta
       // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
       // Se resuelve SIEMPRE (también con memberCandidates=[]) para cazar el miembro COMPUTADO de abajo.
-      const resolvedPartialRoots = exprPartialRoots(node.expression, context);
+      const resolvedPartialRoots = inSiteMemberRoots;
       // Predicado CENTRAL con dispatch de POLARIDAD: denylist (WebAssembly) → miembro ∈ set; allowlist
       // (performance/console) → ∉ set; allowlist import.meta (SAFE_IMPORT_META_MEMBERS). import.meta se
       // maneja AQUÍ tanto DIRECTO (`import.meta.dirname`) como por alias/proyección (`m.dirname`) — Fable
@@ -8357,9 +8372,9 @@ function checkSourceFile(
             ? pat.properties
             : pat.elements;
           // init puede ser undefined (catch-pattern / param sin default) → solo el default-scan corre.
-          // ∃-quantifica sobre exprPartialRoots(init) (Auditoría B FIX-1): un init destructure multi-rama
+          // ∃-quantifica sobre resolveRoots(init) (Auditoría B FIX-1): un init destructure multi-rama
           // (`const {compile}=(b?crypto:WebAssembly)`) enmascaraba el root denegado tras uno safe → FN.
-          const partialRoots = init ? exprPartialRoots(init, context) : new Set();
+          const partialRoots = init ? resolveRoots(init, context) : new Set();
           if (partialRoots.size) {
             // Solo un OBJECT pattern extrae un MIEMBRO por key; un array pattern sobre el root es
             // iteración (no member-access). init ES el root → sin literal anidado que recursar.

@@ -7620,3 +7620,74 @@ describe("server-safe gate — R11 custodios (centralización: dup-key resolver 
     });
   });
 });
+
+// ============================================================================
+// R11 pt.2 — carrier-root cableado solo en consumidores en-sitio.
+// resolveRoots NO participa en el enrolado de alias: receiver-vía-flujo sigue §141.
+// ============================================================================
+describe("server-safe gate — R11 pt.2 custodios (carrier-root en consumidores in-site)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(`/** @server-safe */\n${code}`, "r11-carrier.fixture.tsx").length > 0;
+
+  it.each<[string, string]>([
+    [
+      "gap read: allowlist computed bajo identity carrier",
+      `export function f(k:string){ return Object.freeze(performance)[k](); }`,
+    ],
+    [
+      "F3c: import.meta computed bajo identity carrier",
+      `export function f(k:string){ return Object.freeze(import.meta)[k]; }`,
+    ],
+    [
+      "gap construct: denylist computed bajo identity carrier",
+      `export function f(k:string,b:any){ return new (Object.freeze(WebAssembly)[k] as any)(b); }`,
+    ],
+    [
+      "gap unbound: branded host method bajo identity carrier",
+      `export const x=(0,Object.freeze(crypto).getRandomValues)(new Uint8Array(1));`,
+    ],
+    [
+      "gap destructure: present-throws bajo proto carrier",
+      `const {compile}=Object.create(WebAssembly); export const x=compile(new Uint8Array());`,
+    ],
+    [
+      "gap for-of: literal element carrier conserva la raíz",
+      `export function f(){ for (const W of [Object.freeze(WebAssembly)]) W.compile(new Uint8Array()); }`,
+    ],
+    [
+      "control present-throws: optional call no protege",
+      `export const x=Object.freeze(WebAssembly).compile?.(new Uint8Array());`,
+    ],
+  ])("%s → FLAG", (_name, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    [
+      "absent-member optional call bajo carrier",
+      `export const x=Object.freeze(performance).eventLoopUtilization?.();`,
+    ],
+    [
+      "absent-member typeof bajo carrier",
+      `export const x=typeof Object.freeze(performance).eventLoopUtilization;`,
+    ],
+    [
+      "absent-member fallback bajo carrier",
+      `export const x=(Object.freeze(performance).eventLoopUtilization ?? (()=>0))();`,
+    ],
+    [
+      "own-copy sobre proto-carrier no copia el miembro",
+      `export const x=({...Object.create(performance)}).eventLoopUtilization();`,
+    ],
+    [
+      "§141 receiver-vía-flujo: alias de identity carrier",
+      `const p=Object.freeze(performance); export const x=p.eventLoopUtilization();`,
+    ],
+    [
+      "§141 receiver-vía-flujo: copia guardada en local",
+      `export function f(){ const m={...import.meta}; return m.dirname; }`,
+    ],
+  ])("%s → SILENT", (_name, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+});
