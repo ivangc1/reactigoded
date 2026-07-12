@@ -7575,3 +7575,48 @@ describe("server-safe gate — R10 custodios", () => {
     });
   });
 });
+
+// ============================================================================
+// R11 — custodios (auditoría de centralización + pasada Fable). gap-5/F1 dup-key last-wins unificados
+// al resolver canónico; gap-6 reflective-value bajo VT-wrapper. Expected = ORÁCULO de runtime.
+// ============================================================================
+describe("server-safe gate — R11 custodios (centralización: dup-key resolver + reflective VT)", () => {
+  const flagged = (code: string, fn = "r11.fixture.tsx") =>
+    checkSourceFile(`/** @server-safe */\n${code}`, fn).length > 0;
+
+  // gap-5 + F1: dup-key `{p: safe, p: danger}` — LAST-WINS (runtime) resuelve al SEGUNDO; el first-match
+  // resolvía al primero (safe) y perdía el override → FN. Cerrado en AMBOS loci object (member-extract +
+  // alias) vía el resolver canónico objectLiteralMemberValues (unificación, no parche de celda — Fable).
+  describe("dup-key last-wins en destructure (gap-5) y alias (F1) → FLAG", () => {
+    it.each<[string, string, boolean]>([
+      ["gap-5 member {p:{compile}}={p:Math,p:WA}", `const {p:{compile}}={p:Math,p:WebAssembly}; export const g=(b:any)=>compile(b);`, true],
+      ["F1 alias {p}={p:Math,p:perf}", `const {p}={p:Math,p:performance}; export const y=p.eventLoopUtilization();`, true],
+      ["F1b alias {p}={p:{},p:perf}", `const {p}={p:{},p:performance}; export const y=p.eventLoopUtilization();`, true],
+      // no regresión: single-key directo + spread inline (R10) siguen FLAG
+      ["control single {p}={p:perf}", `const {p}={p:performance}; export const y=p.eventLoopUtilization();`, true],
+      ["control R10 spread {p:{compile}}={...{p:WA}}", `const {p:{compile}}={...{p:WebAssembly}}; export const y=compile;`, true],
+      // last-wins FIEL en ambos sentidos: reversal {p:danger,p:safe} → p=safe runtime → SILENT (cierra el FP simétrico)
+      ["reversal {p}={p:perf,p:Math} → SILENT", `const {p}={p:performance,p:Math}; export const y=p.eventLoopUtilization();`, false],
+      // §141 pin: spread de VARIABLE sigue SILENT (no resoluble last-wins)
+      ["§141 {x}={...o} (o variable) → SILENT", `const o={x:performance}; const {x}={...o}; export const y=x.eventLoopUtilization();`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+
+  // gap-6: el receptor de `<descriptor>.value` se resuelve VALUE-TRANSPARENTE por-hoja (||/??/ternario/
+  // coma), no solo unwrapErased — simetría con reflectGetMemberRead/staticNamespaceCall (twins).
+  describe("reflective-value read bajo VT-wrapper (gap-6) → FLAG", () => {
+    it.each<[string, string, boolean]>([
+      ["gap-6 (gOPD(perf,'elu')||alt).value", `export const x=(alt:any)=>(Object.getOwnPropertyDescriptor(performance,"eventLoopUtilization")||alt).value;`, true],
+      ["gap-6b (a??gOPD(perf,'elu')).value", `export const x=(a:any)=>(a ?? Object.getOwnPropertyDescriptor(performance,"eventLoopUtilization")).value;`, true],
+      ["gap-6c (c?gOPD(perf,'elu'):a).value", `export const x=(c:boolean,a:any)=>(c?Object.getOwnPropertyDescriptor(performance,"eventLoopUtilization"):a).value;`, true],
+      // control directo ya FLAG (R8)
+      ["control directo gOPD(perf,'elu').value", `export const x=Object.getOwnPropertyDescriptor(performance,"eventLoopUtilization").value;`, true],
+      // §141 pin: key VARIABLE en gOPD → SILENT (paridad EXACTA con el directo)
+      ["§141 (gOPD(perf,k)||a).value k var → SILENT", `export const x=(k:string,a:any)=>(Object.getOwnPropertyDescriptor(performance,k)||a).value;`, false],
+    ])("%s", (_n, code, exp) => {
+      expect(flagged(code)).toBe(exp);
+    });
+  });
+});

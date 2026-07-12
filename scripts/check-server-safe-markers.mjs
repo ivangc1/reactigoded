@@ -2624,22 +2624,14 @@ function collectStructuralAliases(target, init, context, resolve, emit, enrollRe
         }
       } else continue;
       if (structuralKeyTexts(keyNode).length === 0) continue;
-      const ip = lit.properties.find(
-        (p) =>
-          ts.isPropertyAssignment(p) &&
-          p.name &&
-          structuralKeysOverlap(p.name, keyNode),
-      );
-      if (ip) {
-        collectStructuralAliases(sub, ip.initializer, context, resolve, emit, enrollRest);
-      } else {
-        // R10 DESTRUCT: la key puede llegar por un SPREAD de object-literal EN-SITIO
-        // (`{x} = {...{x: root}}`). objectLiteralMemberValues/resolveKeyInLiteral descienden el
-        // spread (last-wins, ∃-unión de ramas); un spread de VARIABLE queda `blocked` → [] → §141.
-        for (const key of structuralKeyTexts(keyNode)) {
-          for (const val of objectLiteralMemberValues(lit, key)) {
-            collectStructuralAliases(sub, val, context, resolve, emit, enrollRest);
-          }
+      // R11 (gap-5 + F1): SIEMPRE el resolver canónico last-wins (objectLiteralMemberValues/
+      // resolveKeyInLiteral), NUNCA el first-match `lit.properties.find`. Con dup-keys
+      // `{p: Math, p: performance}` el first-match resolvía al PRIMERO (Math, no-root) y el override
+      // runtime (last-wins) se perdía → FN. El resolver canónico cubre directo + shorthand + spread +
+      // last-wins en UN sitio; unifica este locus (alias) con flagPartialDestructure (member-extract).
+      for (const key of structuralKeyTexts(keyNode)) {
+        for (const val of objectLiteralMemberValues(lit, key)) {
+          collectStructuralAliases(sub, val, context, resolve, emit, enrollRest);
         }
       }
     }
@@ -4457,27 +4449,32 @@ function reflectiveValueReads(node) {
       ts.isElementAccessExpression(node)) &&
     accessedMemberNames(node).includes("value")
   ) {
-    const inner = unwrapErased(node.expression);
-    if (
-      ts.isCallExpression(inner) &&
-      inner.arguments.length >= 2 &&
-      (staticNamespaceCall(inner, "Object", "getOwnPropertyDescriptor") ||
-        staticNamespaceCall(inner, "Reflect", "getOwnPropertyDescriptor"))
-    ) {
-      // getOwnPropertyDescriptor(R, "k").value → member = k (key VT-fold canónica); receiver = R.
-      add(inner.arguments[0], resolveKeyCandidates(inner.arguments[1]));
-    } else if (
-      ts.isPropertyAccessExpression(inner) ||
-      ts.isElementAccessExpression(inner)
-    ) {
-      // getOwnPropertyDescriptors(R).k.value / [.]["k"].value (plural, solo Object) → member = k; receiver = R.
-      const innerCall = unwrapErased(inner.expression);
+    // R11 (gap-6): el receptor del `.value` se resuelve VALUE-TRANSPARENTE por-hoja
+    // (`||`/`??`/ternario/coma/proyección/erased), NO solo unwrapErased — simetría con los gemelos
+    // reflectGetMemberRead/staticNamespaceCall que ya usan valueTransparentLeaves. `(gOPD(R,'k') ||
+    // alt).value` foldea a la hoja gOPD; una hoja VARIABLE no aporta (§141).
+    for (const inner of valueTransparentLeaves(node.expression)) {
       if (
-        ts.isCallExpression(innerCall) &&
-        innerCall.arguments.length >= 1 &&
-        staticNamespaceCall(innerCall, "Object", "getOwnPropertyDescriptors")
+        ts.isCallExpression(inner) &&
+        inner.arguments.length >= 2 &&
+        (staticNamespaceCall(inner, "Object", "getOwnPropertyDescriptor") ||
+          staticNamespaceCall(inner, "Reflect", "getOwnPropertyDescriptor"))
       ) {
-        add(innerCall.arguments[0], new Set(accessedMemberNames(inner)));
+        // getOwnPropertyDescriptor(R, "k").value → member = k (key VT-fold canónica); receiver = R.
+        add(inner.arguments[0], resolveKeyCandidates(inner.arguments[1]));
+      } else if (
+        ts.isPropertyAccessExpression(inner) ||
+        ts.isElementAccessExpression(inner)
+      ) {
+        // getOwnPropertyDescriptors(R).k.value / [.]["k"].value (plural, solo Object) → member = k; receiver = R.
+        const innerCall = unwrapErased(inner.expression);
+        if (
+          ts.isCallExpression(innerCall) &&
+          innerCall.arguments.length >= 1 &&
+          staticNamespaceCall(innerCall, "Object", "getOwnPropertyDescriptors")
+        ) {
+          add(innerCall.arguments[0], new Set(accessedMemberNames(inner)));
+        }
       }
     }
   }
@@ -8512,22 +8509,13 @@ function checkSourceFile(
                 ) {
                   continue;
                 }
-                const ip = lit.properties.find(
-                  (p) =>
-                    ts.isPropertyAssignment(p) &&
-                    p.name &&
-                    structuralKeysOverlap(p.name, kn),
-                );
-                if (ip) {
-                  flagPartialDestructure(sub, ip.initializer);
-                } else {
-                  // R10 DESTRUCT: la key puede venir por un SPREAD de object-literal EN-SITIO
-                  // (`{p:{compile}} = {...{p: WebAssembly}}`). Descender el spread con
-                  // objectLiteralMemberValues (fail-closed §141 ante spread de variable → []).
-                  for (const key of structuralKeyTexts(kn)) {
-                    for (const val of objectLiteralMemberValues(lit, key)) {
-                      flagPartialDestructure(sub, val);
-                    }
+                // R11 (gap-5 + F1): SIEMPRE el resolver canónico last-wins, NUNCA el first-match
+                // `lit.properties.find` (con dup-keys `{p:Math, p:WebAssembly}` resolvía al PRIMERO y
+                // perdía el override runtime last-wins → FN). Cubre directo + shorthand + spread; el
+                // spread de VARIABLE queda `blocked` → [] → §141. Unifica con el locus alias.
+                for (const key of structuralKeyTexts(kn)) {
+                  for (const val of objectLiteralMemberValues(lit, key)) {
+                    flagPartialDestructure(sub, val);
                   }
                 }
               }
