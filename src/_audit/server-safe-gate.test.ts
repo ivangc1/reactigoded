@@ -7691,3 +7691,92 @@ describe("server-safe gate — R11 pt.2 custodios (carrier-root en consumidores 
     expect(flagged(code)).toBe(false);
   });
 });
+
+// ============================================================================
+// R11 pt.3 — residual verificado cross-agente: identity-carrier ∘ contenedor-proyectado.
+// El carrier se pela SOLO si preserva identidad+contenido (freeze/seal/preventExtensions), y SOLO
+// en el sitio de la proyección/destructure. Un carrier guardado en variable continúa siendo §141.
+// ============================================================================
+describe("server-safe gate — R11 pt.3 custodios (carrier identity sobre contenedor proyectado)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(`/** @server-safe */\n${code}`, "r11-carrier-container.fixture.tsx").length > 0;
+
+  it.each<[string, string]>([
+    [
+      "member-read por object projection",
+      `export const x=Object.freeze({m:performance}).m.eventLoopUtilization();`,
+    ],
+    [
+      "member-read por array projection",
+      `export const x=Object.freeze([performance])[0].eventLoopUtilization();`,
+    ],
+    [
+      "construction por array projection",
+      `export const x=new (Object.freeze([WebAssembly])[0].Module)(new Uint8Array());`,
+    ],
+    [
+      "Reflect.get receiver por array projection",
+      `export const x=Reflect.get(Object.freeze([performance]),0).eventLoopUtilization();`,
+    ],
+    [
+      "string-timer por object projection (gap-7)",
+      `export const x=Object.freeze({t:setTimeout}).t("doWork()",0);`,
+    ],
+    [
+      "eval-sink por object projection (gap-8)",
+      `export const x=Object.freeze({k:(function(){}).constructor}).k("return 1")();`,
+    ],
+    [
+      "destructure structural alias desde carrier",
+      `const {m}=Object.freeze({m:WebAssembly}); export const x=m.compile(new Uint8Array());`,
+    ],
+    [
+      "seal conserva el contenedor",
+      `export const x=Object.seal({m:performance}).m.eventLoopUtilization();`,
+    ],
+    [
+      "preventExtensions conserva el contenedor",
+      `export const x=Object.preventExtensions([WebAssembly])[0].compile(new Uint8Array());`,
+    ],
+    [
+      "carriers identity anidados terminan por descenso AST",
+      `export const x=Object.freeze(Object.seal({m:performance})).m.eventLoopUtilization();`,
+    ],
+    [
+      "callee identity proyectado conserva la semántica de staticNamespaceCall",
+      `export const x=Object.freeze({f:Object.freeze}).f({m:performance}).m.eventLoopUtilization();`,
+    ],
+    [
+      "la proyección ocurre in-site antes de enrolar el alias de root",
+      `const m=Object.freeze({m:performance}).m; export const x=m.eventLoopUtilization();`,
+    ],
+  ])("%s → FLAG", (_name, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  it("40 carriers identity sobre el contenedor → FLAG (sin cap fail-open)", () => {
+    const nested = "Object.freeze(".repeat(40) + "{m:performance}" + ")".repeat(40);
+    expect(flagged(`export const x=${nested}.m.eventLoopUtilization();`)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    [
+      "§141: el carrier-container se guarda antes de proyectar",
+      `const o=Object.freeze({m:performance}); export const x=o.m.eventLoopUtilization();`,
+    ],
+    [
+      "OOM: own-copy sobre proto-carrier no copia el miembro",
+      `export const x=({...Object.create(performance)}).eventLoopUtilization();`,
+    ],
+    [
+      "defineProperty puede sobrescribir la key: no es carrier de contenido",
+      `export const x=Object.defineProperty({m:performance},"m",{value:Math}).m.eventLoopUtilization();`,
+    ],
+    [
+      "defineProperties puede sobrescribir la key: no es carrier de contenido",
+      `export const x=Object.defineProperties({m:performance},{m:{value:Math}}).m.eventLoopUtilization();`,
+    ],
+  ])("%s → SILENT", (_name, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+});

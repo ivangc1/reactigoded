@@ -2457,13 +2457,13 @@ const TIMER_GLOBAL_NAMES = new Set([
 // La única hoja value-transparente de `expr` SI es un literal object/array (para matchear patrones
 // de destructuring contra `{a: X}` / `[X]`). Versión module-level del `literalInit` de react-family.
 // TODOS los object/array literal leaves value-transparentes de `expr` — ALTERNATIVAS incluidas
-// (`cond ? { a: X } : { a: Y }` → [{a:X},{a:Y}]). Fail-closed: el match estructural corre contra
-// CADA uno (si CUALQUIER rama liga el token, enrola/flaggea) (codex P2).
+// (`cond ? { a: X } : { a: Y }` → [{a:X},{a:Y}]) y carriers identity-return EN-SITIO (R11 pt.3).
+// Delega en el MISMO resolver que arrayLiteralAlternatives/objectLiteralAlternatives: el destructure
+// estructural no puede divergir de la proyección member/timer/eval. Fail-closed: el match corre contra
+// CADA rama (si CUALQUIER rama liga el token, enrola/flaggea).
 function literalLeaves(expr) {
   if (!expr) return [];
-  return valueTransparentLeaves(expr).filter(
-    (l) => ts.isObjectLiteralExpression(l) || ts.isArrayLiteralExpression(l),
-  );
+  return containerLiteralAlternatives(expr, isAnyContainerLiteral);
 }
 
 /**
@@ -4577,25 +4577,76 @@ function constructionTargets(expr) {
   });
 }
 
+// Argumento cuyo valor conserva EXACTAMENTE un carrier identity-return que no cambia las props/elementos
+// observables del contenedor. Acotado a freeze/seal/preventExtensions: defineProperty/defineProperties también
+// devuelven arg0, pero PUEDEN mutar/sobrescribir la key proyectada; assign/create/copies cambian contenido o
+// identidad. Pelarlos aquí sería unsound (`defineProperty({m:R},"m",{value:safe}).m`). R11 pt.3.
+function identityPreservingContainerArgument(expr) {
+  const e = unwrapErased(expr);
+  if (
+    ts.isCallExpression(e) &&
+    e.arguments.length >= 1 &&
+    (staticNamespaceCall(e, "Object", "freeze") ||
+      staticNamespaceCall(e, "Object", "seal") ||
+      staticNamespaceCall(e, "Object", "preventExtensions"))
+  ) {
+    return e.arguments[0];
+  }
+  return null;
+}
+
+function isAnyContainerLiteral(node) {
+  return ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node);
+}
+
+// Memo por nodo+predicado: staticNamespaceCall consulta valueTransparentLeaves, que para un member-access
+// puede volver a pedir alternatives de su receiver. Sin memo, probar los 3 carriers sobre `.bind`×N repetía
+// los mismos subárboles con ramificación exponencial. Los nodos AST son inmutables durante el check y las tres
+// funciones-predicado son estables; WeakMap evita retener SourceFiles entre invocaciones. R11 pt.3 perf-guard.
+const containerLiteralAlternativesCache = new WeakMap();
+
+// Ramas literales alcanzables value-transparentemente, pelando SOLO carriers que preservan identidad Y
+// contenido. La recursión termina por descenso del AST (arg0 es hijo del CallExpression); sin cap fail-open.
+// Centraliza la composición `carrier ∘ contenedor-proyectado` para array/object y sus consumidores.
+function containerLiteralAlternatives(expr, isLiteral) {
+  if (!expr) return [];
+  let byPredicate = containerLiteralAlternativesCache.get(expr);
+  if (byPredicate?.has(isLiteral)) return byPredicate.get(isLiteral);
+  const out = [];
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const e = unwrapErased(leaf);
+    if (isLiteral(e)) {
+      out.push(e);
+      continue;
+    }
+    const arg = identityPreservingContainerArgument(e);
+    if (arg) out.push(...containerLiteralAlternatives(arg, isLiteral));
+  }
+  if (!byPredicate) {
+    byPredicate = new Map();
+    containerLiteralAlternativesCache.set(expr, byPredicate);
+  }
+  byPredicate.set(isLiteral, out);
+  return out;
+}
+
 // Aplana los SPREAD de ARRAY-LITERAL en una lista de args: `f(...["a", b], c)` → ["a", b, c]. Un
 // spread de VARIABLE (`...args`) NO se aplana (data-flow residual): se conserva como SpreadElement
 // (no produce un string-leaf, así que no flaggea). Usado para que el handler/target/string de un
 // sink (timer directo/.call/.apply/.bind, Reflect.apply, mutador react) no quede oculto tras un
 // spread literal (codex P2). Token-en-su-sitio: el array literal está a la vista.
 // Ramas array-literal que un arg-expr puede tomar value-transparentemente: array directo `["a"]` o
-// ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2). Fail-closed: cualquiera cuenta.
+// ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2), incl. identity-carrier EN-SITIO (R11 pt.3).
+// Fail-closed: cualquiera cuenta.
 function arrayLiteralAlternatives(expr) {
-  return valueTransparentLeaves(expr).filter((l) =>
-    ts.isArrayLiteralExpression(l),
-  );
+  return containerLiteralAlternatives(expr, ts.isArrayLiteralExpression);
 }
 
 // Ramas object-literal que un expr puede tomar value-transparentemente (`({k:X}).k`, o vía VT
-// `(c ? {k:X} : {k:Y}).k`). Espejo de arrayLiteralAlternatives para el eje object-member (root A).
+// `(c ? {k:X} : {k:Y}).k`), incl. identity-carrier EN-SITIO (R11 pt.3). Espejo de
+// arrayLiteralAlternatives para el eje object-member (root A).
 function objectLiteralAlternatives(expr) {
-  return valueTransparentLeaves(expr).filter((l) =>
-    ts.isObjectLiteralExpression(l),
-  );
+  return containerLiteralAlternatives(expr, ts.isObjectLiteralExpression);
 }
 
 // Nombre(s) canónico(s) de una PropertyName (INV-VT): identifier/string → [text]; numeric → key JS FIEL
