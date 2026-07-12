@@ -4599,6 +4599,388 @@ function isAnyContainerLiteral(node) {
   return ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node);
 }
 
+// R12: resolución COMPLETA de un expr a contenedores del tipo pedido. A diferencia del resolver público
+// (∃-acumula las ramas conocidas y renuncia las opacas), los carriers de MERGE necesitan probar que CADA hoja
+// del source es un contenedor modelable: un source-variable posterior puede sobrescribir la key → §141.
+// `null` = al menos una rama opaca; array = todas las ramas resueltas. Termina por descenso AST.
+function completeContainerLiteralAlternatives(expr, isLiteral) {
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length === 0) return null;
+  const out = [];
+  for (const leaf of leaves) {
+    const alts = containerLiteralAlternatives(leaf, isLiteral);
+    if (alts.length === 0) return null;
+    out.push(...alts);
+  }
+  return out;
+}
+
+// Variante OWN para el source de un object-spread. Solo acepta literales y carriers identity-return:
+// `freeze({m:X})` conserva las own-properties, mientras `create({m:X})` expone `m` por PROTOTIPO y un
+// spread NO la copia. No reutilizar el resolver semántico general aquí: reabriría el pin OOM de R12.
+function completeOwnObjectLiteralAlternatives(expr) {
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length === 0) return null;
+  const out = [];
+  for (const leaf of leaves) {
+    const e = unwrapErased(leaf);
+    if (ts.isObjectLiteralExpression(e)) {
+      out.push(e);
+      continue;
+    }
+    const arg = identityPreservingContainerArgument(e);
+    if (arg) {
+      const nested = completeOwnObjectLiteralAlternatives(arg);
+      if (!nested) return null;
+      out.push(...nested);
+      continue;
+    }
+    if (
+      ts.isCallExpression(e) &&
+      staticNamespaceCall(e, "Object", "create") &&
+      e.arguments.length >= 1 &&
+      e.arguments.length <= 2 &&
+      !e.arguments.some(ts.isSpreadElement)
+    ) {
+      if (e.arguments.length === 1) {
+        out.push(syntheticObject([]));
+        continue;
+      }
+      const descriptorMaps = completeOwnObjectLiteralAlternatives(
+        e.arguments[1],
+      );
+      if (!descriptorMaps) return null;
+      out.push(
+        ...descriptorMaps.map((map) =>
+          syntheticObject(descriptorOverlayProperties(map)),
+        ),
+      );
+      continue;
+    }
+    if (
+      ts.isCallExpression(e) &&
+      staticNamespaceCall(e, "Object", "setPrototypeOf") &&
+      e.arguments.length >= 2 &&
+      !e.arguments.some(ts.isSpreadElement)
+    ) {
+      const nested = completeOwnObjectLiteralAlternatives(e.arguments[0]);
+      if (!nested) return null;
+      out.push(...nested);
+      continue;
+    }
+    return null;
+  }
+  return out;
+}
+
+function syntheticObject(properties) {
+  return ts.factory.createObjectLiteralExpression(properties, false);
+}
+
+function syntheticArray(elements) {
+  return ts.factory.createArrayLiteralExpression(elements, false);
+}
+
+// Une varios valores posibles en una expresión VT sintética. La condición NO es literal para que
+// valueTransparentLeaves conserve TODAS las ramas (∃-danger); el nodo solo vive dentro del resolver.
+function syntheticValueUnion(values) {
+  if (values.length === 1) return values[0];
+  let out = values[values.length - 1];
+  for (let i = values.length - 2; i >= 0; i -= 1) {
+    out = ts.factory.createConditionalExpression(
+      ts.factory.createIdentifier("__r12_branch"),
+      ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+      values[i],
+      ts.factory.createToken(ts.SyntaxKind.ColonToken),
+      out,
+    );
+  }
+  return out;
+}
+
+// Object.assign(target,...sources) sobre TARGET object-literal: virtualiza EXACTAMENTE el orden own-copy
+// como `{...targetOwn,...source1,...sourceN}`. resolveKeyInLiteral aplica last-wins PER-KEY; un source opaco
+// queda SpreadAssignment opaco → blocked (§141), y una prop posterior literal puede volver a probar el override.
+function objectAssignObjectAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Object", "assign") ||
+    call.arguments.length === 0 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const targets = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isObjectLiteralExpression,
+  );
+  if (!targets) return [];
+  if (call.arguments.length === 1) return targets;
+  return targets.map((target) =>
+    syntheticObject([
+      ...target.properties,
+      ...call.arguments
+        .slice(1)
+        .map((source) => ts.factory.createSpreadAssignment(source)),
+    ]),
+  );
+}
+
+function assignArrayElements(target, source) {
+  if (
+    target.elements.some(ts.isSpreadElement) ||
+    source.elements.some(ts.isSpreadElement)
+  ) {
+    return null;
+  }
+  const merged = [...target.elements];
+  for (let i = 0; i < source.elements.length; i += 1) {
+    const el = source.elements[i];
+    // Un hole NO es una own-property y Object.assign no copia `length` (non-enumerable).
+    if (ts.isOmittedExpression(el)) continue;
+    merged[i] = el;
+  }
+  return syntheticArray(merged);
+}
+
+// Object.assign sobre TARGET array-literal: copia índices own-enumerable SIN concatenar/desplazar posiciones.
+// Requiere sources completamente array-literal; objeto/variable/call queda §141 (no inventa conversión mixta).
+function objectAssignArrayAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Object", "assign") ||
+    call.arguments.length === 0 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const targets = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isArrayLiteralExpression,
+  );
+  if (!targets || targets.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  let variants = [...targets];
+  for (const sourceExpr of call.arguments.slice(1)) {
+    const sources = completeContainerLiteralAlternatives(
+      sourceExpr,
+      ts.isArrayLiteralExpression,
+    );
+    if (!sources) return [];
+    const next = [];
+    for (const target of variants) {
+      for (const source of sources) {
+        const merged = assignArrayElements(target, source);
+        if (!merged) return [];
+        next.push(merged);
+      }
+    }
+    variants = next;
+  }
+  return variants;
+}
+
+// Convierte el MAPA de descriptors de Object.create a own-properties virtuales. `{m:{value:X}}` → `m:X`;
+// descriptor sin `value`, accessor u opaco → valor opaco que SOMBREA el proto (nunca deja filtrar su `m`).
+function descriptorOverlayProperties(descriptors) {
+  const out = [];
+  for (const p of descriptors.properties) {
+    if (ts.isPropertyAssignment(p)) {
+      const vals = objectLiteralMemberValues(p.initializer, "value");
+      out.push(
+        ts.factory.createPropertyAssignment(
+          p.name,
+          vals.length > 0
+            ? syntheticValueUnion(vals)
+            : syntheticObject([]),
+        ),
+      );
+    } else if (ts.isShorthandPropertyAssignment(p)) {
+      out.push(ts.factory.createPropertyAssignment(p.name, p.name));
+    } else if (ts.isSpreadAssignment(p)) {
+      // Un spread/descriptor-map opaco podría definir cualquier key → el resolver lo marca blocked.
+      out.push(ts.factory.createSpreadAssignment(p.expression));
+    } else if (p.name) {
+      out.push(
+        ts.factory.createPropertyAssignment(p.name, syntheticObject([])),
+      );
+    }
+  }
+  return out;
+}
+
+function objectCreateAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Object", "create") ||
+    call.arguments.length < 1 ||
+    call.arguments.length > 2 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const protos = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isObjectLiteralExpression,
+  );
+  if (!protos) return [];
+  if (call.arguments.length === 1) return protos;
+
+  const descriptorExpr = call.arguments[1];
+  const descriptors = completeOwnObjectLiteralAlternatives(descriptorExpr);
+  // Descriptors opacos pueden sombrear CUALQUIER key: conservar un spread opaco posterior bloquea el proto.
+  if (!descriptors) {
+    return protos.map((proto) =>
+      syntheticObject([
+        ...proto.properties,
+        ts.factory.createSpreadAssignment(descriptorExpr),
+      ]),
+    );
+  }
+  const out = [];
+  for (const proto of protos) {
+    for (const descriptorMap of descriptors) {
+      out.push(
+        syntheticObject([
+          ...proto.properties,
+          ...descriptorOverlayProperties(descriptorMap),
+        ]),
+      );
+    }
+  }
+  return out;
+}
+
+function objectSetPrototypeAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Object", "setPrototypeOf") ||
+    call.arguments.length < 2 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const targets = completeOwnObjectLiteralAlternatives(call.arguments[0]);
+  const protos = completeContainerLiteralAlternatives(
+    call.arguments[1],
+    ts.isObjectLiteralExpression,
+  );
+  if (!targets || !protos) return [];
+  const out = [];
+  for (const proto of protos) {
+    for (const target of targets) {
+      // Lookup: own target gana sobre proto → orden last-wins del resolver virtual.
+      out.push(syntheticObject([...proto.properties, ...target.properties]));
+    }
+  }
+  return out;
+}
+
+function arrayFromAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Array", "from") ||
+    call.arguments.length !== 1 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const sources = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isArrayLiteralExpression,
+  );
+  if (!sources || sources.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  return sources.map((source) => syntheticArray([...source.elements]));
+}
+
+function arrayOfAlternatives(call) {
+  if (!staticNamespaceCall(call, "Array", "of")) return [];
+  return expandArgLists(call.arguments)
+    .filter((branch) => !branch.truncated)
+    .map((branch) => syntheticArray(branch.nodes));
+}
+
+function concatenateArrayAlternatives(call, callee) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("concat")
+  ) {
+    return [];
+  }
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+  );
+  if (!receivers || receivers.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  const out = [];
+  for (const branch of expandArgLists(call.arguments)) {
+    if (branch.truncated) continue;
+    let variants = receivers.map((r) => [...r.elements]);
+    let complete = true;
+    for (const arg of branch.nodes) {
+      const arrays = completeContainerLiteralAlternatives(
+        arg,
+        ts.isArrayLiteralExpression,
+      );
+      if (!arrays || arrays.some((a) => a.elements.some(ts.isSpreadElement))) {
+        complete = false;
+        break;
+      }
+      const next = [];
+      for (const current of variants) {
+        for (const arr of arrays) next.push([...current, ...arr.elements]);
+      }
+      variants = next;
+    }
+    if (complete) out.push(...variants.map(syntheticArray));
+  }
+  return out;
+}
+
+function slicedArrayAlternatives(call, callee) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("slice") ||
+    call.arguments.some(ts.isSpreadElement) ||
+    call.arguments.length > 1 ||
+    (call.arguments.length === 1 && canonicalNumericKey(call.arguments[0]) !== "0")
+  ) {
+    return [];
+  }
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+  );
+  if (!receivers || receivers.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  return receivers.map((receiver) => syntheticArray([...receiver.elements]));
+}
+
+// Carriers de RESULTADO R12. No son value-transparentes ni identity-carriers genéricos: cada familia
+// virtualiza SU semántica observable de contenedor y el consumer existente sigue resolviendo keys/posiciones.
+function semanticContainerResultAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  const callee = unwrapErased(e.expression);
+  return [
+    ...objectAssignObjectAlternatives(e),
+    ...objectAssignArrayAlternatives(e),
+    ...objectCreateAlternatives(e),
+    ...objectSetPrototypeAlternatives(e),
+    ...arrayFromAlternatives(e),
+    ...arrayOfAlternatives(e),
+    ...concatenateArrayAlternatives(e, callee),
+    ...slicedArrayAlternatives(e, callee),
+  ];
+}
+
 // Memo por nodo+predicado: staticNamespaceCall consulta valueTransparentLeaves, que para un member-access
 // puede volver a pedir alternatives de su receiver. Sin memo, probar los 3 carriers sobre `.bind`×N repetía
 // los mismos subárboles con ramificación exponencial. Los nodos AST son inmutables durante el check y las tres
@@ -4620,7 +5002,13 @@ function containerLiteralAlternatives(expr, isLiteral) {
       continue;
     }
     const arg = identityPreservingContainerArgument(e);
-    if (arg) out.push(...containerLiteralAlternatives(arg, isLiteral));
+    if (arg) {
+      out.push(...containerLiteralAlternatives(arg, isLiteral));
+      continue;
+    }
+    for (const semantic of semanticContainerResultAlternatives(e)) {
+      if (isLiteral(semantic)) out.push(semantic);
+    }
   }
   if (!byPredicate) {
     byPredicate = new Map();
@@ -4691,12 +5079,11 @@ function resolveKeyInLiteral(obj, key, depth) {
       // la de B → si ALGUNA es danger, FLAG). El predecesor SOBRESCRIBÍA (`spreadVal = r.val`) → una rama safe
       // POSTERIOR tapaba la danger (R7-C, ruptura de INV-PARITY: el gemelo array ∃-une en `out`). Un spread
       // NO-resoluble a literal (variable/call/Object.assign) o profundidad excedida → §141 blocked.
-      const leaves = valueTransparentLeaves(p.expression);
-      const litAlts = leaves.filter((l) => ts.isObjectLiteralExpression(l));
+      const litAlts = completeOwnObjectLiteralAlternatives(p.expression);
       // R9-4a: quitado el `depth > 16` — degradaba FAIL-OPEN (un spread anidado profundo pero RESOLUBLE se
       // etiquetaba §141 y el root escapaba). El resto (no-literal / alternativas mixtas) SÍ es §141 genuino.
       // Termina por descenso del AST. Doctrina de caps (R8/MEC-E) al conjunto.
-      if (litAlts.length === 0 || litAlts.length !== leaves.length) {
+      if (!litAlts) {
         blocked = true; // no resuelve ENTERAMENTE a literales → indeterminado (§141)
         continue;
       }

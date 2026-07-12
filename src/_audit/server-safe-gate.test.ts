@@ -7780,3 +7780,121 @@ describe("server-safe gate — R11 pt.3 custodios (carrier identity sobre conten
     expect(flagged(code)).toBe(false);
   });
 });
+
+// ============================================================================
+// R12 — corpus congelado tras re-hunt adversarial + critic independiente.
+// 33 FILAS (29 sources únicos): 18 deltas SILENT→FLAG autorizados, 15 pins que deben seguir SILENT.
+// Los pins Codex duplican dos casos deliberadamente: funcionan como contrato explícito del merge/proto resolver.
+// ============================================================================
+describe("server-safe gate — R12 custodios (container result carriers semánticos)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(`/** @server-safe */\n${code}`, "r12.fixture.tsx").length > 0;
+
+  it.each<[string, string, boolean]>([
+    ["A-assign1-member-obj", `export const x=Object.assign({m:performance}).m.eventLoopUtilization();`, true],
+    ["A-assign1-member-arr", `export const x=Object.assign([performance])[0].eventLoopUtilization();`, true],
+    ["A-assign1-at", `export const x=Object.assign([performance]).at(0).eventLoopUtilization();`, true],
+    ["A-assign1-destr", `const {m}=Object.assign({m:performance}); export const y=m.eventLoopUtilization();`, true],
+    ["A-assign1-forof", `for(const w of Object.assign([performance])) { w.eventLoopUtilization(); } export const q=1;`, true],
+    ["A-owncopy-obj", `export const x=Object.assign({},{m:performance}).m.eventLoopUtilization();`, true],
+    ["A-owncopy-arr", `export const x=Object.assign([],[performance])[0].eventLoopUtilization();`, true],
+    ["A-override-DANGER", `export const x=Object.assign({m:Math},{m:performance}).m.eventLoopUtilization();`, true],
+    ["A-timer-string", `export const x=Object.assign({t:setTimeout}).t("doWork()",0);`, true],
+    ["A-override-SAFE", `export const x=Object.assign({m:performance},{m:Math}).m.eventLoopUtilization();`, false],
+    ["A-alias-var", `const o=Object.assign({m:performance}); export const y=()=>o.m.eventLoopUtilization();`, false],
+    ["A-source-var", `export const x=(s:any)=>Object.assign({m:performance},s).m.eventLoopUtilization();`, false],
+    ["A-defineProperty", `export const x=Object.defineProperty({m:performance},"m",{value:0}).m.eventLoopUtilization();`, false],
+    ["B-create-member", `export const x=Object.create({m:performance}).m.eventLoopUtilization();`, true],
+    ["B-create-destr", `const {m}=Object.create({m:performance}); export const y=m.eventLoopUtilization();`, true],
+    ["B-setproto", `export const x=Object.setPrototypeOf({},{m:performance}).m.eventLoopUtilization();`, true],
+    ["B-descriptors-shadow", `export const x=Object.create({m:performance},{m:{value:Math}}).m.eventLoopUtilization();`, false],
+    ["B-owncopy-proto-OOM", `export const x=({...Object.create({m:performance})}).m.eventLoopUtilization();`, false],
+    ["C-Array-from", `export const x=Array.from([performance])[0].eventLoopUtilization();`, true],
+    ["C-Array-of", `export const x=Array.of(performance)[0].eventLoopUtilization();`, true],
+    ["C-concat", `export const x=[].concat([performance])[0].eventLoopUtilization();`, true],
+    ["C-slice0", `export const x=[performance].slice(0)[0].eventLoopUtilization();`, true],
+    ["C-slice1-OOM", `export const x=[performance].slice(1)[0].eventLoopUtilization();`, false],
+    ["C-map-141", `export const x=[performance].map(z=>z)[0].eventLoopUtilization();`, false],
+    ["D-values", `export const x=Object.values({m:performance})[0].eventLoopUtilization();`, false],
+    ["D-entries", `export const x=Object.entries({m:performance})[0][1].eventLoopUtilization();`, false],
+    ["D-fromEntries", `export const x=Object.fromEntries([["m",performance]]).m.eventLoopUtilization();`, false],
+    ["D-structuredClone", `export const x=structuredClone({m:performance}).m.eventLoopUtilization();`, false],
+    ["PIN-override-danger", `export const x=Object.assign({m:Math},{m:performance}).m.eventLoopUtilization();`, true],
+    ["PIN-override-safe", `export const x=Object.assign({m:performance},{m:Math}).m.eventLoopUtilization();`, false],
+    ["PIN-3way-safe", `export const x=Object.assign({m:performance},{},{m:Math}).m.eventLoopUtilization();`, false],
+    ["PIN-create-simple", `export const x=Object.create({m:performance}).m.eventLoopUtilization();`, true],
+    ["PIN-create-descriptors", `export const x=Object.create({m:performance},{m:{value:Math}}).m.eventLoopUtilization();`, false],
+  ])("%s", (_name, code, expected) => {
+    expect(flagged(code)).toBe(expected);
+  });
+
+  it.each<[string, string, boolean]>([
+    [
+      "assign array: un source posterior danger sobrescribe por índice",
+      `export const x=Object.assign([Math],[performance])[0].eventLoopUtilization();`,
+      true,
+    ],
+    [
+      "assign array: un source posterior safe sobrescribe por índice",
+      `export const x=Object.assign([performance],[Math])[0].eventLoopUtilization();`,
+      false,
+    ],
+    [
+      "assign object: un source opaco queda bloqueado si es el último",
+      `export const x=(s:any)=>Object.assign({m:performance},s).m.eventLoopUtilization();`,
+      false,
+    ],
+    [
+      "assign object: un override danger posterior restaura certeza",
+      `export const x=(s:any)=>Object.assign({m:Math},s,{m:performance}).m.eventLoopUtilization();`,
+      true,
+    ],
+    [
+      "assign object: un override safe posterior restaura certeza",
+      `export const x=(s:any)=>Object.assign({m:performance},s,{m:Math}).m.eventLoopUtilization();`,
+      false,
+    ],
+    [
+      "composición R11→R12: source identity-carrier",
+      `export const x=Object.assign({},Object.freeze({m:performance})).m.eventLoopUtilization();`,
+      true,
+    ],
+    [
+      "create: un descriptor sibling no sombrea la key heredada",
+      `export const x=Object.create({m:performance},{z:{value:1}}).m.eventLoopUtilization();`,
+      true,
+    ],
+    [
+      "create: un descriptor danger sombrea con el mismo danger",
+      `export const x=Object.create({m:Math},{m:{value:performance}}).m.eventLoopUtilization();`,
+      true,
+    ],
+    [
+      "setPrototypeOf: una own-property safe sombrea el proto danger",
+      `export const x=Object.setPrototypeOf({m:Math},{m:performance}).m.eventLoopUtilization();`,
+      false,
+    ],
+    [
+      "setPrototypeOf: una own-property danger sombrea el proto safe",
+      `export const x=Object.setPrototypeOf({m:performance},{m:Math}).m.eventLoopUtilization();`,
+      true,
+    ],
+    [
+      "create: el descriptor-map heredado no aporta own descriptors",
+      `export const x=Object.create({m:Math},Object.create({m:{value:performance}})).m.eventLoopUtilization();`,
+      false,
+    ],
+    [
+      "setPrototypeOf: reemplazar un proto danger por uno safe no conserva el viejo",
+      `export const x=Object.setPrototypeOf(Object.create({m:performance}),{m:Math}).m.eventLoopUtilization();`,
+      false,
+    ],
+    [
+      "setPrototypeOf: reemplazar un proto safe por uno danger expone el nuevo",
+      `export const x=Object.setPrototypeOf(Object.create({m:Math}),{m:performance}).m.eventLoopUtilization();`,
+      true,
+    ],
+  ])("edge: %s", (_name, code, expected) => {
+    expect(flagged(code)).toBe(expected);
+  });
+});
