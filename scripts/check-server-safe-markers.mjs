@@ -4283,14 +4283,11 @@ function elementProjection(containerExpr, keyExpr) {
   const keys = resolveKeyCandidates(keyExpr);
   // R14: el carrier estructural SOLO entra con índice/key completamente literal. Un índice mixto/variable
   // conserva la frontera §141 del finding; los carriers históricos mantienen su política previa.
-  const projectedMethodArrays =
-    keys.size > 0 && keyExprComplete(keyExpr)
-      ? projectedArrayMethodAlternatives(containerExpr)
-      : [];
-  const arrayAlternatives = [
-    ...arrayLiteralAlternatives(containerExpr),
-    ...projectedMethodArrays,
-  ];
+  const allowStructuralFallback = keys.size > 0 && keyExprComplete(keyExpr);
+  const arrayAlternatives = arrayLiteralAlternatives(
+    containerExpr,
+    allowStructuralFallback,
+  );
   if (keys.size === 0) {
     for (const arr of arrayAlternatives) {
       spreadFlattenedElements(arr.elements, out);
@@ -4379,15 +4376,26 @@ function valueTransparentChildren(node) {
     // `Reflect.get(receiverLit, keyLit)` ≡ `receiverLit[keyLit]` en-sitio (espejo de reflectGetMemberRead, que
     // ya lo modela en el eje member-read). elementProjection hereda la polaridad fail-closed (receiver/key
     // no-literal → vacío/∃-descenso).
-    if (staticNamespaceCall(node, "Reflect", "get") && node.arguments.length >= 2) {
-      const out = elementProjection(node.arguments[0], node.arguments[1]);
-      if (out.length > 0) return out;
+    if (staticNamespaceCall(node, "Reflect", "get")) {
+      for (const branch of expandArgLists(node.arguments)) {
+        if (branch.truncated || branch.nodes.length < 2) continue;
+        const out = elementProjection(branch.nodes[0], branch.nodes[1]);
+        if (out.length > 0) return out;
+      }
     }
     // R13 gap#1: `new Map([[k,X]]).get(k)` conserva el VALOR de la entrada elegida. Resolución
     // key-aware literal + last-wins; key miss/unknown no aporta hojas (OOM/§141). Al vivir en el seam VT,
     // TODOS los consumidores value-survival heredan la cobertura, no solo el member-read observado.
     const mapValues = mapGetValueAlternatives(node, callee);
     if (mapValues.length > 0) return mapValues;
+    // R15: pop/shift son carriers ESCALARES (no arrays). La selección es exacta sobre un receptor
+    // literal en-sitio; vacío no aporta hoja porque el resultado universal es `undefined`.
+    const scalarArrayValues = arrayScalarElementAlternatives(node, callee);
+    if (scalarArrayValues.length > 0) return scalarArrayValues;
+    // WeakRef.deref conserva el target cuando éste es demostrablemente un objeto en-sitio. Un target
+    // primitivo queda fuera: `new WeakRef(primitive)` lanza universalmente y permanece OOM.
+    const weakRefValues = weakRefDerefAlternatives(node, callee);
+    if (weakRefValues.length > 0) return weakRefValues;
     // `[containerLit].at(i)` de un array-literal → ∃-descenso a TODOS los elementos (fail-closed: `.at` admite
     // índices NEGATIVOS = desde el final, así que no se mapea a posición fija sin sobre-aproximar). R10/R9FIX: el
     // método `.at` se accede por DOT (`.at`) o BRACKET (`["at"]`) — `accessedMemberNames` folda ambos; y con o SIN
@@ -4536,7 +4544,7 @@ function reflectCallTarget(n) {
 // `Reflect.get(x,"constructor")()` (eje EVAL-SINK: x variable + result-chasing por invocación). Key
 // VARIABLE (`Reflect.get(R,k)`) → §141 (paridad con `R[dynKey]`). Callee value-transparent (`(0,Reflect).get`).
 function reflectGetMemberRead(n) {
-  if (!ts.isCallExpression(n) || n.arguments.length < 2) return null;
+  if (!ts.isCallExpression(n) || n.arguments.length === 0) return null;
   for (const callee of valueTransparentLeaves(unwrapErased(n.expression))) {
     const c = unwrapErased(callee);
     if (
@@ -4560,11 +4568,14 @@ function reflectGetMemberRead(n) {
       // BLOQUEO-A: devolver el SUBSET resoluble (∃-deny lo comprueba SIEMPRE → `Reflect.get(WebAssembly,
       // c?'compile':m)` FLAG por 'compile') + el flag `complete`; la rama irresoluble la decide el caller según
       // la polaridad del root (allowlist fail-closed / denylist renunciado), espejo de `R[dynKey]`.
-      return {
-        receiver: n.arguments[0],
-        members: resolveKeyCandidates(n.arguments[1]),
-        complete: keyExprComplete(n.arguments[1]),
-      };
+      for (const branch of expandArgLists(n.arguments)) {
+        if (branch.truncated || branch.nodes.length < 2) continue;
+        return {
+          receiver: branch.nodes[0],
+          members: resolveKeyCandidates(branch.nodes[1]),
+          complete: keyExprComplete(branch.nodes[1]),
+        };
+      }
     }
   }
   return null;
@@ -4891,12 +4902,20 @@ function isAnyContainerLiteral(node) {
 // (∃-acumula las ramas conocidas y renuncia las opacas), los carriers de MERGE necesitan probar que CADA hoja
 // del source es un contenedor modelable: un source-variable posterior puede sobrescribir la key → §141.
 // `null` = al menos una rama opaca; array = todas las ramas resueltas. Termina por descenso AST.
-function completeContainerLiteralAlternatives(expr, isLiteral) {
+function completeContainerLiteralAlternatives(
+  expr,
+  isLiteral,
+  allowStructuralFallback = true,
+) {
   const leaves = valueTransparentLeaves(expr);
   if (leaves.length === 0) return null;
   const out = [];
   for (const leaf of leaves) {
-    const alts = containerLiteralAlternatives(leaf, isLiteral);
+    const alts = containerLiteralAlternatives(
+      leaf,
+      isLiteral,
+      allowStructuralFallback,
+    );
     if (alts.length === 0) return null;
     out.push(...alts);
   }
@@ -4914,6 +4933,29 @@ function completeOwnObjectLiteralAlternatives(expr) {
     const e = unwrapErased(leaf);
     if (ts.isObjectLiteralExpression(e)) {
       out.push(e);
+      continue;
+    }
+    if (ts.isArrayLiteralExpression(e)) {
+      // Object-spread copia los índices own-enumerable de un array. Se virtualiza como un object-literal
+      // numérico; holes no son own-properties. Spreads internos quedan en su seam iterable, no se finge
+      // aquí una posición si no puede demostrarse completa.
+      if (!arrayLiteralSpreadsFullyResolve(e)) return null;
+      const elements = positionalArrayElements(e);
+      if (!elements) return null;
+      out.push(
+        syntheticObject(
+          [...elements].flatMap((element, index) =>
+            !element || ts.isOmittedExpression(element)
+              ? []
+              : [
+                  ts.factory.createPropertyAssignment(
+                    ts.factory.createStringLiteral(String(index)),
+                    element,
+                  ),
+                ],
+          ),
+        ),
+      );
       continue;
     }
     const arg = identityPreservingContainerArgument(e);
@@ -4989,7 +5031,10 @@ function syntheticValueUnion(values) {
 // Object.assign(target,...sources) sobre TARGET object-literal: virtualiza EXACTAMENTE el orden own-copy
 // como `{...targetOwn,...source1,...sourceN}`. resolveKeyInLiteral aplica last-wins PER-KEY; un source opaco
 // queda SpreadAssignment opaco → blocked (§141), y una prop posterior literal puede volver a probar el override.
-function objectAssignObjectAlternatives(call) {
+function objectAssignObjectAlternatives(
+  call,
+  allowStructuralFallback = true,
+) {
   if (
     !staticNamespaceCall(call, "Object", "assign") ||
     call.arguments.length === 0 ||
@@ -5000,6 +5045,7 @@ function objectAssignObjectAlternatives(call) {
   const targets = completeContainerLiteralAlternatives(
     call.arguments[0],
     ts.isObjectLiteralExpression,
+    allowStructuralFallback,
   );
   if (!targets) return [];
   if (call.arguments.length === 1) return targets;
@@ -5032,7 +5078,7 @@ function assignArrayElements(target, source) {
 
 // Object.assign sobre TARGET array-literal: copia índices own-enumerable SIN concatenar/desplazar posiciones.
 // Requiere sources completamente array-literal; objeto/variable/call queda §141 (no inventa conversión mixta).
-function objectAssignArrayAlternatives(call) {
+function objectAssignArrayAlternatives(call, allowStructuralFallback = true) {
   if (
     !staticNamespaceCall(call, "Object", "assign") ||
     call.arguments.length === 0 ||
@@ -5043,6 +5089,7 @@ function objectAssignArrayAlternatives(call) {
   const targets = completeContainerLiteralAlternatives(
     call.arguments[0],
     ts.isArrayLiteralExpression,
+    allowStructuralFallback,
   );
   if (!targets || targets.some((a) => a.elements.some(ts.isSpreadElement))) {
     return [];
@@ -5052,6 +5099,7 @@ function objectAssignArrayAlternatives(call) {
     const sources = completeContainerLiteralAlternatives(
       sourceExpr,
       ts.isArrayLiteralExpression,
+      allowStructuralFallback,
     );
     if (!sources) return [];
     const next = [];
@@ -5096,7 +5144,7 @@ function descriptorOverlayProperties(descriptors) {
   return out;
 }
 
-function objectCreateAlternatives(call) {
+function objectCreateAlternatives(call, allowStructuralFallback = true) {
   if (
     !staticNamespaceCall(call, "Object", "create") ||
     call.arguments.length < 1 ||
@@ -5105,10 +5153,15 @@ function objectCreateAlternatives(call) {
   ) {
     return [];
   }
-  const protos = completeContainerLiteralAlternatives(
-    call.arguments[0],
-    ts.isObjectLiteralExpression,
-  );
+  const protoExpr = unwrapErased(call.arguments[0]);
+  const protos =
+    protoExpr.kind === ts.SyntaxKind.NullKeyword
+      ? [syntheticObject([])]
+      : completeContainerLiteralAlternatives(
+          call.arguments[0],
+          ts.isObjectLiteralExpression,
+          allowStructuralFallback,
+        );
   if (!protos) return [];
   if (call.arguments.length === 1) return protos;
 
@@ -5137,7 +5190,7 @@ function objectCreateAlternatives(call) {
   return out;
 }
 
-function objectSetPrototypeAlternatives(call) {
+function objectSetPrototypeAlternatives(call, allowStructuralFallback = true) {
   if (
     !staticNamespaceCall(call, "Object", "setPrototypeOf") ||
     call.arguments.length < 2 ||
@@ -5149,6 +5202,7 @@ function objectSetPrototypeAlternatives(call) {
   const protos = completeContainerLiteralAlternatives(
     call.arguments[1],
     ts.isObjectLiteralExpression,
+    allowStructuralFallback,
   );
   if (!targets || !protos) return [];
   const out = [];
@@ -5161,21 +5215,247 @@ function objectSetPrototypeAlternatives(call) {
   return out;
 }
 
-function arrayFromAlternatives(call) {
+// Object.defineProperty devuelve el target mutado. Modelar el descriptor `value` de forma POSICIONAL
+// (append last-wins) cierra el carrier sin reintroducir el FP R12: un override safe posterior sigue safe.
+function objectDefinePropertyAlternatives(
+  call,
+  allowStructuralFallback = true,
+) {
   if (
-    !staticNamespaceCall(call, "Array", "from") ||
+    !staticNamespaceCall(call, "Object", "defineProperty") ||
+    call.arguments.length !== 3 ||
+    call.arguments.some(ts.isSpreadElement) ||
+    !keyExprComplete(call.arguments[1])
+  ) {
+    return [];
+  }
+  const keys = [...resolveKeyCandidates(call.arguments[1])];
+  if (keys.length === 0) return [];
+  const targets = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isObjectLiteralExpression,
+    allowStructuralFallback,
+  );
+  const descriptors = completeOwnObjectLiteralAlternatives(call.arguments[2]);
+  if (!targets || !descriptors) return [];
+  const out = [];
+  for (const target of targets) {
+    for (const descriptor of descriptors) {
+      const read = resolveKeyInLiteral(descriptor, "value", 0);
+      if (read.blocked) continue;
+      const value =
+        read.vals.length > 0
+          ? syntheticValueUnion(read.vals)
+          : syntheticObject([]);
+      for (const key of keys) {
+        out.push(
+          syntheticObject([
+            ...target.properties,
+            ts.factory.createPropertyAssignment(
+              ts.factory.createStringLiteral(key),
+              value,
+            ),
+          ]),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+function objectPrototypeAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !(
+      staticNamespaceCall(call, "Object", "getPrototypeOf") ||
+      staticNamespaceCall(call, "Reflect", "getPrototypeOf")
+    )
+  ) {
+    return [];
+  }
+  const out = [];
+  for (const branch of expandArgLists(call.arguments)) {
+    if (branch.truncated || branch.nodes.length !== 1) continue;
+    const source = unwrapErased(branch.nodes[0]);
+    if (!ts.isCallExpression(source)) continue;
+    if (
+      staticNamespaceCall(source, "Object", "create") &&
+      source.arguments.length >= 1 &&
+      !source.arguments.some(ts.isSpreadElement)
+    ) {
+      const proto = unwrapErased(source.arguments[0]);
+      if (proto.kind === ts.SyntaxKind.NullKeyword) continue;
+      const alternatives = completeContainerLiteralAlternatives(
+        source.arguments[0],
+        ts.isObjectLiteralExpression,
+        allowStructuralFallback,
+      );
+      if (alternatives) out.push(...alternatives);
+      continue;
+    }
+    if (
+      staticNamespaceCall(source, "Object", "setPrototypeOf") &&
+      source.arguments.length >= 2 &&
+      !source.arguments.some(ts.isSpreadElement)
+    ) {
+      const alternatives = completeContainerLiteralAlternatives(
+        source.arguments[1],
+        ts.isObjectLiteralExpression,
+        allowStructuralFallback,
+      );
+      if (alternatives) out.push(...alternatives);
+    }
+  }
+  return out;
+}
+
+// fromEntries es codificable cuando CADA key está escrita como literal en el carrier. No se enruta
+// Object.entries/values: ese round-trip de key implícita sigue expresamente renunciado por D2.
+function objectFromEntriesAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Object", "fromEntries") ||
     call.arguments.length !== 1 ||
     call.arguments.some(ts.isSpreadElement)
   ) {
     return [];
   }
-  const sources = completeContainerLiteralAlternatives(
-    call.arguments[0],
-    ts.isArrayLiteralExpression,
-  );
-  if (!sources || sources.some((a) => a.elements.some(ts.isSpreadElement))) {
+  const sources = iterableArrayAlternatives(call.arguments[0], true);
+  const out = [];
+  for (const source of sources) {
+    const entries = concreteArrayElements(source);
+    if (!entries) continue;
+    let variants = [[]];
+    for (const entry of entries) {
+      const pairs = completeContainerLiteralAlternatives(
+        entry,
+        ts.isArrayLiteralExpression,
+        true,
+      );
+      if (!pairs) {
+        variants = [];
+        break;
+      }
+      const next = [];
+      for (const properties of variants) {
+        for (const pair of pairs) {
+          const elements = concreteArrayElements(pair);
+          if (!elements || elements.length < 2 || !keyExprComplete(elements[0])) {
+            continue;
+          }
+          const keys = [...resolveKeyCandidates(elements[0])];
+          for (const key of keys) {
+            next.push([
+              ...properties,
+              ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                elements[1],
+              ),
+            ]);
+          }
+        }
+      }
+      variants = next;
+    }
+    out.push(...variants.map(syntheticObject));
+  }
+  return out;
+}
+
+function identityArrayFromMapper(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isArrowFunction(e) && !ts.isFunctionExpression(e)) return false;
+  if (e.parameters.length !== 1 || !ts.isIdentifier(e.parameters[0].name)) {
+    return false;
+  }
+  const param = e.parameters[0].name.text;
+  if (!ts.isBlock(e.body)) {
+    const body = unwrapErased(e.body);
+    return ts.isIdentifier(body) && body.text === param;
+  }
+  if (e.body.statements.length !== 1) return false;
+  const stmt = e.body.statements[0];
+  if (!ts.isReturnStatement(stmt) || !stmt.expression) return false;
+  const returned = unwrapErased(stmt.expression);
+  return ts.isIdentifier(returned) && returned.text === param;
+}
+
+// Subconjunto decidible del overload array-like de Array.from. Solo materializa índices own explícitos
+// dentro de un `length` entero literal; posiciones ausentes son `undefined` y no aportan una raíz.
+function objectArrayLikeAlternatives(expr) {
+  const objects = completeOwnObjectLiteralAlternatives(expr);
+  if (!objects) return [];
+  const out = [];
+  for (const object of objects) {
+    if (
+      object.properties.some(
+        (p) =>
+          ts.isSpreadAssignment(p) ||
+          (p.name && ts.isComputedPropertyName(p.name)),
+      )
+    ) {
+      continue;
+    }
+    const lengthRead = resolveKeyInLiteral(object, "length", 0);
+    if (lengthRead.blocked || lengthRead.vals.length === 0) continue;
+    const lengths = [];
+    for (const value of lengthRead.vals) {
+      const candidates = literalIntegerAlternatives(value);
+      if (!candidates) continue;
+      lengths.push(...candidates.filter((n) => n >= 0));
+    }
+    for (const length of lengths) {
+      const indexed = new Map();
+      let blocked = false;
+      for (const property of object.properties) {
+        const names = propNameCanonical(property.name);
+        for (const name of names) {
+          if (!/^(0|[1-9]\d*)$/.test(name)) continue;
+          const index = Number(name);
+          if (index >= length) continue;
+          const read = resolveKeyInLiteral(object, name, 0);
+          if (read.blocked) {
+            blocked = true;
+            break;
+          }
+          if (read.vals.length > 0) {
+            indexed.set(index, syntheticValueUnion(read.vals));
+          }
+        }
+        if (blocked) break;
+      }
+      if (blocked || indexed.size === 0) {
+        if (!blocked) out.push(syntheticArray([]));
+        continue;
+      }
+      const max = Math.max(...indexed.keys());
+      const elements = Array.from({ length: max + 1 }, () =>
+        ts.factory.createOmittedExpression(),
+      );
+      for (const [index, value] of indexed) elements[index] = value;
+      out.push(syntheticArray(elements));
+    }
+  }
+  return out;
+}
+
+function arrayFromAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !staticNamespaceCall(call, "Array", "from") ||
+    (call.arguments.length !== 1 && call.arguments.length !== 2) ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
     return [];
   }
+  if (call.arguments.length === 2 && !identityArrayFromMapper(call.arguments[1])) {
+    return [];
+  }
+  const sources = [
+    ...iterableArrayAlternatives(
+      call.arguments[0],
+      allowStructuralFallback,
+    ),
+    ...objectArrayLikeAlternatives(call.arguments[0]),
+  ];
+  if (sources.some((a) => a.elements.some(ts.isSpreadElement))) return [];
   return sources.map((source) => syntheticArray([...source.elements]));
 }
 
@@ -5186,7 +5466,55 @@ function arrayOfAlternatives(call) {
     .map((branch) => syntheticArray(branch.nodes));
 }
 
-function concatenateArrayAlternatives(call, callee) {
+function singleNumericArrayLengthArgument(expr) {
+  return valueTransparentLeaves(expr).every((leaf) => {
+    const e = unwrapErased(leaf);
+    const operand = ts.isPrefixUnaryExpression(e)
+      ? unwrapErased(e.operand)
+      : null;
+    return (
+      ts.isNumericLiteral(e) ||
+      (ts.isPrefixUnaryExpression(e) &&
+        (e.operator === ts.SyntaxKind.PlusToken ||
+          e.operator === ts.SyntaxKind.MinusToken) &&
+        operand !== null &&
+        ts.isNumericLiteral(operand))
+    );
+  });
+}
+
+// `Array(x)`/`new Array(x)`: un único Number es longitud (no elemento); un arg no-numérico o ≥2
+// son elementos. El spread de variable queda §141; spread literal se aplana con el seam común.
+function arrayConstructorAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e) && !ts.isNewExpression(e)) return [];
+  if (
+    !valueTransparentLeaves(e.expression).some((leaf) => {
+      const callee = unwrapErased(leaf);
+      return ts.isIdentifier(callee) && callee.text === "Array";
+    })
+  ) {
+    return [];
+  }
+  const out = [];
+  for (const branch of expandArgLists(e.arguments ?? [])) {
+    if (branch.truncated) continue;
+    if (
+      branch.nodes.length === 1 &&
+      singleNumericArrayLengthArgument(branch.nodes[0])
+    ) {
+      continue;
+    }
+    out.push(syntheticArray(branch.nodes));
+  }
+  return out;
+}
+
+function concatenateArrayAlternatives(
+  call,
+  callee,
+  allowStructuralFallback = true,
+) {
   if (
     !(
       ts.isPropertyAccessExpression(callee) ||
@@ -5199,6 +5527,7 @@ function concatenateArrayAlternatives(call, callee) {
   const receivers = completeContainerLiteralAlternatives(
     callee.expression,
     ts.isArrayLiteralExpression,
+    allowStructuralFallback,
   );
   if (!receivers || receivers.some((a) => a.elements.some(ts.isSpreadElement))) {
     return [];
@@ -5212,6 +5541,7 @@ function concatenateArrayAlternatives(call, callee) {
       const arrays = completeContainerLiteralAlternatives(
         arg,
         ts.isArrayLiteralExpression,
+        allowStructuralFallback,
       );
       if (!arrays || arrays.some((a) => a.elements.some(ts.isSpreadElement))) {
         complete = false;
@@ -5228,7 +5558,7 @@ function concatenateArrayAlternatives(call, callee) {
   return out;
 }
 
-function slicedArrayAlternatives(call, callee) {
+function slicedArrayAlternatives(call, callee, allowStructuralFallback = true) {
   if (
     !(
       ts.isPropertyAccessExpression(callee) ||
@@ -5244,6 +5574,7 @@ function slicedArrayAlternatives(call, callee) {
   const receivers = completeContainerLiteralAlternatives(
     callee.expression,
     ts.isArrayLiteralExpression,
+    allowStructuralFallback,
   );
   if (!receivers || receivers.some((a) => a.elements.some(ts.isSpreadElement))) {
     return [];
@@ -5267,7 +5598,11 @@ function concreteArrayElements(lit) {
 // para toSpliced, de los inserts). El ORDEN no es una prueba segura común — comparator/índices cambian la
 // posición — así que cada posición virtual contiene la unión ∃ de elementos posibles, igual que `.at`.
 // Es over-aprox fail-closed deliberada y central: cualquier consumidor posicional hereda el mismo resultado.
-function reorderedArrayAlternatives(call, callee) {
+function reorderedArrayAlternatives(
+  call,
+  callee,
+  allowStructuralFallback = true,
+) {
   if (
     !(
       ts.isPropertyAccessExpression(callee) ||
@@ -5283,6 +5618,7 @@ function reorderedArrayAlternatives(call, callee) {
   const receivers = completeContainerLiteralAlternatives(
     callee.expression,
     ts.isArrayLiteralExpression,
+    allowStructuralFallback,
   );
   if (!receivers) return [];
 
@@ -5312,7 +5648,11 @@ function reorderedArrayAlternatives(call, callee) {
 // `flat()` / `flat(1)` sobre arrays completamente literales: virtualiza exactamente un nivel. Las ramas
 // alternativas de un elemento-array se cartesianizan; `flat(0)` es copia. Profundidades >1 permanecen fuera
 // del mandato R13 para no fingir un folder recursivo no adjudicado.
-function flattenedArrayAlternatives(call, callee) {
+function flattenedArrayAlternatives(
+  call,
+  callee,
+  allowStructuralFallback = true,
+) {
   if (
     !(
       ts.isPropertyAccessExpression(callee) ||
@@ -5330,6 +5670,7 @@ function flattenedArrayAlternatives(call, callee) {
   const receivers = completeContainerLiteralAlternatives(
     callee.expression,
     ts.isArrayLiteralExpression,
+    allowStructuralFallback,
   );
   if (!receivers) return [];
   const out = [];
@@ -5345,6 +5686,7 @@ function flattenedArrayAlternatives(call, callee) {
       const nested = completeContainerLiteralAlternatives(
         element,
         ts.isArrayLiteralExpression,
+        allowStructuralFallback,
       );
       if (!nested) {
         variants = variants.map((current) => [...current, element]);
@@ -5362,6 +5704,99 @@ function flattenedArrayAlternatives(call, callee) {
     out.push(...variants.map(syntheticArray));
   }
   return out;
+}
+
+// pop()/shift() devuelven un ELEMENTO, no un contenedor. Mantener este seam en value-survival evita
+// fingir que el resultado es indexable y conserva la frontera OOM de los arrays vacíos.
+function arrayScalarElementAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    call.arguments.length !== 0
+  ) {
+    return [];
+  }
+  const method = accessedMemberNames(callee).find((name) =>
+    name === "pop" || name === "shift",
+  );
+  if (!method) return [];
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    true,
+  );
+  if (!receivers) return [];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements || elements.length === 0) continue;
+    out.push(method === "pop" ? elements[elements.length - 1] : elements[0]);
+  }
+  return out;
+}
+
+function definitelyObjectWeakRefTargets(expr) {
+  const out = [];
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const e = unwrapErased(leaf);
+    if (
+      ts.isObjectLiteralExpression(e) ||
+      ts.isArrayLiteralExpression(e) ||
+      ts.isFunctionExpression(e) ||
+      ts.isArrowFunction(e) ||
+      ts.isClassExpression(e) ||
+      ts.isNewExpression(e)
+    ) {
+      out.push(e);
+      continue;
+    }
+    if (
+      (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) &&
+      accessedMemberNames(e).includes("constructor")
+    ) {
+      const receiver = unwrapErased(e.expression);
+      if (
+        receiver.kind !== ts.SyntaxKind.NullKeyword &&
+        !(ts.isIdentifier(receiver) && receiver.text === "undefined")
+      ) {
+        out.push(e);
+      }
+      continue;
+    }
+    if (
+      containerLiteralAlternatives(e, isAnyContainerLiteral, true).length > 0
+    ) {
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+function weakRefDerefAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("deref") ||
+    call.arguments.length !== 0
+  ) {
+    return [];
+  }
+  const receiver = unwrapErased(callee.expression);
+  if (
+    !isStaticGlobalNew(receiver, "WeakRef") ||
+    !receiver.arguments ||
+    receiver.arguments.length !== 1 ||
+    receiver.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  return definitelyObjectWeakRefTargets(receiver.arguments[0]);
 }
 
 // Métodos cuyo resultado NO es un array proyectable de valores del receiver, o cuya selección depende de
@@ -5456,7 +5891,12 @@ function arrayMethodArgumentsAreInline(args) {
   return args.every((arg) =>
     valueTransparentLeaves(arg).every((leaf) => {
       const u = unwrapErased(leaf);
-      return !ts.isIdentifier(u) && !ts.isCallExpression(u);
+      return (
+        !ts.isIdentifier(u) &&
+        !ts.isCallExpression(u) &&
+        !ts.isArrowFunction(u) &&
+        !ts.isFunctionExpression(u)
+      );
     }),
   );
 }
@@ -5465,7 +5905,10 @@ function arrayMethodArgumentsAreInline(args) {
 // sobre receiver array-literal se PROYECTA por índice literal completo. Los cuatro métodos con semántica de
 // rango/replacement se virtualizan exactamente para conservar OOM y el origen de `.fill`; cualquier método
 // futuro no clasificado degrada a unión ∃ de los elementos del receiver (fail-closed anti-drift).
-function projectedArrayMethodAlternatives(expr) {
+function projectedArrayMethodAlternatives(
+  expr,
+  allowStructuralFallback = true,
+) {
   const out = [];
   for (const leaf of valueTransparentLeaves(expr)) {
     const call = unwrapErased(leaf);
@@ -5484,8 +5927,10 @@ function projectedArrayMethodAlternatives(expr) {
     const receivers = completeContainerLiteralAlternatives(
       callee.expression,
       ts.isArrayLiteralExpression,
+      allowStructuralFallback,
     );
     if (!receivers) continue;
+    const argBranches = expandArgLists(call.arguments);
 
     for (const method of methods) {
       if (
@@ -5497,68 +5942,70 @@ function projectedArrayMethodAlternatives(expr) {
       for (const receiver of receivers) {
         const elements = concreteArrayElements(receiver);
         if (!elements) continue;
+        for (const branch of argBranches) {
+          if (branch.truncated) continue; // spread de variable → §141
+          const args = branch.nodes;
 
-        if (method === "with") {
-          if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) continue;
-          const indices = literalIntegerAlternatives(call.arguments[0]);
-          if (!indices) continue;
-          for (const rawIndex of indices) {
-            const index = rawIndex < 0 ? elements.length + rawIndex : rawIndex;
-            if (index < 0 || index >= elements.length) continue; // runtime RangeError → OOM universal
-            const next = [...elements];
-            next[index] = call.arguments[1];
-            out.push(syntheticArray(next));
-          }
-          continue;
-        }
-
-        if (method === "slice") {
-          if (call.arguments.length > 2) continue;
-          const branches = literalIntegerArgumentLists(call.arguments);
-          if (!branches) continue;
-          for (const args of branches) out.push(syntheticArray(elements.slice(...args)));
-          continue;
-        }
-
-        if (method === "copyWithin") {
-          if (call.arguments.length > 3) continue;
-          const branches = literalIntegerArgumentLists(call.arguments);
-          if (!branches) continue;
-          for (const args of branches) {
-            const next = [...elements];
-            next.copyWithin(...args);
-            out.push(syntheticArray(next));
-          }
-          continue;
-        }
-
-        if (method === "fill") {
-          if (
-            call.arguments.length < 1 ||
-            call.arguments.length > 3 ||
-            call.arguments.some(ts.isSpreadElement)
-          ) {
+          if (method === "with") {
+            if (args.length !== 2) continue;
+            const indices = literalIntegerAlternatives(args[0]);
+            if (!indices) continue;
+            for (const rawIndex of indices) {
+              const index = rawIndex < 0 ? elements.length + rawIndex : rawIndex;
+              if (index < 0 || index >= elements.length) continue; // runtime RangeError → OOM universal
+              const next = [...elements];
+              next[index] = args[1];
+              out.push(syntheticArray(next));
+            }
             continue;
           }
-          const branches = literalIntegerArgumentLists(call.arguments.slice(1));
-          if (!branches) continue;
-          for (const args of branches) {
-            const next = [...elements];
-            next.fill(call.arguments[0], ...args);
-            out.push(syntheticArray(next));
-          }
-          continue;
-        }
 
-        if (!arrayMethodArgumentsAreInline(call.arguments)) continue;
-        if (elements.length === 0) {
-          out.push(syntheticArray([]));
-          continue;
+          if (method === "slice") {
+            if (args.length > 2) continue;
+            const branches = literalIntegerArgumentLists(args);
+            if (!branches) continue;
+            for (const intArgs of branches) {
+              out.push(syntheticArray(elements.slice(...intArgs)));
+            }
+            continue;
+          }
+
+          if (method === "copyWithin") {
+            if (args.length > 3) continue;
+            const branches = literalIntegerArgumentLists(args);
+            if (!branches) continue;
+            for (const intArgs of branches) {
+              const next = [...elements];
+              next.copyWithin(...intArgs);
+              out.push(syntheticArray(next));
+            }
+            continue;
+          }
+
+          if (method === "fill") {
+            if (args.length < 1 || args.length > 3) continue;
+            const branches = literalIntegerArgumentLists(args.slice(1));
+            if (!branches) continue;
+            for (const intArgs of branches) {
+              const next = [...elements];
+              next.fill(args[0], ...intArgs);
+              out.push(syntheticArray(next));
+            }
+            continue;
+          }
+
+          if (!arrayMethodArgumentsAreInline(args)) continue;
+          if (elements.length === 0) {
+            out.push(syntheticArray([]));
+            continue;
+          }
+          const union = syntheticValueUnion(elements);
+          out.push(
+            syntheticArray(
+              Array.from({ length: elements.length }, () => union),
+            ),
+          );
         }
-        const union = syntheticValueUnion(elements);
-        out.push(
-          syntheticArray(Array.from({ length: elements.length }, () => union)),
-        );
       }
     }
   }
@@ -5678,32 +6125,94 @@ function mapGetValueAlternatives(call, callee) {
   return out;
 }
 
-function mapValuesArrayAlternatives(call, callee) {
+function materializedMapEntries(entries) {
+  if (entries.some((entry) => entry.key === null)) return null;
+  const positions = new Map();
+  const ordered = [];
+  for (const entry of entries) {
+    const position = positions.get(entry.key);
+    if (position === undefined) {
+      positions.set(entry.key, ordered.length);
+      ordered.push({ ...entry });
+    } else {
+      ordered[position] = { ...ordered[position], value: entry.value };
+    }
+  }
+  return ordered;
+}
+
+function mapIteratorArrayAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  const callee = unwrapErased(e.expression);
   if (
-    !ts.isCallExpression(call) ||
     !(
       ts.isPropertyAccessExpression(callee) ||
       ts.isElementAccessExpression(callee)
-    ) ||
-    !accessedMemberNames(callee).includes("values")
+    )
   ) {
     return [];
   }
+  const methods = [...new Set(accessedMemberNames(callee))];
+  if (methods.length === 0) return [];
+  const negative = new Set([
+    "clear",
+    "constructor",
+    "delete",
+    "forEach",
+    "get",
+    "has",
+    "set",
+  ]);
   const out = [];
   for (const entries of mapEntryAlternatives(callee.expression)) {
-    if (entries.some((entry) => entry.key === null)) continue;
-    const positions = new Map();
-    const values = [];
-    for (const entry of entries) {
-      const position = positions.get(entry.key);
-      if (position === undefined) {
-        positions.set(entry.key, values.length);
-        values.push(entry.value);
-      } else {
-        values[position] = entry.value; // last-wins, orden de primera inserción preservado
+    const ordered = materializedMapEntries(entries);
+    if (!ordered) continue;
+    for (const method of methods) {
+      if (negative.has(method)) continue;
+      if (method === "values") {
+        out.push(syntheticArray(ordered.map((entry) => entry.value)));
+        continue;
       }
+      if (method === "keys") {
+        out.push(syntheticArray(ordered.map((entry) => entry.keyExpr)));
+        continue;
+      }
+      if (method === "entries") {
+        out.push(
+          syntheticArray(
+            ordered.map((entry) =>
+              syntheticArray([entry.keyExpr, entry.value]),
+            ),
+          ),
+        );
+        continue;
+      }
+      if (!arrayMethodArgumentsAreInline(e.arguments)) continue;
+      const candidates = ordered.flatMap((entry) => [entry.keyExpr, entry.value]);
+      if (candidates.length === 0) {
+        out.push(syntheticArray([]));
+        continue;
+      }
+      const union = syntheticValueUnion(candidates);
+      out.push(
+        syntheticArray(Array.from({ length: ordered.length }, () => union)),
+      );
     }
-    out.push(syntheticArray(values));
+  }
+  return out;
+}
+
+function mapDefaultIteratorAlternatives(expr) {
+  const out = [];
+  for (const entries of mapEntryAlternatives(expr)) {
+    const ordered = materializedMapEntries(entries);
+    if (!ordered) continue;
+    out.push(
+      syntheticArray(
+        ordered.map((entry) => syntheticArray([entry.keyExpr, entry.value])),
+      ),
+    );
   }
   return out;
 }
@@ -5738,38 +6247,385 @@ function setArrayAlternatives(expr) {
   return out;
 }
 
+function setIteratorArrayAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = [...new Set(accessedMemberNames(callee))];
+  if (methods.length === 0) return [];
+  const sources = setArrayAlternatives(callee.expression);
+  const negative = new Set([
+    "add",
+    "clear",
+    "constructor",
+    "delete",
+    "forEach",
+    "has",
+  ]);
+  const out = [];
+  for (const source of sources) {
+    const elements = concreteArrayElements(source);
+    if (!elements) continue;
+    for (const method of methods) {
+      if (negative.has(method)) continue;
+      if (method === "entries") {
+        out.push(
+          syntheticArray(elements.map((value) => syntheticArray([value, value]))),
+        );
+        continue;
+      }
+      if (method === "keys" || method === "values") {
+        out.push(syntheticArray([...elements]));
+        continue;
+      }
+      if (!arrayMethodArgumentsAreInline(e.arguments)) continue;
+      if (elements.length === 0) {
+        out.push(syntheticArray([]));
+        continue;
+      }
+      const union = syntheticValueUnion(elements);
+      out.push(
+        syntheticArray(Array.from({ length: elements.length }, () => union)),
+      );
+    }
+  }
+  return out;
+}
+
+function arrayIteratorArrayAlternatives(
+  expr,
+  allowStructuralFallback = true,
+) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e) || e.arguments.length !== 0) return [];
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = accessedMemberNames(callee);
+  if (!methods.some((method) => ["entries", "keys", "values"].includes(method))) {
+    return [];
+  }
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!receivers) return [];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements) continue;
+    for (const method of methods) {
+      if (method === "values") out.push(syntheticArray([...elements]));
+      else if (method === "keys") {
+        out.push(
+          syntheticArray(
+            elements.map((_element, index) =>
+              ts.factory.createNumericLiteral(index),
+            ),
+          ),
+        );
+      } else if (method === "entries") {
+        out.push(
+          syntheticArray(
+            elements.map((element, index) =>
+              syntheticArray([
+                ts.factory.createNumericLiteral(index),
+                element,
+              ]),
+            ),
+          ),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+function iteratorHelperArrayAlternatives(call, callee) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("toArray") ||
+    call.arguments.length !== 0
+  ) {
+    return [];
+  }
+  return iterableArrayAlternatives(callee.expression, true).map((array) =>
+    syntheticArray([...array.elements]),
+  );
+}
+
+const NON_PROJECTABLE_ITERATOR_HELPERS = new Set([
+  "constructor",
+  "every",
+  "filter",
+  "find",
+  "flatMap",
+  "forEach",
+  "map",
+  "reduce",
+  "some",
+]);
+
+// Un Iterator helper intermedio sigue siendo un iterable. Los helpers con callback permanecen §141;
+// drop/take se virtualizan exactamente y cualquier helper futuro sin data-flow degrada a unión ∃.
+function iteratorCarrierAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  if (
+    staticNamespaceCall(e, "Iterator", "from") &&
+    e.arguments.length === 1 &&
+    !e.arguments.some(ts.isSpreadElement)
+  ) {
+    return iterableArrayAlternatives(e.arguments[0], true);
+  }
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = [...new Set(accessedMemberNames(callee))];
+  if (methods.length === 0) return [];
+  const sources = iterableArrayAlternatives(callee.expression, true);
+  if (sources.length === 0) return [];
+  const branches = expandArgLists(e.arguments);
+  const out = [];
+  for (const method of methods) {
+    if (NON_PROJECTABLE_ITERATOR_HELPERS.has(method)) continue;
+    for (const source of sources) {
+      const elements = concreteArrayElements(source);
+      if (!elements) continue;
+      for (const branch of branches) {
+        if (branch.truncated) continue;
+        const args = branch.nodes;
+        if (method === "drop" || method === "take") {
+          if (args.length !== 1) continue;
+          const counts = literalIntegerAlternatives(args[0]);
+          if (!counts) continue;
+          for (const count of counts) {
+            if (count < 0) continue; // RangeError universal
+            out.push(
+              syntheticArray(
+                method === "drop"
+                  ? elements.slice(count)
+                  : elements.slice(0, count),
+              ),
+            );
+          }
+          continue;
+        }
+        if (method === "asIndexedPairs" && args.length === 0) {
+          out.push(
+            syntheticArray(
+              elements.map((element, index) =>
+                syntheticArray([
+                  ts.factory.createNumericLiteral(index),
+                  element,
+                ]),
+              ),
+            ),
+          );
+          continue;
+        }
+        if (!arrayMethodArgumentsAreInline(args)) continue;
+        if (elements.length === 0) {
+          out.push(syntheticArray([]));
+          continue;
+        }
+        const union = syntheticValueUnion(elements);
+        out.push(
+          syntheticArray(Array.from({ length: elements.length }, () => union)),
+        );
+      }
+    }
+  }
+  return out;
+}
+
 // Secuencias iterables materializables SOLO cuando el consumidor es spread/iteración. Mantener este seam
 // separado evita la falsa equivalencia `new Set([X])[0] ≡ X` (Set no tiene index properties) mientras permite
 // `[...new Set([X])][0]` y `[...new Map([[k,X]]).values()][0]`.
-function iterableArrayAlternatives(expr) {
-  const arrays = containerLiteralAlternatives(expr, ts.isArrayLiteralExpression);
+function iterableArrayAlternatives(expr, allowStructuralFallback = true) {
+  const arrays = containerLiteralAlternatives(
+    expr,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
   if (arrays.length > 0) return arrays;
   const e = unwrapErased(expr);
   const sets = setArrayAlternatives(e);
   if (sets.length > 0) return sets;
+  const mapDefault = mapDefaultIteratorAlternatives(e);
+  if (mapDefault.length > 0) return mapDefault;
   if (ts.isCallExpression(e)) {
-    return mapValuesArrayAlternatives(e, unwrapErased(e.expression));
+    const mapIterators = mapIteratorArrayAlternatives(e);
+    if (mapIterators.length > 0) return mapIterators;
+    const setIterators = setIteratorArrayAlternatives(e);
+    if (setIterators.length > 0) return setIterators;
+    const arrayIterators = arrayIteratorArrayAlternatives(
+      e,
+      allowStructuralFallback,
+    );
+    if (arrayIterators.length > 0) return arrayIterators;
+    return iteratorCarrierAlternatives(e);
   }
   return [];
 }
 
+function staticNamespaceMethodNames(call, namespace) {
+  if (!ts.isCallExpression(call)) return [];
+  const out = [];
+  for (const leaf of valueTransparentLeaves(unwrapErased(call.expression))) {
+    const callee = unwrapErased(leaf);
+    if (
+      !ts.isPropertyAccessExpression(callee) &&
+      !ts.isElementAccessExpression(callee)
+    ) {
+      continue;
+    }
+    const isNamespace = valueTransparentLeaves(callee.expression).some(
+      (receiver) => {
+        const e = unwrapErased(receiver);
+        return ts.isIdentifier(e) && e.text === namespace;
+      },
+    );
+    if (isNamespace) out.push(...accessedMemberNames(callee));
+  }
+  return [...new Set(out)];
+}
+
+const NON_CONTAINER_OBJECT_STATICS = new Set([
+  "assign",
+  "create",
+  "defineProperties",
+  "defineProperty",
+  "entries",
+  "freeze",
+  "fromEntries",
+  "getOwnPropertyDescriptor",
+  "getOwnPropertyDescriptors",
+  "getOwnPropertyNames",
+  "getOwnPropertySymbols",
+  "getPrototypeOf",
+  "groupBy",
+  "hasOwn",
+  "is",
+  "isExtensible",
+  "isFrozen",
+  "isSealed",
+  "keys",
+  "preventExtensions",
+  "seal",
+  "setPrototypeOf",
+  "values",
+]);
+
+// Default anti-drift para un Object static futuro/no-clasificado. No adivina transformación ni key:
+// conserva el espacio de keys visibles y pone en cada una la unión ∃ de todos los valores resolubles del
+// source. Los statics conocidos conservan arriba su semántica separada o su renuncia explícita.
+function structuralObjectStaticAlternatives(call) {
+  const methods = staticNamespaceMethodNames(call, "Object").filter(
+    (method) => !NON_CONTAINER_OBJECT_STATICS.has(method),
+  );
+  if (methods.length === 0) return [];
+  const out = [];
+  for (const branch of expandArgLists(call.arguments)) {
+    if (branch.truncated || !arrayMethodArgumentsAreInline(branch.nodes)) {
+      continue;
+    }
+    for (const source of branch.nodes) {
+      for (const array of arrayLiteralAlternatives(source, true)) {
+        const elements = concreteArrayElements(array);
+        if (!elements) continue;
+        if (elements.length === 0) {
+          out.push(syntheticArray([]));
+          continue;
+        }
+        const union = syntheticValueUnion(elements);
+        out.push(
+          syntheticArray(Array.from({ length: elements.length }, () => union)),
+        );
+      }
+      for (const object of objectLiteralAlternatives(source, true)) {
+        const values = allObjectLiteralValuesDeep(object, []);
+        if (values.length === 0) {
+          out.push(syntheticObject([]));
+          continue;
+        }
+        const union = syntheticValueUnion(values);
+        const keys = new Set();
+        for (const property of object.properties) {
+          for (const key of propNameCanonical(property.name)) keys.add(key);
+        }
+        out.push(
+          syntheticObject(
+            [...keys].map((key) =>
+              ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                union,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+  }
+  return out;
+}
+
 // Carriers de RESULTADO R12. No son value-transparentes ni identity-carriers genéricos: cada familia
 // virtualiza SU semántica observable de contenedor y el consumer existente sigue resolviendo keys/posiciones.
-function semanticContainerResultAlternatives(expr) {
+function semanticContainerResultAlternatives(
+  expr,
+  allowStructuralFallback = true,
+) {
   const e = unwrapErased(expr);
-  if (!ts.isCallExpression(e)) return [];
+  const constructedArrays = arrayConstructorAlternatives(e);
+  if (!ts.isCallExpression(e)) return constructedArrays;
   const callee = unwrapErased(e.expression);
-  return [
-    ...objectAssignObjectAlternatives(e),
-    ...objectAssignArrayAlternatives(e),
-    ...objectCreateAlternatives(e),
-    ...objectSetPrototypeAlternatives(e),
-    ...arrayFromAlternatives(e),
+  const precise = [
+    ...objectAssignObjectAlternatives(e, allowStructuralFallback),
+    ...objectAssignArrayAlternatives(e, allowStructuralFallback),
+    ...objectCreateAlternatives(e, allowStructuralFallback),
+    ...objectSetPrototypeAlternatives(e, allowStructuralFallback),
+    ...objectDefinePropertyAlternatives(e, allowStructuralFallback),
+    ...objectPrototypeAlternatives(e, allowStructuralFallback),
+    ...objectFromEntriesAlternatives(e),
+    ...arrayFromAlternatives(e, allowStructuralFallback),
     ...arrayOfAlternatives(e),
-    ...concatenateArrayAlternatives(e, callee),
-    ...slicedArrayAlternatives(e, callee),
-    ...reorderedArrayAlternatives(e, callee),
-    ...flattenedArrayAlternatives(e, callee),
+    ...concatenateArrayAlternatives(e, callee, allowStructuralFallback),
+    ...slicedArrayAlternatives(e, callee, allowStructuralFallback),
+    ...reorderedArrayAlternatives(e, callee, allowStructuralFallback),
+    ...flattenedArrayAlternatives(e, callee, allowStructuralFallback),
+    ...iteratorHelperArrayAlternatives(e, callee),
+    ...constructedArrays,
+  ];
+  if (!allowStructuralFallback) return precise;
+  return [
+    ...precise,
+    ...projectedArrayMethodAlternatives(e, true),
+    ...structuralObjectStaticAlternatives(e),
   ];
 }
 
@@ -5782,10 +6638,17 @@ const containerLiteralAlternativesCache = new WeakMap();
 // Ramas literales alcanzables value-transparentemente, pelando SOLO carriers que preservan identidad Y
 // contenido. La recursión termina por descenso del AST (arg0 es hijo del CallExpression); sin cap fail-open.
 // Centraliza la composición `carrier ∘ contenedor-proyectado` para array/object y sus consumidores.
-function containerLiteralAlternatives(expr, isLiteral) {
+function containerLiteralAlternatives(
+  expr,
+  isLiteral,
+  allowStructuralFallback = true,
+) {
   if (!expr) return [];
   let byPredicate = containerLiteralAlternativesCache.get(expr);
-  if (byPredicate?.has(isLiteral)) return byPredicate.get(isLiteral);
+  const byMode = byPredicate?.get(isLiteral);
+  if (byMode?.has(allowStructuralFallback)) {
+    return byMode.get(allowStructuralFallback);
+  }
   const out = [];
   for (const leaf of valueTransparentLeaves(expr)) {
     const e = unwrapErased(leaf);
@@ -5795,10 +6658,19 @@ function containerLiteralAlternatives(expr, isLiteral) {
     }
     const arg = identityPreservingContainerArgument(e);
     if (arg) {
-      out.push(...containerLiteralAlternatives(arg, isLiteral));
+      out.push(
+        ...containerLiteralAlternatives(
+          arg,
+          isLiteral,
+          allowStructuralFallback,
+        ),
+      );
       continue;
     }
-    for (const semantic of semanticContainerResultAlternatives(e)) {
+    for (const semantic of semanticContainerResultAlternatives(
+      e,
+      allowStructuralFallback,
+    )) {
       if (isLiteral(semantic)) out.push(semantic);
     }
   }
@@ -5806,7 +6678,12 @@ function containerLiteralAlternatives(expr, isLiteral) {
     byPredicate = new Map();
     containerLiteralAlternativesCache.set(expr, byPredicate);
   }
-  byPredicate.set(isLiteral, out);
+  let modes = byPredicate.get(isLiteral);
+  if (!modes) {
+    modes = new Map();
+    byPredicate.set(isLiteral, modes);
+  }
+  modes.set(allowStructuralFallback, out);
   return out;
 }
 
@@ -5818,15 +6695,23 @@ function containerLiteralAlternatives(expr, isLiteral) {
 // Ramas array-literal que un arg-expr puede tomar value-transparentemente: array directo `["a"]` o
 // ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2), incl. identity-carrier EN-SITIO (R11 pt.3).
 // Fail-closed: cualquiera cuenta.
-function arrayLiteralAlternatives(expr) {
-  return containerLiteralAlternatives(expr, ts.isArrayLiteralExpression);
+function arrayLiteralAlternatives(expr, allowStructuralFallback = true) {
+  return containerLiteralAlternatives(
+    expr,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
 }
 
 // Ramas object-literal que un expr puede tomar value-transparentemente (`({k:X}).k`, o vía VT
 // `(c ? {k:X} : {k:Y}).k`), incl. identity-carrier EN-SITIO (R11 pt.3). Espejo de
 // arrayLiteralAlternatives para el eje object-member (root A).
-function objectLiteralAlternatives(expr) {
-  return containerLiteralAlternatives(expr, ts.isObjectLiteralExpression);
+function objectLiteralAlternatives(expr, allowStructuralFallback = true) {
+  return containerLiteralAlternatives(
+    expr,
+    ts.isObjectLiteralExpression,
+    allowStructuralFallback,
+  );
 }
 
 // Nombre(s) canónico(s) de una PropertyName (INV-VT): identifier/string → [text]; numeric → key JS FIEL

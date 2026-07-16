@@ -7829,7 +7829,8 @@ describe("server-safe gate — R12 custodios (container result carriers semánti
     ["C-map-141", `export const x=[performance].map(z=>z)[0].eventLoopUtilization();`, false],
     ["D-values", `export const x=Object.values({m:performance})[0].eventLoopUtilization();`, false],
     ["D-entries", `export const x=Object.entries({m:performance})[0][1].eventLoopUtilization();`, false],
-    ["D-fromEntries", `export const x=Object.fromEntries([["m",performance]]).m.eventLoopUtilization();`, false],
+    // R15 adjudica la variante de key LITERAL en-sitio; el round-trip Object.entries sigue renunciado.
+    ["D-fromEntries", `export const x=Object.fromEntries([["m",performance]]).m.eventLoopUtilization();`, true],
     ["D-structuredClone", `export const x=structuredClone({m:performance}).m.eventLoopUtilization();`, false],
     ["PIN-override-danger", `export const x=Object.assign({m:Math},{m:performance}).m.eventLoopUtilization();`, true],
     ["PIN-override-safe", `export const x=Object.assign({m:performance},{m:Math}).m.eventLoopUtilization();`, false],
@@ -8114,5 +8115,103 @@ describe("server-safe gate — R14 custodios (estructura + driver)", () => {
     it("no confunde strings ni tokens con sufijo", () => {
       expect(lines('export const a="// @server-safe";\n// @server-safe-helper')).toEqual([]);
     });
+  });
+});
+
+// ============================================================================
+// R15 — cierre carrier-completo por construcción.
+// El contrato no es una lista de builtins: todo carrier en-sitio no clasificado
+// degrada a unión ∃, sin cruzar las fronteras de data-flow (§141) ni OOM.
+// ============================================================================
+describe("server-safe gate — R15 custodios (carrier-completo por construcción)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(`/** @server-safe */\n${code}`, "r15.fixture.tsx").length > 0;
+
+  it.each<[string, string]>([
+    ["with ∘ slice", `export const x=setTimeout(["code"].with(0,"code").slice()[0],0);`],
+    ["copyWithin ∘ slice", `export const x=setTimeout(["code",0].copyWithin(1,0).slice()[0],0);`],
+    ["fill ∘ slice", `export const x=setTimeout([0].fill("code").slice()[0],0);`],
+    ["sort ∘ slice", `export const x=setTimeout(["code"].sort().slice(0)[0],0);`],
+    ["unknown ∘ slice", `export const x=setTimeout(((["code"] as any).fooBar(0)).slice()[0],0);`],
+    ["unknown ∘ unknown", `export const x=setTimeout(((["code"] as any).fooBar().futureCopy())[0],0);`],
+    ["constructor sink compuesto", `const g=()=>{}; export const x=[g.constructor].with(0,g.constructor).slice()[0]("return 1")();`],
+  ])("composición FLAG: %s", (_name, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    ["Array.from(Set)", `export const x=setTimeout(Array.from(new Set(["code"]))[0],0);`],
+    ["Array.from(array-like)", `export const x=setTimeout(Array.from({length:1,0:"code"})[0],0);`],
+    ["Array.from(Map.values)", `export const x=setTimeout(Array.from(new Map([["k","code"]]).values())[0],0);`],
+    ["Array.from identidad", `export const x=setTimeout(Array.from(["code"],z=>z)[0],0);`],
+    ["Map.keys", `export const x=setTimeout([...new Map([["code",1]]).keys()][0],0);`],
+    ["Map.entries", `export const x=setTimeout([...new Map([["k","code"]]).entries()][0][1],0);`],
+    ["Map iterador default", `export const x=setTimeout([...new Map([["k","code"]])][0][1],0);`],
+    ["Set.entries", `export const x=setTimeout([...new Set(["code"]).entries()][0][0],0);`],
+    ["Set producer desconocido", `export const x=setTimeout([...(new Set(["code"]) as any).futureValues()][0],0);`],
+    ["WeakRef.deref", `export const x=new WeakRef((()=>{}).constructor).deref()("return 1")();`],
+  ])("iterables FLAG: %s", (_name, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    ["Object.fromEntries key literal", `export const x=setTimeout(Object.fromEntries([["k","code"]]).k,0);`],
+    ["object spread de array", `export const x=setTimeout(({...["code"]})[0],0);`],
+    ["Object.create(null, descriptors)", `export const x=Object.create(null,{m:{value:performance}}).m.eventLoopUtilization();`],
+    ["defineProperty value", `export const x=Object.defineProperty({},"m",{value:performance}).m.eventLoopUtilization();`],
+    ["Object.getPrototypeOf(create)", `export const x=Object.getPrototypeOf(Object.create({m:performance})).m.eventLoopUtilization();`],
+    ["Reflect.getPrototypeOf(setPrototypeOf)", `export const x=Reflect.getPrototypeOf(Object.setPrototypeOf({},{m:performance})).m.eventLoopUtilization();`],
+    ["Reflect.get con spread literal", `export const x=Reflect.get(...[{m:performance},"m"]).eventLoopUtilization();`],
+    ["iterator helper toArray", `export const x=[performance].values().toArray()[0].eventLoopUtilization();`],
+    ["iterator helper intermedio", `export const x=[performance].values().drop(0).toArray()[0].eventLoopUtilization();`],
+    ["Iterator.from", `export const x=Iterator.from([performance]).toArray()[0].eventLoopUtilization();`],
+  ])("Object/Reflect/Iterator FLAG: %s", (_name, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    ["with spread literal", `export const x=setTimeout(["a"].with(...[0,"code"])[0],0);`],
+    ["fill spread literal", `export const x=setTimeout([0].fill(...["code"])[0],0);`],
+    ["slice spread literal", `export const x=setTimeout(["code","x"].slice(...[0,1])[0],0);`],
+    ["copyWithin spread literal", `export const x=setTimeout(["code",0].copyWithin(...[1,0])[0],0);`],
+    ["pop último", `export const x=setTimeout(["x","code"].pop(),0);`],
+    ["shift primero", `export const x=setTimeout(["code","x"].shift(),0);`],
+    ["pop constructor", `const g=()=>{}; export const x=["x",g.constructor].pop()("return 1")();`],
+    ["new Array valor", `export const x=setTimeout(new Array("code")[0],0);`],
+    ["bare Array valor", `export const x=setTimeout(Array("code")[0],0);`],
+    ["new Array varios", `export const x=setTimeout(new Array("x","code")[1],0);`],
+  ])("args/scalars/producers FLAG: %s", (_name, code) => {
+    expect(flagged(code)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    ["receiver variable", `const a=["code"]; export const x=setTimeout(a.with(0,"code").slice()[0],0);`],
+    ["spread variable", `export const x=(a:any[])=>setTimeout(["x"].with(...a)[0],0);`],
+    ["arg identifier", `export const x=(i:number)=>setTimeout(["code"].slice(i)[0],0);`],
+    ["índice final variable sobre unknown", `export const x=(i:number)=>setTimeout(((["code"] as any).futureCopy())[i],0);`],
+    ["callback no-identidad", `export const x=setTimeout(Array.from(["code"],()=>"safe")[0],0);`],
+    ["with fuera de rango", `export const x=setTimeout(["code"].with(5,"code")[0],0);`],
+    ["new Array length", `export const x=setTimeout(new Array(16)[0],0);`],
+    ["bare Array length", `export const x=setTimeout(Array(16)[0],0);`],
+    ["pop vacío", `export const x=setTimeout([].pop(),0);`],
+    ["shift vacío", `export const x=setTimeout([].shift(),0);`],
+    ["structuredClone Function", `const g=()=>{}; export const x=structuredClone([g])[0]();`],
+    ["WeakRef primitive", `export const x=new WeakRef("code" as any).deref();`],
+    ["fromEntries ∘ entries renunciado", `export const x=Object.fromEntries(Object.entries({k:performance})).k.eventLoopUtilization();`],
+    ["Object.values renunciado", `export const x=Object.values({k:performance})[0].eventLoopUtilization();`],
+    ["defineProperty override-safe", `export const x=Object.defineProperty({m:performance},"m",{value:Math}).m.eventLoopUtilization();`],
+  ])("frontera SILENT: %s", (_name, code) => {
+    expect(flagged(code)).toBe(false);
+  });
+
+  it.each<[string, string]>([
+    ["slice", `export const x=setTimeout(["code"].slice()[0],0);`],
+    ["toShuffled", `export const x=setTimeout((["code"] as any).toShuffled()[0],0);`],
+    ["at", `export const x=setTimeout(["code"].at(0),0);`],
+    ["concat spread", `export const x=setTimeout([].concat(...[["code"]])[0],0);`],
+    ["Array.from array", `export const x=setTimeout(Array.from(["code"])[0],0);`],
+    ["Map.get", `export const x=setTimeout(new Map([["k","code"]]).get("k"),0);`],
+  ])("control positivo sigue FLAG: %s", (_name, code) => {
+    expect(flagged(code)).toBe(true);
   });
 });
