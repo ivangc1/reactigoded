@@ -19,7 +19,16 @@
  * en property + identifier).
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import ts from "typescript";
 import { transformSync } from "esbuild";
 import {
@@ -30,6 +39,7 @@ import {
   checkSourceFile,
   checkFileWithImports,
   resolveImportPath,
+  discoverServerSafeSourceFiles,
   isContentServerSafeMarked,
   markerNearMissLines,
 } from "../../scripts/check-server-safe-markers.mjs";
@@ -6574,10 +6584,10 @@ describe("server-safe gate — #7 celdas del cuantificador diferido (batería ad
   });
 });
 
-describe("server-safe gate — marcador M1 (near-miss /* */) + O2 (@internal@server-safe higiene)", () => {
+describe("server-safe gate — marcador M1/R14 (near-miss /* */ y //) + O2 (@internal@server-safe higiene)", () => {
   const body = "\nexport const x = 1;\n";
 
-  describe("M1: @server-safe en comentario NO-JSDoc (una estrella) → near-miss (blast-radius fichero)", () => {
+  describe("M1/R14: @server-safe en comentario NO-JSDoc → near-miss (blast-radius fichero)", () => {
     const nm = (src: string) =>
       markerNearMissLines(
         ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true),
@@ -6587,7 +6597,7 @@ describe("server-safe gate — marcador M1 (near-miss /* */) + O2 (@internal@ser
       ["/*@server-safe*/ sin espacios → near-miss", "/*@server-safe*/" + body, true],
       ["multi-línea una-estrella → near-miss", "/*\n * @server-safe\n */" + body, true],
       ["/** @server-safe */ JSDoc → NO near-miss", "/** @server-safe */" + body, false],
-      ["// @server-safe line-comment → NO", "// @server-safe" + body, false],
+      ["// @server-safe line-comment → near-miss", "// @server-safe" + body, true],
       ["prosa foo@server-safe pegado → NO (incidental)", "/* nota: foo@server-safe */" + body, false],
       ["string literal → NO", 'const s = "@server-safe";' + body, false],
     ])("%s", (_n, src, isNearMiss) => {
@@ -8026,6 +8036,83 @@ describe("server-safe gate — R13 custodios (5 gaps post-R12)", () => {
       ["fallback exterior rescata", `export const x=((performance.eventLoopUtilization ?? undefined) || (()=>0))();`],
     ])("SILENT: %s", (_name, code) => {
       expect(flagged(code)).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// R14 — carrier estructural anti-drift + discovery completo + near-miss de línea.
+// Solo se codifican los findings adjudicados por el informe; runtime/ADR pendientes quedan intactos.
+// ============================================================================
+describe("server-safe gate — R14 custodios (estructura + driver)", () => {
+  const flagged = (code: string, file = "r14.fixture.tsx") =>
+    checkSourceFile(`/** @server-safe */\n${code}`, file).length > 0;
+
+  describe("gap#1: proyección de métodos Array por estructura, con default anti-drift", () => {
+    it.each<[string, string]>([
+      ["with conserva receiver", `export const x=setTimeout(["code",0].with(1,9)[0],0);`],
+      ["with puede introducir replacement", `export const x=setTimeout([0].with(0,"code")[0],0);`],
+      ["slice(0,N)", `export const x=setTimeout(["code",0].slice(0,5)[0],0);`],
+      ["copyWithin", `export const x=setTimeout(["code",0].copyWithin(1,0)[0],0);`],
+      ["fill toma arguments[0]", `export const x=setTimeout([0].fill("code")[0],0);`],
+      ["método futuro desconocido falla cerrado", `export const x=setTimeout((["code"] as any).futureCopy()[0],0);`],
+      ["otro consumidor hereda el seam", `export const x=import((["node:fs"] as any).futureCopy()[0]);`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    it.each<[string, string]>([
+      ["with index variable = §141", `export const x=(i:number)=>setTimeout(["code",0].with(i,9)[0],0);`],
+      ["slice end variable = §141", `export const x=(n:number)=>setTimeout(["code"].slice(0,n)[0],0);`],
+      ["copyWithin arg variable = §141", `export const x=(i:number)=>setTimeout(["code",0].copyWithin(i,0)[0],0);`],
+      ["fill range variable = §141", `export const x=(i:number)=>setTimeout([0].fill("code",i)[0],0);`],
+      ["índice resultante fuera de rango", `export const x=setTimeout([0].fill("code")[4],0);`],
+      ["fill benigno no arrastra receiver", `export const x=setTimeout(["code"].fill(String)[0],0);`],
+      ["map callback permanece §141", `export const x=setTimeout(["code"].map(x=>x)[0],0);`],
+      ["filter callback permanece §141", `export const x=setTimeout(["code"].filter(Boolean)[0],0);`],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
+  });
+
+  it("discovery recorre TODO src, no solo components/hooks", () => {
+    const root = mkdtempSync(join(tmpdir(), "r14-server-safe-discovery-"));
+    try {
+      for (const dir of ["components", "hooks", "utils", "theme"]) {
+        mkdirSync(join(root, dir), { recursive: true });
+      }
+      writeFileSync(join(root, "components", "A.tsx"), "/** @server-safe */ export const A=1;");
+      writeFileSync(join(root, "hooks", "useA.ts"), "/** @server-safe */ export const useA=()=>1;");
+      writeFileSync(join(root, "utils", "marked.ts"), "/** @server-safe */ export const x=1;");
+      writeFileSync(join(root, "theme", "runtime.ts"), "export const theme=1;");
+      writeFileSync(join(root, "utils", "marked.test.ts"), "/** @server-safe */ export const x=window;");
+
+      const found = discoverServerSafeSourceFiles(root)
+        .map((file) => relative(root, file).split("\\").join("/"))
+        .sort();
+      expect(found).toEqual([
+        "components/A.tsx",
+        "hooks/useA.ts",
+        "theme/runtime.ts",
+        "utils/marked.ts",
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  describe("near-miss de marker en line-comment", () => {
+    const lines = (source: string) =>
+      markerNearMissLines(
+        ts.createSourceFile("r14-marker.ts", source, ts.ScriptTarget.Latest, true),
+      );
+
+    it("// @server-safe falla loud", () => {
+      expect(lines("// @server-safe\nexport const x=1;")).toEqual([1]);
+    });
+
+    it("no confunde strings ni tokens con sufijo", () => {
+      expect(lines('export const a="// @server-safe";\n// @server-safe-helper')).toEqual([]);
     });
   });
 });

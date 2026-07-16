@@ -192,7 +192,14 @@ export declare function isContentServerSafeMarked(
 ): boolean;
 
 /**
- * NEAR-MISS del marker (M1): líneas donde `@server-safe` aparece en un block-comment NO-JSDoc (una estrella en
- * vez de dos) → TS no lo reconoce como tag → el fichero se salta sin auditar. Vacío si no hay near-miss.
+ * Enumera los source files candidatos al marker bajo TODO `src` (o el root
+ * proporcionado). Incluye JS-family para poder fallar loud ante un marker en
+ * formato no auditable; excluye tests y stories.
+ */
+export declare function discoverServerSafeSourceFiles(root?: string): string[];
+
+/**
+ * NEAR-MISS del marker (M1/R14): líneas donde `@server-safe` aparece en un comentario NO-JSDoc (`//` o bloque
+ * de una estrella) → TS no lo reconoce como tag → el fichero se salta sin auditar. Vacío si no hay near-miss.
  */
 export declare function markerNearMissLines(sourceFile: ts.SourceFile): number[];

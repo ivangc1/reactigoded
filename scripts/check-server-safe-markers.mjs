@@ -303,8 +303,6 @@ function crossOsDirname(p) {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
-const COMPONENTS_DIR = resolve(repoRoot, "src/components");
-const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 const SRC_ROOT = resolve(repoRoot, "src");
 
 // ── Modelo fail-closed (whitelist) del catálogo server-safe ──
@@ -1144,6 +1142,13 @@ function listSourceFiles(dir) {
     }
   }
   return result;
+}
+
+// El marker es PER-FICHERO, no per-carpeta. Limitar el driver a components/hooks hacía que un marker
+// válido en utils/theme/index.ts ni se auditase ni participase del detector de near-miss. El root es
+// parametrizable para que el custodio pruebe el discovery con un árbol efímero, mientras el CLI usa TODO src.
+export function discoverServerSafeSourceFiles(root = SRC_ROOT) {
+  return listSourceFiles(root);
 }
 
 /**
@@ -4276,8 +4281,18 @@ function allObjectLiteralValuesDeep(expr, out) {
 function elementProjection(containerExpr, keyExpr) {
   const out = [];
   const keys = resolveKeyCandidates(keyExpr);
+  // R14: el carrier estructural SOLO entra con índice/key completamente literal. Un índice mixto/variable
+  // conserva la frontera §141 del finding; los carriers históricos mantienen su política previa.
+  const projectedMethodArrays =
+    keys.size > 0 && keyExprComplete(keyExpr)
+      ? projectedArrayMethodAlternatives(containerExpr)
+      : [];
+  const arrayAlternatives = [
+    ...arrayLiteralAlternatives(containerExpr),
+    ...projectedMethodArrays,
+  ];
   if (keys.size === 0) {
-    for (const arr of arrayLiteralAlternatives(containerExpr)) {
+    for (const arr of arrayAlternatives) {
       spreadFlattenedElements(arr.elements, out);
     }
     allObjectLiteralValuesDeep(containerExpr, out);
@@ -4285,7 +4300,7 @@ function elementProjection(containerExpr, keyExpr) {
     for (const key of keys) {
       if (/^(0|[1-9]\d*)$/.test(key)) {
         const i = Number(key);
-        for (const arr of arrayLiteralAlternatives(containerExpr)) {
+        for (const arr of arrayAlternatives) {
           if (arr.elements.some(ts.isSpreadElement)) {
             spreadFlattenedElements(arr.elements, out);
             continue;
@@ -5345,6 +5360,207 @@ function flattenedArrayAlternatives(call, callee) {
       variants = next;
     }
     out.push(...variants.map(syntheticArray));
+  }
+  return out;
+}
+
+// Métodos cuyo resultado NO es un array proyectable de valores del receiver, o cuya selección depende de
+// ejecutar un callback. Son la frontera negativa del carrier estructural R14: `map/filter/flatMap` siguen
+// §141; scalar/iterator/element-returning tampoco se fingen como arrays. La dirección anti-drift está en el
+// COMPLEMENTO: un método nuevo/desconocido sobre array-literal falla cerrado como potencial value-preserver.
+const NON_PROJECTABLE_ARRAY_METHODS = new Set([
+  "at",
+  "constructor",
+  "entries",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flatMap",
+  "forEach",
+  "includes",
+  "indexOf",
+  "join",
+  "keys",
+  "lastIndexOf",
+  "map",
+  "pop",
+  "push",
+  "reduce",
+  "reduceRight",
+  "shift",
+  "some",
+  "toLocaleString",
+  "toString",
+  "unshift",
+  "values",
+]);
+
+// Ya tienen virtualización semántica propia (más precisa) en semanticContainerResultAlternatives. Excluirlos
+// del fallback evita que una rama estructural más ancha borre sus controles OOM/§141. `slice` no está aquí:
+// R14 amplía su semántica exacta a start/end literales, no solo `slice()`/`slice(0)`.
+const PRECISE_ARRAY_RESULT_METHODS = new Set([
+  "concat",
+  "flat",
+  "reverse",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+]);
+
+// Alternativas ENTERAS numéricas decidibles de un argumento VT. Rechaza BigInt (los métodos Array hacen
+// ToNumber y lanzarían), strings/coerciones e identifiers: son §141, no un evaluador de constantes parcial.
+function literalIntegerAlternatives(expr) {
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length === 0) return null;
+  const out = [];
+  for (const leaf of leaves) {
+    const u = unwrapErased(leaf);
+    if (
+      ts.isBigIntLiteral(u) ||
+      (ts.isPrefixUnaryExpression(u) &&
+        ts.isBigIntLiteral(unwrapErased(u.operand)))
+    ) {
+      return null;
+    }
+    const canonical = canonicalNumericKey(u);
+    if (canonical === null) return null;
+    const value = Number(canonical);
+    if (!Number.isFinite(value) || !Number.isInteger(value)) return null;
+    out.push(value);
+  }
+  return [...new Set(out)];
+}
+
+function literalIntegerArgumentLists(args) {
+  let branches = [[]];
+  for (const arg of args) {
+    if (ts.isSpreadElement(arg)) return null;
+    const values = literalIntegerAlternatives(arg);
+    if (!values) return null;
+    const next = [];
+    for (const branch of branches) {
+      for (const value of values) next.push([...branch, value]);
+    }
+    branches = next;
+  }
+  return branches;
+}
+
+// Para el default desconocido solo aceptamos args en-sitio sin identifiers/calls. Si el comportamiento del
+// método depende de data-flow (`futureCopy(n)`), permanece §141; `futureCopy()`/args literales falla cerrado.
+function arrayMethodArgumentsAreInline(args) {
+  if (args.some(ts.isSpreadElement)) return false;
+  return args.every((arg) =>
+    valueTransparentLeaves(arg).every((leaf) => {
+      const u = unwrapErased(leaf);
+      return !ts.isIdentifier(u) && !ts.isCallExpression(u);
+    }),
+  );
+}
+
+// R14: carrier por ESTRUCTURA, no catálogo positivo método-a-método. Solo se consulta cuando un CallExpression
+// sobre receiver array-literal se PROYECTA por índice literal completo. Los cuatro métodos con semántica de
+// rango/replacement se virtualizan exactamente para conservar OOM y el origen de `.fill`; cualquier método
+// futuro no clasificado degrada a unión ∃ de los elementos del receiver (fail-closed anti-drift).
+function projectedArrayMethodAlternatives(expr) {
+  const out = [];
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const call = unwrapErased(leaf);
+    if (!ts.isCallExpression(call)) continue;
+    const callee = unwrapErased(call.expression);
+    if (
+      !(
+        ts.isPropertyAccessExpression(callee) ||
+        ts.isElementAccessExpression(callee)
+      )
+    ) {
+      continue;
+    }
+    const methods = [...new Set(accessedMemberNames(callee))];
+    if (methods.length === 0) continue; // método por key variable → §141
+    const receivers = completeContainerLiteralAlternatives(
+      callee.expression,
+      ts.isArrayLiteralExpression,
+    );
+    if (!receivers) continue;
+
+    for (const method of methods) {
+      if (
+        NON_PROJECTABLE_ARRAY_METHODS.has(method) ||
+        PRECISE_ARRAY_RESULT_METHODS.has(method)
+      ) {
+        continue;
+      }
+      for (const receiver of receivers) {
+        const elements = concreteArrayElements(receiver);
+        if (!elements) continue;
+
+        if (method === "with") {
+          if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) continue;
+          const indices = literalIntegerAlternatives(call.arguments[0]);
+          if (!indices) continue;
+          for (const rawIndex of indices) {
+            const index = rawIndex < 0 ? elements.length + rawIndex : rawIndex;
+            if (index < 0 || index >= elements.length) continue; // runtime RangeError → OOM universal
+            const next = [...elements];
+            next[index] = call.arguments[1];
+            out.push(syntheticArray(next));
+          }
+          continue;
+        }
+
+        if (method === "slice") {
+          if (call.arguments.length > 2) continue;
+          const branches = literalIntegerArgumentLists(call.arguments);
+          if (!branches) continue;
+          for (const args of branches) out.push(syntheticArray(elements.slice(...args)));
+          continue;
+        }
+
+        if (method === "copyWithin") {
+          if (call.arguments.length > 3) continue;
+          const branches = literalIntegerArgumentLists(call.arguments);
+          if (!branches) continue;
+          for (const args of branches) {
+            const next = [...elements];
+            next.copyWithin(...args);
+            out.push(syntheticArray(next));
+          }
+          continue;
+        }
+
+        if (method === "fill") {
+          if (
+            call.arguments.length < 1 ||
+            call.arguments.length > 3 ||
+            call.arguments.some(ts.isSpreadElement)
+          ) {
+            continue;
+          }
+          const branches = literalIntegerArgumentLists(call.arguments.slice(1));
+          if (!branches) continue;
+          for (const args of branches) {
+            const next = [...elements];
+            next.fill(call.arguments[0], ...args);
+            out.push(syntheticArray(next));
+          }
+          continue;
+        }
+
+        if (!arrayMethodArgumentsAreInline(call.arguments)) continue;
+        if (elements.length === 0) {
+          out.push(syntheticArray([]));
+          continue;
+        }
+        const union = syntheticValueUnion(elements);
+        out.push(
+          syntheticArray(Array.from({ length: elements.length }, () => union)),
+        );
+      }
+    }
   }
   return out;
 }
@@ -9340,7 +9556,7 @@ function checkSourceFile(
           line: line + 1,
           detail:
             partialMember === null
-              ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un global parcial default-deny (allow: ${[...(SAFE_PARTIAL_MEMBERS[partialRootName] ?? SAFE_IMPORT_META_MEMBERS)].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro Node-only escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
+              ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un root default-deny (global host-populated o import.meta; allow: ${[...(SAFE_PARTIAL_MEMBERS[partialRootName] ?? SAFE_IMPORT_META_MEMBERS)].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro no portable escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
               : PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
                 ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
                 : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR. Remedia con \`${partialRootName}.${partialMember}?.()\` (safe-probe sancionado; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
@@ -10245,14 +10461,14 @@ const isCliEntry =
   process.argv[1] !== undefined &&
   pathToFileURL(process.argv[1]).href === import.meta.url;
 
-// Enumera TODOS los rangos de block-comment del fichero (ambos estilos de bloque), ROBUSTO a template literals
+// Enumera TODOS los rangos de comentario del fichero (línea + ambos estilos de bloque), ROBUSTO a templates
 // (Auditoría B R7 / R7-D). El scanner crudo (`ts.createScanner`) se DESINCRONIZA en un template con sustitución
 // (sin `reScanTemplateToken` trata la llave-cierre + backtick como CloseBrace + template-head nuevo) → pierde
 // los comentarios POSTERIORES → un marker tras un template moría en SILENCIO (blast-radius de fichero). Las
 // posiciones del AST (`getFullStart`/`getEnd`) son parser-correctas y `getLeadingCommentRanges`/
 // `getTrailingCommentRanges` solo escanean la trivia en esos puntos → inmunes al desync. Rangos deduplicados
 // por pos, ordenados.
-function allBlockCommentRanges(sourceFile) {
+function allCommentRanges(sourceFile) {
   const text = sourceFile.text;
   const seen = new Set();
   const out = [];
@@ -10260,7 +10476,8 @@ function allBlockCommentRanges(sourceFile) {
     if (!ranges) return;
     for (const r of ranges) {
       if (
-        r.kind === ts.SyntaxKind.MultiLineCommentTrivia &&
+        (r.kind === ts.SyntaxKind.MultiLineCommentTrivia ||
+          r.kind === ts.SyntaxKind.SingleLineCommentTrivia) &&
         !seen.has(r.pos)
       ) {
         seen.add(r.pos);
@@ -10419,7 +10636,7 @@ function detectServerSafeMarker(sourceFile, relPath) {
       }
     }
     // R7-D: enumeración por AST (robusta a templates), no scanner crudo (se desincronizaba con `${...}`).
-    for (const r of allBlockCommentRanges(sourceFile)) {
+    for (const r of allCommentRanges(sourceFile)) {
       const pos = r.pos;
       const raw = sourceFile.text.slice(r.pos, r.end);
       if (raw.startsWith("/**") && !validAnchors.has(pos)) {
@@ -10570,7 +10787,8 @@ function markerNeedsHygiene(sourceFile, content, relPath) {
 }
 
 /**
- * NEAR-MISS del marker (Auditoría B R5 / M1 + R13): (a) `@server-safe` en BLOCK-COMMENT NO-JSDoc (una estrella),
+ * NEAR-MISS del marker (Auditoría B R5 / M1 + R13/R14): (a) `@server-safe` en comentario NO-JSDoc
+ * (block de una estrella o `//`),
  * o (b) JSDoc doble-star cuyo token se convierte en `@server-safe` al retirar un code-point no-ASCII desconocido
  * que el normalizador aún no clasifica. En ambos TS no emite el tag y el fichero se SALTA silenciosamente.
  * Devuelve líneas para que el CLI falle loud; la rama (b) invierte el default de categorías Unicode futuras:
@@ -10580,7 +10798,7 @@ export function markerNearMissLines(sourceFile) {
   const out = [];
   // R7-D: enumeración por AST (robusta a templates), no scanner crudo (se desincronizaba con `${...}` → un
   // single-star tras un template no disparaba el near-miss).
-  for (const r of allBlockCommentRanges(sourceFile)) {
+  for (const r of allCommentRanges(sourceFile)) {
     // Auditoría B R6 / H4: normalizar invisibles con el MISMO normalizador que FIX-4 (una definición de
     // "invisible", dos consumidores) → un ZWSP pegado al token no rompe el borde. Y borde SIMÉTRICO
     // `(?<![\w-])…(?![\w-])`: el predecesor `(?:\s|\*|$)` solo cubría el lado TRAILING → puntuación LEADING
@@ -10614,10 +10832,9 @@ export function isContentServerSafeMarked(content, relPath) {
 }
 
 if (isCliEntry) {
-  const allFiles = [
-    ...listSourceFiles(COMPONENTS_DIR),
-    ...listSourceFiles(HOOKS_DIR),
-  ];
+  // R14: el marker es per-fichero en TODO `src`. Acotar a components/hooks dejaba markers y near-misses de
+  // utils/theme/barrels completamente fuera del driver (silent-skip aunque el detector individual fuese robusto).
+  const allFiles = discoverServerSafeSourceFiles();
 
   // Cache compartida cross-entries: un util importado por N componentes
   // se parsea y analiza UNA vez. Sin esto, el coste pasa de O(N+M) a
@@ -10655,7 +10872,7 @@ if (isCliEntry) {
   const allViolations = [];
   // M1 (Auditoría B R5): NEAR-MISS del marker en ficheros NO marcados — `@server-safe` en un `/* */` (una
   // estrella, no-JSDoc) → TS lo ignora → el fichero se salta silenciosamente sin auditar. Fail-loud para que el
-  // maintainer corrija `/*`→`/**` (blast-radius de fichero completo, más probable que un Cc). Solo auditables.
+  // maintainer corrija `/*`/`//`→`/**` (blast-radius de fichero completo, más probable que un Cc). Solo auditables.
   {
     const markedSet = new Set(markedFiles);
     for (const file of allFiles) {
@@ -10669,7 +10886,7 @@ if (isCliEntry) {
         allViolations.push({
           rule: "server-safe-marker",
           file: relPath,
-        detail: `near-miss no parseable de \`@server-safe\` en la línea${plural ? "s" : ""} ${nmLines.join(", ")} — comentario de una estrella o token JSDoc corrompido por un carácter Unicode desconocido; TypeScript no emite el tag y este fichero se saltaría SIN auditar. Usa exactamente \`/** @server-safe */\` o quita el token si no era un marker. M1/R13.`,
+          detail: `near-miss no parseable de \`@server-safe\` en la línea${plural ? "s" : ""} ${nmLines.join(", ")} — comentario no-JSDoc (\`//\` o bloque de una estrella) o token JSDoc corrompido por un carácter Unicode desconocido; TypeScript no emite el tag y este fichero se saltaría SIN auditar. Usa exactamente \`/** @server-safe */\` o quita el token si no era un marker. M1/R13/R14.`,
         });
       }
     }
