@@ -2163,15 +2163,67 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       collectWriteTargets(t.left); // default en destructuring: `{ x: T = d }` → T es t.left
     }
   };
+  // Mutadores cuyo PRIMER argumento es el objeto target: `Object.assign/defineProperty/
+  // defineProperties(X, …)`, `Reflect.set/defineProperty/deleteProperty(X, …)`. Token-en-su-sitio
+  // (el mutador está a la vista). Pasar X a una función arbitraria que lo muta = data-flow → residual.
+  const MUTATORS = {
+    Object: new Set(["assign", "defineProperty", "defineProperties"]),
+    Reflect: new Set(["set", "defineProperty", "deleteProperty"]),
+  };
+
+  // R13 gap#4: familia CONST-ESTABLE del receptor del mutador (`const O=Object; O.assign(…)`). El target
+  // React ya se resolvía por familia, pero el receptor exigía el spelling literal Object/Reflect. Punto fijo
+  // por unión para cadenas (`const O=Object; const O2=O`); SOLO const, de modo que `let O=Object` conserva la
+  // frontera §141. Scope-blind como el taint file-wide de esta función: una colisión solo sobre-tainta.
+  const mutatorNamespaceAliases = new Map([
+    ["Object", new Set(["Object"])],
+    ["Reflect", new Set(["Reflect"])],
+  ]);
+  let mutatorAliasesChanged = true;
+  while (mutatorAliasesChanged) {
+    mutatorAliasesChanged = false;
+    const collectMutatorAlias = (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.Const) !== 0
+      ) {
+        const namespaces = new Set();
+        for (const leaf of valueTransparentLeaves(node.initializer)) {
+          if (!ts.isIdentifier(leaf)) continue;
+          for (const ns of mutatorNamespaceAliases.get(leaf.text) ?? []) {
+            namespaces.add(ns);
+          }
+        }
+        if (namespaces.size > 0) {
+          const previous = mutatorNamespaceAliases.get(node.name.text);
+          const merged = previous
+            ? new Set([...previous, ...namespaces])
+            : namespaces;
+          if (!previous || merged.size !== previous.size) {
+            mutatorNamespaceAliases.set(node.name.text, merged);
+            mutatorAliasesChanged = true;
+          }
+        }
+      }
+      ts.forEachChild(node, collectMutatorAlias);
+    };
+    collectMutatorAlias(sourceFile);
+  }
+
   // `[obj, member]` de un callee `Obj.m(…)` (dot) o `Obj["m"](…)` (bracket string literal) — misma
   // normalización dot/bracket que el resto del gate (codex P1: el bracket-form se colaba).
   // Receiver del mutador value-transparente (`(0, Object).assign(React, …)`, `(c ? Fake : Object).
   // assign(…)`) → TODAS las hojas identifier VT (ALTERNATIVAS), no solo la primera; el caller
   // taintea si CUALQUIERA es un mutador para el member, fail-closed (codex P1).
   const mutatorReceiverIdents = (recv) =>
-    valueTransparentLeaves(recv)
-      .filter((o) => ts.isIdentifier(o))
-      .map((o) => o.text);
+    valueTransparentLeaves(recv).flatMap((o) =>
+      ts.isIdentifier(o)
+        ? [...(mutatorNamespaceAliases.get(o.text) ?? [])]
+        : [],
+    );
   const calleeObjMember = (callee) => {
     if (ts.isPropertyAccessExpression(callee)) {
       const objs = mutatorReceiverIdents(callee.expression);
@@ -2199,13 +2251,6 @@ function gatherMutatedNamespaceRoots(sourceFile) {
       }
     }
     return null;
-  };
-  // Mutadores cuyo PRIMER argumento es el objeto target: `Object.assign/defineProperty/
-  // defineProperties(X, …)`, `Reflect.set/defineProperty/deleteProperty(X, …)`. Token-en-su-sitio
-  // (el mutador está a la vista). Pasar X a una función arbitraria que lo muta = data-flow → residual.
-  const MUTATORS = {
-    Object: new Set(["assign", "defineProperty", "defineProperties"]),
-    Reflect: new Set(["set", "defineProperty", "deleteProperty"]),
   };
   const visit = (node) => {
     if (
@@ -3754,6 +3799,17 @@ function accessedMemberNames(node) {
   return [];
 }
 
+// ¿el selector de un member-access está completamente resuelto? Dot siempre; bracket solo si TODAS sus
+// hojas VT son literal-string/numéricas. Gemelo estructural de `keyExprComplete`, centralizado para los
+// idiomas reflexivos que reciben el member-access completo en vez de la key aislada. R13 gap#3.
+function accessedMemberKeyComplete(node) {
+  return (
+    ts.isPropertyAccessExpression(node) ||
+    (ts.isElementAccessExpression(node) &&
+      keyExprComplete(node.argumentExpression))
+  );
+}
+
 /**
  * Valor string CONSTANTE de un nodo si es foldeable en compile-time: StringLiteral,
  * NoSubstitutionTemplate, o TemplateExpression cuyas sustituciones son TODAS strings
@@ -3853,6 +3909,195 @@ function keyExprComplete(argExpr) {
   return valueTransparentLeaves(argExpr).every(
     (l) => foldConstString(l) !== undefined || canonicalNumericKey(l) !== null,
   );
+}
+
+// ¿el VALOR de `child` puede llegar intacto al consumidor de `parent`? Compartido por la inspección del
+// resultado de sondas optional y value-fallback. En `||`/`??` el operando izquierdo queda rescatado por el
+// derecho; el derecho sí llega. En `&&` cualquiera puede ser el resultado. R13 gap#5 centraliza la simetría.
+function resultCrossesToConsumer(parent, child) {
+  if (isErasedOuterExpr(parent)) return true;
+  if (ts.isBinaryExpression(parent)) {
+    const op = parent.operatorToken.kind;
+    if (
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+    ) {
+      return true;
+    }
+    if (
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
+    ) {
+      return parent.right === child;
+    }
+  }
+  return valueTransparentChildren(parent).includes(child);
+}
+
+function stableValueDeclarations(sourceFile, name) {
+  const out = [];
+  let unstableBinding = false;
+  const bindsName = (binding) => {
+    const names = new Set();
+    addBindingNamesFromPattern(binding, names);
+    return names.has(name);
+  };
+  const visit = (node) => {
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+      node.name?.text === name
+    ) {
+      out.push(node);
+    } else if (ts.isVariableDeclaration(node) && bindsName(node.name)) {
+      if (
+        ts.isIdentifier(node.name) &&
+        node.name.text === name &&
+        node.initializer &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.Const) !== 0
+      ) {
+        out.push(node.initializer);
+      } else {
+        // let/var, catch binding o destructuring: no hay un valor const demostrable.
+        unstableBinding = true;
+      }
+    } else if (ts.isParameter(node) && bindsName(node.name)) {
+      unstableBinding = true;
+    } else if (ts.isImportDeclaration(node)) {
+      const imports = new Set();
+      addRuntimeImportBindings(node.importClause, imports);
+      if (imports.has(name)) unstableBinding = true;
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name
+    ) {
+      unstableBinding = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  // La prueba es intencionadamente más estrecha que un resolver de scopes: cualquier binding homónimo no
+  // demostrable invalida el alias. Puede over-flagear, pero nunca convierte un parámetro/let sombreante en
+  // "callable" por haber visto un const homónimo en otro scope.
+  return unstableBinding ? [] : out;
+}
+
+function everyStableValue(expr, sourceFile, predicate, seen = new Set()) {
+  const leaves = valueTransparentLeaves(expr).map(unwrapErased);
+  if (leaves.length === 0) return false;
+  return leaves.every((leaf) => {
+    if (!ts.isIdentifier(leaf)) return predicate(leaf, seen);
+    if (seen.has(leaf.text)) return false;
+    const declarations = stableValueDeclarations(sourceFile, leaf.text);
+    if (declarations.length === 0) return false;
+    const nextSeen = new Set([...seen, leaf.text]);
+    return declarations.every((decl) =>
+      ts.isFunctionDeclaration(decl) || ts.isClassDeclaration(decl)
+        ? predicate(decl, nextSeen)
+        : everyStableValue(decl, sourceFile, predicate, nextSeen),
+    );
+  });
+}
+
+function valueProvablyCallable(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) =>
+    ts.isArrowFunction(leaf) ||
+    ts.isFunctionExpression(leaf) ||
+    ts.isFunctionDeclaration(leaf),
+  );
+}
+
+function valueProvablyConstructible(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) =>
+    ts.isFunctionExpression(leaf) ||
+    ts.isFunctionDeclaration(leaf) ||
+    ts.isClassExpression(leaf) ||
+    ts.isClassDeclaration(leaf),
+  );
+}
+
+function valueProvablyNonNullish(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) => {
+    if (
+      ts.isArrowFunction(leaf) ||
+      ts.isFunctionExpression(leaf) ||
+      ts.isFunctionDeclaration(leaf) ||
+      ts.isClassExpression(leaf) ||
+      ts.isClassDeclaration(leaf) ||
+      ts.isObjectLiteralExpression(leaf) ||
+      ts.isArrayLiteralExpression(leaf) ||
+      ts.isNewExpression(leaf) ||
+      ts.isStringLiteralLike(leaf) ||
+      ts.isNumericLiteral(leaf) ||
+      ts.isBigIntLiteral(leaf)
+    ) {
+      return true;
+    }
+    return (
+      leaf.kind === ts.SyntaxKind.TrueKeyword ||
+      leaf.kind === ts.SyntaxKind.FalseKeyword
+    );
+  });
+}
+
+function valueProvablyIterable(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) => {
+    if (ts.isArrayLiteralExpression(leaf) || ts.isStringLiteralLike(leaf)) {
+      return true;
+    }
+    if (ts.isNewExpression(leaf)) {
+      const ctor = unwrapErased(leaf.expression);
+      return ts.isIdentifier(ctor) && (ctor.text === "Map" || ctor.text === "Set");
+    }
+    return false;
+  });
+}
+
+// ¿el fallback garantiza que el consumidor concreto no crashea cuando el miembro parcial está ausente?
+// No intenta probar expresiones arbitrarias: solo literales/funciones y aliases const-estables; lo demás
+// degrada fail-closed. Un consumidor opcional (`?.`) se rescata por sí mismo.
+function fallbackProtectsConsumer(fallback, consumer, result, sourceFile) {
+  if (!consumer) return true;
+  if (
+    (ts.isCallExpression(consumer) ||
+      ts.isPropertyAccessExpression(consumer) ||
+      ts.isElementAccessExpression(consumer)) &&
+    consumer.expression === result
+  ) {
+    if (consumer.questionDotToken !== undefined) return true;
+    return ts.isCallExpression(consumer)
+      ? valueProvablyCallable(fallback, sourceFile)
+      : valueProvablyNonNullish(fallback, sourceFile);
+  }
+  if (ts.isTaggedTemplateExpression(consumer) && consumer.tag === result) {
+    return valueProvablyCallable(fallback, sourceFile);
+  }
+  if (ts.isNewExpression(consumer) && consumer.expression === result) {
+    return valueProvablyConstructible(fallback, sourceFile);
+  }
+  if (
+    (ts.isVariableDeclaration(consumer) ||
+      ts.isBindingElement(consumer) ||
+      ts.isParameter(consumer)) &&
+    consumer.initializer === result
+  ) {
+    if (ts.isObjectBindingPattern(consumer.name)) {
+      return valueProvablyNonNullish(fallback, sourceFile);
+    }
+    if (ts.isArrayBindingPattern(consumer.name)) {
+      return valueProvablyIterable(fallback, sourceFile);
+    }
+  }
+  if (ts.isSpreadElement(consumer) && consumer.expression === result) {
+    return valueProvablyIterable(fallback, sourceFile);
+  }
+  if (ts.isForOfStatement(consumer) && consumer.expression === result) {
+    return valueProvablyIterable(fallback, sourceFile);
+  }
+  return true;
 }
 
 function isConstructorMemberAccess(node) {
@@ -3962,7 +4207,7 @@ function spreadFlattenedElements(elements, out) {
   for (const el of elements) {
     if (!el || ts.isOmittedExpression(el)) continue;
     if (ts.isSpreadElement(el)) {
-      for (const arr of arrayLiteralAlternatives(el.expression)) {
+      for (const arr of iterableArrayAlternatives(el.expression)) {
         spreadFlattenedElements(arr.elements, out);
       }
       continue;
@@ -3980,10 +4225,13 @@ function arrayLiteralSpreadsFullyResolve(lit) {
   for (const el of lit.elements) {
     if (!ts.isSpreadElement(el)) continue;
     const leaves = valueTransparentLeaves(el.expression);
-    const arrs = leaves.filter((l) => ts.isArrayLiteralExpression(l));
-    if (leaves.length === 0 || arrs.length !== leaves.length) return false;
-    for (const arr of arrs) {
-      if (!arrayLiteralSpreadsFullyResolve(arr)) return false;
+    if (leaves.length === 0) return false;
+    for (const leaf of leaves) {
+      const arrs = iterableArrayAlternatives(leaf);
+      if (arrs.length === 0) return false;
+      for (const arr of arrs) {
+        if (!arrayLiteralSpreadsFullyResolve(arr)) return false;
+      }
     }
   }
   return true;
@@ -4120,6 +4368,11 @@ function valueTransparentChildren(node) {
       const out = elementProjection(node.arguments[0], node.arguments[1]);
       if (out.length > 0) return out;
     }
+    // R13 gap#1: `new Map([[k,X]]).get(k)` conserva el VALOR de la entrada elegida. Resolución
+    // key-aware literal + last-wins; key miss/unknown no aporta hojas (OOM/§141). Al vivir en el seam VT,
+    // TODOS los consumidores value-survival heredan la cobertura, no solo el member-read observado.
+    const mapValues = mapGetValueAlternatives(node, callee);
+    if (mapValues.length > 0) return mapValues;
     // `[containerLit].at(i)` de un array-literal → ∃-descenso a TODOS los elementos (fail-closed: `.at` admite
     // índices NEGATIVOS = desde el final, así que no se mapea a posición fija sin sobre-aproximar). R10/R9FIX: el
     // método `.at` se accede por DOT (`.at`) o BRACKET (`["at"]`) — `accessedMemberNames` folda ambos; y con o SIN
@@ -4451,8 +4704,13 @@ function reflectiveCarrierSources(expr, mode, viaReflective = false) {
 
 function reflectiveValueReads(node) {
   const out = [];
-  const add = (receiver, members) => {
-    if (receiver && members && members.size > 0) out.push({ receiver, members });
+  const add = (receiver, members, complete = true) => {
+    // Una key incompleta sobre import.meta debe sobrevivir hasta el consumidor aunque el subset resoluble
+    // esté vacío: allí se aplica la polaridad allowlist fail-closed. Las keys completas sin candidatas siguen
+    // sin representar una lectura modelable.
+    if (receiver && members && (members.size > 0 || complete === false)) {
+      out.push({ receiver, members, complete });
+    }
   };
   // (A/A2) `<descriptor>.value` — el idioma getOwnPropertyDescriptor(s). La lectura de `.value` se resuelve
   // por el resolver COMPARTIDO `accessedMemberNames` (Auditoría B R5 / U3, cierra #4): bracket `["value"]` ≡
@@ -4475,7 +4733,11 @@ function reflectiveValueReads(node) {
           staticNamespaceCall(inner, "Reflect", "getOwnPropertyDescriptor"))
       ) {
         // getOwnPropertyDescriptor(R, "k").value → member = k (key VT-fold canónica); receiver = R.
-        add(inner.arguments[0], resolveKeyCandidates(inner.arguments[1]));
+        add(
+          inner.arguments[0],
+          resolveKeyCandidates(inner.arguments[1]),
+          keyExprComplete(inner.arguments[1]),
+        );
       } else if (
         ts.isPropertyAccessExpression(inner) ||
         ts.isElementAccessExpression(inner)
@@ -4487,7 +4749,11 @@ function reflectiveValueReads(node) {
           innerCall.arguments.length >= 1 &&
           staticNamespaceCall(innerCall, "Object", "getOwnPropertyDescriptors")
         ) {
-          add(innerCall.arguments[0], new Set(accessedMemberNames(inner)));
+          add(
+            innerCall.arguments[0],
+            new Set(accessedMemberNames(inner)),
+            accessedMemberKeyComplete(inner),
+          );
         }
       }
     }
@@ -4501,14 +4767,17 @@ function reflectiveValueReads(node) {
     ts.isElementAccessExpression(node)
   ) {
     const members = new Set(accessedMemberNames(node));
-    if (members.size > 0) {
+    const membersComplete = accessedMemberKeyComplete(node);
+    if (members.size > 0 || !membersComplete) {
       const recv = unwrapErased(node.expression);
       // R8 MEC-B: fuentes value-carrier por FAMILIA (identity-return arg0 / proto-walk / own-copy), RECURSIVAS —
       // reemplaza el dispatch inline assign/create-arg0/spread (ahora un caso del helper) y AÑADE freeze/seal/
       // preventExtensions/defineProperty-TARGET/defineProperties-TARGET/setPrototypeOf/getPrototypeOf/{__proto__}
       // + la composición (create∘create, freeze∘create, {...{...R}}), con la matriz chain-vs-own que NO lee
       // `assign({},create(R))`/`{...create(R)}` (medido undefined → SILENT-correcto).
-      for (const src of reflectiveCarrierSources(recv, "chain")) add(src, members);
+      for (const src of reflectiveCarrierSources(recv, "chain")) {
+        add(src, members, membersComplete);
+      }
       // descriptor-transfer (R como FUENTE de descriptor, ORTOGONAL al value-carrier): gOPDs(R) → 2º arg de
       // create/defineProperties; gOPD(R,k2) → 3er arg de defineProperty. El helper cubre el TARGET (arg0).
       const gOPDsRoot = (arg) => {
@@ -4526,7 +4795,7 @@ function reflectiveValueReads(node) {
           staticNamespaceCall(recv, "Object", "defineProperties"))
       ) {
         const r = gOPDsRoot(recv.arguments[1]); // create(proto, gOPDs(R)) / defineProperties(_, gOPDs(R))
-        if (r) add(r, members);
+        if (r) add(r, members, membersComplete);
       } else if (
         ts.isCallExpression(recv) &&
         recv.arguments.length >= 3 &&
@@ -4542,7 +4811,11 @@ function reflectiveValueReads(node) {
         ) {
           const defKeys = resolveKeyCandidates(recv.arguments[1]);
           if ([...members].some((m) => defKeys.has(m))) {
-            add(desc.arguments[0], resolveKeyCandidates(desc.arguments[1]));
+            add(
+              desc.arguments[0],
+              resolveKeyCandidates(desc.arguments[1]),
+              membersComplete && keyExprComplete(desc.arguments[1]),
+            );
           }
         }
       }
@@ -4963,6 +5236,307 @@ function slicedArrayAlternatives(call, callee) {
   return receivers.map((receiver) => syntheticArray([...receiver.elements]));
 }
 
+function concreteArrayElements(lit) {
+  // Los holes cambian posiciones/iteración según el carrier (reverse conserva; flat elimina; Set materializa
+  // undefined). No inventar una semántica común: quedan fuera hasta que un consumer los adjudique.
+  if (
+    lit.elements.some(ts.isOmittedExpression) ||
+    !arrayLiteralSpreadsFullyResolve(lit)
+  ) {
+    return null;
+  }
+  return spreadFlattenedElements(lit.elements, []);
+}
+
+// reverse/toReversed/toSorted/toSpliced producen una secuencia cuyos elementos provienen del receiver (y,
+// para toSpliced, de los inserts). El ORDEN no es una prueba segura común — comparator/índices cambian la
+// posición — así que cada posición virtual contiene la unión ∃ de elementos posibles, igual que `.at`.
+// Es over-aprox fail-closed deliberada y central: cualquier consumidor posicional hereda el mismo resultado.
+function reorderedArrayAlternatives(call, callee) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const method = accessedMemberNames(callee).find((name) =>
+    ["reverse", "toReversed", "toSorted", "toSpliced"].includes(name),
+  );
+  if (!method) return [];
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+  );
+  if (!receivers) return [];
+
+  const branches =
+    method === "toSpliced"
+      ? expandArgLists(call.arguments).filter((branch) => !branch.truncated)
+      : [{ nodes: [], truncated: false }];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements) continue;
+    for (const branch of branches) {
+      const inserts = method === "toSpliced" ? branch.nodes.slice(2) : [];
+      const candidates = [...elements, ...inserts];
+      if (candidates.length === 0) {
+        out.push(syntheticArray([]));
+        continue;
+      }
+      const union = syntheticValueUnion(candidates);
+      const width = Math.max(1, elements.length + inserts.length);
+      out.push(syntheticArray(Array.from({ length: width }, () => union)));
+    }
+  }
+  return out;
+}
+
+// `flat()` / `flat(1)` sobre arrays completamente literales: virtualiza exactamente un nivel. Las ramas
+// alternativas de un elemento-array se cartesianizan; `flat(0)` es copia. Profundidades >1 permanecen fuera
+// del mandato R13 para no fingir un folder recursivo no adjudicado.
+function flattenedArrayAlternatives(call, callee) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("flat") ||
+    call.arguments.some(ts.isSpreadElement) ||
+    call.arguments.length > 1
+  ) {
+    return [];
+  }
+  const depth =
+    call.arguments.length === 0 ? "1" : canonicalNumericKey(call.arguments[0]);
+  if (depth !== "0" && depth !== "1") return [];
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+  );
+  if (!receivers) return [];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements) continue;
+    if (depth === "0") {
+      out.push(syntheticArray(elements));
+      continue;
+    }
+    let variants = [[]];
+    for (const element of elements) {
+      const nested = completeContainerLiteralAlternatives(
+        element,
+        ts.isArrayLiteralExpression,
+      );
+      if (!nested) {
+        variants = variants.map((current) => [...current, element]);
+        continue;
+      }
+      const next = [];
+      for (const current of variants) {
+        for (const array of nested) {
+          const flattened = concreteArrayElements(array);
+          if (flattened) next.push([...current, ...flattened]);
+        }
+      }
+      variants = next;
+    }
+    out.push(...variants.map(syntheticArray));
+  }
+  return out;
+}
+
+function isStaticGlobalNew(node, name) {
+  if (!ts.isNewExpression(node)) return false;
+  return valueTransparentLeaves(node.expression).some((leaf) => {
+    const e = unwrapErased(leaf);
+    return ts.isIdentifier(e) && e.text === name;
+  });
+}
+
+// SameValueZero key para el subconjunto LITERAL adjudicado de Map/Set. El prefijo de tipo evita confluir
+// `1` con `"1"`; Number -0/0 sí confluyen como en runtime. null/boolean son valores literales distintos.
+function literalCollectionKey(expr) {
+  const leaves = valueTransparentLeaves(expr).map(unwrapErased);
+  if (leaves.length !== 1) return null;
+  const e = leaves[0];
+  if (ts.isStringLiteralLike(e)) return `string:${e.text}`;
+  if (ts.isBigIntLiteral(e)) {
+    return `bigint:${String(BigInt(e.text.slice(0, -1).replace(/_/g, "")))}`;
+  }
+  if (
+    ts.isPrefixUnaryExpression(e) &&
+    e.operator === ts.SyntaxKind.MinusToken &&
+    ts.isBigIntLiteral(unwrapErased(e.operand))
+  ) {
+    const b = unwrapErased(e.operand);
+    return `bigint:${String(-BigInt(b.text.slice(0, -1).replace(/_/g, "")))}`;
+  }
+  const numeric = canonicalNumericKey(e);
+  if (numeric !== null) return `number:${numeric}`;
+  if (e.kind === ts.SyntaxKind.TrueKeyword) return "boolean:true";
+  if (e.kind === ts.SyntaxKind.FalseKeyword) return "boolean:false";
+  if (e.kind === ts.SyntaxKind.NullKeyword) return "null";
+  return null;
+}
+
+// Variantes de entradas de `new Map(<array-literal>)`. Cada entrada conserva keyExpr para la eventual
+// iteración y key canónica (null = key opaca). Las entradas/pairs opacas quedan §141; no se extraen parciales.
+function mapEntryAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!isStaticGlobalNew(e, "Map")) return [];
+  const args = [...(e.arguments ?? [])];
+  if (args.some(ts.isSpreadElement) || args.length > 1) return [];
+  if (args.length === 0) return [[]];
+  const sources = completeContainerLiteralAlternatives(
+    args[0],
+    ts.isArrayLiteralExpression,
+  );
+  if (!sources) return [];
+  const out = [];
+  for (const source of sources) {
+    const entryExprs = concreteArrayElements(source);
+    if (!entryExprs) continue;
+    let variants = [[]];
+    for (const entryExpr of entryExprs) {
+      const pairs = completeContainerLiteralAlternatives(
+        entryExpr,
+        ts.isArrayLiteralExpression,
+      );
+      if (!pairs) {
+        variants = [];
+        break;
+      }
+      const next = [];
+      for (const current of variants) {
+        for (const pair of pairs) {
+          const pairElements = concreteArrayElements(pair);
+          if (!pairElements || pairElements.length < 2) continue;
+          next.push([
+            ...current,
+            {
+              key: literalCollectionKey(pairElements[0]),
+              keyExpr: pairElements[0],
+              value: pairElements[1],
+            },
+          ]);
+        }
+      }
+      variants = next;
+    }
+    out.push(...variants);
+  }
+  return out;
+}
+
+// `Map.get`: match literal, bloqueado por cualquier key opaca posterior, y last-wins exacto.
+function mapGetValueAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("get") ||
+    call.arguments.length < 1 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const wanted = literalCollectionKey(call.arguments[0]);
+  if (wanted === null) return [];
+  const out = [];
+  for (const entries of mapEntryAlternatives(callee.expression)) {
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+      const entry = entries[i];
+      if (entry.key === null) break; // podría sombrear la key buscada → §141
+      if (entry.key === wanted) {
+        out.push(entry.value);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function mapValuesArrayAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("values")
+  ) {
+    return [];
+  }
+  const out = [];
+  for (const entries of mapEntryAlternatives(callee.expression)) {
+    if (entries.some((entry) => entry.key === null)) continue;
+    const positions = new Map();
+    const values = [];
+    for (const entry of entries) {
+      const position = positions.get(entry.key);
+      if (position === undefined) {
+        positions.set(entry.key, values.length);
+        values.push(entry.value);
+      } else {
+        values[position] = entry.value; // last-wins, orden de primera inserción preservado
+      }
+    }
+    out.push(syntheticArray(values));
+  }
+  return out;
+}
+
+function setArrayAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!isStaticGlobalNew(e, "Set")) return [];
+  const args = [...(e.arguments ?? [])];
+  if (args.some(ts.isSpreadElement) || args.length > 1) return [];
+  if (args.length === 0) return [syntheticArray([])];
+  const sources = completeContainerLiteralAlternatives(
+    args[0],
+    ts.isArrayLiteralExpression,
+  );
+  if (!sources) return [];
+  const out = [];
+  for (const source of sources) {
+    const elements = concreteArrayElements(source);
+    if (!elements) continue;
+    const seen = new Set();
+    const unique = [];
+    for (const element of elements) {
+      const key = literalCollectionKey(element);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      unique.push(element);
+    }
+    out.push(syntheticArray(unique));
+  }
+  return out;
+}
+
+// Secuencias iterables materializables SOLO cuando el consumidor es spread/iteración. Mantener este seam
+// separado evita la falsa equivalencia `new Set([X])[0] ≡ X` (Set no tiene index properties) mientras permite
+// `[...new Set([X])][0]` y `[...new Map([[k,X]]).values()][0]`.
+function iterableArrayAlternatives(expr) {
+  const arrays = containerLiteralAlternatives(expr, ts.isArrayLiteralExpression);
+  if (arrays.length > 0) return arrays;
+  const e = unwrapErased(expr);
+  const sets = setArrayAlternatives(e);
+  if (sets.length > 0) return sets;
+  if (ts.isCallExpression(e)) {
+    return mapValuesArrayAlternatives(e, unwrapErased(e.expression));
+  }
+  return [];
+}
+
 // Carriers de RESULTADO R12. No son value-transparentes ni identity-carriers genéricos: cada familia
 // virtualiza SU semántica observable de contenedor y el consumer existente sigue resolviendo keys/posiciones.
 function semanticContainerResultAlternatives(expr) {
@@ -4978,6 +5552,8 @@ function semanticContainerResultAlternatives(expr) {
     ...arrayOfAlternatives(e),
     ...concatenateArrayAlternatives(e, callee),
     ...slicedArrayAlternatives(e, callee),
+    ...reorderedArrayAlternatives(e, callee),
+    ...flattenedArrayAlternatives(e, callee),
   ];
 }
 
@@ -7446,7 +8022,7 @@ function checkSourceFile(
       // descriptor-transfer cuyo receptor no es él mismo el root.
       inSiteMemberRoots.size === 0
     ) {
-      for (const { receiver, members } of reflectiveValueReads(node)) {
+      for (const { receiver, members, complete } of reflectiveValueReads(node)) {
         let hitRoot = null;
         let hitMember = null;
         // El receptor descriptor pasa por el mismo resolveRoots que member-read/Reflect.get/construcción.
@@ -7459,6 +8035,27 @@ function checkSourceFile(
             break;
           }
         }
+        // R13 gap#3: getOwnPropertyDescriptor(s) solo observa OWN members. Entre las raíces parciales
+        // modeladas, import.meta es la que tiene own-members allowlisted/Edge-divergentes; una key incompleta
+        // puede seleccionar dirname/filename/resolve y debe fail-cerrar. `gOPD(performance,k).value` conserva
+        // el pin OOM: eventLoopUtilization vive en el prototipo, gOPD devuelve undefined y `.value` lanza en
+        // todos los runtimes, así que NO se generaliza este fallback a todas las raíces.
+        const receiverHasInSiteImportMeta = [
+          ...valueSurvivalLeaves(receiver),
+          ...reflectiveCarrierSources(receiver, "chain"),
+        ].some(
+          (candidate) =>
+            ts.isMetaProperty(unwrapErased(candidate)) &&
+            unwrapErased(candidate).keywordToken === ts.SyntaxKind.ImportKeyword,
+        );
+        if (
+          !hitRoot &&
+          complete === false &&
+          rroots.has(IMPORT_META_ROOT) &&
+          receiverHasInSiteImportMeta
+        ) {
+          hitRoot = IMPORT_META_ROOT;
+        }
         if (hitRoot) {
           const start = node.getStart(sourceFile);
           const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -7467,7 +8064,10 @@ function checkSourceFile(
             file: relPath,
             rule: "no-bare-dom-access",
             line: line + 1,
-            detail: `lectura reflexiva de \`${hitRoot}.${hitMember}\` (getOwnPropertyDescriptor/assign/create/spread) ≡ \`${hitRoot}.${hitMember}\` — miembro que diverge/lanza en el baseline Edge; la indirección reflexiva no lo oculta: ${lineText}`,
+            detail:
+              hitMember === null
+                ? `lectura reflexiva de \`${hitRoot}[<computado>]\` mediante descriptor/copia — key no resoluble sobre import.meta (allow: ${[...SAFE_IMPORT_META_MEMBERS].join("/")}) → fail-closed: ${lineText}`
+                : `lectura reflexiva de \`${hitRoot}.${hitMember}\` (getOwnPropertyDescriptor/assign/create/spread) ≡ \`${hitRoot}.${hitMember}\` — miembro que diverge/lanza en el baseline Edge; la indirección reflexiva no lo oculta: ${lineText}`,
           });
           break;
         }
@@ -8613,26 +9213,7 @@ function checkSourceFile(
         //    rompe en Edge (cae a `o`). Cruzar el izq flaggeaba el consejo del propio gate (`?? fallback`).
         //  · resto (ternario/coma/asignación/proyección) → valueTransparentChildren. `g(X?.()).foo` sigue §141
         //    (arg de call no es value-transparent). DOCTRINA: el valor esperado sale del ORÁCULO de runtime.
-        const crossesToDeref = (parent, child) => {
-          if (isErasedOuterExpr(parent)) return true;
-          if (ts.isBinaryExpression(parent)) {
-            const op = parent.operatorToken.kind;
-            if (
-              op === ts.SyntaxKind.AmpersandAmpersandToken ||
-              op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
-            )
-              return true; // ambos operandos deref'an
-            if (
-              op === ts.SyntaxKind.BarBarToken ||
-              op === ts.SyntaxKind.QuestionQuestionToken ||
-              op === ts.SyntaxKind.BarBarEqualsToken ||
-              op === ts.SyntaxKind.QuestionQuestionEqualsToken
-            )
-              return parent.right === child; // solo el fallback; el izquierdo RESCATA
-          }
-          return valueTransparentChildren(parent).includes(child);
-        };
-        while (r.parent && crossesToDeref(r.parent, r)) {
+        while (r.parent && resultCrossesToConsumer(r.parent, r)) {
           if (ts.isParenthesizedExpression(r.parent)) crossedParen = true;
           r = r.parent;
         }
@@ -8716,13 +9297,32 @@ function checkSourceFile(
         vfNode = vfParent;
         vfParent = vfParent.parent;
       }
-      const isValueFallbackProbe =
+      let isValueFallbackProbe =
         !anyPresentThrows &&
         vfParent &&
         ts.isBinaryExpression(vfParent) &&
         (vfParent.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
           vfParent.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
         vfParent.left === vfNode;
+      if (isValueFallbackProbe) {
+        // R13 gap#5: la posición `left of ??/||` solo demuestra que la AUSENCIA produce el fallback; no
+        // demuestra que el RESULTADO sea válido para su consumidor. Sigue el resultado por el mismo seam que
+        // optional-probe. Si termina invocado/dereferenciado/desestructurado/spread/new, el fallback debe
+        // probar sintácticamente el contrato requerido (incl. const-alias estable); si no, la exención cae.
+        let result = vfParent;
+        while (
+          result.parent &&
+          resultCrossesToConsumer(result.parent, result)
+        ) {
+          result = result.parent;
+        }
+        isValueFallbackProbe = fallbackProtectsConsumer(
+          vfParent.right,
+          result.parent,
+          result,
+          sourceFile,
+        );
+      }
       const safelyProbed =
         isTypeofProbe || isSafeOptionalProbe || isValueFallbackProbe;
       // shadow/forward value-read ya resueltos en exprPartialRoot (directo) o en la purga del alias.
@@ -9901,7 +10501,8 @@ function detectServerSafeMarker(sourceFile, relPath) {
  */
 // Normaliza caracteres invisibles/format-control que ROMPEN el scanner JSDoc de TS: un char no-trivia
 // entre `/**` y `@server-safe` hace que el tag no se emita → archivo sin auditar (fail-open silencioso,
-// medido: U+200C, U+2028). Cf→"" (zero-width/BOM/soft-hyphen); Zl/Zp→"\n" (line/paragraph separator
+// medido: U+200C, U+2028). Cf→"" (zero-width/BOM/soft-hyphen); M/variation-selectors→"" (combining
+// marks pegados al `@`, incl. emoji VS15/VS16); Zl/Zp→"\n" (line/paragraph separator
 // U+2028/U+2029); Zs→" " (space separators, incl. nbsp/ideographic). Categorías Unicode (auto-actualizan
 // con las tablas del runtime), no allowlist puntual — la lección del round aplicada. Fable cross-review 3 (#5).
 // Cc que rompen la detección del gate→"": los 60 controles C0/C1/DEL EXCEPTO TAB/LF/VT/FF/CR (los 5 ws
@@ -9913,6 +10514,10 @@ function detectServerSafeMarker(sourceFile, relPath) {
 function normalizeMarkerText(text) {
   return text
     .replace(/\p{Cf}/gu, "")
+    // R13 gap#2: TypeScript deja de emitir el JSDoc tag si un mark Unicode queda entre `@` y
+    // `server-safe`. Variation Selectors son Mn hoy, pero se enumeran también por rango para que la
+    // intención siga visible y no dependa de una reclasificación futura de las tablas Unicode.
+    .replace(/[\p{M}\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu, "")
     .replace(/\p{Cc}/gu, (c) => {
       // Mantener los 5 ws estructurales que el detector SI trata como trivia glued (TAB 9/LF 10/VT 11/FF
       // 12/CR 13); foldear el resto de Cc (los 60: C0 no-ws + DEL + C1 incl. NEL). Predicado por code-point
@@ -9946,7 +10551,7 @@ function detectMarkerRobust(sourceFile, content, relPath) {
 }
 
 // ¿el marker de este archivo SOLO se detecta tras normalizar invisibles? (Auditoría B FIX-4, política de
-// higiene): entonces el source tiene un char invisible (Cc/Cf/Zs/Zl/Zp) entre `/**` y `@server-safe` que
+// higiene): entonces el source tiene un char invisible (Cc/Cf/M/VS/Zs/Zl/Zp) entre `/**` y `@server-safe` que
 // rompe el scanner JSDoc de TS. El gate lo audita igual (fail-safe, vía detectMarkerRobust), pero OTRO tooling
 // basado en `ts.getJSDocTags` NO vería el tag → divergencia permanente. Diagnóstico fail-loud para que el
 // contributor elimine el char (domina al fold silencioso, que dejaría basura invisible permanente).
@@ -9965,11 +10570,11 @@ function markerNeedsHygiene(sourceFile, content, relPath) {
 }
 
 /**
- * NEAR-MISS del marker (Auditoría B R5 / M1): `@server-safe` en un BLOCK-COMMENT NO-JSDoc (un bloque abierto con
- * UNA estrella en vez de DOS) → TS no emite el tag → el fichero se SALTA silenciosamente y el maintainer CREE que
- * está auditado. Blast-radius de fichero completo, MÁS probable que un Cc invisible (una estrella en vez de dos
- * es un typo trivial). Devuelve las líneas de los near-miss (el CLI las reporta fail-loud sobre ficheros NO
- * marcados). Solo `@server-safe` en POSICIÓN de tag (tras el abre-bloque / estrella / whitespace), no incidental.
+ * NEAR-MISS del marker (Auditoría B R5 / M1 + R13): (a) `@server-safe` en BLOCK-COMMENT NO-JSDoc (una estrella),
+ * o (b) JSDoc doble-star cuyo token se convierte en `@server-safe` al retirar un code-point no-ASCII desconocido
+ * que el normalizador aún no clasifica. En ambos TS no emite el tag y el fichero se SALTA silenciosamente.
+ * Devuelve líneas para que el CLI falle loud; la rama (b) invierte el default de categorías Unicode futuras:
+ * unknown cerca del marker = near-miss, nunca des-auditar en silencio.
  */
 export function markerNearMissLines(sourceFile) {
   const out = [];
@@ -9981,8 +10586,15 @@ export function markerNearMissLines(sourceFile) {
     // `(?<![\w-])…(?![\w-])`: el predecesor `(?:\s|\*|$)` solo cubría el lado TRAILING → puntuación LEADING
     // (`note:@server-safe`, `(@server-safe)`) y trailing (`@server-safe:`) se colaban en silencio. La forma
     // simétrica cierra las 5 celdas medidas y mantiene los negativos (`@server-safefoo`, `@server-safe-foo`).
-    const c = normalizeMarkerText(sourceFile.text.slice(r.pos, r.end));
-    if (!c.startsWith("/**") && /(?<![\w-])@server-safe(?![\w-])/.test(c)) {
+    const raw = sourceFile.text.slice(r.pos, r.end);
+    const c = normalizeMarkerText(raw);
+    const token = /(?<![\w-])@server-safe(?![\w-])/;
+    const singleStar = !c.startsWith("/**") && token.test(c);
+    const unknownUnicodeInJSDoc =
+      c.startsWith("/**") &&
+      !token.test(c) &&
+      token.test(c.replace(/\P{ASCII}/gu, ""));
+    if (singleStar || unknownUnicodeInJSDoc) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(r.pos);
       out.push(line + 1);
     }
@@ -10057,7 +10669,7 @@ if (isCliEntry) {
         allViolations.push({
           rule: "server-safe-marker",
           file: relPath,
-          detail: `\`@server-safe\` en un comentario NO-JSDoc (\`/* */\`, una estrella) en la línea${plural ? "s" : ""} ${nmLines.join(", ")} — TS solo reconoce el marker en un bloque JSDoc (\`/** */\`, doble estrella) → este fichero se saltaba SIN auditar. ¿Querías \`/** @server-safe */\`? Cámbialo a doble estrella (o quita el token si no es un marker). M1.`,
+        detail: `near-miss no parseable de \`@server-safe\` en la línea${plural ? "s" : ""} ${nmLines.join(", ")} — comentario de una estrella o token JSDoc corrompido por un carácter Unicode desconocido; TypeScript no emite el tag y este fichero se saltaría SIN auditar. Usa exactamente \`/** @server-safe */\` o quita el token si no era un marker. M1/R13.`,
         });
       }
     }
@@ -10083,7 +10695,7 @@ if (isCliEntry) {
       allViolations.push({
         rule: "server-safe-marker",
         file: relPath,
-        detail: `el marker @server-safe contiene un carácter invisible (control C0/C1, format o space no estándar) entre \`/**\` y \`@server-safe\` que rompe el scanner JSDoc de TypeScript. El gate lo audita igual (fail-safe), pero otro tooling basado en ts.getJSDocTags NO vería el tag → divergencia. Elimina el carácter invisible del comentario.`,
+        detail: `el marker @server-safe contiene un carácter invisible (control C0/C1, format, combining-mark/variation-selector o space no estándar) entre \`/**\` y \`@server-safe\` que rompe el scanner JSDoc de TypeScript. El gate lo audita igual (fail-safe), pero otro tooling basado en ts.getJSDocTags NO vería el tag → divergencia. Elimina el carácter invisible del comentario.`,
       });
     }
     const visited = new Set();

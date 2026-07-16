@@ -5975,6 +5975,9 @@ describe("server-safe gate — Auditoría B (re-hunt 4): ∃-quantificación de 
       ["Object.create(import.meta).dirname", W + "export const x = Object.create(import.meta).dirname;"],
       ["multi-branch gOPD(b?crypto:import.meta)", W + "export function f(b:boolean){ return Object.getOwnPropertyDescriptor(b?crypto:import.meta,'dirname').value; }"],
       ["Object.assign({},WebAssembly).compile (fail-closed)", W + "export const x = Object.assign({}, WebAssembly).compile;"],
+      // R13 gap#3: import.meta es allowlist de OWN members; key irresoluble puede seleccionar
+      // dirname/filename/resolve y ya no pertenece a la frontera §141 del receiver-vía-flujo.
+      ["variable-key gOPD(import.meta,k).value (R13)", W + "export function f(k:string){ return Object.getOwnPropertyDescriptor(import.meta,k).value; }"],
     ])("FLAG: %s", (_n, src) => {
       expect(flagged(src)).toBe(true);
     });
@@ -5982,7 +5985,6 @@ describe("server-safe gate — Auditoría B (re-hunt 4): ∃-quantificación de 
     it.each([
       ["safe member gOPD(...,'url').value", W + "export const x = Object.getOwnPropertyDescriptor(import.meta,'url').value;"],
       ["fromEntries∘entries (§141 renunciado)", W + "export const x = Object.fromEntries(Object.entries(import.meta)).dirname;"],
-      ["variable-key gOPD(...,k).value (§141)", W + "export function f(k:string){ return Object.getOwnPropertyDescriptor(import.meta,k).value; }"],
       ["receiver-vía-flujo const c={...im}; c.dirname (§141)", W + "export function f(){ const c={...import.meta}; return c.dirname; }"],
       ["entries[0] key-implícita (§141)", W + "export const x = Object.entries(import.meta)[0];"],
       ["gOPD sin .value (descriptor, no valor)", W + "export const x = Object.getOwnPropertyDescriptor(import.meta,'dirname');"],
@@ -7896,5 +7898,134 @@ describe("server-safe gate — R12 custodios (container result carriers semánti
     ],
   ])("edge: %s", (_name, code, expected) => {
     expect(flagged(code)).toBe(expected);
+  });
+});
+
+// ============================================================================
+// R13 — 5 gaps in-mandate del hunt generalista post-R12.
+// Custodios escritos antes del fix: cada positivo tiene su control inverso §141/OOM/FP.
+// ============================================================================
+describe("server-safe gate — R13 custodios (5 gaps post-R12)", () => {
+  const flagged = (code: string, file = "r13.fixture.tsx") =>
+    checkSourceFile(`/** @server-safe */\n${code}`, file).length > 0;
+
+  describe("gap#1: carriers array/Map/Set compartidos por value-survival", () => {
+    it.each<[string, string]>([
+      ["reverse", `export const x=[performance].reverse()[0].eventLoopUtilization();`],
+      ["toReversed", `export const x=[performance].toReversed()[0].eventLoopUtilization();`],
+      ["toSorted", `export const x=[performance].toSorted()[0].eventLoopUtilization();`],
+      ["toSpliced", `export const x=[performance].toSpliced()[0].eventLoopUtilization();`],
+      ["flat un nivel", `export const x=[[performance]].flat()[0].eventLoopUtilization();`],
+      ["Map.get key literal", `export const x=new Map([["k",performance]]).get("k").eventLoopUtilization();`],
+      ["Set spread", `export const x=[...new Set([performance])][0].eventLoopUtilization();`],
+      ["Map.values spread", `export const x=[...new Map([["k",performance]]).values()][0].eventLoopUtilization();`],
+      ["Map dup-key last-wins danger", `export const x=new Map([["k",Math],["k",performance]]).get("k").eventLoopUtilization();`],
+      ["eval-sink hereda reverse", `const g=()=>{}; export const x=[g.constructor].reverse()[0]("return 1")();`],
+      ["string-timer hereda Map.get", `export const x=new Map([["k",setTimeout]]).get("k")("doWork()",0);`],
+      ["construcción hereda toReversed", `export const x=new ([WebAssembly.Module].toReversed()[0])(new Uint8Array());`],
+      ["dynamic import hereda flat", `export const x=import([["node:fs"]].flat()[0]);`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    it.each<[string, string]>([
+      ["constructor inocuo tras reverse", `export const x=[({}).constructor].reverse()[0]("code");`],
+      ["Map key miss = OOM universal", `export const x=new Map([["k",performance]]).get("nomatch").eventLoopUtilization();`],
+      ["Map dup-key last-wins safe", `export const x=new Map([["k",performance],["k",Math]]).get("k").eventLoopUtilization();`],
+      ["flatMap callback = §141", `export const x=[[performance]].flatMap(z=>z)[0].eventLoopUtilization();`],
+      ["Set.forEach callback = §141", `new Set([performance]).forEach(p=>p.eventLoopUtilization()); export const x=1;`],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
+  });
+
+  describe("gap#2: marker Unicode Category-M/variation selector", () => {
+    it.each([
+      ["combining mark U+0301", "/** @\u0301server-safe */\nexport const x=1;"],
+      ["variation selector U+FE0F", "/** @\uFE0Fserver-safe */\nexport const x=1;"],
+      ["enclosing mark U+20DD", "/** @\u20DDserver-safe */\nexport const x=1;"],
+    ])("rescata %s", (_name, code) => {
+      expect(isContentServerSafeMarked(code, "r13-marker.fixture.ts")).toBe(true);
+    });
+
+    it("no fabrica un marker a partir de prosa con marks", () => {
+      expect(
+        isContentServerSafeMarked(
+          "/** café\u0301 docs */\nexport const x=1;",
+          "r13-marker-control.fixture.ts",
+        ),
+      ).toBe(false);
+    });
+
+    it("unknown Unicode junto al token degrada a near-miss fail-loud", () => {
+      const source = ts.createSourceFile(
+        "r13-marker-unknown.fixture.ts",
+        "/** @💥server-safe */\nexport const x=1;",
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      expect(markerNearMissLines(source)).toEqual([1]);
+    });
+  });
+
+  describe("gap#3: descriptor-value computado de import.meta", () => {
+    it.each<[string, string]>([
+      ["gOPD(import.meta,k).value", `export const x=(k:string)=>Object.getOwnPropertyDescriptor(import.meta,k).value;`],
+      ["gOPDs(import.meta)[k].value", `export const x=(k:string)=>Object.getOwnPropertyDescriptors(import.meta)[k].value;`],
+      ["create + gOPDs + computed read", `export const x=(k:string)=>Object.create(null,Object.getOwnPropertyDescriptors(import.meta))[k];`],
+      ["defineProperties + gOPDs + computed read", `export const x=(k:string)=>Object.defineProperties({},Object.getOwnPropertyDescriptors(import.meta))[k];`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    it.each<[string, string]>([
+      ["safe own member url", `export const x=Object.getOwnPropertyDescriptor(import.meta,"url").value;`],
+      ["performance own-descriptor OOM", `export const x=(k:string)=>Object.getOwnPropertyDescriptor(performance,k).value;`],
+      ["receiver vía variable = §141", `const R=import.meta; export const x=(k:string)=>Object.getOwnPropertyDescriptor(R,k).value;`],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
+  });
+
+  describe("gap#4: mutador React con receptor const-aliaseado", () => {
+    const H = `import React from "react";\n`;
+    it.each<[string, string]>([
+      ["const O=Object", `const O=Object; export function C(){ O.assign(React,{useEffect:(cb:any)=>cb()}); React.useEffect(()=>{void window.location.href}); return null; }`],
+      ["const R2=Reflect", `const R2=Reflect; export function C(){ R2.set(React,"useEffect",(cb:any)=>cb()); React.useEffect(()=>{void window.location.href}); return null; }`],
+      ["cadena const O2=O", `const O=Object; const O2=O; export function C(){ O2.assign(React,{useEffect:(cb:any)=>cb()}); React.useEffect(()=>{void window.location.href}); return null; }`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(H + code)).toBe(true);
+    });
+
+    it("let reasignable permanece §141", () => {
+      expect(
+        flagged(
+          H + `let O=Object; export function C(){ O.assign(React,{useEffect:(cb:any)=>cb()}); React.useEffect(()=>{void window.location.href}); return null; }`,
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe("gap#5: fallback de valor consumido", () => {
+    it.each<[string, string]>([
+      ["?? undefined invocado", `export const x=(performance.eventLoopUtilization ?? undefined)();`],
+      ["?? 0 invocado", `export const x=(performance.eventLoopUtilization ?? 0)();`],
+      ["|| null invocado", `export const x=(performance.eventLoopUtilization || null)();`],
+      ["?? undefined dereferenciado", `export const x=(performance.eventLoopUtilization ?? undefined).name;`],
+      ["const no-callable invocado", `const n=0; export const x=(performance.eventLoopUtilization ?? n)();`],
+      ["parámetro sombrea const callable", `const fb=()=>0; export const x=(fb:any)=>(performance.eventLoopUtilization ?? fb)();`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    it.each<[string, string]>([
+      ["fallback callable inline", `export const x=(performance.eventLoopUtilization ?? (()=>0))();`],
+      ["fallback callable const", `const fb=()=>0; export const x=(performance.eventLoopUtilization ?? fb)();`],
+      ["fallback no consumido", `export const x=performance.eventLoopUtilization ?? 0;`],
+      ["optional call", `export const x=performance.eventLoopUtilization?.();`],
+      ["fallback exterior rescata", `export const x=((performance.eventLoopUtilization ?? undefined) || (()=>0))();`],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
   });
 });
