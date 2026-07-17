@@ -2,7 +2,7 @@
 /**
  * Oráculo de runtime — runner (Auditoría B R5 §4.2 / D3).
  * Arranca workerd REAL contra worker.js, lee el JSON de premisas y ASERTA cada una
- * contra lo medido (2026-07-03). Exit 0 = todas las premisas del catálogo verifican
+ * contra lo medido (2026-07-17). Exit 0 = todas las premisas del catálogo verifican
  * contra el runtime; exit 1 = premisa rota (drift de workerd) o workerd ausente.
  *
  * Diseño:
@@ -25,9 +25,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const COMPAT_DATE = "2026-07-01";
+const COMPAT_DATE = "2026-07-17";
 
-/** Premisas pineadas (medición 2026-07-03, workerd 2026-07-03). */
+/** Premisas pineadas (medición 2026-07-17, workerd 2026-07-17; 13/13 con compat 2026-07-01 y 2026-07-17, idénticas). */
 const CHECKS = [
   ["perf", (v) => v === "object", "performance presente (objeto)"],
   ["elu", (v) => v === "undefined", "eventLoopUtilization AUSENTE — hazard=absence (sonda ?.() válida)"],

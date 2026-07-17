@@ -3,7 +3,9 @@
  * Corre DENTRO de workerd y reporta las premisas del catálogo del gate `@server-safe`.
  * Cada entrada nueva del catálogo añade aquí su sonda (typeof + llamada si el hazard es
  * present-but-throws) y su aserción en run.mjs. Las premisas pineadas provienen de la
- * medición del 2026-07-03 (workerd 2026-07-03, compat 2025-05-01 y 2026-07-01, idénticas).
+ * medición del 2026-07-17 (workerd 2026-07-17, compat 2026-07-01 y 2026-07-17, idénticas;
+ * corroborado en Deno 2.9.3 —única divergencia elu-ausente, ya cubierta— y @edge-runtime/vm
+ * —console.table ausente, resto no-fiable por fuga-de-Node).
  */
 export default {
   async fetch() {

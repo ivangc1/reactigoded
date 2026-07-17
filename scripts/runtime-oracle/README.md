@@ -8,7 +8,7 @@ lesson (memory) is that mis-asserting a premise reopens a false-negative by cata
 This directory measures the premises against the **real Edge baseline** (`workerd`, not the leaky
 `@edge-runtime/vm`) so they become **continuously measured** instead of asserted.
 
-## Pinned premises (measured against workerd `2026-07-03`, compat dates `2025-05-01` and `2026-07-01`)
+## Pinned premises (measured against workerd `2026-07-17`, compat dates `2026-07-01` and `2026-07-17`, identical)
 
 | Member | workerd | hazard-kind | gate treatment |
 |---|---|---|---|
@@ -33,14 +33,24 @@ WORKERD_BIN=/path/to/workerd npm run oracle # or point at a binary explicitly
 Design decisions (baked into `run.mjs`):
 - **`workerd` is NOT in `devDependencies`** (~90 MB native binary). Resolved via `$WORKERD_BIN` or
   `node_modules/.bin/workerd` if the repo/CI installs it. Keeps `npm i` light for consumers.
-- **The compat date is pinned** (`2026-07-01`) as *part of the premise* — a member can appear behind a future
-  compat flag; bumping it is a catalog decision, not a chore.
+- **The compat date is pinned** (`2026-07-17`) as *part of the premise* — a member can appear behind a future
+  compat flag; bumping it is a catalog decision, not a chore. Bumped `2026-07-01`→`2026-07-17` after measuring
+  13/13 identical at both dates.
 
-### Deferred with line: CI wiring
+### Cross-runtime corroboration (2026-07-17)
 
-The only remaining piece is **installing workerd on the CI runner** so `npm run oracle` runs there — infra, not
-code (the runner itself is verified). Follow-ups (declared): `@edge-runtime/vm` as a second divergence target
-(the only one where `console.table` is absent), then Deno as a third.
+The three mandate runtimes were measured with the same 13 probes:
+- **workerd** (faithful, real isolate): 13/13 PASS, 0 drift at both compat dates.
+- **Deno** `2.9.3` (faithful, real runtime): most permissive — only divergence is `elu` absent (already covered);
+  eval/WASM/`console.table`/`createObjectURL` all work. No Deno-specific hazard uncovered.
+- **`@edge-runtime/vm`** (partial — Node-based sandbox): confirms the one Edge-specific divergence
+  (`console.table` absent) which the gate covers; the rest leaks Node globals (`elu`, `createObjectURL`,
+  `WebAssembly.Module` all falsely "work") so it is **not** faithful beyond Vercel's explicit removals.
+
+### Deferred with line
+- **CI wiring**: install workerd on the CI runner so `npm run oracle` runs there — infra, not code.
+- **Edge-VM faithful-complete**: `@edge-runtime/vm` cannot validate premises that depend on Node-shared globals;
+  a real Vercel deploy is the only faithful oracle for those.
 
 Independently, the premises are pinned in the gate's own fixtures (`server-safe-gate.test.ts`, describe
 "Auditoría B R5") and in `docs/AUDITORIA-B-REHUNT5.md` §2.1 — so drift is caught even before CI wiring lands.
