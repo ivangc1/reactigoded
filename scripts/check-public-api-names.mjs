@@ -79,8 +79,12 @@ if (missing.length > 0) {
   );
   for (const m of missing) console.error(`  − ${m}`);
   console.error(
-    `\nUn nombre público del freeze desapareció de dist = rename/borrado = breaking change.\n` +
-      `Si es intencional: bump MAJOR + edita src/_audit/public-api-names.json + CHANGELOG.`,
+    `\nUn nombre público del freeze desapareció de dist = rename/borrado = BREAKING CHANGE.\n\n` +
+      `Este gate solo comprueba INTEGRIDAD (que el freeze refleje dist). Editar el JSON hace\n` +
+      `que vuelva a pasar — pero eso NO cierra un rename por sí solo. Si es INTENCIONAL, la\n` +
+      `política §5.13 entera es: (1) actualiza src/_audit/public-api-names.json, (2) añade\n` +
+      `entrada en CHANGELOG describiendo el breaking, (3) sube el MAJOR en la release. El (3)\n` +
+      `lo respaldan el review del PR y el release-gate (#15), no este check.`,
   );
   process.exit(1);
 }

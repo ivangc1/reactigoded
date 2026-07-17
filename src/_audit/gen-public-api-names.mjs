@@ -104,7 +104,9 @@ if (t2seedMinusDist.length > 0) console.log("tokens seed\\dist (bug doc):", t2se
 const out = {
   _doc:
     "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, data-attributes, tokens Tier-2 semánticos). " +
-    "Editar este fichero = breaking change: exige bump MAJOR + entrada en CHANGELOG. El contrato estable es EXACTAMENTE lo aquí listado. " +
+    "POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. " +
+    "ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). " +
+    "El contrato estable es EXACTAMENTE lo aquí listado. " +
     "FUERA DEL FREEZE: la capa utility (ig-bg-*, ig-text-*, ig-border-*, ig-font-*, ig-flex, ig-gap-*, spacing, ig-gradient-*, ig-glow-*, " +
     "ig-ring-*, ig-fill-*, ig-stroke-*, ig-filter-* y sus variantes de estado hover:/focus:/... del state.css) es opt-in, shippeada y " +
     "documentada, pero EXPERIMENTAL: su vocabulario puede evolucionar SIN major hasta que se declare estable en el CHANGELOG. Queda fuera " +
