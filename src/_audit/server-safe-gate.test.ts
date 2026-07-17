@@ -8272,6 +8272,31 @@ describe("server-safe gate — R16 custodios (robustez + precisión)", () => {
   it("elige el alias tsconfig más específico aunque se declare después", () => {
     const exists = (p: string) =>
       p === "/repo/src/clean/feature/mod.ts" ||
+  it("audita directorios internos cuyo nombre empieza por `..` sin confundirlos con un parent segment", () => {
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const files = vfs({
+      "/repo/src/entry.ts": `/** @server-safe */\nimport { dirty } from "./..private/dirty";\nexport const value = dirty;`,
+      "/repo/src/..private/dirty.ts": `export const dirty = window.location.href;`,
+      "/repo/outside.ts": `export const outside = window.location.href;`,
+    });
+
+    expect(
+      resolveImportPath(
+        "./..private/dirty",
+        "/repo/src/entry.ts",
+        [],
+        (p) => files.has(p),
+        roots,
+      ),
+    ).toMatchObject({ kind: "internal", absPath: "/repo/src/..private/dirty.ts" });
+    expect(
+      resolveImportPath("../outside", "/repo/src/entry.ts", [], (p) => files.has(p), roots),
+    ).toMatchObject({ kind: "external" });
+
+    const violations = runWithVfs("/repo/src/entry.ts", files);
+    expect(violations.some((v) => v.file.endsWith("/..private/dirty.ts"))).toBe(true);
+  });
+
       p === "/repo/src/dirty/mod.ts";
     const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
     const broadFirst = [

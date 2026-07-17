@@ -8400,7 +8400,9 @@ function resolveImportPath(
     }
     if (dirHit.ext === ".json") return { kind: "external" };
     const relDir = crossOsRelative(srcRoot, dirHit.absPath);
-    const inSrcDir = !relDir.startsWith("..") && !relDir.startsWith("/");
+    const escapesSrcDir =
+      relDir === ".." || relDir.startsWith("../") || relDir.startsWith("..\\");
+    const inSrcDir = !escapesSrcDir && !relDir.startsWith("/");
     if (!inSrcDir) return { kind: "external" };
     if (!isAuditableExt(dirHit.absPath)) {
       return {
@@ -8428,7 +8430,8 @@ function resolveImportPath(
     // Solo seguimos dentro de src/ (proxy para "archivo del DS, no
     // node_modules, no scripts/ ni fixtures/ ni dist/").
     const rel = crossOsRelative(srcRoot, resolved);
-    const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
+    const escapesSrc = rel === ".." || rel.startsWith("../") || rel.startsWith("..\\");
+    const inSrc = !escapesSrc && !rel.startsWith("/");
     if (inSrc) {
       if (exact && !isAuditableExt(exact)) {
         // JS-family dentro de src importado desde el grafo @server-safe → fail-closed (no auditable).
@@ -8451,7 +8454,9 @@ function resolveImportPath(
   const nonAuditable = tryResolveNonAuditable(noExt, fileExists);
   if (nonAuditable) {
     const relNA = crossOsRelative(srcRoot, nonAuditable);
-    const naInSrc = !relNA.startsWith("..") && !relNA.startsWith("/");
+    const escapesSrc =
+      relNA === ".." || relNA.startsWith("../") || relNA.startsWith("..\\");
+    const naInSrc = !escapesSrc && !relNA.startsWith("/");
     // Fuera de src (node_modules/peer) → external; dentro → JS-family no auditable (fail-closed).
     if (naInSrc) {
       return {
