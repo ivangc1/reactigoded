@@ -11695,11 +11695,17 @@ function detectServerSafeMarker(sourceFile, relPath) {
       const raw = sourceFile.text.slice(r.pos, r.end);
       if (raw.startsWith("/**") && !validAnchors.has(pos)) {
         const norm = normalizeMarkerText(raw);
-        const m = /(?<![\w-])@server-safe(?![\w-])/.exec(norm);
-        if (m) {
+        // codex P2 (rc.1): un JSDoc SIN node.jsDoc host (p.ej. suelto entre elementos de un
+        // array) que el bloque AST `visit` no recupera puede llevar VARIAS menciones — una en
+        // PROSA (tolerada) ANTES del marker real line-start. `.exec` (single-match) veía solo la
+        // primera y el line-start quedaba SILENT (fail-open del invariante fail-loud). Iteramos
+        // TODAS las ocurrencias hasta la primera line-start/sibling (una basta → break).
+        const markerRe = /(?<![\w-])@server-safe(?![\w-])/g;
+        let m;
+        while ((m = markerRe.exec(norm)) !== null) {
           const before = norm.slice(0, m.index);
           const linePrefix = before.slice(before.lastIndexOf("\n") + 1);
-          // clean (line-start) o sibling-tag → intención de marcar bien-formada → misplaced; prosa → tolera.
+          // clean (line-start) o sibling-tag → intención de marcar bien-formada → misplaced; prosa → sigue buscando.
           const clean = /^[\s*/]*$/.test(linePrefix);
           const sibling = /^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix);
           if (clean || sibling) {
@@ -11707,6 +11713,7 @@ function detectServerSafeMarker(sourceFile, relPath) {
             if (!misplacedLines.includes(line + 1)) {
               misplacedLines.push(line + 1);
             }
+            break;
           }
         }
       }

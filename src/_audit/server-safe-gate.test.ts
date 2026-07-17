@@ -2642,6 +2642,22 @@ describe("server-safe gate — marker @server-safe fail-loud (beta.27 BLOCKER-1)
       /embebido en prosa/,
     );
   });
+
+  // codex P2 (rc.1): un JSDoc SIN node.jsDoc host (suelto entre elementos de un array) con una
+  // mención en PROSA ANTES del marker line-start real. El scan por comment-ranges (no-AST) usaba
+  // `.exec` single-match → veía solo la prosa (tolerada) y el line-start quedaba SILENT (fail-open
+  // del invariante fail-loud). Ahora itera TODAS las ocurrencias hasta la primera line-start.
+  it("prosa `@server-safe` + marker line-start en JSDoc unattached (sin host) → fail-loud, no silent", () => {
+    const code = `export const arr = [1,\n/** See @server-safe docs.\n * @server-safe */\n2];`;
+    expect(() =>
+      isContentServerSafeMarked(code, "unattached-prose-then-marker.tsx"),
+    ).toThrow(/posición no soportada/);
+  });
+
+  it("multi-mención TODA en prosa en JSDoc unattached (ninguna line-start) → tolera, no lanza", () => {
+    const code = `export const arr = [1,\n/** foo @server-safe bar @server-safe baz */\n2];`;
+    expect(isContentServerSafeMarked(code, "unattached-all-prose.tsx")).toBe(false);
+  });
 });
 
 /**
