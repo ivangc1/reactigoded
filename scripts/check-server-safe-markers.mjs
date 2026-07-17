@@ -11750,7 +11750,8 @@ function detectServerSafeMarker(sourceFile, relPath) {
         `su línea; un tag parseado que ni marca ni falla sería un fail-open ` +
         `silencioso (el archivo dejaría de auditarse). Mueve \`@server-safe\` a su ` +
         `propia línea del JSDoc (o quita el \`@\` si de verdad es prosa). Un tag ` +
-        `hermano previo en la misma línea (\`@internal @server-safe\`) sí es válido.`,
+        `hermano en la MISMA línea (\`@internal @server-safe\`) tampoco vale: cada ` +
+        `tag va en su propia línea (higiene M2).`,
     );
   }
   return marked;

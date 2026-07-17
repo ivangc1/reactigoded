@@ -105,11 +105,11 @@ subsystem the gate renounces. Never hides anything executable.
 
 - **Self-reference by the package's own name.** `import … from "<own-package>"` (and any subpath) is flagged.
   *Inside the package, import by relative path or the `@/` alias.*
-- **`.at()` positional projection (R9, Δ2).** `[X].at(i)` on an array literal descends to *all* elements
-  (`.at` accepts negative indices = from-the-end, so a fixed literal index cannot map to a fixed position without
-  over-approximating), while its twin `[X][i]` is precise: `[perf, 0].at(1).m` flags (over-approx) whereas
-  `[perf, 0][1].m` is silent. Fail-closed divergence between forms `INV-PARITY` calls twins; documented, never
-  hides anything (rc.2 option: precise map for a non-negative literal index).
+- **`.at()` with a *dynamic* index (R9→R16).** `[X].at(i)` with a **literal** index (including negative,
+  from-the-end) is now projected precisely, exactly like `[X][i]`: `[perf, 0].at(1).m` is silent (index `1` = `0`)
+  and `[0, perf].at(1).m` flags. Only a **non-literal** index (`[X].at(k)`, `k` a variable/expression) is
+  over-approximated fail-closed — it descends to *all* elements, so it flags if any element is hazardous even when
+  the runtime index would land on a safe one. Conservative (never a false-negative), never hides anything.
 
 ## 5. Deferred — solvable, tracked for a later release
 
