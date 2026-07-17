@@ -12,7 +12,9 @@ export interface ServerSafeGateViolation {
   /**
    * Rule identifier que disparó la violation. Tres categorías:
    *   - `"no-bare-dom-access"`: acceso a client global sin guard activo.
-   *   - `"no-dynamic-eval-sink"`: ref a `eval` / `Function` (bypass del AST).
+   *   - `"no-dynamic-eval-sink"`: ref a `eval` / `Function`, o invocación de
+   *     `.constructor` (Function constructor alcanzable desde cualquier base,
+   *     p.ej. `[].constructor.constructor("code")()`) — bypass del AST.
    *   - `"no-use-client"`: `"use client"` coexistiendo con `@server-safe`.
    *   - `"unresolved-import"`: import relativo o alias que no resuelve a
    *     un archivo dentro de `src/`. El gate FALLA aquí (no skip silencioso)
@@ -56,17 +58,21 @@ export declare function checkSourceFile(
 ): ServerSafeGateViolation[];
 
 /**
- * Resultado de resolver un module specifier. Tres outcomes:
+ * Resultado de resolver un module specifier. Cuatro outcomes:
  *   - `internal`: archivo dentro de `src/`. El orquestador desciende.
  *   - `external`: bare specifier sin alias match, o relativo que resuelve
- *     fuera de `src/`. El orquestador NO desciende — peer/built-in/out-of-scope.
- *   - `unresolvable`: relativo o alias que no resuelve a archivo. El
- *     orquestador emite una violation `unresolved-import` para fallar
- *     ruidosamente.
+ *     fuera de `src/`. El orquestador NO desciende — peer/out-of-scope.
+ *   - `edge-denied`: builtin de Node (bare `fs`, prefijado `node:fs`, subpath
+ *     `fs/promises`). Node-only por construcción, fuera de la intersección
+ *     cross-runtime → el orquestador lo flaggea (no existe en el baseline Edge).
+ *   - `unresolvable`: relativo/alias/subpath/dir-con-package.json/ext-no-asset
+ *     que el gate no puede resolver o auditar. El orquestador emite una
+ *     violation `unresolved-import` para fallar ruidosamente.
  */
 export type ResolveImportResult =
   | { kind: "internal"; absPath: string }
   | { kind: "external" }
+  | { kind: "edge-denied"; specifier: string }
   | { kind: "unresolvable"; reason: string };
 
 export declare function resolveImportPath(
@@ -130,17 +136,70 @@ export declare function getTsconfigPaths(): Array<{
   targetPrefix: string;
 }>;
 
-export declare const CLIENT_GLOBALS: ReadonlySet<string>;
+/**
+ * Whitelist fail-closed (beta.27 BLOCKER-1). Acceso bare a cualquier global
+ * AUSENTE de este set se flaggea. Derivado de `globals` (builtins ES ∪
+ * globals de Node) menos `INTENTIONAL_DENY` y los overclaims de `globals`
+ * no provistos por el engine mínimo (Node 22.12). Reemplaza al antiguo
+ * `CLIENT_GLOBALS` (denylist).
+ */
+export declare const SAFE_GLOBALS: ReadonlySet<string>;
+/**
+ * Globals que Node provee pero el gate deniega igual (portabilidad
+ * multi-runtime / anti-bypass): `globalThis`, `global`, `process`, `Buffer`,
+ * `navigator`, `localStorage`, `sessionStorage`, `eval`, `Function`.
+ * Excluidos de `SAFE_GLOBALS`.
+ */
+export declare const INTENTIONAL_DENY: ReadonlySet<string>;
+/**
+ * Globals que `nodeBuiltin` lista (Node los provee) pero el runtime Edge más
+ * estricto (Vercel Edge sin nodejs_compat) NO expone — derivados data-driven del
+ * globalThis real (@edge-runtime/vm). Excluidos de `SAFE_GLOBALS`. #190.
+ */
+export declare const EDGE_MISSING_GLOBALS: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
 
 /**
- * Detección AST del marker `@server-safe` (#158, beta.27). Reemplaza la
- * detección substring que tenía falsos positivos sobre string literals,
- * line comments y block comments NO-JSDoc. Solo cuenta el marker como
- * presente si el parser de JSDoc de TypeScript lo reconoce como tag en
- * un bloque JSDoc real.
+ * Bucket-1 allowlist member-level: por root host-populated (`performance`/`crypto`/`console`),
+ * los miembros confirmados Edge-present contra `@edge-runtime/vm` (member ∉ set → denegado por
+ * complemento). Pin de contenido en `server-safe-catalog-vs-node.test.ts` Test G; #190 lo re-deriva
+ * vivo contra el VM. Ver ADR D1-P1 ("Namespaces host-populated").
+ */
+export declare const SAFE_PARTIAL_MEMBERS: Readonly<
+  Record<string, ReadonlySet<string>>
+>;
+/** Bucket-2 denylist member-level: ops prohibidas por root (`WebAssembly` compile-family). */
+export declare const PARTIAL_SAFE_GLOBAL_MEMBERS: Readonly<
+  Record<string, ReadonlySet<string>>
+>;
+/** Ban-de-construcción (`new <root>.<member>(...)`): `WebAssembly.Module`. */
+export declare const CONSTRUCTION_DENIED_MEMBERS: Readonly<
+  Record<string, ReadonlySet<string>>
+>;
+
+/**
+ * Detección AST del marker `@server-safe`. Recorre el AST completo: cuenta
+ * el marker como presente solo si aparece en el JSDoc de un statement
+ * top-level. FALLA RUIDOSO (throw) si aparece en posición ANIDADA (función
+ * interna, método…) — antes ese caso pasaba inadvertido (fail-open
+ * silencioso). beta.27 BLOCKER-1.
+ *
+ * @throws si el marker `@server-safe` está en una posición no soportada.
  */
 export declare function isContentServerSafeMarked(
   content: string,
   relPath: string,
 ): boolean;
+
+/**
+ * Enumera los source files candidatos al marker bajo TODO `src` (o el root
+ * proporcionado). Incluye JS-family para poder fallar loud ante un marker en
+ * formato no auditable; excluye tests y stories.
+ */
+export declare function discoverServerSafeSourceFiles(root?: string): string[];
+
+/**
+ * NEAR-MISS del marker (M1/R14): líneas donde `@server-safe` aparece en un comentario NO-JSDoc (`//` o bloque
+ * de una estrella) → TS no lo reconoce como tag → el fichero se salta sin auditar. Vacío si no hay near-miss.
+ */
+export declare function markerNearMissLines(sourceFile: ts.SourceFile): number[];

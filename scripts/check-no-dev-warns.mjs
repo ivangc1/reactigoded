@@ -6,12 +6,12 @@
  * `console.warn`/`console.error` con prefijo `[reactigoded]` —
  * indicador de un warn/error dev-only que no respeta el guard
  * `import.meta.env.DEV` y por tanto sobrevive al DCE de
- * esbuild/Vite en producción.
+ * Vite (define + OXC/rolldown) en producción.
  *
  * Historia:
  *
  * - B-07 (beta.21): los warns dev del DS migraron de `isDev()` a
- *   `import.meta.env.DEV` para que esbuild/Vite los podaran. Si una
+ *   `import.meta.env.DEV` para que Vite (define + OXC/rolldown) los podara. Si una
  *   regresión introduce un `console.warn` sin guard, llega al bundle.
  * - Post-RC1 (Tooltip Floating UI): la assertion blanket
  *   `grep -c 'console\.'` mezclaba dos clases:
@@ -78,6 +78,6 @@ for (const m of matches) {
   console.error(`  ${m.replace(/\s+/g, " ").trim()}`);
 }
 console.error(
-  `\nFix: cualquier console.warn/error con prefijo "${NEEDLE}" debe vivir bajo guard \`import.meta.env.DEV\` para que esbuild/Vite lo poden del bundle de producción. Ver patrón en src/components/Slider/Slider.tsx, src/components/Pagination/Pagination.tsx.`,
+  `\nFix: cualquier console.warn/error con prefijo "${NEEDLE}" debe vivir bajo guard \`import.meta.env.DEV\` para que Vite (define + OXC/rolldown) lo pode del bundle de producción. Ver patrón en src/components/Slider/Slider.tsx, src/components/Pagination/Pagination.tsx.`,
 );
 process.exit(1);

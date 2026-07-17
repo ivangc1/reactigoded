@@ -3,102 +3,279 @@
 // Forzamos environment `node` (no jsdom): este test verifica el
 // runtime real de Node. El default `jsdom` del proyecto polyfilla
 // `window`, `document`, `localStorage`, etc. — todos darían "existe"
-// como global y el test sería trivialmente falso. Bajo `node` el
-// globalThis es el real, exponiendo solo lo que Node realmente provee.
+// como global y los asserts de presencia/ausencia serían triviales.
+// Bajo `node` el globalThis es el real, exponiendo solo lo que Node
+// realmente provee.
 
 /**
- * #150: verificación del catálogo `CLIENT_GLOBALS` vs Node runtime.
+ * #150 (reformulado en beta.27 BLOCKER-1): verificación del catálogo
+ * server-safe — ahora modelo FAIL-CLOSED (whitelist) `SAFE_GLOBALS` — vs
+ * el runtime real de Node.
  *
- * El server-safe gate flaggea acceso bare a `CLIENT_GLOBALS` en código
- * `@server-safe`. La premisa original (gate review CONV-2 beta.25) era:
- * "estos nombres NO existen como global en Node >=22.12.0, así que
- * acceder a ellos en render server lanza ReferenceError tal como
- * `window`".
+ * El gate pasó de una DENYLIST (~46 nombres browser-only) a una WHITELIST:
+ * acceso bare a cualquier identificador NO resuelto en scope y AUSENTE de
+ * `SAFE_GLOBALS` se flaggea. `SAFE_GLOBALS = (ES builtins ∪ globals de
+ * Node) − INTENTIONAL_DENY`. Eso invierte la dirección de fallo: un global
+ * DOM nuevo se caza solo en vez de pasar silencioso (START-1, cruce A+B).
  *
- * Esa premisa se erosiona conforme Node añade APIs web (v21 trajo
- * `navigator`, releases recientes traen más). Este test verifica que:
+ * Este test ancla el modelo al engine mínimo y blinda sus invariantes:
  *
- *   1. Ningún nombre del catálogo que NO esté documentado como
- *      overlap intencional con Node existe como global runtime.
- *      Si Node añade un nuevo nombre (p.ej. en Node 30 añaden
- *      `WebSocket` como global y aún no lo documentamos), el test
- *      falla en la matriz CI y nos avisa para decidir: ¿overlap
- *      intencional (multi-runtime portability) o quitar del catálogo?
+ *   A. ENGINE-MIN ANCHOR. Cada nombre de `SAFE_GLOBALS` debe resolver como
+ *      binding real en el Node que ejecuta el test. `globals.nodeBuiltin`
+ *      puede listar globals añadidos DESPUÉS de Node 22.12.0 (engine
+ *      mínimo declarado). Como este test corre en cada celda de la matriz
+ *      CI (#151, ubuntu/windows × Node 22.12/24), la celda 22.12 falla si
+ *      la whitelist incluye algo que el engine mínimo NO provee — un
+ *      consumer en 22.12 recibiría un falso negativo (global tratado como
+ *      seguro que en realidad lanza ReferenceError). El anclaje es a 22.12,
+ *      no al Node donde corre el dev.
  *
- *   2. Los nombres documentados como overlap (4 entries actuales)
- *      SIGUEN en `CLIENT_GLOBALS`. Anti-regresión por si alguien
- *      borra una entry sin actualizar la doc.
+ *   B. DENIAL INVARIANT. Ningún `INTENTIONAL_DENY` está en `SAFE_GLOBALS`.
+ *      Las denegaciones (Node los provee pero se flaggean igual) tienen que
+ *      ganar siempre — si una se colara en SAFE, reabriría su bypass.
  *
- *   3. Node runtime sí provee cada nombre documentado como overlap.
- *      Si Node deprecase alguno (p.ej. Node 30 quita `Buffer` por
- *      `Uint8Array`), el set documentado debería simplificarse y el
- *      test nos avisa.
+ *   C. BYPASS ANTI-REGRESIÓN. Globals client-only conocidos NO están en
+ *      `SAFE_GLOBALS` (siguen flaggeándose). Incluye el START-1 (HTMLElement,
+ *      self, CSS) que la denylist de 46 dejaba pasar.
  *
- * Cobertura cross-Node: este test corre en cada celda de la matriz
- * CI (#151) — ubuntu/windows × Node 22.12/24. Drift en cualquier
- * versión soportada se caza automáticamente.
+ *   D. STABLE OVERLAP. Los overlaps Node estables documentados (no los
+ *      experimentales) SÍ los provee el runtime — documenta por qué se
+ *      deniegan a pesar de existir.
  *
- * Codex sugirió este gate en el cruce beta.26 (MEDIUM-2).
+ * Codex sugirió la semilla de este gate en el cruce beta.26 (MEDIUM-2);
+ * el cruce A+B claudegate6 lo reorientó al modelo fail-closed.
  */
 import { describe, it, expect } from "vitest";
-import { CLIENT_GLOBALS } from "../../scripts/check-server-safe-markers.mjs";
+import {
+  SAFE_GLOBALS,
+  INTENTIONAL_DENY,
+  EDGE_MISSING_GLOBALS,
+  SAFE_PARTIAL_MEMBERS,
+  PARTIAL_SAFE_GLOBAL_MEMBERS,
+  CONSTRUCTION_DENIED_MEMBERS,
+} from "../../scripts/check-server-safe-markers.mjs";
+
+/** ¿`name` resuelve como binding global en el runtime actual? Usamos `in`
+ *  (no `typeof`) porque `typeof globalThis.undefined === "undefined"` daría
+ *  un falso "ausente" para el global `undefined`. */
+function isRuntimeGlobal(name: string): boolean {
+  return name in (globalThis as object);
+}
 
 /**
- * Nombres del catálogo `CLIENT_GLOBALS` que TAMBIÉN existen como
- * global en Node 22.12+. Cada uno está en `CLIENT_GLOBALS` por
- * decisión consciente — NO porque Node no lo provea — y el rationale
- * vive en el comment del catálogo (`scripts/check-server-safe-markers.mjs`).
- *
- * Si cambias este set, actualiza también el comment del catálogo.
+ * Overlaps Node ESTABLES: Node los provee como global y el gate los
+ * deniega igual (portabilidad multi-runtime / anti-bypass). Subset de
+ * `INTENTIONAL_DENY` que excluye los experimentales (`localStorage`,
+ * `sessionStorage`, behind `--experimental-webstorage`) y los eval sinks
+ * (`eval`, `Function`, que son builtins ES, no "overlaps Node").
  */
-const DOCUMENTED_NODE_OVERLAPS = new Set([
-  // Caza bypasses tipo `globalThis.constructor.constructor("return window")()`.
-  "globalThis",
-  // Multi-runtime portability (Cloudflare Workers / Deno no lo tienen).
-  "process",
-  // Multi-runtime: usar `Uint8Array` en su lugar.
-  "Buffer",
-  // Añadido a Node en v21. Subset de browser navigator — semántica
-  // inestable entre runtimes.
-  "navigator",
-]);
+const STABLE_NODE_OVERLAPS = ["globalThis", "process", "Buffer", "navigator"];
 
-describe("CLIENT_GLOBALS catálogo vs Node runtime (#150)", () => {
-  it("ningún CLIENT_GLOBAL no-documentado existe como global en Node actual", () => {
-    const unexpected: string[] = [];
-    for (const name of CLIENT_GLOBALS) {
-      if (DOCUMENTED_NODE_OVERLAPS.has(name)) continue;
-      // typeof sobre globalThis[name] no lanza si no existe;
-      // "undefined" significa "Node no lo provee como global".
-      const present =
-        typeof (globalThis as Record<string, unknown>)[name] !== "undefined";
-      if (present) unexpected.push(name);
+/**
+ * Globals client-only que DEBEN seguir flaggeándose (ausentes de SAFE).
+ * Incluye el START-1 del cruce A+B (HTMLElement, self, CSS, customElements)
+ * que la denylist de 46 NO cubría.
+ */
+const MUST_STAY_FLAGGED = [
+  "window",
+  "document",
+  "HTMLElement",
+  "Element",
+  "self",
+  "CSS",
+  "customElements",
+  "localStorage",
+  "sessionStorage",
+  "IntersectionObserver",
+  "matchMedia",
+  "XMLHttpRequest",
+  "DOMParser",
+  "Worker",
+  // `global`: alias runtime-equivalente de `globalThis` en Node. Si entra en
+  // SAFE (vía `globals.nodeBuiltin`) reabre el bypass dynamic-eval +
+  // `global.process.env`. Cruce A+B, FN-hunt.
+  "global",
+  // `setImmediate`/`clearImmediate`: Node-only, no Web-standard. Stub que lanza
+  // en Vercel Edge. Denegados por el stance edge-baseline (workflow honest-
+  // construct). Los otros deferred-timers (setTimeout/setInterval/
+  // queueMicrotask) SÍ son web-standard y SÍ están en SAFE.
+  "setImmediate",
+  "clearImmediate",
+];
+
+/**
+ * Contenido EXACTO esperado de `SAFE_GLOBALS` (98 nombres, ordenados). Es
+ * un PIN del contrato: cualquier cambio en el set (bump de `globals`,
+ * denegación nueva, overclaim) debe actualizar esta lista CONSCIENTEMENTE.
+ * Sin el pin, un minor bump de `globals` (`^17.6.0`) podría añadir un nombre
+ * floor-present pero client-unsafe sin que los Tests A/B/C lo cacen (Test A
+ * solo caza nombres ausentes del runtime, no los presentes-pero-unsafe).
+ * Cruce A+B claudegate6, robustez del freeze.
+ */
+const SAFE_GLOBALS_PIN = [
+  "AbortController", "AbortSignal", "AggregateError", "Array", "ArrayBuffer", "Atomics",
+  "BigInt", "BigInt64Array", "BigUint64Array", "Blob", "Boolean", "Crypto",
+  "CryptoKey", "DOMException", "DataView", "Date", "Error", "EvalError",
+  "Event", "EventTarget", "File", "FinalizationRegistry", "Float32Array", "Float64Array",
+  "FormData", "Headers", "Infinity", "Int16Array", "Int32Array", "Int8Array",
+  "Intl", "Iterator", "JSON", "Map", "Math", "NaN",
+  "Number", "Object", "Promise", "Proxy", "RangeError", "ReadableStream",
+  "ReadableStreamBYOBReader", "ReadableStreamDefaultReader", "ReferenceError", "Reflect", "RegExp", "Request",
+  "Response", "Set", "String", "SubtleCrypto", "Symbol",
+  "SyntaxError", "TextDecoder", "TextDecoderStream", "TextEncoder", "TextEncoderStream", "TransformStream",
+  "TypeError", "URIError", "URL", "URLSearchParams", "Uint16Array", "Uint32Array",
+  "Uint8Array", "Uint8ClampedArray", "WeakMap", "WeakRef", "WeakSet", "WebAssembly",
+  "WebSocket", "WritableStream", "WritableStreamDefaultWriter", "atob", "btoa", "clearInterval",
+  "clearTimeout", "console", "crypto", "decodeURI", "decodeURIComponent", "encodeURI",
+  "encodeURIComponent", "escape", "fetch", "isFinite", "isNaN", "parseFloat",
+  "parseInt", "performance", "queueMicrotask", "setInterval", "setTimeout", "structuredClone",
+  "undefined", "unescape",
+];
+
+/**
+ * Overclaims de `globals`: nombres que `globals@17.x` lista pero Node 22.12
+ * (engine floor) NO provee. Deben estar restados de SAFE_GLOBALS — si no, un
+ * componente que los referencie bare petaría en un consumer sobre el floor.
+ */
+const GLOBALS_OVERCLAIMS = [
+  "AsyncDisposableStack",
+  "CloseEvent",
+  "DisposableStack",
+  "ErrorEvent",
+  "Float16Array",
+  "Storage",
+  "SuppressedError",
+  "URLPattern",
+];
+
+describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
+  it("A. cada SAFE_GLOBAL resuelve en el Node actual (engine-min anchor)", () => {
+    const absent: string[] = [];
+    for (const name of SAFE_GLOBALS) {
+      if (!isRuntimeGlobal(name)) absent.push(name);
     }
-    expect(unexpected).toEqual([]);
+    // En la celda Node 22.12 de la matriz CI, cualquier nombre listado por
+    // `globals` pero ausente en el engine mínimo aparece aquí → forzamos
+    // reclasificación antes de tagear.
+    expect(absent).toEqual([]);
   });
 
-  it("DOCUMENTED_NODE_OVERLAPS sigue siendo subset de CLIENT_GLOBALS", () => {
-    // Defensivo: si alguien borra un entry de `CLIENT_GLOBALS` sin
-    // tocar este test, el set documentado quedaría con un nombre
-    // huérfano. Esta aserción lo caza.
-    const missing: string[] = [];
-    for (const name of DOCUMENTED_NODE_OVERLAPS) {
-      if (!CLIENT_GLOBALS.has(name)) missing.push(name);
+  it("B. ningún INTENTIONAL_DENY está en SAFE_GLOBALS (denials ganan)", () => {
+    const leaked: string[] = [];
+    for (const name of INTENTIONAL_DENY) {
+      if (SAFE_GLOBALS.has(name)) leaked.push(name);
     }
-    expect(missing).toEqual([]);
+    expect(leaked).toEqual([]);
   });
 
-  it("Node runtime provee TODOS los DOCUMENTED_NODE_OVERLAPS", () => {
-    // Anti-regresión sobre el lado Node: si una versión soportada deja
-    // de proveer alguno (p.ej. `Buffer` deprecation en Node 30), el
-    // set documentado debería simplificarse — quitar el entry tanto
-    // de aquí como del comment de `CLIENT_GLOBALS`.
-    const missing: string[] = [];
-    for (const name of DOCUMENTED_NODE_OVERLAPS) {
-      const present =
-        typeof (globalThis as Record<string, unknown>)[name] !== "undefined";
-      if (!present) missing.push(name);
-    }
+  it("C. globals client-only conocidos NO están en SAFE (anti-regresión bypass)", () => {
+    const leaked = MUST_STAY_FLAGGED.filter((name) => SAFE_GLOBALS.has(name));
+    expect(leaked).toEqual([]);
+  });
+
+  it("D. Node provee los overlaps estables documentados", () => {
+    // Si una versión soportada deja de proveer alguno (p.ej. `Buffer`
+    // deprecation en una release futura), el set debería simplificarse —
+    // quitar el entry de INTENTIONAL_DENY y del comment del catálogo.
+    const missing = STABLE_NODE_OVERLAPS.filter(
+      (name) => !isRuntimeGlobal(name),
+    );
     expect(missing).toEqual([]);
+    // Y todos siguen siendo denegaciones intencionales (no se borraron).
+    const undocumented = STABLE_NODE_OVERLAPS.filter(
+      (name) => !INTENTIONAL_DENY.has(name),
+    );
+    expect(undocumented).toEqual([]);
+  });
+
+  it("E. SAFE_GLOBALS coincide EXACTAMENTE con el pin del contrato", () => {
+    // Pin de contenido: si `globals` (bump) o las denegaciones cambian el
+    // set, este test falla y obliga a revisar conscientemente. Caza el caso
+    // que Test A no ve: un nombre AÑADIDO que SÍ existe en el floor pero es
+    // client-unsafe (p.ej. una Web API que Node estabiliza pero que rompe en
+    // Workers/Deno). En ese caso, decidir: ¿añadir a INTENTIONAL_DENY o
+    // aceptar en el pin?
+    expect([...SAFE_GLOBALS].sort()).toEqual([...SAFE_GLOBALS_PIN].sort());
+  });
+
+  it("E2. WORKERS_MISSING (root F): SharedArrayBuffer fuera de SAFE; Atomics sigue dentro", () => {
+    // root F / Fable cross-review rc.1: SharedArrayBuffer ESTÁ en el baseline Vercel Edge
+    // (@edge-runtime/vm) pero Cloudflare Workers lo DESHABILITA (mitigación Spectre, doc oficial) →
+    // misma clase que el reversal §448 de process.env (presente-en-Vercel-Edge ≠ presente-en-el-MCD)
+    // → restado de SAFE_GLOBALS. `Atomics` NO se resta sin medir workerd (ES2024 lo permite sobre
+    // ArrayBuffer normal → puede existir) → sigue en SAFE, derivación sistemática pendiente en #190.
+    expect(SAFE_GLOBALS.has("SharedArrayBuffer")).toBe(false);
+    expect(SAFE_GLOBALS.has("Atomics")).toBe(true);
+  });
+
+  it("F. EDGE_MISSING: Node los provee pero NO están en SAFE (edge baseline)", () => {
+    // La clase "Node-tiene / Edge-no": globals de `nodeBuiltin` que el runtime
+    // Edge más estricto (Vercel Edge sin nodejs_compat) NO expone. Derivados
+    // data-driven del globalThis real de @edge-runtime/vm. Invariantes:
+    //   (1) ninguno está en SAFE (un read bare lanzaría ReferenceError en Edge);
+    const leaked = [...EDGE_MISSING_GLOBALS].filter((n) => SAFE_GLOBALS.has(n));
+    expect(leaked).toEqual([]);
+    //   (2) todos existen en el runtime Node (son la cara "Node-tiene" de la
+    //       divergencia — si uno deja de estar en Node, sale de la lista).
+    const notInNode = [...EDGE_MISSING_GLOBALS].filter(
+      (n) => !isRuntimeGlobal(n),
+    );
+    expect(notInNode).toEqual([]);
+    //   (3) ancla concreta del codex P1 — BroadcastChannel cazado.
+    expect(EDGE_MISSING_GLOBALS.has("BroadcastChannel")).toBe(true);
+  });
+
+  it("F. los GLOBALS_OVERCLAIMS están restados de SAFE_GLOBALS", () => {
+    // Invariante directo (no solo el indirecto de Test A en la celda 22.12):
+    // los nombres que el floor no provee no deben estar en la whitelist.
+    const leaked = GLOBALS_OVERCLAIMS.filter((name) => SAFE_GLOBALS.has(name));
+    expect(leaked).toEqual([]);
+  });
+
+  // G. PIN de contenido de los allowlists bucket-1/2 (snapshot del barrido contra @edge-runtime/vm).
+  // El barrido conductual de las 96 filas vive en #190 (requiere @edge-runtime/vm como devDep — choca
+  // con peers, #184). Aquí se PINEA el RESULTADO derivado (los Sets exactos) sin el VM, igual que §150
+  // pinea SAFE_GLOBALS sin el runtime: si Node/Edge/VM cambian, se regenera y este pin revienta primero.
+  // REGENERAR (post-#184): correr el barrido del scratchpad —`new EdgeVM()` + enumerar miembros de cada
+  // root host-populated, intersección Node∩Edge para bucket-1, test de contaminación con un miembro
+  // Node-only (performance: eventLoopUtilization presente = VM contaminado → convergencia)— y re-fijar.
+  it("G. SAFE_PARTIAL_MEMBERS (bucket-1 allowlist) = snapshot VM-derivado exacto", () => {
+    const dump = Object.fromEntries(
+      Object.entries(SAFE_PARTIAL_MEMBERS).map(
+        ([k, v]) => [k, [...v].sort()],
+      ),
+    );
+    expect(dump).toEqual({
+      // performance: VM contaminado para miembros → solo convergencia {now,timeOrigin}, resto complemento.
+      performance: ["now", "timeOrigin"],
+      // console: VM-fiel (table/Console undefined aunque Node los tiene) → los 12 Edge-present.
+      console: [
+        "assert", "count", "debug", "dir", "error", "info",
+        "log", "time", "timeEnd", "timeLog", "trace", "warn",
+      ],
+      // crypto NO está: el global Web Crypto = {subtle,getRandomValues,randomUUID} IDÉNTICO en los 3
+      // runtimes → cero miembro divergente → WHOLESALE para presencia. La invocación-unbound se cubre
+      // por RECEIVER_BOUND_MEMBERS (eje ortogonal), no por allowlist de presencia. Ver Test H (tabla 3-runtime).
+    });
+  });
+
+  it("G. PARTIAL_SAFE_GLOBAL_MEMBERS (bucket-2 denylist) + CONSTRUCTION_DENIED_MEMBERS = snapshot exacto", () => {
+    const deny = Object.fromEntries(
+      Object.entries(
+        PARTIAL_SAFE_GLOBAL_MEMBERS,
+      ).map(([k, v]) => [k, [...v].sort()]),
+    );
+    expect(deny).toEqual({
+      // WebAssembly: ban-de-LLAMADA (los que compilan bytes); `Module` va en construction-ban aparte.
+      WebAssembly: ["compile", "compileStreaming", "instantiateStreaming"],
+      // URL: blob-URL browser/Node-only, present-but-throws en workerd (Auditoría B R5 §2.1 / #11 / D3).
+      URL: ["createObjectURL", "revokeObjectURL"],
+    });
+    const ctor = Object.fromEntries(
+      Object.entries(
+        CONSTRUCTION_DENIED_MEMBERS,
+      ).map(([k, v]) => [k, [...v].sort()]),
+    );
+    expect(ctor).toEqual({ WebAssembly: ["Module"] });
   });
 });

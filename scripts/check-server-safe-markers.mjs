@@ -13,30 +13,33 @@
  *      `@server-safe`, NO debe declarar `"use client"`. Las dos cosas
  *      son contradictorias por design.
  *
- *   2. **No accesos DOM en render path**: `document.X`, `window.X`,
- *      `navigator.X`, `process.X`, `Buffer.X`, `globalThis.X` (cualquier
- *      forma — `.foo`, `?.foo`, `["foo"]`, `?.["foo"]`) deben aparecer
- *      SOLO en uno de estos contextos:
+ *   2. **No accesos a globals no-server-safe en render path** (modelo
+ *      FAIL-CLOSED / whitelist, beta.27): acceso bare a CUALQUIER
+ *      identificador no resuelto en scope (local/param/import) y AUSENTE de
+ *      `SAFE_GLOBALS` (= builtins ES ∪ globals de Node − `INTENTIONAL_DENY`
+ *      − overclaims) — en cualquier forma (`X`, `X.foo`, `X?.foo`,
+ *      `X["foo"]`, `X?.["foo"]`) — es violation, salvo en uno de estos
+ *      contextos:
  *
  *      (a) Bajo guard `typeof X !== "undefined"` ACTIVO según scope
  *          (positive typeof, dentro del then-branch del if).
  *      (b) Dentro del body de una función pasada a un sink de ejecución
  *          diferida reconocido: JSX event handler (`onClick`,
  *          `onChange`, etc), hook de React diferido (`useEffect`,
- *          `useLayoutEffect`, `useInsertionEffect`, `useCallback`,
- *          `useImperativeHandle`), o timer (`setTimeout`,
- *          `setInterval`, `setImmediate`, `queueMicrotask`,
- *          `requestAnimationFrame`, `requestIdleCallback`,
- *          `startTransition`).
+ *          `useLayoutEffect`, `useInsertionEffect` — ver `DEFERRED_HOOKS`),
+ *          o timer que existe en Node (`setTimeout`, `setInterval`,
+ *          `setImmediate`, `queueMicrotask` — ver `DEFERRED_LATER_FNS`).
  *
  *          NOT incluido en (b): `useMemo` / `useState` lazy init /
- *          `useRef` lazy init (corren durante render server), helpers
+ *          `useRef` lazy init (corren durante render server); helpers
  *          nested (`function readEnv() { return window.x; }` invocada
- *          desde JSX corre durante render), IIFE (`(() => x)()`),
- *          y referencias indirectas (`const h = () => ...; <X
- *          onClick={h}>` — el body del arrow no queda en posición
- *          sintáctica reconocida; el consumer debe inline-ar o
- *          envolver en `useCallback`).
+ *          desde JSX corre durante render); IIFE (`(() => x)()`);
+ *          `useCallback` / `useImperativeHandle` (el value returned puede
+ *          invocarse durante render — removidos del set); timers
+ *          browser-only `requestAnimationFrame` / `requestIdleCallback` y
+ *          `startTransition` (corre síncrono) — su call-site mismo lanza en
+ *          SSR. El consumer debe inline-ar el acceso en un JSX event
+ *          handler reconocido o moverlo a un effect / guard.
  *
  *      Acceso a un client global en el render path top-level (FUERA
  *      de cualquier callback) sin guard activo es la única forma de
@@ -195,6 +198,21 @@
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { isBuiltin } from "node:module";
+
+// ¿`specifier` resuelve a un builtin de Node (bare `fs`, prefijado `node:fs`, subpath `fs/promises`,
+// prefijo+subpath `node:fs/promises`)? ORÁCULO = `module.isBuiltin` (enumeración canónica del runtime, NO
+// lista a mano → sin la deriva de denylist que motivó #173). Maneja los 4 vectores POR SÍ SOLO (normaliza
+// `node:` Y resuelve subpaths — medido: `node:fs/promises`→true) Y rechaza los no-builtin con precisión de
+// subpath (`fs/promises`→true PERO `buffer/foo`/`node:buffer/foo`→false: buffer no tiene ese subpath, Node
+// tira ERR_UNKNOWN_BUILTIN_MODULE). El fallback `base`-split anterior re-implementaba esto a mano y PEOR:
+// denegaba `<nombre-builtin>/<lo-que-sea>` (colisión con paquete npm — `buffer/foo`) que el oráculo dice que
+// NO es builtin = over-deny FP (codex P2). Borrado: confía el oráculo, no lo second-guesses. El `node:buffer/
+// foo` no-builtin lo caza el scheme-guard aguas abajo (`node:` scheme + no-builtin → unresolvable, fail-
+// closed), NO cae a external silencioso.
+function isNodeBuiltinSpecifier(specifier) {
+  return isBuiltin(specifier);
+}
 import {
   dirname,
   resolve,
@@ -204,6 +222,7 @@ import {
   posix as pathPosix,
 } from "node:path";
 import ts from "typescript";
+import globalsPkg from "globals";
 
 /**
  * Normaliza un path al separator POSIX (`/`). Helper de bajo nivel
@@ -284,89 +303,405 @@ function crossOsDirname(p) {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
-const COMPONENTS_DIR = resolve(repoRoot, "src/components");
-const HOOKS_DIR = resolve(repoRoot, "src/hooks");
 const SRC_ROOT = resolve(repoRoot, "src");
 
-const CLIENT_GLOBALS = new Set([
-  "document",
-  "window",
-  // `navigator`, `process`, `Buffer`, `globalThis` están en este set
-  // intencionalmente AUNQUE Node los provee como global (verificado en
-  // matriz CI por `src/__tests__/server-safe-catalog-vs-node.test.ts`,
-  // #150 beta.27). Las 4 razones:
-  //   - `globalThis`: caza el bypass
-  //     `globalThis.constructor.constructor("return window")()` —
-  //     audit fixture `globalThis-constructor.fixture.tsx` lo prueba.
-  //     No tener `globalThis` en el set deja esta clase de bypass
-  //     abierta aunque Node lo provea como global ECMAScript estándar.
-  //   - `process`: portabilidad multi-runtime. Cloudflare Workers /
-  //     Deno no tienen `process`. En RSC el patrón canónico es leer
-  //     env vars vía args/context del Server Component, no globalmente.
-  //   - `Buffer`: Node-specific. Multi-runtime usan `Uint8Array`.
-  //     Mismo razonamiento que `process`.
-  //   - `navigator`: añadido a Node en v21 (Node 22.12+ lo provee),
-  //     pero su forma es un SUBSET del navigator de browser (no
-  //     `geolocation`, no `mediaDevices`, sí `userAgent`/`language`).
-  //     Semántica inestable entre runtimes (browser vs Node vs Workers)
-  //     → gate fuerza guard explícito o evitar la API en `@server-safe`.
-  "navigator",
+// ── Modelo fail-closed (whitelist) del catálogo server-safe ──
+// (beta.27 BLOCKER-1, cruce A+B claudegate6)
+//
+// HISTORIA: hasta beta.26 esto era una DENYLIST de ~46 nombres browser-
+// only. El cruce A+B (START-1) demostró que era estructuralmente
+// insuficiente: `lib.dom.d.ts` declara ~826 globals client-only que
+// lanzan ReferenceError en Node, y la denylist cubría 46 → ~780 pasaban
+// silenciosos (`HTMLElement`, `Element`, `self`, `CSS`, customElements
+// nuevos…). Una denylist "más completa" conserva la dirección de fallo
+// equivocada: el día que el navegador/TS añada un global nuevo, vuelve a
+// pasar hasta que alguien regenere el catálogo.
+//
+// MODELO: deny-by-default. Lo SEGURO se enumera (finito, estable); todo
+// lo demás accedido bare se flaggea. Seguro =
+//   (ECMAScript builtins ∪ globals de Node) − denegaciones intencionales.
+// Fuente: paquete `globals` (mantenido, versionado). Un global DOM nuevo
+// se caza solo, sin tocar este archivo. Un falso positivo es ruido
+// (arreglable: añadir a SAFE_GLOBALS si es genuinamente Node-safe), no un
+// ReferenceError en producción SSR — fail-closed compra esa dirección.
+//
+// ENGINE-MIN: `globals.nodeBuiltin` puede listar globals añadidos después
+// de Node 22.12.0 (engine mínimo declarado). El test #150
+// `src/__tests__/server-safe-catalog-vs-node.test.ts` corre en la matriz
+// CI (22.12 + 24) y falla si algún nombre de SAFE_GLOBALS no lo provee el
+// Node real → ancla la whitelist al engine mínimo, no al Node del dev.
+//
+// STANCE: "server-safe" = funciona en el EDGE RUNTIME MÁS ESTRICTO **sin
+// asumir `nodejs_compat`** (Vercel Edge; Cloudflare Workers / Deno sin la flag
+// de compat de Node). Es la decisión conservadora correcta para una librería:
+// no puedes asumir que tus consumers activan compat. CAVEAT explícito: un
+// componente flaggeado por un global Node-only SÍ funcionaría en un runtime
+// CON compat — pero el gate ancla al baseline sin compat. (Verificado contra
+// Vercel Edge / matriz de compat cross-runtime; ver ADR D1-P1.)
+//
+// DENEGACIONES INTENCIONALES (Node los provee pero se flaggean igual):
+//   - `globalThis` / `global`: cazan el bypass
+//     `globalThis.constructor.constructor("return window")()` y el acceso
+//     directo a client globals / `process.env` vía el objeto global. `global`
+//     es el alias runtime-equivalente de Node (`global === globalThis` en el
+//     floor) y `globals.nodeBuiltin` lo lista — sin denegarlo, `global.*`
+//     reabriría el mismo agujero que `globalThis.*` (cruce A+B, FN-hunt).
+//   - `process` / `Buffer`: ausentes/stub en el baseline Web-standard edge
+//     (Vercel Edge; Workers/Deno SIN `nodejs_compat`). NO "Workers/Deno no los
+//     tienen" — CON compat sí los tienen; el anclaje es al baseline sin compat.
+//     En RSC el patrón canónico es leer env vía args/context, no globalmente.
+//   - `setImmediate` / `clearImmediate`: Node-only, NO Web-standard. En Vercel
+//     Edge están definidos como STUB QUE LANZA al llamarse ("A Node.js API is
+//     used (setImmediate) which is not supported in the Edge Runtime"). Por eso
+//     van también en NON_ABSENCE_DENIALS (un `typeof setImmediate !==
+//     "undefined"` pasa pero la llamada revienta → guard de falsa confianza).
+//     Los otros deferred-timers (`setTimeout`/`setInterval`/`queueMicrotask`)
+//     SÍ son Web-standard y se quedan en SAFE.
+//   - `navigator`: provisto como SUBSET inestable (sí `userAgent`/`language`;
+//     no `geolocation`/`mediaDevices`) — el ROOT está presente (Node 22+/edge) pero
+//     PARCIAL, así que `typeof navigator !== "undefined"` da falsa confianza y
+//     `navigator.geolocation.x` revienta en SSR. Por eso va TAMBIÉN en
+//     NON_ABSENCE_DENIALS (como setImmediate): presence-guard/timer NO eximen, solo
+//     deferred client-only. codex P2.
+//   - `localStorage` / `sessionStorage`: webstorage no disponible en el edge
+//     baseline ni estable en Node (experimental) → crashean o son semántica-
+//     mente erróneos en SSR/RSC.
+//   - `eval` / `Function`: dynamic eval sinks (ver DYNAMIC_EVAL_SINKS).
+//     Excluidos de SAFE para que también se flaggeen como bare ref.
+//
+// FOLLOW-UP (post-freeze): derivar SAFE como INTERSECCIÓN cross-runtime anclada
+// al baseline edge (vía una herramienta tipo `platform-node-compat`) en vez de
+// `globals.nodeBuiltin` − denegaciones-a-mano. Esto convertiría la lista de
+// denegaciones Node-only en algo derivado, no curado.
+const INTENTIONAL_DENY = new Set([
+  "globalThis",
+  "global",
   "process",
   "Buffer",
-  "globalThis",
-  // Browser-only timers (no existen en Node SSR). Codex round 17 P2.2:
-  // tratarlos como client globals para flag-ear cualquier ref bare a
-  // ellos en render path (call site, no solo callback body).
-  "requestAnimationFrame",
-  "cancelAnimationFrame",
-  "requestIdleCallback",
-  "cancelIdleCallback",
-  // beta.25 BLOCKER 4 (gate review CONV-2): catálogo Claude ampliado.
-  // Browser-only que NO existen como global en Node >=22.12.0 (engine
-  // mínimo declarado). Acceder a bare en render server lanza
-  // ReferenceError exactamente igual que `window`. Verificación caso a
-  // caso antes de añadir (algunos como `URL`, `Blob`, `crypto`, `fetch`,
-  // `EventTarget` SÍ existen como global en Node y NO se añaden).
+  "setImmediate",
+  "clearImmediate",
+  "navigator",
   "localStorage",
   "sessionStorage",
+  "eval",
+  "Function",
+]);
+
+// Overclaims de `globals`: nombres que `globals@17.x` lista en `builtin`/
+// `nodeBuiltin` pero que Node 22.12.0 (engine MÍNIMO declarado) NO provee
+// como global — landearon en Node 23/24 o están flag-gated. Un componente
+// `@server-safe` que los referencie bare lanzaría ReferenceError en un
+// consumer sobre el floor. Verificado contra el runtime real de Node
+// 22.12.0; el test `server-safe-catalog-vs-node.test.ts` (Test A) corre en
+// la celda 22.12 de la matriz CI y FALLA si esta lista se desincroniza con
+// lo que el floor realmente provee (p.ej. al bumpear `globals` o el engine).
+// IMPORTANTE: subtraer SOLO añade strictness (fail-closed) — si un nombre
+// dejara de ser overclaim, el efecto sería un FP corregible, nunca un FN.
+const GLOBALS_OVERCLAIMS = new Set([
+  "AsyncDisposableStack",
+  "CloseEvent",
+  "DisposableStack",
+  "ErrorEvent",
+  "Float16Array",
+  "Storage",
+  "SuppressedError",
+  "URLPattern",
+]);
+
+// EDGE-MISSING: globals que `globals.nodeBuiltin` lista (Node los provee) pero el
+// runtime EDGE más estricto (Vercel Edge sin nodejs_compat) NO expone — un read
+// bare lanza ReferenceError ahí. El gate ancla "server-safe" a ese baseline, así
+// que SAFE = (builtin ∪ nodeBuiltin) ∩ edge. Esta lista es la diferencia
+// (SAFE − edgeGlobalThis), derivada DATA-DRIVEN del runtime Edge real, no curada
+// a ojo. Regenerable (provenance, @edge-runtime/vm@5.0.0):
+//   npm i -D @edge-runtime/vm@5 && node -e 'const{EdgeVM}=require("@edge-runtime/vm");
+//   const e=new Set(new EdgeVM().evaluate("Object.getOwnPropertyNames(globalThis)"));
+//   import("./scripts/check-server-safe-markers.mjs").then(m=>console.log(
+//   [...m.SAFE_GLOBALS].filter(n=>!e.has(n)).sort()))'
+// Subtraer SOLO añade strictness (fail-closed): un FP corregible si Edge gana la
+// API, nunca un FN. Codex P1 (BroadcastChannel) + #190. El pin de contenido de
+// SAFE caza el drift al bumpear `globals`.
+const EDGE_MISSING_GLOBALS = new Set([
+  "BroadcastChannel",
+  "ByteLengthQueuingStrategy",
+  "CompressionStream",
+  "CountQueuingStrategy",
+  "CustomEvent",
+  "DecompressionStream",
+  "MessageChannel",
+  "MessageEvent",
+  "MessagePort",
+  "Navigator",
+  // SOLO los CONSTRUCTORES `Performance*` son Edge-missing (no se instancian en el isolate). La
+  // INSTANCIA `performance` (lowercase) SÍ está en Edge — verificado conductualmente en @edge-runtime/vm
+  // (`typeof performance === "object"`, `performance.now()` corre) + ADR D1-P1 §270. NO sale de
+  // SAFE_GLOBALS (es bucket-1 en SAFE_PARTIAL_MEMBERS). Quitar la instancia fue un error contra §270.
+  "Performance",
+  "PerformanceEntry",
+  "PerformanceMark",
+  "PerformanceMeasure",
+  "PerformanceObserver",
+  "PerformanceObserverEntryList",
+  "PerformanceResourceTiming",
+  "ReadableByteStreamController",
+  "ReadableStreamBYOBRequest",
+  "ReadableStreamDefaultController",
+  "TransformStreamDefaultController",
+  "WritableStreamDefaultController",
+]);
+
+// WORKERS-MISSING (root F / Fable cross-review rc.1): globals PRESENTES en el baseline Vercel Edge
+// (@edge-runtime/vm) pero AUSENTES en el más estricto Cloudflare Workers (workerd) — la MISMA clase que el
+// reversal §448 de `process.env` (presente-en-Vercel-Edge ≠ presente-en-el-MCD estricto). EDGE_MISSING se
+// deriva solo de @edge-runtime/vm, así que estos se cuelan a SAFE. `SharedArrayBuffer`: Cloudflare lo
+// DESHABILITA por mitigación Spectre (doc oficial "Security model" — "disable SharedArrayBuffer and
+// high-resolution timers") → leer/construir en module-eval lanza ReferenceError en Workers-sin-compat.
+// QUIRÚRGICO: solo lo DOCUMENTADO-ausente. `Atomics` NO se resta sin medir (ES2024 lo permite sobre
+// ArrayBuffer normal → puede existir en workerd; requiere dump de globalThis real, #190). Los "high-res
+// timers" NO son entrada de catálogo (`Date.now` congelado / `performance.now` grueso = COMPORTAMIENTO, no
+// presencia) → nota en #190. La derivación sistemática por intersección {workerd ∩ Deno ∩ Edge} es #190.
+const WORKERS_MISSING_GLOBALS = new Set(["SharedArrayBuffer"]);
+
+// BROWSER-ONLY: globals presentes SOLO en el browser (AUSENTES en Node Y en Edge — DOM/BOM, sin habitante
+// server). Un `typeof X !== "undefined"` sobre uno de éstos prueba que la rama corre SOLO client-side →
+// CLIENT-ONLY (justifica suprimir el follow de import()/glob). ALLOWLIST POSITIVO + fail-CLOSED: el gate solo
+// modela `builtin ∪ nodeBuiltin`, así que un global Edge-only (`EdgeRuntime`, `caches`), Deno-only, o
+// DESCONOCIDO NO se puede probar browser-only → auditar (NUNCA asumir client-only — ése era el fail-open de la
+// categoría Edge-present/Node-absent, codex P2). NO derivable de `globals.browser − nodeBuiltin`: `caches` se
+// cuela ahí siendo Edge-present → curado a mano. Incompleto = FP fail-closed (un guard browser-only raro se
+// sobre-audita, suprimible), NUNCA fail-open. El subset preciso (browser − node − edge) se deriva en #190.
+const BROWSER_ONLY_GUARD_GLOBALS = new Set([
+  "window",
+  "document",
+  "navigator",
   "location",
   "history",
   "screen",
+  "localStorage",
+  "sessionStorage",
+  "customElements",
+  "matchMedia",
+  "getComputedStyle",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "HTMLElement",
+  "Element",
+  "Node",
+  "ShadowRoot",
+  "DOMParser",
+  "MutationObserver",
   "IntersectionObserver",
   "ResizeObserver",
-  "MutationObserver",
-  // PerformanceObserver NO va aqui: es global en Node >=22.12.0 (engine
-  // minimo del paquete) — anadirlo genera falsos positivos para codigo
-  // server-safe que use la API legitima de Node. Codex P2 round 2 sobre #99.
   "XMLHttpRequest",
-  "indexedDB",
-  "caches",
-  "FileReader",
-  "getComputedStyle",
-  "getSelection",
-  "matchMedia",
-  "scrollTo",
-  "scrollBy",
-  "alert",
-  "confirm",
-  "prompt",
-  "print",
-  "open",
-  "close",
-  "EventSource",
-  "Notification",
-  "visualViewport",
-  "Animation",
-  "KeyframeEffect",
-  "DOMParser",
-  "XPathEvaluator",
-  "Image",
-  "Audio",
-  "Worker",
-  "SharedWorker",
-  "customElements",
-  "speechSynthesis",
 ]);
+
+// Whitelist efectiva. Acceso bare a cualquier identificador NO resuelto
+// en scope (local/param/import) y AUSENTE de este set se trata como
+// global no-server-safe y se flaggea. Reemplaza al antiguo `CLIENT_GLOBALS`
+// (denylist) invirtiendo la decisión-hoja del walker. DETERMINISTA: se
+// deriva solo del paquete `globals` (datos estáticos), nunca del
+// `globalThis` ambiente — el gate se importa también bajo jsdom (donde
+// `window`/`document`/`HTMLElement` estarían polyfilled) y un
+// runtime-intersect envenenaría SAFE con browser globals.
+const SAFE_GLOBALS = new Set(
+  [
+    ...Object.keys(globalsPkg.builtin),
+    ...Object.keys(globalsPkg.nodeBuiltin),
+  ].filter(
+    (name) =>
+      !INTENTIONAL_DENY.has(name) &&
+      !GLOBALS_OVERCLAIMS.has(name) &&
+      !EDGE_MISSING_GLOBALS.has(name) &&
+      !WORKERS_MISSING_GLOBALS.has(name),
+  ),
+);
+
+// MIEMBROS browser-only de un global que SÍ es SAFE en su ROOT (existe en Node/edge) pero
+// cuyo MÉTODO/propiedad falta en el floor → llamarlo lanza (TypeError: undefined no es función).
+// El typeof-guard del root NO protege (el root existe) → como NON_ABSENCE_DENIALS pero a nivel
+// de propiedad. Solo exento en client-only deferred (browser, donde el miembro existe). Tabla
+// MÍNIMA + verificada (deepest re-hunt: performance.measureUserAgentSpecificMemory revienta en
+// Node); extensible al auditar más browser-only de performance/Intl/crypto. beta.27 BLOCKER-1.
+const PARTIAL_SAFE_GLOBAL_MEMBERS = {
+  // `WebAssembly` existe como namespace en el baseline Edge (Vercel/Workers) → root SAFE, pero la
+  // COMPILACIÓN DE BYTES está deshabilitada igual que eval/Function (dynamic code generation). La
+  // partición se deriva del semántico de cada API, NO del framing simplificado "WebAssembly
+  // deshabilitado" (los docs de Vercel se contradicen; la verdad fina es: el ÚNICO camino Wasm
+  // soportado en Edge es `instantiate(<Module importado vía ?module>)`; todo lo que compila bytes
+  // lanza — confirmado: `new WebAssembly.Module(bytes)` e `instantiate(bytes)` petan, solo
+  // `instantiate(Module)` corre). codex P2 (review genérico).
+  //
+  // DENY — no tienen forma estática, SIEMPRE compilan bytes → true positive:
+  //   `compile`, `compileStreaming`, `instantiateStreaming` (solo toma Response/stream, sin overload
+  //   de Module), y el constructor `new WebAssembly.Module(bytes)`.
+  // ALLOW — `instantiate`: tiene la forma estática soportada `instantiate(Module)` (el único Wasm
+  //   bendecido en Edge para RSC/SSR — highlighter/codec/sanitizer Wasm). Denegarla sería FALSE
+  //   positive sobre código que Vercel documenta como soportado, NO "fallar cerrado ante duda". La
+  //   incertidumbre real (¿el arg es un buffer o un Module importado?) es PROVENANCE = data-flow, que
+  //   el gate renuncia por diseño (§141): `instantiate(bufferSource)` queda RESIDUAL de data-flow,
+  //   junto al resto de renuncias de provenance, NO un bypass.
+  // SAFE — `Memory`/`Table`/`Global`/`Instance`/`validate` no compilan.
+  // `Module` NO va aquí (member-read ban): `WebAssembly.Module` como VALOR no compila — `wasm
+  // instanceof WebAssembly.Module`, `WebAssembly.Module.imports(m)`/`.exports(m)` (inspección de un
+  // módulo ya importado), `const M = WebAssembly.Module` son Edge-safe. El ÚNICO hazard es la
+  // CONSTRUCCIÓN `new WebAssembly.Module(bytes)` (compila bytes SIEMPRE — sin overload estático, a
+  // diferencia de `instantiate(Module)`), que se caza en posición `new` aparte. codex P2 (review genérico).
+  WebAssembly: new Set(["compile", "compileStreaming", "instantiateStreaming"]),
+  // `URL` existe en el baseline Edge (root SAFE, `new URL()`/`canParse`/`parse` corren), pero
+  // `createObjectURL`/`revokeObjectURL` son el patrón blob-URL browser/Node-only: en workerd `typeof` da
+  // `function` y la LLAMADA lanza `URL.createObjectURL() is not implemented` (MEDIDO contra workerd real,
+  // Auditoría B R5 §2.1 / #11 / D3) → present-but-throws. Denylist MÍNIMA (no registrar URL entera: canParse/
+  // parse/new URL miden correctamente-silenciosos; un ∃ blanket los FP-earía). La remediación NO sugiere `?.()`
+  // (el miembro existe; la sonda no protege) → rediseño (el patrón blob-URL no existe en Workers) o disable.
+  URL: new Set(["createObjectURL", "revokeObjectURL"]),
+};
+
+// Roots de PARTIAL_SAFE_GLOBAL_MEMBERS cuyos miembros están PRESENTES en el floor pero LANZAN al
+// INVOCARSE (dynamic codegen Edge), a diferencia de los AUSENTES (performance.measure…, donde el
+// miembro es undefined). Consecuencia para el safe-probe: `WebAssembly.compile?.()` SÍ invoca →
+// lanza, así que el optional-CALL NO es probe seguro (sí lo siguen siendo `typeof` y el optional-
+// ACCESS `?.name`, que no compilan). Para los AUSENTES, `?.()` corta a undefined = seguro.
+const PARTIAL_PRESENT_THROWS_ROOTS = new Set(["WebAssembly", "URL"]);
+
+// NAMESPACES HOST-POPULATED — TRES BUCKETS por la relación runtime↔namespace (el bucket NO se elige,
+// lo determina la relación; test checkeable):
+//   (1) El runtime expone un SUBSET LIMITADO (el host omite miembros, o Node AÑADE no-estándar) →
+//       default DENY, ALLOWLIST de lo confirmado-Edge-present. Complemento (Node-only/browser-only +
+//       futuros) denegado por construcción. → `performance`, `crypto`, `console`, `process`, `import.meta`.
+//   (2) Superficie estándar COMPLETA pero PROHÍBE ops concretas (seguridad) → default ALLOW, DENYLIST
+//       de lo prohibido. → `WebAssembly` (PARTIAL_SAFE_GLOBAL_MEMBERS). Forzarlo a allowlist sería FP
+//       sobre miembros estándar NUEVOS (`WebAssembly.Tag`/`Exception` del exception-handling, ya en el
+//       V8 de Edge) = allowlist-rot. Por eso NO se unifica.
+//   (3) Superficie completa SIN prohibiciones → allow wholesale, sin tabla. → `Intl`, `Math`, `JSON`.
+//       Ponerles allowlist = allowlist-rot (FP sobre `Intl.DurationFormat`/`Segmenter` nuevos).
+// BAR DE ALLOW = **Edge-present** (NO Web-standard: hay miembros standard ausentes en el isolate
+// server — browser-only). Un falso-ALLOW es FAIL-OPEN; un falso-DENY es FP corregible → el rigor va
+// entero en los ALLOW. INCIERTO = DENY por construcción (la carga de prueba está en ALLOW: demostrar
+// presencia-Edge-y-funcional). Oráculo de la superficie Edge = `@edge-runtime/primitives` (cuando esté
+// disponible; hoy ABSENTE → confirmación manual contra la API documentada del Edge Runtime). El subset
+// REAL se refina en #190. codex P2 (review genérico). FUERA DE SCOPE: V8-version-drift (`Array.fromAsync`,
+// `Promise.withResolvers`, `Object.groupBy`…) — skew de versión Node-V8 vs Edge-V8, NO "Node-only", sin
+// oráculo limpio; la clase es presencia-de-miembro-Node-vs-estándar, no version-skew.
+const SAFE_PARTIAL_MEMBERS = {
+  // `performance` ES bucket-1: la INSTANCIA existe en Edge (VM: `typeof performance==="object"`,
+  // `now()` corre; ADR §270). PERO el allowlist de MIEMBROS no se puede derivar de un oráculo: las 3
+  // fuentes locales están CONTAMINADAS para performance — doc Vercel OMITE (omisión≠ausencia),
+  // @edge-runtime/primitives es passthrough, y @edge-runtime/vm HEREDA el performance de Node (da
+  // `eventLoopUtilization → "function"`, que es perf_hooks Node-only → el VM no es fiel a Edge para
+  // performance). Bajo INCIERTO=deny, ALLOW = SOLO lo confirmable por CONVERGENCIA-de-fuentes sin
+  // depender de fidelidad perf_hooks: `now`/`timeOrigin` (Web-Performance-core; VM+WHATWG+Cloudflare
+  // coinciden, no son artefacto de perf_hooks). TODO lo demás —mark/measure/getEntries*/clearMarks/
+  // clearMeasures/toJSON (probablemente Edge-present pero SIN fuente fiable) Y eventLoopUtilization/
+  // timerify/nodeTiming (Node-only)— al COMPLEMENTO denegado. eventLoopUtilization se cierra por
+  // CONSTRUCCIÓN (complemento), NO por denylist → resiste que el VM mienta sobre él. Refinar contra
+  // introspección de PRODUCCIÓN (no otro oráculo local) en #190. codex P2 (review genérico).
+  performance: new Set(["now", "timeOrigin"]),
+  // `crypto` NO es bucket-1: el global Web Crypto = `{subtle, getRandomValues, randomUUID}` IDÉNTICO en
+  // browser + Node + Edge (verificado 3-runtime: Chromium real con COOP/COEP, Node, @edge-runtime/vm) →
+  // CERO miembro divergente que denegar. El "fail-open de crypto.createHash" era premisa FALSA: createHash/
+  // timingSafeEqual NO existen en el global crypto de NINGÚN runtime (viven en el MÓDULO `node:crypto`, que
+  // SÍ caza el check de node-builtins por import). `(crypto as any).createHash()` lanza idéntico en los 3 →
+  // UNIVERSAL-crash = out-of-mandate (el `npm test` del contributor en Node lo caza, no es divergencia-Edge).
+  // → crypto WHOLESALE para presencia-de-miembro. La INVOCACIÓN unbound (`(0,crypto.getRandomValues)(b)`:
+  // OK-Node/throw-Edge = divergencia real) SÍ se caza vía RECEIVER_BOUND_MEMBERS (eje ortogonal). codex P2.
+  // Edge `console` = consola de debugging MÍNIMA (NO la interfaz WHATWG completa). Set DERIVADO del
+  // ORÁCULO `@edge-runtime/primitives` (su `console` es subset propio, NO passthrough del de Node —
+  // verificado `=== globalThis.console` → false), intersección Node∩Edge. La spec WHATWG NO sirve de
+  // bar: `clear`/`table`/`group*`/`dirxml`/`countReset` están en la spec pero AUSENTES en el isolate
+  // Edge → meterlos sería FALSO-ALLOW = fail-open (pasarían el gate y reventarían en SSR). DENY por
+  // complemento: `Console` (constructor Node-only) + lo no-confirmado-Edge-present. El DS solo usa
+  // `console.error`/`console.warn` (ambos ∈ set) → FP=0. El subset se re-deriva del oráculo en #190.
+  // codex P2 (review genérico — corregido: spec→oráculo).
+  console: new Set([
+    "assert",
+    "count",
+    "debug",
+    "dir",
+    "error",
+    "info",
+    "log",
+    "time",
+    "timeEnd",
+    "timeLog",
+    "trace",
+    "warn",
+  ]),
+};
+
+// BUCKET 2, SEPARADO POR TIPO DE OPERACIÓN PELIGROSA (no por nombre): el member-read-ban de
+// PARTIAL_SAFE_GLOBAL_MEMBERS es correcto SOLO cuando la operación peligrosa es la LLAMADA al método
+// y no hay forma segura de leer el nombre (`compile`/`compileStreaming`/`instantiateStreaming` —
+// leerlos es para llamarlos). Para un CONSTRUCTOR que compila bytes (`new WebAssembly.Module(bytes)`)
+// la operación peligrosa es la CONSTRUCCIÓN, NO leer `WebAssembly.Module` — el valor se necesita
+// Edge-safe (`wasm instanceof WebAssembly.Module`, `WebAssembly.Module.imports(m)`, mismo flujo que
+// `instantiate(Module)`). Mezclarlos bajo member-read-ban sobre-captura del valor a la construcción
+// (FP). Mecanismo separado: ban-de-CONSTRUCCIÓN, cazado SOLO en posición `new`. codex P2 (review
+// genérico — error de origen en el teardown que metió `Module` en el read-ban).
+const CONSTRUCTION_DENIED_MEMBERS = {
+  WebAssembly: new Set(["Module"]),
+};
+function isConstructionDeniedMember(root, member) {
+  return Boolean(CONSTRUCTION_DENIED_MEMBERS[root]?.has(member));
+}
+
+// MÉTODOS bucket-1 ALLOWED RECEIVER-BOUND Y EDGE-ESPECÍFICOS: seguros LIGADOS (`crypto.getRandomValues(b)`)
+// pero llamados DESLIGADOS (`(0, crypto.getRandomValues)(b)`) van OK en Node pero LANZAN en Edge (el `this`
+// ya no es el objeto Crypto). La REGLA es receiver-bound **Y Edge-específico**, NO "todo receiver-bound":
+// el mandato del gate es DIVERGENCIA-Edge (pasa en el entorno del contributor, revienta en producción
+// Edge — el gate es la ÚNICA defensa porque su `npm test` en Node NO lo caza), NO corrección-JS-universal.
+// Derivado del VM member-a-member por el discriminador "¿funciona en Node?": `getRandomValues`/`randomUUID`
+// = OK-Node/throw-Edge → Edge-específico → AQUÍ. EXCLUIDOS (out-of-mandate, NO fail-open — el contributor
+// los ve en su propio test, misma categoría que el TDZ universal §"hunt final" — crash idéntico cliente/
+// servidor que tsc casi caza): `performance.now` (sync-throw en Node TAMBIÉN = universal) y `crypto.subtle.*`
+// (async-reject ERR_INVALID_THIS en Node TAMBIÉN = universal; nested, cubierto por la MISMA regla universal→
+// fuera, no como caso aparte). `console.*` = callable-unbound (sin brand) → tampoco aplica. El subset se
+// re-deriva en #190 contra producción. codex P1/P2 (review genérico: "branded host methods unbound").
+const RECEIVER_BOUND_MEMBERS = {
+  crypto: new Set(["randomUUID", "getRandomValues"]),
+};
+
+// PREDICADO DE RESOLUCIÓN, **NO de política** (contrato blindado tras el barrido de "ejes ortogonales
+// bajo predicado compartido" — el patrón que falló en WebAssembly.Module/crypto). Responde UNA pregunta
+// axis-agnóstica: "¿algún check de miembro se interesa por este root? → exprPartialRoot lo resuelve (+ sus
+// aliases)". Es la UNIÓN de los 4 sets SOLO para alcanzabilidad. NUNCA usar este predicado para DECIDIR un
+// flag: cada POLÍTICA consulta SU PROPIO set por separado — presencia→isDeniedPartialMember (SAFE_PARTIAL/
+// PARTIAL_SAFE), construcción→isConstructionDeniedMember (CONSTRUCTION_DENIED), invocación-unbound→el check
+// L5005 (RECEIVER_BOUND directamente). Por eso incluir RECEIVER_BOUND aquí es INERTE para presencia: hace
+// `crypto` RESOLVIBLE (lo necesita el check unbound) pero NO presence-denied — isDeniedPartialMember NO
+// consulta RECEIVER_BOUND y devuelve false (wholesale) para crypto. Resolver ≠ denegar. La inertness está
+// pineada por Test H (`(crypto as any).zBogus`→PASA): si alguien rompe el aislamiento (hace crypto
+// presence-denied), Test H revienta. ÚNICO call-site: exprPartialRoot (resolución), verificado por grep.
+function isPartialMemberRoot(root) {
+  return Boolean(
+    PARTIAL_SAFE_GLOBAL_MEMBERS[root] ||
+      SAFE_PARTIAL_MEMBERS[root] ||
+      CONSTRUCTION_DENIED_MEMBERS[root] ||
+      RECEIVER_BOUND_MEMBERS[root],
+  );
+}
+// ¿`member` está DENEGADO para `root`? denylist (bucket 2): ∈ set. allowlist (bucket 1): ∉ set.
+// wholesale-safe (bucket 3): nunca. Predicado CENTRAL que TODOS los colectores consultan.
+function isDeniedPartialMember(root, member) {
+  const deny = PARTIAL_SAFE_GLOBAL_MEMBERS[root];
+  if (deny) return deny.has(member);
+  const allow = SAFE_PARTIAL_MEMBERS[root];
+  if (allow) return !allow.has(member);
+  return false;
+}
+
+// Root-sentinel de `import.meta` (Fable cross-review rc.1, root C). No es un identifier
+// válido (contiene `.`) → no colisiona con ningún root-identifier ni puede ser shadowed.
+const IMPORT_META_ROOT = "import.meta";
+
+// Predicado CENTRAL con dispatch de POLARIDAD (Fable: el riesgo crítico de enrolar
+// import.meta). `import.meta` usa ALLOWLIST (deny-unknown: miembro ∉ SAFE_IMPORT_META_MEMBERS);
+// los roots-identifier (performance/WebAssembly/…) usan la polaridad de `isDeniedPartialMember`
+// (denylist bucket-2 / allowlist bucket-1 / wholesale-safe bucket-3). Rutear los alias de
+// import.meta por la denylist abriría fail-open en miembros desconocidos → dispatch por familia.
+function partialMemberDenied(root, member) {
+  if (root === IMPORT_META_ROOT) return !SAFE_IMPORT_META_MEMBERS.has(member);
+  return isDeniedPartialMember(root, member);
+}
 
 // Sinks de evaluación dinámica. NO son "browser globals" — existen
 // también en Node — pero PERMITEN bypassear el análisis estático del
@@ -392,9 +727,125 @@ const CLIENT_GLOBALS = new Set([
 // con eval/Function NO se puede "guard con typeof" — hay que refactor.
 const DYNAMIC_EVAL_SINKS = new Set(["eval", "Function"]);
 
+// Whitelist fail-closed de miembros de `import.meta` disponibles en el baseline Edge — MISMA forma
+// que SAFE_GLOBALS (un namespace paralelo poblado por el host/build, no un global). REGLA de
+// mantenimiento (checkeable, NO juicio): ALLOW = ESTÁNDAR (∈ spec TC39 import-meta, poblado por el
+// host: `url`) ∪ VITE (transformado/borrado en build antes de runtime: `env`, `hot`, `glob`). El
+// DENY es el COMPLEMENTO por construcción → `dirname`/`filename` (Node-only) y cualquier miembro
+// Node-only futuro caen sin enumerarlos. `resolve` se EXCLUYE pero por INCERTIDUMBRE-Edge (es
+// estándar — Node 20.6+/browsers — pero lo puebla el host y V8-a-pelo no lo provee; Vercel/CF Edge
+// dudoso en deploy bundled donde la resolución ya ocurrió en build) → pendiente de confirmar en #190,
+// NO Node-only. La lista se pudre solo con un EVENTO VERSIONADO (sube spec / sube Vite), no con cada
+// release de Node. Whitelist-sobre-denylist = la misma ratificación de SAFE_GLOBALS (codex P2 review
+// genérico). El subset definitivo Edge se deriva del baseline real en #190.
+//
+// NOTA `hot` (codex P2 sobre `604e817`, RATIFICADO OUT-OF-MANDATE): `import.meta.hot.<deref>()` UNGUARDED
+// (`import.meta.hot.accept()` sin `if (import.meta.hot)` / `?.`) crashea porque Vite poda `hot→undefined` en
+// TODO build de producción. Se MANTIENE en el allowlist a propósito: NO es divergencia-Edge (no hay runtime-
+// prod donde funcione — falla el discriminador "¿hay prod-runtime donde corre?", a diferencia de `process.env`
+// que SÍ corre en Vercel-Edge) sino CRASH UNIVERSAL de producción = FUERA del mandato del gate (Edge-safety, no
+// correctness-de-prod-general; mismo criterio que el universal-crash TDZ/receiver-binding e `instantiate`).
+// Cerrarlo DISOLVERÍA el mandato (¿por qué no `JSON.parse(undefined)`, `throw` en module-scope…?). El READ
+// pelado + las formas guardadas/optional-chain SÍ son safe. Residual out-of-mandate documentado en ADR D1-P1
+// + LIMITATIONS. NO re-flaggear sin re-decidir el mandato.
+const SAFE_IMPORT_META_MEMBERS = new Set(["url", "env", "hot", "glob"]);
+
+// Miembros SEGUROS de una raíz DENEGADA (raíz denegada bare, miembro X exento). VACÍO tras ENDURECER
+// `process.env`: codex P2 + Auditor-B. `process` ya está en NON_ABSENCE_DENIALS (present-but-partial, como
+// `navigator`): `typeof process !== "undefined"` da FALSA CONFIANZA (prueba que `process` existe, no que el
+// miembro exista). En el baseline edge ESTRICTO (Workers/Deno SIN nodejs_compat) `process` es un identificador
+// NO DECLARADO → en ESM strict-mode `process.env.FOO` tira ReferenceError sobre el bare `process` ANTES de
+// llegar a `.env` (y `process?.env` tampoco salva: optional-chaining corta sobre null/undefined, no sobre una
+// referencia inexistente). El contrato @server-safe de una LIBRERÍA PUBLICADA debe ser el MÍNIMO COMÚN
+// DENOMINADOR de los runtimes del consumidor = estricto; `process.env` NO es MCD, `import.meta.env` SÍ
+// (cross-runtime, sigue allow en SAFE_IMPORT_META_MEMBERS — mecanismo separado, NO se toca). #190 absorbido:
+// baseline declarado = estricto. FUTURO (cambio APARTE, NO aquí): permitir `process.env` bajo `typeof process
+// !== "undefined"` exige CONSTRUIR el narrowing de server-globals — polaridad ESPEJO de window (`typeof process
+// !== "undefined"` = rama SERVER = EXIME porque `process` existe ahí; el `else` de `=== "undefined"` corre
+// cuando `process` FALTA → debe FLAGGEAR; copiar la lógica de window sin invertir = fail-open). Hoy la forma
+// guardada queda flagged = fail-CLOSED (lado seguro). El objeto vacío preserva el mecanismo.
+const SAFE_MEMBERS_OF_DENIED_ROOT = {};
+
+// Denegaciones para las que un guard `typeof X !== "undefined"` NO hace el
+// body safe — el typeof-guard NO se reconoce para ellas:
+//   - `eval`/`Function`/`globalThis`/`global`/`self`: sinks de eval / raíz de
+//     escape (el objeto global por sus tres nombres `globalThis`/`global`/`self`).
+//     `globalThis` está siempre presente; `global` es el alias de Node; `self` es
+//     el alias presente en Vercel Edge (typeof self === "object" ahí) → en Edge el
+//     guard es vacuamente true y `self.eval`/`self.Function` LANZAN EvalError igual.
+//     Un typeof-guard solo suprimiría la detección. (Codex P1 round 3; `self`:
+//     re-hunt B2.) NO incluye `window`/`parent`/`top`/`frames`: esos están AUSENTES
+//     en Edge, su hazard SÍ es la ausencia → ahí el guard typeof protege de verdad.
+//   - `setImmediate`/`clearImmediate`: en Vercel Edge están DEFINIDOS como un
+//     stub que LANZA al llamarse → `typeof setImmediate !== "undefined"` pasa
+//     pero la llamada revienta. El guard da falsa confianza; por eso se trata
+//     como los eval-sinks. (Workflow honest-construct / edge-baseline.)
+// Difiere de `window`/`document`, cuyo hazard SÍ es la ausencia (no están definidos en el
+// baseline) y donde el guard typeof SÍ protege.
+const NON_ABSENCE_DENIALS = new Set([
+  "eval",
+  "Function",
+  "globalThis",
+  "global",
+  "self",
+  "setImmediate",
+  "clearImmediate",
+  // `navigator`: el ROOT está PRESENTE en Node 22+ y en el edge baseline (Workers/
+  // Vercel: `navigator.userAgent` definido), pero como SUBSET PARCIAL — `geolocation`/
+  // `mediaDevices`/`clipboard` faltan → `typeof navigator !== "undefined"` pasa pero
+  // `navigator.geolocation.getCurrentPosition(...)` revienta en SSR (TypeError: undefined).
+  // El hazard NO es ausencia-del-root sino shape-parcial → el presence-guard da falsa
+  // confianza, igual que setImmediate (stub que lanza). Solo se exime en deferred CLIENT-
+  // ONLY (handler/useEffect, browser-only donde navigator es completo), NUNCA en timers ni
+  // bajo typeof-guard. Coherencia con el comentario de INTENTIONAL_DENY ("subset inestable").
+  // codex P2 sobre 5f7aa4d.
+  "navigator",
+  // `process`: en el edge baseline (Vercel sin nodejs_compat) está AUSENTE → el typeof-guard
+  // protegería; pero en Node está PRESENTE y PARCIAL — `process.permission` solo existe con
+  // `--experimental-permission`, así que `if (typeof process !== "undefined") process.permission
+  // .has(...)` pasa el guard y revienta (TypeError) en un Node sin el flag. Mismo perfil
+  // present-but-partial que navigator → el presence-guard del ROOT da falsa confianza. (process
+  // ya está denegado en INTENTIONAL_DENY; aquí se asegura que ningún typeof-guard lo exima.)
+  // deepest re-hunt #173.
+  "process",
+]);
+
+/**
+ * Política ÚNICA de exención en body diferido (ramas (c) y (d)). Un global de CLIENTE
+ * (window/document/navigator, eval-sink, escape-root, stub-que-lanza — CUALQUIERA) solo es
+ * seguro de leer en un body que NO corre en el isolate del SERVIDOR: i.e. CLIENT-ONLY
+ * deferred — handler de evento (onClick…) o effect (useEffect/useLayoutEffect), que React/el
+ * navegador garantizan que NO se ejecutan durante SSR/Edge.
+ *
+ * Los TIMERS (setTimeout/setInterval/queueMicrotask…) SÍ disparan en el isolate Edge/SSR
+ * (queueMicrotask casi inmediato; setTimeout en el event-loop de Node tras render) → su
+ * callback corre en el SERVIDOR → un read de global de cliente ahí LANZA (window/document
+ * ausentes; navigator/stub parciales). Por eso TODOS requieren client-only, NO solo las
+ * NON_ABSENCE_DENIALS.
+ *
+ * codex P1: antes los absence-hazard (window/document) se eximían en CUALQUIER deferred
+ * (cualquier deferred, incluido timer) → `setTimeout(() => window.scrollTo(0,0))` en
+ * render se eximía pero el timer corre en el server y lanza = BYPASS. Coincide con el
+ * comentario que ya tenía el walker ("los timers SÍ disparan en Edge durante SSR"), que solo
+ * se aplicaba a los eval-sinks; ahora la política es ÚNICA: client-only para TODO global.
+ * El `api` ya no diferencia (se conserva por firma/legibilidad). beta.27 BLOCKER-1.
+ */
+function isExemptInDeferredBody(_api, context) {
+  return context.isInClientOnlyDeferredBody;
+}
+
 // Hooks de React cuyo body se EJECUTA GUARANTEED post-render (commit
 // phase) en client. Los effects no corren en SSR, por tanto sus bodies
 // nunca se ejecutan durante render server — exención safe.
+//
+// REGLA UNIFICADORA del eje client-only (más fina que "¿cuándo corre el callback?"): exento ⟺ el callback
+// (a) NO se ejecuta en render Y (b) NO EXPONE nada invocable-en-render. useEffect/useLayoutEffect/
+// useInsertionEffect y el `ref` callback de host pasan AMBOS (corren en commit; lo que retornan —nada /
+// cleanup-de-unmount— no es render-callable). useImperativeHandle FALLA (b): corre en commit pero RETORNA un
+// handle cuyos métodos el consumer invoca vía `ref.current.m()`, posiblemente en el render del padre →
+// expone superficie render-callable → flag. useCallback FALLA (b) igual (el value memoizado se llama donde
+// el consumer quiera). useMemo/useState-init/useSyncExternalStore-get*Snapshot FALLAN (a) (corren en render
+// directo). NO clasificar por "es un hook que corre en commit" — clasificar por qué-corre-O-se-expone-en-render.
 //
 // EXCLUIDOS intencionalmente:
 //   - useMemo / useState (lazy init) / useRef (lazy init): el factory
@@ -418,6 +869,13 @@ const DEFERRED_HOOKS = new Set([
   "useEffect",
   "useLayoutEffect",
   "useInsertionEffect",
+  // useEffectEvent (React 19.2 estable; `experimental_useEffectEvent` en 19.0/19.1): el callback corre
+  // CUANDO el Effect Event se invoca, y React DOCUMENTA que solo puede llamarse desde Effects + ERRA si se
+  // llama en render → (a) no corre en render Y (b) el return NO es render-invocable (React lo previene).
+  // Pasa AMBAS condiciones de la regla unificadora → exento. DISTINTO de useCallback/useImperativeHandle
+  // (removidos): su return SÍ es render-invocable porque React NO lo previene. codex P2.
+  "useEffectEvent",
+  "experimental_useEffectEvent",
 ]);
 
 // Browser/JS timers cuyo callback NO corre durante el render server.
@@ -435,18 +893,27 @@ const DEFERRED_HOOKS = new Set([
 //     lanza ReferenceError antes de que el callback se defiera. Movidos
 //     a CLIENT_GLOBALS para que la bare ref también flag-ee. Codex
 //     round 17 P2.2.
+// Timers WEB-STANDARD cuyo callback NO corre durante el render server (existen
+// en el edge baseline). `setImmediate` NO está aquí: es Node-only y se deniega
+// (ver INTENTIONAL_DENY) — su call site mismo crashea en Edge.
 const DEFERRED_LATER_FNS = new Set([
   "setTimeout",
   "setInterval",
-  "setImmediate",
   "queueMicrotask",
 ]);
 
 /**
- * Devuelve `true` si `fnNode` (ArrowFunction / FunctionExpression /
- * FunctionDeclaration / Method / Accessor / Constructor) está
- * sintácticamente colocado como argumento de un sink de ejecución
- * diferida reconocido — su body NO se invoca durante el render server.
+ * Devuelve el KIND de ejecución diferida de `fnNode` (ArrowFunction /
+ * FunctionExpression / … colocado como callback de un sink reconocido):
+ *   - "none"   → render path (su body corre durante el render server).
+ *   - "client" → hook (useEffect…) / event handler — NO corre en SSR (corre tras
+ *                hidratación en cliente). Eval-sinks aquí son safe (eval funciona
+ *                post-hidratación) → exentos.
+ *   - "timer"  → setTimeout/setInterval/queueMicrotask — su callback PUEDE
+ *                disparar en el isolate Edge durante SSR. Un eval-sink ahí throw
+ *                (code-gen deshabilitado) → NO exento; un read de global ausente
+ *                (window) sí sigue exento (deferred).
+ * Su body NO se invoca durante el render server (salvo "none").
  *
  * Sinks reconocidos:
  *   - JSX event handler: `<X onFoo={fn}>` con nombre matching /^on[A-Z]/.
@@ -468,24 +935,40 @@ const DEFERRED_LATER_FNS = new Set([
 function isDeferredExecutionContext(fnNode, context) {
   let current = fnNode;
   let parent = current.parent;
+  // Sube saltando wrappers RUNTIME-TRANSPARENTES entre el callback y su sink: parens,
+  // JsxExpression, erased (`as`/`satisfies`/`!`/`<T>`), y los constructos VALUE-TRANSPARENTES
+  // de los que el callback ES el valor (`cond ? cb : x`, `cond && cb`, `cb ?? x`, `(0, cb)`)
+  // — `onClick={cond ? () => {…} : undefined}` pasa el arrow como handler del intrínseco
+  // igual que `onClick={() => {…}}` (deepest re-hunt #173: handler en ternario). Reusa
+  // valueTransparentChildren (el callback es una de sus hojas transparentes).
   while (
     parent &&
-    (ts.isParenthesizedExpression(parent) || ts.isJsxExpression(parent))
+    (isErasedOuterExpr(parent) ||
+      ts.isJsxExpression(parent) ||
+      valueTransparentChildren(parent).includes(current))
   ) {
     current = parent;
     parent = parent.parent;
   }
-  if (!parent) return false;
+  if (!parent) return "none";
 
-  // (1) JSX event handler RESTRICTED a intrinsic HTML elements:
-  // `<button onClick={fn}>`. Custom components `<MyComp onFoo={fn}>`
-  // pueden invocar `onFoo` síncronamente durante render — NO son
-  // deferred sinks. Distinción: tagName lowercase first char =
-  // intrinsic (string element), uppercase / PropertyAccess / namespaced =
-  // component reference. Codex round 16 P2.1.
+  // (1) JSX event handler `on[A-Z]` O `ref` callback, RESTRICTED a intrinsic HTML elements:
+  // `<button onClick={fn}>` / `<div ref={fn}>`. Un `ref` callback de un elemento HOST corre en el
+  // COMMIT del cliente (cuando el nodo DOM existe), NO durante el render SSR/Edge — React no invoca
+  // host ref callbacks en SSR → su cuerpo es client-only igual que un handler (codex P2). Custom
+  // components `<MyComp onFoo={fn}>` / `<MyComp ref={fn}>` pueden invocar `onFoo` o (React 19) recibir
+  // `ref` como prop normal e invocarlo síncronamente durante render — NO son deferred sinks. Distinción:
+  // tagName lowercase first char = intrinsic (string element), uppercase / PropertyAccess / namespaced =
+  // component reference. Codex round 16 P2.1 + ref-callback P2. (El `ref` callback de host es client-only —
+  // su return es el CLEANUP, que corre en unmount=cliente, NO un value invocable-en-render — DISTINTO de
+  // `useCallback`/`useImperativeHandle`, removidos de DEFERRED_HOOKS porque su VALUE returned SÍ puede
+  // invocarse en render por el consumer = fail-closed ratificado, codex round 15 P2.2.)
   if (ts.isJsxAttribute(parent)) {
     const attrName = parent.name;
-    if (ts.isIdentifier(attrName) && /^on[A-Z]/.test(attrName.text)) {
+    if (
+      ts.isIdentifier(attrName) &&
+      (/^on[A-Z]/.test(attrName.text) || attrName.text === "ref")
+    ) {
       const jsxAttributes = parent.parent;
       const jsxElement = jsxAttributes?.parent;
       if (
@@ -495,9 +978,17 @@ function isDeferredExecutionContext(fnNode, context) {
       ) {
         const tagName = jsxElement.tagName;
         if (ts.isIdentifier(tagName)) {
-          const first = tagName.text.charAt(0);
-          if (first && first === first.toLowerCase()) {
-            return true;
+          // Intrínseco (host string `<button>`) ⟺ el tag empieza por LETRA MINÚSCULA
+          // [a-z] — la regla REAL del jsx-runtime de React (verificado bajo OXC, el transform
+          // de vite 8): `<$Foo>`/`<_Foo>`/`<Upper>` son COMPONENTES (OXC emite `jsx($Foo,…)`),
+          // no strings (`<x-custom>` con guion sí es host string). El check viejo
+          // `first === first.toLowerCase()` tomaba `$`/`_` como "minúscula" → clasificaba
+          // `$Panel`/`_Widget` como intrínsecos → eximía su handler, pero un componente
+          // custom puede invocar `props.onClick()` SÍNCRONO en render → lee el global en SSR
+          // = BYPASS (hunt final #173, 4 confirmados $/_-prefijo). Solo el intrínseco real
+          // (lowercase letter) difiere el handler al evento del DOM post-render.
+          if (/^[a-z]/.test(tagName.text)) {
+            return "client";
           }
         }
       }
@@ -506,24 +997,46 @@ function isDeferredExecutionContext(fnNode, context) {
 
   // (2) Argumento de CallExpression a sink reconocido.
   if (ts.isCallExpression(parent)) {
-    if (parent.expression === current) return false;
-    const isArg = parent.arguments.some((a) => a === current);
-    if (!isArg) return false;
-    const callee = parent.expression;
+    if (parent.expression === current) return "none";
+    // SOLO el 1er argumento (el CALLBACK) de un sink se difiere; los args 2+ corren en RENDER.
+    // El 2º arg de un effect-hook son las DEPS (un array, NO un callback que React invoque): una
+    // arrow colocada en deps que lee window y se captura+invoca en render escapaba como deferred
+    // = BYPASS (deepest re-hunt). Todos los sinks reconocidos (useEffect/useLayoutEffect/
+    // useInsertionEffect + setTimeout/setInterval/queueMicrotask) llevan el callback en posición 0.
+    if (parent.arguments.indexOf(current) !== 0) return "none";
+    // El callee puede venir envuelto en wrappers RUNTIME-TRANSPARENTES igual que el
+    // callback (L613): `(useEffect)(cb)`, `(useEffect as typeof useEffect)(cb)`,
+    // `(setTimeout)(cb,0)`. Sin desenvolver, `ts.isIdentifier`/`isPropertyAccess`
+    // daban false → calleeName=null → sink no reconocido → render-path → FP. Espejo
+    // exacto del unwrap del callback (hunt final deferred-alias-spoof). Fail-closed:
+    // un hook render-phase envuelto (`(React).useState(lazy)`) sigue flaggeándose.
+    const callee = unwrapErased(parent.expression);
     let calleeName = null;
     let rootIdent = null;
     if (ts.isIdentifier(callee)) {
       calleeName = callee.text;
       rootIdent = callee.text;
-    } else if (ts.isPropertyAccessExpression(callee)) {
-      // Soporte para `React.useEffect`, `window.setTimeout`, etc.
-      // (Nota: `window.setTimeout` por sí mismo sería otra violación si
-      // está en render path, capturada por el check de access bare.)
-      if (ts.isIdentifier(callee.name)) calleeName = callee.name.text;
-      // Encontrar el root identifier de la cadena para chequear shadow.
-      let chain = callee.expression;
-      while (ts.isPropertyAccessExpression(chain)) {
-        chain = chain.expression;
+    } else if (
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) {
+      // Soporte para `React.useEffect`, `React["useEffect"]`, `window.setTimeout`.
+      // accessedMemberName resuelve punto Y bracket-string igual — antes solo se
+      // reconocía la forma punto y `React["useEffect"]` se trataba como render-path
+      // (FP, deep adversarial). Una key dinámica (`React[k]`) → undefined → no
+      // reconocido (render-path), correcto: no es un hook conocido.
+      calleeName = accessedMemberName(callee) ?? null;
+      // Root identifier de la cadena para chequear shadow (punto o bracket).
+      // Desenvolver erased en cada hop: `(React).useEffect`, `React!.useEffect`,
+      // `(React satisfies typeof React).useEffect` → chain-root `React`. Antes el
+      // walk solo atravesaba Property/ElementAccess y un wrapper intermedio cortaba
+      // la cadena → rootIdent=null → no canónico → FP (hunt final).
+      let chain = unwrapErased(callee.expression);
+      while (
+        ts.isPropertyAccessExpression(chain) ||
+        ts.isElementAccessExpression(chain)
+      ) {
+        chain = unwrapErased(chain.expression);
       }
       if (ts.isIdentifier(chain)) rootIdent = chain.text;
     }
@@ -537,18 +1050,55 @@ function isDeferredExecutionContext(fnNode, context) {
         rootIdent !== null &&
         context.nonImportBindings.has(rootIdent)
       ) {
-        return false;
+        return "none";
+      }
+      // Deferred React hook — resuelto por el EXPORT CANÓNICO de react, no el alias
+      // local. `import { useState as useEffect }` (callee local "useEffect") resuelve
+      // a "useState" → render-phase → NO deferred (deep adversarial bypass); la cara
+      // inversa `import { useEffect as ue }` resuelve a "useEffect" → SÍ deferred (FP).
+      // `React.useEffect`: el miembro YA es canónico si `React` viene de react.
+      // Codex round 17 P1.1: solo cuenta si viene de "react" (un `import { useEffect }
+      // from "./fake"` con impl síncrona NO se exime).
+      // Aliases react SCOPE-AWARE (declarados dentro de la función/namespace
+      // actual: `const { useEffect } = React`, `const ue = React.useEffect`,
+      // `const useEffect = reactUseEffect`, `import R = React`). Viven solo en el
+      // context del scope donde se declararon — NO filtran a scopes hermanos, así
+      // que un alias react nested no exime un hook homónimo de OTRA función (el
+      // bypass file-global que codex P1 rechazó). Se consultan ANTES del mapa
+      // file-global de `gatherReactImports` (que solo cubre top-level).
+      // Si el OBJETO react de la familia fue mutado por un member-write en el archivo
+      // (`mutatedNamespaceRoots` no-vacío ⟺ familia mutada), NINGÚN binding derivado de react
+      // es de fiar — ni el namespace (`React.useEffect`) ni el NAMED (`import { useEffect } from
+      // "react"`), porque bajo interop CJS/bundler el named se lee del MISMO objeto mutable
+      // (`Object.assign(React,…)` o `React.useEffect = sync` lo vuelve síncrono). Se desactiva
+      // toda la exención react del archivo (fail-closed; el caso común SIN mutación no se toca).
+      // codex P1 (named-hook taint sobre 8b08896).
+      const reactFamilyMutated = (context.mutatedNamespaceRoots?.size ?? 0) > 0;
+      let canonicalCallee = null;
+      if (reactFamilyMutated) {
+        canonicalCallee = null; // objeto react mutado → nada derivado de él es deferred
+      } else if (ts.isIdentifier(callee)) {
+        const scoped = context.scopeReactNamed?.get(calleeName);
+        const mapped =
+          scoped !== undefined
+            ? scoped
+            : context.reactImports.named.get(calleeName);
+        if (mapped !== undefined) canonicalCallee = mapped;
+      } else if (
+        rootIdent !== null &&
+        (context.scopeReactNs?.has(rootIdent) ||
+          context.reactImports.namespaces.has(rootIdent))
+      ) {
+        canonicalCallee = calleeName;
+      }
+      if (canonicalCallee !== null && DEFERRED_HOOKS.has(canonicalCallee)) {
+        return "client";
       }
       if (DEFERRED_HOOKS.has(calleeName)) {
-        // Codex round 17 P1.1: solo exempt si el binding viene
-        // específicamente de `"react"`. `import { useEffect } from
-        // "./fake-helper"` con synchronous impl NO debe exempt-ear.
-        // El check usa root del callee chain — cubre tanto `useEffect`
-        // bare como `React.useEffect` (`React` debe venir de "react").
-        if (rootIdent !== null && context.reactImports.has(rootIdent)) {
-          return true;
-        }
-        return false;
+        // Nombre de hook diferido que NO resuelve a un export de react (alias-spoof
+        // `useState as useEffect`, o un hook de un módulo no-react): el binding real
+        // corre síncrono en render → NO diferido.
+        return "none";
       }
       if (DEFERRED_LATER_FNS.has(calleeName)) {
         // Codex round 18 P1: solo exempt si el timer es el GLOBAL real
@@ -563,14 +1113,14 @@ function isDeferredExecutionContext(fnNode, context) {
           rootIdent === null ||
           context.localBindings.has(rootIdent)
         ) {
-          return false;
+          return "none";
         }
-        return true;
+        return "timer";
       }
     }
   }
 
-  return false;
+  return "none";
 }
 
 function listSourceFiles(dir) {
@@ -582,15 +1132,23 @@ function listSourceFiles(dir) {
     if (st.isDirectory()) {
       result.push(...listSourceFiles(p));
     } else if (
-      (p.endsWith(".tsx") || p.endsWith(".ts")) &&
-      !p.endsWith(".test.tsx") &&
-      !p.endsWith(".test.ts") &&
-      !p.endsWith(".stories.tsx")
+      hasExplicitSourceExt(p) && // .ts/.tsx + JS-family (.js/.jsx/.mjs/.cjs/.mts/.cts)
+      !/\.(test|stories)\.[mc]?[jt]sx?$/.test(p)
     ) {
+      // JS-family se descubre para DETECTAR un marcador @server-safe mal-colocado (el gate no
+      // audita JS → fail-loud en el CLI), no para auditarlo. codex P2: un `Foo.jsx` con marcador
+      // se ignoraba en silencio porque el discovery solo miraba .ts/.tsx.
       result.push(p);
     }
   }
   return result;
+}
+
+// El marker es PER-FICHERO, no per-carpeta. Limitar el driver a components/hooks hacía que un marker
+// válido en utils/theme/index.ts ni se auditase ni participase del detector de near-miss. El root es
+// parametrizable para que el custodio pruebe el discovery con un árbol efímero, mientras el CLI usa TODO src.
+export function discoverServerSafeSourceFiles(root = SRC_ROOT) {
+  return listSourceFiles(root);
 }
 
 /**
@@ -598,6 +1156,285 @@ function listSourceFiles(dir) {
  * ObjectBindingPattern / ArrayBindingPattern) y los añade al Set.
  * Maneja destructure anidado y rest elements.
  */
+/**
+ * `true` si la declaración es AMBIENT (`declare const/let/var/function/class`,
+ * o cualquier declaración dentro de un `declare global { … }`). Las ambient se
+ * BORRAN al compilar — NO emiten binding runtime, así que NO sombrean el global
+ * homónimo. Si se añadieran al shadow-set, una ref bare al nombre se trataría
+ * como local y pasaría el gate, pero en runtime resuelve al global ambiente →
+ * ReferenceError en SSR. Mismo eje que los imports type-only.
+ *
+ * Cubre el `declare` PROPIO (vía `getCombinedModifierFlags & Ambient`) Y el
+ * ambient HEREDADO de un `declare global`/`declare module`/namespace ambient
+ * (vía `node.flags & NodeFlags.Ambient`) — `getCombinedModifierFlags` NO
+ * propaga el ambient heredado, por eso se chequean los dos. (En la práctica el
+ * `declare global { var X }` ya queda fuera porque `collectVarHoistedRecursive`
+ * no recursa en `ModuleDeclaration`; este chequeo es defensa-en-profundidad
+ * frente a un refactor que añada recursión.) beta.27 BLOCKER-1 (codex P2
+ * round 3 + workflow honest-construct).
+ */
+function isAmbientDeclaration(node) {
+  return (
+    (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Ambient) !== 0 ||
+    (node.flags & ts.NodeFlags.Ambient) !== 0
+  );
+}
+
+/**
+ * ¿La lista de statements de un case/default-clause TERMINA el control de flujo
+ * (no cae por fall-through al siguiente clause)? Conservador: solo el caso simple
+ * en que el ÚLTIMO statement es return/break/continue/throw. Si no es obvio,
+ * devuelve false → se trata como fall-through (no se narrowea → FP seguro, no
+ * bypass). Usado por el narrowing de `switch (typeof X)`. deepest re-hunt #173.
+ */
+function caseClauseTerminates(statements) {
+  if (!statements || statements.length === 0) return false;
+  const last = statements[statements.length - 1];
+  return (
+    ts.isReturnStatement(last) ||
+    ts.isBreakStatement(last) ||
+    ts.isContinueStatement(last) ||
+    ts.isThrowStatement(last)
+  );
+}
+
+/**
+ * ¿El nombre de un `namespace` COLISIONA con una declaración AMBIENT del MISMO nombre
+ * en su MISMO scope (sibling)? — p.ej. `declare var window: any; namespace window {…}`.
+ *
+ * Bajo declaration-merging de TypeScript, un `declare var/let/const/function/class N`
+ * ambient HERMANO del `namespace N` hace que el BUNDLER (rolldown 1.0.2 — el de vite 8,
+ * **NO** esbuild; ver nota de oráculo abajo) trate `N` como binding EXTERNO y ELIDA el
+ * `var N` que el namespace emitiría en solitario. Resultado: el shell `N || (N = {})` y
+ * los reads `N.x` quedan contra el GLOBAL LIBRE → en Edge/SSR `ReferenceError: N is not
+ * defined` en MODULE-LOAD. Si el gate tratara `N` como shadow runtime (lo añade a
+ * localBindings vía `namespaceIsInstantiated`→`producesRuntimeValue`), eximiría ese read
+ * = BYPASS FAIL-OPEN. beta.27 BLOCKER-1, workflow adversarial `verify-export-declare-ns-p1`.
+ *
+ * ORÁCULO = el BUILD REAL (vite 8 → **rolldown** + transform OXC), medido data-driven, NO
+ * `esbuild.transformSync`: transformSync emite `var window` para AMBOS (merge y no-merge) y
+ * ENMASCARABA la divergencia — solo el bundle completo de rolldown elide el local. Verificado
+ * detrás del gate: gate-exime + build→`ReferenceError` para `declare var/let/const/function/
+ * class window` + `namespace window`; gate-exime + build→`undefined` (sound) para el caso
+ * PLANO (sin declare hermano), value-member, y `declare global { var window }`.
+ *
+ * EXCLUIDO `declare global { var N }`: es augmentation del global, NO un sibling del mismo
+ * nombre (el bloque se llama `global`; `N` vive ANIDADO dentro) → no colisiona a nivel de
+ * statement → el build MANTIENE el local → sound (medido). Fail-closed e INDEPENDIENTE del
+ * ORDEN (rolldown solo elide si el `declare` va ANTES, pero ese detalle de impl no se asume:
+ * cualquier colisión mismo-scope → no-instanciado). Solo puede AÑADIR flagging (nunca quitar)
+ * → no puede introducir bypass; el único riesgo es over-flag de un constructo contrivado.
+ */
+// Predicado GENÉRICo nombre+scope (Auditoría B R6 / H6): ¿el binding de valor `namedDecl` (namespace-de-valor,
+// enum, …) colisiona con un ambient sibling homónimo del mismo scope? La misma merge-elision de rolldown/OXC
+// borra el `var` local → el read filtra al global. Order-independiente + fail-closed (solo AÑADE flagging).
+function collidesWithAmbientSibling(namedDecl) {
+  if (!namedDecl.name || !ts.isIdentifier(namedDecl.name)) return false;
+  const name = namedDecl.name.text;
+  const parent = namedDecl.parent;
+  const siblings =
+    parent && ts.isSourceFile(parent)
+      ? parent.statements
+      : parent && ts.isModuleBlock(parent)
+        ? parent.statements
+        : null;
+  if (!siblings) return false;
+  for (const s of siblings) {
+    if (s === namedDecl || !isAmbientDeclaration(s)) continue;
+    if (ts.isVariableStatement(s)) {
+      for (const d of s.declarationList.declarations) {
+        const declNames = new Set();
+        addBindingNamesFromPattern(d.name, declNames);
+        if (declNames.has(name)) return true;
+      }
+    } else if (
+      (ts.isFunctionDeclaration(s) ||
+        ts.isClassDeclaration(s) ||
+        ts.isEnumDeclaration(s) ||
+        // Ambient `declare namespace N` HERMANO de un `namespace N` de valor: la MISMA
+        // merge-elision que `declare var N` — rolldown borra el `var N` local → el read
+        // filtra al global (deepest re-hunt: 10 instancias window/document/location, ambos
+        // órdenes, plano/anidado/self-read). `declare global` no entra: su name es "global".
+        ts.isModuleDeclaration(s)) &&
+      s.name &&
+      ts.isIdentifier(s.name) &&
+      s.name.text === name
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * ¿Un `namespace`/`module` está INSTANCIADO? — i.e. ¿el emit de RUNTIME produce
+ * `var N;(IIFE)`? Si lo está, su nombre ES una sombra runtime legítima; si se
+ * elide, una ref bare a `N` (= global ausente en Edge) resuelve al global real →
+ * debe flaggearse.
+ *
+ * ORÁCULO = el EMISOR DE RUNTIME DEL BUILD, **NO** `ts.isInstantiatedModule`. tsc NO
+ * emite el JS (`tsconfig.build.json` es `emitDeclarationOnly`); el build es `vite build`,
+ * cuyo emisor en **vite 8 es OXC (transform) + rolldown 1.0.2 (bundle)** — esbuild 0.27.7
+ * es SOLO minify (`transformWithEsbuild` está deprecado; `transformWithOxc` es el activo).
+ * El emisor DIVERGE de `ts.isInstantiatedModule`, que cuenta instanciado un namespace cuyo
+ * único value-member vive en un `namespace` AMBIENT anidado → el nombre entraría en
+ * localBindings → ref bare al global NO se flaggearía. La regla de instanciación se calibró
+ * data-driven contra `esbuild.transformSync` (PROXY rápido per-statement) y se RE-VERIFICÓ
+ * behavioralmente contra el build real OXC/rolldown (workflow `audit-esbuild-vs-rolldown-
+ * premise`): coinciden en TODAS las formas per-statement salvo dos casos donde rolldown es
+ * MÁS conservador (mantiene un shell vacío donde esbuild elide) → el over-flag fail-closed
+ * sigue siendo SOUND. La ÚNICA divergencia que importaba (rolldown ELIDE donde esbuild
+ * mantiene) es el declaration-merge, cerrado aparte (`namespaceCollidesWithAmbientSibling`).
+ * Ver `feedback_esbuild_emit_oracle`. Regla del emit (medida sobre ~10 formas):
+ *
+ *   INSTANCIA: miembro DIRECTO var/let/const/function/class/enum (declare o no),
+ *              o `namespace` anidado NO-ambient que a su vez instancia.
+ *   ELIDE:     `namespace` anidado AMBIENT (declare), interface/type/import-type, vacío.
+ *
+ * Nota clave: el build SÍ instancia por un value-member ambient TOP-LEVEL (`export declare
+ * const z` → `var N`), pero el predicado NO cuenta el ambient ANIDADO → fail-closed: ante
+ * un statement no reconocido devolvemos `false` (over-flag seguro, nunca bypass). beta.27
+ * BLOCKER-1.
+ */
+function namespaceIsInstantiated(moduleDecl) {
+  // Colisión ambient-merge mismo-scope (`declare var window` + `namespace window`): el
+  // bundler (rolldown/vite 8) ELIDE el `var N` local → `N` NO es shadow runtime, el read
+  // `N.x` filtra al global → debe flaggearse. Ver `namespaceCollidesWithAmbientSibling`.
+  // FAIL-CLOSED (solo añade flagging). beta.27 BLOCKER-1 (workflow adversarial).
+  if (collidesWithAmbientSibling(moduleDecl)) return false;
+  const body = moduleDecl.body;
+  if (!body) return false;
+  // `namespace X.Y { … }`: el body es otro ModuleDeclaration (forma dotted).
+  if (ts.isModuleDeclaration(body)) {
+    return isAmbientDeclaration(body) ? false : namespaceIsInstantiated(body);
+  }
+  if (!ts.isModuleBlock(body)) return false;
+  return body.statements.some(buildInstantiatesViaStatement);
+}
+
+/** ¿El statement lleva el modificador `export`? (robusto a la API nueva/vieja de TS). */
+function hasExportModifier(stmt) {
+  const mods =
+    ts.canHaveModifiers && ts.canHaveModifiers(stmt)
+      ? ts.getModifiers(stmt)
+      : stmt.modifiers;
+  return !!mods && mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+}
+
+/**
+ * Un statement de cuerpo de namespace que hace que el BUILD (OXC/rolldown) EMITA el shell
+ * `var N`. (Oráculo = el emisor real del build; `esbuild.transformSync` es PROXY rápido y
+ * coincide salvo bundle-level — ver `namespaceIsInstantiated` + `feedback_esbuild_emit_oracle`.)
+ *
+ * **UNDER-APPROXIMATION CONSERVADORA (fail-closed) — NO igualdad exacta con el emit.**
+ * La invariante de soundness es `true ⟹ el-build-instancia` (si decimos instanciado, lo
+ * está → el nombre es shadow runtime → eximir el read es seguro). El REVERSO no se cumple:
+ * esto es un WHITELIST de productores de valor DECIDIBLES; un namespace instanciado SOLO
+ * por un statement runtime-only (expression-statement `Q.z;`, control-flow `if(){}`) NO se
+ * reconoce → devolvemos `false` → over-flag FAIL-CLOSED (codex P2 round-9, verificado: esos
+ * casos divergen del emit pero 100% en la dirección segura). Cerrar ese FP exigiría
+ * RECONOCER MÁS instanciación (default-true / blacklist) = la dirección FAIL-OPEN que abrió
+ * los 17 bypasses (§184): un statement que añadiéramos y que el build ELIDA sería bypass. Se
+ * mantiene el whitelist; el FP es contrivado (`namespace window { Q.z; }`, 0 en source real).
+ *
+ * REGLA DE EMIT DEL BUILD para el whitelist (medida empíricamente, deepest final hunt #173 —
+ * NO la que asumía el código anterior). El error previo: tratar TODO value-producer (incl.
+ * `declare` no-exportado y `import Q = N` value-dead) como instanciante. El build NO los emite
+ * → un `namespace document { declare var x }` se ELIDE entero y `document.title` leía el
+ * GLOBAL real con el gate exento = BYPASS (17 confirmados: window/document/navigator/…).
+ *
+ *   INSTANCIA: const/let/var/function/class/enum NO-ambient; o `declare` (ambient)
+ *              PERO SOLO si va `export` (`export declare const z` re-exporta una
+ *              propiedad → `var N`; un `declare const z` pelado es ambient puro →
+ *              ELIDE); o `import Y = Z` que el build emite = value-USED o `export
+ *              import`; o `namespace` anidado NO-ambient que a su vez instancia.
+ *   ELIDE:     `declare …` no-exportado, `import Y = Z` value-dead no-exportado,
+ *              `namespace` anidado ambient, interface/type/import-type, vacío.
+ *
+ * Para import-equals la value-use es binder-territory (parser-puro no la prueba
+ * barato) → fail-closed: solo cuenta `export import` (la forma que el build SIEMPRE
+ * emite). Un `import Q = N` no-exportado value-USED igual instancia el namespace
+ * por SU statement de uso (`export const y = Q.z`), no por el import → no se pierde
+ * ningún caso legítimo. Fail-closed: statement no reconocido → false (over-flag).
+ */
+function buildInstantiatesViaStatement(stmt) {
+  // Productores de valor: const/let/var/function/class/enum. NO-ambient siempre
+  // instancia; `declare` (ambient) solo si `export` (verificado contra el build OXC/rolldown).
+  if (
+    ts.isVariableStatement(stmt) ||
+    ts.isFunctionDeclaration(stmt) ||
+    ts.isClassDeclaration(stmt) ||
+    ts.isEnumDeclaration(stmt)
+  ) {
+    return isAmbientDeclaration(stmt) ? hasExportModifier(stmt) : true;
+  }
+  // `import Y = Z`: el build instancia si la value-use ocurre, o si es `export import`
+  // (re-export, siempre emitido). El `import` pelado value-dead se ELIDE (raíz de 5
+  // bypasses) → fail-closed: solo `export import` de valor cuenta.
+  if (ts.isImportEqualsDeclaration(stmt)) {
+    return hasExportModifier(stmt) && !stmt.isTypeOnly;
+  }
+  // Namespace anidado: instancia SOLO si NO es ambient Y a su vez instancia. El
+  // ambient anidado (`export declare namespace I { … }`) el build lo BORRA entero →
+  // NO cuenta. El no-ambient anidado recurre.
+  if (ts.isModuleDeclaration(stmt)) {
+    return isAmbientDeclaration(stmt) ? false : namespaceIsInstantiated(stmt);
+  }
+  // interface, type alias, import-type, export-decl sin valor → no emite. Fail-closed.
+  return false;
+}
+
+/**
+ * Fail-closed: ¿la declaración EMITE un binding runtime (produce valor)?
+ *
+ * EL shadow-set solo debe añadir un nombre si su declaración PRUEBA que emite
+ * valor. Si no, el nombre se BORRA al compilar y una ref bare resuelve al
+ * global real → erased-shadow bypass. Históricamente esto se filtraba con un
+ * DENYLIST disperso (`!isAmbientDeclaration` por sitio, `!isTypeOnly` en el
+ * path import) y la misma raíz mordió tres veces: type-only import → `declare`
+ * ambient → namespace type-only. Los productores de valor son un conjunto
+ * ACOTADO y enumerable; los borrados son ABIERTOS. Este predicado whitelistea
+ * el lado acotado — la única forma de cerrar la CLASE, no el caso. Lo consultan
+ * todos los colectores que añaden nombres de declaración al shadow-set.
+ *
+ * SINTÁCTICO a propósito: el gate no tiene type-checker (usa createSourceFile),
+ * y el primer emit del build es `tsc -p tsconfig.build.json`, cuya semántica de
+ * elisión es exactamente la que se evalúa aquí.
+ *
+ * El trade es deliberado y consistente con el resto del gate: errar hacia FP
+ * (omitir un productor de valor → flaggear código legítimo, corregible) NUNCA
+ * hacia bypass (añadir un borrado → fallo silencioso en prod). Verificado 0-FP
+ * contra los 39 marcados + el corpus honest-construct. beta.27 BLOCKER-1.
+ */
+function producesRuntimeValue(decl) {
+  if (!decl || isAmbientDeclaration(decl)) return false;
+  if (ts.isClassDeclaration(decl)) return true;
+  // H6 (Auditoría B R6): un enum top-level cuyo nombre COLISIONA con un ambient sibling homónimo
+  // (`declare namespace performance` + `enum performance`) sufre la MISMA merge-elision que el namespace-de-valor
+  // (rolldown/OXC elide el `var` del enum → el read filtra al GLOBAL, no a un local). No produce un binding local
+  // que sombree el global → false. Order-independiente y fail-closed: en ambient-first OXC elide (divergencia
+  // node-vs-Edge, in-mandate); en enum-first emite local (crash universal out-of-mandate) → flaggearlo es
+  // sobre-aproximación fail-closed (drift de emisores), no accidente. El oráculo de emit vive en el eje ERASE.
+  if (ts.isEnumDeclaration(decl)) return !collidesWithAmbientSibling(decl);
+  if (ts.isFunctionDeclaration(decl)) return decl.body !== undefined;
+  if (
+    ts.isVariableDeclaration(decl) ||
+    ts.isVariableStatement(decl) ||
+    ts.isBindingElement(decl) ||
+    ts.isParameter(decl)
+  )
+    return true;
+  // `import X = …`: conservador `!isTypeOnly`. Resolver si el RHS es un miembro-TIPO
+  // SAME-FILE (erased) exige reimplementar el binder de TS (merge / scope-léxico /
+  // alias-chains / dotted / self-ref) — fuera del diseño parser-puro del gate. Ese
+  // caso same-file queda como RESIDUAL honesto (ver ADR: "binder, no indecidibilidad
+  // ni gratis"). El alias CROSS-MODULE ya era residual por la misma razón categórica.
+  if (ts.isImportEqualsDeclaration(decl)) return !decl.isTypeOnly;
+  if (ts.isModuleDeclaration(decl)) return namespaceIsInstantiated(decl);
+  // interface, type alias, y todo lo demás type-space → NO produce valor.
+  return false;
+}
+
 function addBindingNamesFromPattern(node, names) {
   if (!node) return;
   if (ts.isIdentifier(node)) {
@@ -614,6 +1451,201 @@ function addBindingNamesFromPattern(node, names) {
 }
 
 /**
+ * Nombres declarados BLOCK-LEXICAL en `statements` (const/let/class/function al nivel
+ * del scope) — los que, por scope léxico/TDZ, SOMBREAN un binding outer homónimo para
+ * TODO el scope (no solo tras su declaración). Usado para purgar `guardAliases` al ENTRAR
+ * un scope (bloque o CaseBlock entero), cerrando el bypass de shadow-antes-de-declaración
+ * (codex P2). `var` NO entra (es function-scoped, lo cubre el var-hoisting).
+ */
+function gatherBlockLexicalNames(statements) {
+  const out = new Set();
+  for (const stmt of statements) {
+    if (ts.isVariableStatement(stmt)) {
+      // const/let/using/await-using son block-scoped (TDZ); `var` es function-scoped
+      // → NO aplica aquí. isBlockScopedDeclList cubre los 4 (codex P2: faltaba `using`).
+      if (isBlockScopedDeclList(stmt.declarationList.flags)) {
+        for (const d of stmt.declarationList.declarations) {
+          addBindingNamesFromPattern(d.name, out);
+        }
+      }
+    } else if (
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      (ts.isClassDeclaration(stmt) ||
+        ts.isFunctionDeclaration(stmt) ||
+        ts.isEnumDeclaration(stmt) ||
+        ts.isModuleDeclaration(stmt) ||
+        ts.isImportEqualsDeclaration(stmt)) &&
+      producesRuntimeValue(stmt)
+    ) {
+      // class/function/enum/namespace-instanciado/import-equals-de-valor crean un binding
+      // de VALOR block-scoped que sombrea el alias. producesRuntimeValue excluye los que
+      // NO crean valor (función sin cuerpo, namespace type-only, import-equals type-only)
+      // → esos no sombrean el alias-de-valor, no se purgan (evita over-flag).
+      out.add(stmt.name.text);
+    }
+  }
+  return out;
+}
+
+/**
+ * Nombres block-lexical de un scope que SOMBREAN un binding con un valor NO-react —
+ * para PRE-CARGARLOS en nonImportBindings al ENTRAR el scope. Sin esto, una función
+ * visitada ANTES de un `const useEffect = Sync.run` posterior resuelve `useEffect` al
+ * hook react file-global y se exime, aunque léxicamente el call liga al const local
+ * síncrono → BYPASS (codex P1 round-10, el gemelo del purge de guard-aliases). Igual
+ * que `gatherBlockLexicalNames` PERO excluye los import-equals que aliasan react (esos
+ * SÍ son hooks legítimos, FP14/15) — 2 pasadas: primero los no-import-equals (siempre
+ * no-react), luego los import-equals contra el set ya acumulado (cierra la cadena
+ * `import React = FakeReact; import useEffect = React.useEffect`).
+ */
+function gatherNonReactLexicalShadows(statements, scope) {
+  const reactImports = scope.reactImports;
+  const baseNonImport = scope.nonImportBindings ?? new Set();
+  const shadows = new Set();
+  // Pase 1 — nombres block-lexical de function/class/enum/module: SIEMPRE shadow no-react (un
+  // class/function no es un alias react). Hoisted (función) o no, se pre-cargan antes del pase 2
+  // para que una `const useEffect = React.useEffect` donde `React` es una `function React(){}`
+  // hoisted LATER lo vea como sombra.
+  for (const stmt of statements) {
+    if (
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      (ts.isClassDeclaration(stmt) ||
+        ts.isFunctionDeclaration(stmt) ||
+        ts.isEnumDeclaration(stmt) ||
+        ts.isModuleDeclaration(stmt)) &&
+      producesRuntimeValue(stmt)
+    ) {
+      shadows.add(stmt.name.text);
+    }
+  }
+  // Pase 2 — var block-scoped + import-equals en ORDEN TEXTUAL, ACUMULANDO los react-aliases del
+  // MISMO bloque (nsSet/namedMap) y las sombras no-react. El TDZ de const/let garantiza root-
+  // declarado-antes-de-uso, así que un único pase resuelve las cadenas del bloque:
+  //   `const React = FakeReact; const useEffect = React.useEffect` → React∈shadows → useEffect
+  //     es sombra SÍNCRONA (codex P1: el pre-load lo perdía con solo el scope externo → una
+  //     función hoisted antes de la cadena se eximía = BYPASS).
+  //   `const R = React; const useEffect = R.useEffect` → R∈nsSet → useEffect es hook react (no sombra).
+  // Antes esto se delegaba al purge posicional, que NO alcanza a una función hoisted visitada
+  // ANTES de la cadena (el purge corre al llegar a la declaración, demasiado tarde).
+  const nsSet = new Set(scope.scopeReactNs ?? []);
+  const namedMap = new Map(scope.scopeReactNamed ?? []);
+  for (const stmt of statements) {
+    const scopeNow = {
+      reactImports,
+      scopeReactNs: nsSet,
+      scopeReactNamed: namedMap,
+      nonImportBindings: new Set([...baseNonImport, ...shadows]),
+    };
+    if (
+      ts.isVariableStatement(stmt) &&
+      isBlockScopedDeclList(stmt.declarationList.flags)
+    ) {
+      const { ns, named } = reactAliasesDeclaredBy(stmt, scopeNow);
+      for (const n of ns) nsSet.add(n);
+      for (const [l, c] of named) namedMap.set(l, c);
+      const aliasNames = new Set(ns);
+      for (const [l] of named) aliasNames.add(l);
+      for (const d of stmt.declarationList.declarations) {
+        if (isAmbientDeclaration(d)) continue;
+        const names = new Set();
+        addBindingNamesFromPattern(d.name, names);
+        for (const n of names) {
+          if (!aliasNames.has(n)) shadows.add(n);
+        }
+      }
+    } else if (
+      ts.isImportEqualsDeclaration(stmt) &&
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      producesRuntimeValue(stmt)
+    ) {
+      const { ns, named } = reactAliasesDeclaredBy(stmt, scopeNow);
+      for (const n of ns) nsSet.add(n);
+      for (const [l, c] of named) namedMap.set(l, c);
+      if (ns.length === 0 && named.length === 0) {
+        shadows.add(stmt.name.text);
+      }
+    }
+  }
+  return shadows;
+}
+
+/** Devuelve un context con `guardAliases` purgado de `names` (sombras léxicas). */
+function purgeGuardAliasShadows(context, names) {
+  if (!context.guardAliases || context.guardAliases.size === 0 || names.size === 0) {
+    return context;
+  }
+  let purged = null;
+  for (const n of names) {
+    if (context.guardAliases.has(n)) {
+      if (!purged) purged = new Map(context.guardAliases);
+      purged.delete(n);
+    }
+  }
+  return purged ? { ...context, guardAliases: purged } : context;
+}
+
+/**
+ * Recolecta los nombres declarados a NIVEL DE MÓDULO (top-level): const/let/
+ * var, function, class e imports — SIN recursar en cuerpos de función. Usado
+ * SOLO para eximir tags JSX uppercase que son referencias a componentes del
+ * módulo (importados / locales / forward-ref / mutuos — válidos en
+ * render-time aunque el orden TDZ los deje "fuera de scope" en el punto
+ * sintáctico de uso). Un global DOM como `HTMLElement` NO se declara → no se
+ * exime → se flaggea.
+ *
+ * DISEÑO (consciente, no efecto colateral): el set es module-level ∪ (vía el
+ * walker) localBindings. Cubre los casos legítimos —componente importado,
+ * top-level forward/mutuo, y nested declarado-antes-de-uso (que ya está en
+ * localBindings)— SIN sobre-eximir. Un nested forward-ref en el mismo scope
+ * (`<Sub/>` antes de `const Sub=…`) es un error de runtime real (TDZ → React
+ * lo ve undefined) y se flaggea correctamente. Module-level (no whole-file)
+ * evita el FN de "nombre declarado en función A usado como tag en función B".
+ * beta.27 BLOCKER-1 (codex P2: JSX uppercase tags bajo fail-closed).
+ */
+function gatherModuleDeclaredNames(sourceFile) {
+  const names = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      for (const decl of stmt.declarationList.declarations) {
+        if (isAmbientDeclaration(decl)) continue; // declare const → no runtime
+        addBindingNamesFromPattern(decl.name, names);
+      }
+    } else if (
+      (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
+      stmt.name &&
+      !isAmbientDeclaration(stmt) &&
+      // Firma sin cuerpo (`function window();` = overload signature) NO emite runtime value → NO debe
+      // sombrear el global homónimo (root H / Fable). Si hay implementación en scope, ÉSTA (con body) añade
+      // el nombre; una firma suelta solo "compila" con @ts-ignore + esbuild-only (TS2391) → fail-closed.
+      (!ts.isFunctionDeclaration(stmt) || stmt.body !== undefined)
+    ) {
+      names.add(stmt.name.text);
+    } else if (ts.isImportDeclaration(stmt)) {
+      addRuntimeImportBindings(stmt.importClause, names);
+    }
+  }
+  return names;
+}
+
+/**
+ * ¿La VariableDeclarationList es BLOCK-SCOPED (no var-hoisted)? `let`/`const` y
+ * también `using`/`await using` (recursos explícitos, TS 5.2). using=4 (plano),
+ * await-using=6 (incluye el bit Const). El `using` plano faltaba → se trataba como
+ * var-hoisted y sombreaba un global homónimo en scope externo (re-hunt BYP4:
+ * `{ using navigator = …; }` exime `navigator.userAgent` fuera del bloque).
+ */
+function isBlockScopedDeclList(flags) {
+  return (
+    (flags &
+      (ts.NodeFlags.Let | ts.NodeFlags.Const | ts.NodeFlags.Using)) !==
+    0
+  );
+}
+
+/**
  * `var` declarations: hoisted al function/module scope. Recurre a
  * través de blocks anidados, if/else, try/catch, for/while bodies,
  * switch — pero NO en nested function-likes (otro scope).
@@ -621,8 +1653,8 @@ function addBindingNamesFromPattern(node, names) {
  * NO incluye `function` declarations: en strict ESM (todos los .ts/.tsx
  * de un DS) son block-scoped, NO function-hoisted. Codex round 13 P1.1.
  *
- * NO incluye `let`/`const`/`class`: block-scoped y order-aware (TDZ).
- * Codex round 13 P1.2.
+ * NO incluye `let`/`const`/`class`/`using`: block-scoped y order-aware (TDZ).
+ * Codex round 13 P1.2; using en re-hunt BYP4.
  */
 function collectVarHoistedRecursive(node, names) {
   if (
@@ -632,7 +1664,18 @@ function collectVarHoistedRecursive(node, names) {
     ts.isMethodDeclaration(node) ||
     ts.isGetAccessorDeclaration(node) ||
     ts.isSetAccessorDeclaration(node) ||
-    ts.isConstructorDeclaration(node)
+    ts.isConstructorDeclaration(node) ||
+    // class: un `var` en un static block / property initializer está scoped a ESE
+    // bloque, NO al function/namespace scope envolvente (`class C { static { var
+    // window } }` no hoista `window` fuera). No parar aquí preloadeaba ese var →
+    // bypass de un global homónimo leído después. codex P2.
+    ts.isClassDeclaration(node) ||
+    ts.isClassExpression(node) ||
+    // namespace/module: sus `var` son scoped al módulo, NO al archivo — y un
+    // `declare global { var X }` es AMBIENT (borrado, no emite binding). En
+    // ninguno de los dos casos el `var` debe hoistarse al scope del archivo.
+    // No recursar cierra el bypass del `declare global`. Codex P2 round 3.
+    ts.isModuleDeclaration(node)
   ) {
     return;
   }
@@ -643,10 +1686,10 @@ function collectVarHoistedRecursive(node, names) {
   // pasaban sin hoist.
   if (ts.isVariableDeclarationList(node)) {
     const flags = node.flags;
-    const blockScoped =
-      (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+    const blockScoped = isBlockScopedDeclList(flags);
     if (!blockScoped) {
       for (const decl of node.declarations) {
+        if (isAmbientDeclaration(decl)) continue; // declare var / declare global
         addBindingNamesFromPattern(decl.name, names);
       }
     }
@@ -691,7 +1734,7 @@ function gatherBlockFunctionDeclarations(blockNode) {
   const names = new Set();
   if (!blockNode.statements) return names;
   for (const stmt of blockNode.statements) {
-    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt) && stmt.body !== undefined) {
       names.add(stmt.name.text);
     }
   }
@@ -706,7 +1749,7 @@ function gatherBlockFunctionDeclarations(blockNode) {
 function gatherSourceFileFunctionDeclarations(sourceFile) {
   const names = new Set();
   for (const stmt of sourceFile.statements) {
-    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt) && stmt.body !== undefined) {
       names.add(stmt.name.text);
     }
   }
@@ -727,21 +1770,290 @@ function gatherSourceFileFunctionDeclarations(sourceFile) {
  * los let/const se pre-cargaban a scope-entry, false-shadow-eando reads
  * anteriores.
  */
-function extractPostStatementBindings(stmt) {
-  const names = new Set();
+function extractPostStatementBindings(stmt, scope) {
+  // `all`: todos los bindings (para localBindings — sombrean globals). `nonImport`:
+  // SOLO los locales NO-import (para nonImportBindings, que distingue un shadow local
+  // de un hook real). `import X = …` es IMPORT-LIKE → va a `all` pero NO a `nonImport`
+  // (si entrara, `import ue = React.useEffect; ue(cb)` se trataría como shadow local y
+  // se flaggearía — regresión). Espejo de gatherModulePreloadedBindings.
+  //
+  // Los nombres que `stmt` declara como aliases REACT (`reactAliasNamesDeclaredBy`,
+  // scope-aware + const-only) se EXCLUYEN de `nonImport`: NO son shadows síncronos sino
+  // el hook react genuino, así que el deferred-hook shadow-guard no debe flaggearlos. El
+  // control no-react (`const { useEffect } = Sync`, `let ue = React.useEffect` reasignable)
+  // NO es alias → entra en nonImport → flagea. Núcleo único = sin divergencia file-global.
+  const all = new Set();
+  const nonImport = new Set();
+  const aliasNames = reactAliasNamesDeclaredBy(stmt, scope);
   if (ts.isVariableStatement(stmt)) {
     const flags = stmt.declarationList.flags;
-    const blockScoped =
-      (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
+    const blockScoped = isBlockScopedDeclList(flags);
     if (blockScoped) {
       for (const decl of stmt.declarationList.declarations) {
-        addBindingNamesFromPattern(decl.name, names);
+        if (isAmbientDeclaration(decl)) continue; // declare const/let → erased
+        addBindingNamesFromPattern(decl.name, all);
+        const declNames = new Set();
+        addBindingNamesFromPattern(decl.name, declNames);
+        for (const n of declNames) {
+          if (!aliasNames.has(n)) nonImport.add(n);
+        }
       }
     }
-  } else if (ts.isClassDeclaration(stmt) && stmt.name) {
-    names.add(stmt.name.text);
+  } else if (
+    (ts.isClassDeclaration(stmt) ||
+      ts.isEnumDeclaration(stmt) ||
+      ts.isModuleDeclaration(stmt) ||
+      ts.isImportEqualsDeclaration(stmt)) &&
+    stmt.name &&
+    ts.isIdentifier(stmt.name) &&
+    // `class`/`enum` emiten binding; `namespace` SOLO si está instanciado (≥1
+    // miembro de valor); `import X = N.Y` (import-equals) es un alias de VALOR
+    // local si el RHS produce valor (`!isTypeOnly`). Un namespace type-only/vacío
+    // o un import-equals type-only se elide → NO sombra. `producesRuntimeValue`
+    // cierra la CLASE (fail-closed). beta.27 BLOCKER-1 + codex P2 (import-equals en
+    // cuerpo de namespace).
+    producesRuntimeValue(stmt)
+  ) {
+    all.add(stmt.name.text);
+    if (!ts.isImportEqualsDeclaration(stmt)) {
+      nonImport.add(stmt.name.text);
+    } else if (!aliasNames.has(stmt.name.text)) {
+      // Un import-equals es import-like (exempt como hook) SOLO si aliasa REACT
+      // (`import ue = React.useEffect` → FP14/15). Un alias a un valor NO-react
+      // (`import useEffect = Sync.run`, `import React = FakeReact`) SOMBREA el nombre
+      // localmente → debe ir a nonImport para que el shadow-guard de
+      // isDeferredExecutionContext dispare y lo flaggee (hunt final #173, deferred import-equals).
+      nonImport.add(stmt.name.text);
+    }
   }
+  return { all, nonImport };
+}
+
+/**
+ * NÚCLEO ÚNICO de resolución de aliases REACT declarados por UN statement, scope-aware.
+ * Reemplaza la lógica antes CUADRUPLICADA y divergente (`gatherReactImports` var-branch
+ * file-global; `variableInitAliasesReact`/`importEqualsAliasesReact` para la exclusión de
+ * `nonImportBindings`; y la computación interna de `addReactAliases`). La DIVERGENCIA entre
+ * esas copias era la fuente recurrente de bypasses/FPs (codex P1 let-reassign; hunt #173:
+ * root scope-local, element-access, computed-spoof). Una sola resolución la cierra de raíz.
+ *
+ * `scope` = `{ reactImports, scopeReactNs?, scopeReactNamed?, nonImportBindings? }`.
+ * Devuelve `{ ns: string[], named: Array<[local, canónico]> }`:
+ *   ns    → nombres que son un NAMESPACE react (React, o un alias `const` de él) en este scope.
+ *   named → `[localName, exportCanónico]` de hooks/miembros react (`ue`→"useEffect").
+ *
+ * **SOLO `const` (codex P1, BYPASS fail-open):** un `let`/`var` puede REASIGNARSE a una función
+ * síncrona DESPUÉS del init (`let ue = React.useEffect; ue = sync; ue(cb)`) → confiar en el init
+ * es fail-OPEN (el cb corre síncrono en render y se eximía). Un alias por `const` es inmutable →
+ * seguro. Un alias `let`/`var` queda fail-closed (over-flag, residual aceptado, raro). `import X = …`
+ * es inmutable → exento del check `const`.
+ *
+ * Resuelve roots contra `scopeReactNs ∪ reactImports.namespaces`; named contra
+ * `scopeReactNamed ∪ reactImports.named`; roots ∈ `nonImportBindings` (shadow no-react) excluidos
+ * (codex P1 root-shadow). Member-name de property-access (`React.useEffect`) Y element-access con
+ * STRING LITERAL (`React["useEffect"]`); un computed/element NO-literal NO se registra (fail-closed
+ * — cierra el spoof `const { ["useState"]: useEffect } = React`, donde el binding real es useState
+ * render-phase). Rest de un namespace react (`const { C, ...rest } = React`) → `rest ∈ ns` (sus
+ * miembros siguen siendo canónicos react).
+ */
+function reactAliasesDeclaredBy(stmt, scope) {
+  const reactImports = scope.reactImports;
+  const ns = [];
+  const named = [];
+  if (!reactImports) return { ns, named };
+  const nsSet = scope.scopeReactNs;
+  const namedMap = scope.scopeReactNamed;
+  const nonImport = scope.nonImportBindings;
+  const mutated = scope.mutatedNamespaceRoots;
+  // Acumuladores LOCALES al statement — avanzan declarador-a-declarador izquierda-a-derecha. JS
+  // resuelve `React` en el 2º initializer de `const React = FakeReact, useEffect = React.useEffect`
+  // al `const React` LOCAL del 1º declarador, no al import file-global. Sin avanzar, el 2º se
+  // clasificaba contra el scope de ANTES del statement = BYPASS (codex P1). Tienen PRECEDENCIA sobre
+  // el scope externo (sombra léxica más cercana).
+  const localNs = new Set();
+  const localNamed = new Map();
+  const localShadow = new Set();
+  const isReactNs = (name) =>
+    !localShadow.has(name) &&
+    !(nonImport && nonImport.has(name)) &&
+    !(mutated && mutated.has(name)) && // namespace mutado por member-write → no inmutable (codex P1)
+    (localNs.has(name) ||
+      (nsSet && nsSet.has(name)) ||
+      reactImports.namespaces.has(name));
+  const canonicalNamed = (name) => {
+    if (localShadow.has(name)) return undefined;
+    if (nonImport && nonImport.has(name)) return undefined;
+    if (localNamed.has(name)) return localNamed.get(name);
+    const scoped = namedMap && namedMap.get(name);
+    return scoped !== undefined ? scoped : reactImports.named.get(name);
+  };
+  // member string de `React.X` (property) o `React["X"]` (element-access string literal).
+  // Computed/element NO-literal → null (no resoluble → fail-closed).
+  const memberName = (node) => {
+    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.name)) {
+      return node.name.text;
+    }
+    if (ts.isElementAccessExpression(node)) {
+      const arg = node.argumentExpression
+        ? unwrapErased(node.argumentExpression)
+        : null;
+      if (arg && ts.isStringLiteralLike(arg)) return arg.text;
+    }
+    return null;
+  };
+  // propertyName de un BindingElement → string del miembro, o null si no-resoluble.
+  const bindingMember = (el) => {
+    const pn = el.propertyName;
+    if (!pn) return el.name.text; // shorthand `{ useEffect }`
+    if (ts.isIdentifier(pn)) return pn.text; // `{ useEffect: ue }`
+    if (ts.isStringLiteralLike(pn)) return pn.text; // `{ "useEffect": ue }`
+    if (ts.isComputedPropertyName(pn)) {
+      const e = unwrapErased(pn.expression); // `{ [("useEffect")]: ue }`, `{ ["useEffect" as const]: ue }`
+      if (ts.isStringLiteralLike(e)) return e.text; // literal computed
+    }
+    return null; // computed NO-literal `{ [k]: ue }` → no resoluble → fail-closed
+  };
+
+  const handleVarInit = (name, initializer) => {
+    const init = unwrapErased(initializer);
+    // `const useEffect = reactUseEffect` — alias de un NAMED react (no namespace).
+    if (ts.isIdentifier(name) && ts.isIdentifier(init)) {
+      if (isReactNs(init.text)) {
+        ns.push(name.text);
+        return;
+      }
+      const canon = canonicalNamed(init.text);
+      if (canon !== undefined) named.push([name.text, canon]);
+      return;
+    }
+    let root = init;
+    while (
+      ts.isPropertyAccessExpression(root) ||
+      ts.isElementAccessExpression(root)
+    ) {
+      root = unwrapErased(root.expression);
+    }
+    if (!ts.isIdentifier(root) || !isReactNs(root.text)) return;
+    if (ts.isIdentifier(name) && init === root) {
+      ns.push(name.text); // const R = React
+    } else if (ts.isIdentifier(name)) {
+      const member = memberName(init); // const ue = React.useEffect / React["useEffect"]
+      if (member !== null) named.push([name.text, member]);
+    } else if (ts.isObjectBindingPattern(name) && init === root) {
+      for (const el of name.elements) {
+        if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
+        if (el.dotDotDotToken) {
+          // `const { C, ...rest } = React` — el rest crea un OBJETO PLANO MUTABLE (copia de
+          // props enumerables), NO el namespace read-only de react. `rest.useEffect = sync`
+          // reasigna el miembro y el cb corre síncrono en render → tratar rest como namespace
+          // react es fail-OPEN (codex P1 sobre 1defc39). NO se registra → `rest.useEffect`
+          // queda fail-closed (flagea, residual SOUND). Distinto de `const R = React`: R apunta
+          // al Module Namespace Object, cuyos miembros son read-only (no reasignables).
+          continue;
+        }
+        const member = bindingMember(el);
+        if (member !== null) named.push([el.name.text, member]);
+      }
+    }
+  };
+
+  if (ts.isVariableStatement(stmt)) {
+    if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) {
+      return { ns, named }; // const-only (codex P1) — let/var reasignable → no se confía
+    }
+    for (const d of stmt.declarationList.declarations) {
+      const nsBefore = ns.length;
+      const namedBefore = named.length;
+      if (d.initializer && !isAmbientDeclaration(d)) {
+        handleVarInit(d.name, d.initializer);
+      }
+      // Avanzar los acumuladores locales con lo que ESTE declarador aportó, para que el SIGUIENTE
+      // declarador del mismo statement lo vea (orden léxico izquierda-a-derecha). Los nombres que
+      // son alias react → localNs/localNamed; el resto de los bindings del declarador → localShadow.
+      const aliasNames = new Set();
+      for (let i = nsBefore; i < ns.length; i++) {
+        localNs.add(ns[i]);
+        aliasNames.add(ns[i]);
+      }
+      for (let i = namedBefore; i < named.length; i++) {
+        localNamed.set(named[i][0], named[i][1]);
+        aliasNames.add(named[i][0]);
+      }
+      if (!isAmbientDeclaration(d)) {
+        const declNames = new Set();
+        addBindingNamesFromPattern(d.name, declNames);
+        for (const n of declNames) {
+          if (!aliasNames.has(n)) localShadow.add(n);
+        }
+      }
+    }
+  } else if (
+    ts.isImportEqualsDeclaration(stmt) &&
+    !stmt.isTypeOnly &&
+    ts.isIdentifier(stmt.name)
+  ) {
+    const ref = stmt.moduleReference;
+    if (ref && !ts.isExternalModuleReference(ref)) {
+      let r = ref;
+      while (ts.isQualifiedName(r)) r = r.left;
+      if (ts.isIdentifier(r) && isReactNs(r.text)) {
+        if (ts.isIdentifier(ref)) {
+          ns.push(stmt.name.text); // import R = React
+        } else if (ts.isQualifiedName(ref) && ts.isIdentifier(ref.right)) {
+          named.push([stmt.name.text, ref.right.text]); // import ue = React.useEffect
+        }
+      }
+    }
+  }
+  return { ns, named };
+}
+
+/** Conjunto de nombres locales que son aliases react (ns ∪ named) declarados por `stmt`. */
+function reactAliasNamesDeclaredBy(stmt, scope) {
+  const { ns, named } = reactAliasesDeclaredBy(stmt, scope);
+  const names = new Set(ns);
+  for (const [local] of named) names.add(local);
   return names;
+}
+
+/**
+ * Acumula en el `context` (scope-aware) los aliases react declarados por `stmt`, vía el
+ * núcleo `reactAliasesDeclaredBy`. Los guarda en `scopeReactNs` / `scopeReactNamed` —
+ * campos que viven SOLO en el scope donde se declaran y NO filtran a hermanos (el bypass
+ * file-global que codex P1 rechazó). Devuelve el mismo `context` si no hay aliases.
+ */
+function addReactAliases(context, stmt) {
+  const { ns, named } = reactAliasesDeclaredBy(stmt, context);
+  if (ns.length === 0 && named.length === 0) return context;
+  return {
+    ...context,
+    ...(ns.length > 0
+      ? { scopeReactNs: new Set([...(context.scopeReactNs ?? []), ...ns]) }
+      : {}),
+    ...(named.length > 0
+      ? { scopeReactNamed: new Map([...(context.scopeReactNamed ?? []), ...named]) }
+      : {}),
+  };
+}
+
+/**
+ * Purga de `nonImportBindings` los nombres que `stmt` redeclara como aliases react. Un
+ * `const ue = React.useEffect` en un scope interno SOMBREA léxicamente un binding no-react
+ * homónimo del scope externo (`const ue = Sync.run` afuera) → ese nombre ya NO es un shadow
+ * síncrono aquí y debe salir del set para que el deferred-hook shadow-guard no lo flaggee.
+ * Gemelo de `purgeGuardAliasShadows`. Cierra FPs scope-shadow (react-alias sobre sync externo).
+ */
+function purgeNonImportReactAliases(context, stmt) {
+  const aliasNames = reactAliasNamesDeclaredBy(stmt, context);
+  if (aliasNames.size === 0 || context.nonImportBindings.size === 0) return context;
+  let purged = null;
+  for (const n of aliasNames) {
+    if (context.nonImportBindings.has(n)) {
+      if (!purged) purged = new Set(context.nonImportBindings);
+      purged.delete(n);
+    }
+  }
+  return purged ? { ...context, nonImportBindings: purged } : context;
 }
 
 /**
@@ -757,27 +2069,1393 @@ function extractPostStatementBindings(stmt) {
  * Otros módulos (preact, frameworks alt, mocks/helpers locales) no
  * exempt.
  */
-function gatherReactImports(sourceFile) {
-  const names = new Set();
+/**
+ * Añade a `names` los bindings RUNTIME de un import clause, SALTANDO los
+ * type-only. CRÍTICO: un `import type { X }` o `import { type X }` se BORRA al
+ * compilar — NO crea un binding en runtime, así que NO sombrea el global
+ * ambiente `X`. Si se añadiera al shadow-set, una ref bare a `X` se trataría
+ * como local y pasaría el gate, pero en runtime resuelve al global real →
+ * ReferenceError en SSR. Centralizar el filtro aquí evita que el bypass
+ * recurra en cada colector. `isImportPurelyTypeOnly` ya existía para el path
+ * de smuggling; este lo cablea también al path de shadow.
+ * beta.27 BLOCKER-1 (workflow: erased-shadow bypass).
+ */
+function addRuntimeImportBindings(importClause, names) {
+  if (!importClause || importClause.isTypeOnly) return;
+  if (importClause.name) names.add(importClause.name.text);
+  const nb = importClause.namedBindings;
+  if (!nb) return;
+  if (ts.isNamespaceImport(nb)) {
+    names.add(nb.name.text);
+  } else if (ts.isNamedImports(nb)) {
+    for (const spec of nb.elements) {
+      if (!spec.isTypeOnly) names.add(spec.name.text);
+    }
+  }
+}
+
+/**
+ * Roots identifier de cualquier MEMBER-WRITE en el archivo: `X.m = …`, `X[m] = …` (incl.
+ * compuesto `+=`/`??=`/…), `++X.m`/`X.m--`, `delete X.m`, y `Object.assign/defineProperty/
+ * defineProperties(X, …)`. Un namespace react cuyo root aparezca aquí está MUTADO → NO se
+ * puede tratar `X.useEffect` como el hook diferido inmutable (codex P1 sobre b35a87c).
+ *
+ * **Por qué importa el default import:** `import * as React` es un Module Namespace Object
+ * READ-ONLY (`React.useEffect = sync` lanza TypeError en ESM strict → inmutable, sound). Pero
+ * `import React from "react"` / `import { default as React }` es el objeto export MUTABLE bajo
+ * interop CJS/bundler → `React.useEffect = sync; React.useEffect(()=>window)` corre síncrono y se
+ * eximía = BYPASS. En vez de dejar de eximir TODO default-import (FP masivo: `React.useEffect(cb)`
+ * es el patrón ubicuo), se INVALIDA solo si hay un member-write en el archivo (la opción "invalidate
+ * on member writes" que codex sugirió). File-wide y conservador: el objeto React es COMPARTIDO, así
+ * que una mutación en cualquier punto puede alcanzar cualquier llamada (independiente del orden
+ * textual). Residual de diseño: mutación CROSS-MÓDULO o vía `Reflect.set`/aliasing indirecto (fuera
+ * del scope single-file del gate).
+ */
+function gatherMutatedNamespaceRoots(sourceFile) {
+  const roots = new Set();
+  // Roots identifier a los que el RECEIVER (objeto mutado) puede evaluar, atravesando
+  // wrappers VALUE-TRANSPARENTES (no solo erased): `(0, React)` (coma), `(a && React)`,
+  // `(cond ? React : b)`, etc. — el valor ES React, sintácticamente visible = token-en-su-
+  // sitio. Antes solo `unwrapErased` (paréntesis/as/!) → `((0, React) as any).useEffect = sync`
+  // escapaba (codex P2). Multi-hoja (||/??/ternario) → taintea TODAS las ramas (fail-closed).
+  // NOTA DE FRONTERA: esto resuelve el TARGET; el CALLEE (`calleeObjMember`) sigue en
+  // `unwrapErased`, así que `(0, Object.assign)(React,…)` (coma en el callee = invocación
+  // indirecta) sigue siendo el RESIDUAL ratificado (codex P1 #7) — modelar qué función se
+  // invoca es el subsistema que §141 renuncia. La coma en el TARGET sí se caza.
+  const addReceiverRoots = (node) => {
+    for (const leaf of valueTransparentLeaves(node)) {
+      if (
+        ts.isPropertyAccessExpression(leaf) ||
+        ts.isElementAccessExpression(leaf)
+      ) {
+        addReceiverRoots(leaf.expression); // root del chain = root(es) de la base
+      } else if (ts.isIdentifier(leaf)) {
+        roots.add(leaf.text);
+      }
+    }
+  };
+  const addIfMemberAccess = (node) => {
+    const n = unwrapErased(node);
+    if (ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) {
+      addReceiverRoots(n.expression);
+    }
+  };
+  // Recorre un TARGET de asignación (LHS de `=` / patrón de for-of/for-in) recogiendo los
+  // roots de los member-access target. Un destructuring-assignment `({ x: React.useEffect } =
+  // …)` o `[React.useEffect] = …` muta React aunque el LHS sea un object/array literal (no un
+  // member-access directo) — el target member ESTÁ sintácticamente presente (codex P1, token-en-
+  // su-sitio). Recursa en object/array patterns, defaults (`{ x: T = d }`) y rest (`{ ...T }`).
+  const collectWriteTargets = (target) => {
+    const t = unwrapErased(target);
+    if (ts.isPropertyAccessExpression(t) || ts.isElementAccessExpression(t)) {
+      addReceiverRoots(t.expression);
+    } else if (ts.isObjectLiteralExpression(t)) {
+      for (const prop of t.properties) {
+        if (ts.isPropertyAssignment(prop)) collectWriteTargets(prop.initializer);
+        else if (ts.isSpreadAssignment(prop)) collectWriteTargets(prop.expression);
+        // ShorthandPropertyAssignment `{ x }` → x es identifier target, no member.
+      }
+    } else if (ts.isArrayLiteralExpression(t)) {
+      for (const el of t.elements) {
+        if (ts.isOmittedExpression(el)) continue;
+        if (ts.isSpreadElement(el)) collectWriteTargets(el.expression);
+        else collectWriteTargets(el);
+      }
+    } else if (
+      ts.isBinaryExpression(t) &&
+      t.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      collectWriteTargets(t.left); // default en destructuring: `{ x: T = d }` → T es t.left
+    }
+  };
+  // Mutadores cuyo PRIMER argumento es el objeto target: `Object.assign/defineProperty/
+  // defineProperties(X, …)`, `Reflect.set/defineProperty/deleteProperty(X, …)`. Token-en-su-sitio
+  // (el mutador está a la vista). Pasar X a una función arbitraria que lo muta = data-flow → residual.
+  const MUTATORS = {
+    Object: new Set(["assign", "defineProperty", "defineProperties"]),
+    Reflect: new Set(["set", "defineProperty", "deleteProperty"]),
+  };
+
+  // R13 gap#4: familia CONST-ESTABLE del receptor del mutador (`const O=Object; O.assign(…)`). El target
+  // React ya se resolvía por familia, pero el receptor exigía el spelling literal Object/Reflect. Punto fijo
+  // por unión para cadenas (`const O=Object; const O2=O`); SOLO const, de modo que `let O=Object` conserva la
+  // frontera §141. Scope-blind como el taint file-wide de esta función: una colisión solo sobre-tainta.
+  const mutatorNamespaceAliases = new Map([
+    ["Object", new Set(["Object"])],
+    ["Reflect", new Set(["Reflect"])],
+  ]);
+  let mutatorAliasesChanged = true;
+  while (mutatorAliasesChanged) {
+    mutatorAliasesChanged = false;
+    const collectMutatorAlias = (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.Const) !== 0
+      ) {
+        const namespaces = new Set();
+        for (const leaf of valueTransparentLeaves(node.initializer)) {
+          if (!ts.isIdentifier(leaf)) continue;
+          for (const ns of mutatorNamespaceAliases.get(leaf.text) ?? []) {
+            namespaces.add(ns);
+          }
+        }
+        if (namespaces.size > 0) {
+          const previous = mutatorNamespaceAliases.get(node.name.text);
+          const merged = previous
+            ? new Set([...previous, ...namespaces])
+            : namespaces;
+          if (!previous || merged.size !== previous.size) {
+            mutatorNamespaceAliases.set(node.name.text, merged);
+            mutatorAliasesChanged = true;
+          }
+        }
+      }
+      ts.forEachChild(node, collectMutatorAlias);
+    };
+    collectMutatorAlias(sourceFile);
+  }
+
+  // `[obj, member]` de un callee `Obj.m(…)` (dot) o `Obj["m"](…)` (bracket string literal) — misma
+  // normalización dot/bracket que el resto del gate (codex P1: el bracket-form se colaba).
+  // Receiver del mutador value-transparente (`(0, Object).assign(React, …)`, `(c ? Fake : Object).
+  // assign(…)`) → TODAS las hojas identifier VT (ALTERNATIVAS), no solo la primera; el caller
+  // taintea si CUALQUIERA es un mutador para el member, fail-closed (codex P1).
+  const mutatorReceiverIdents = (recv) =>
+    valueTransparentLeaves(recv).flatMap((o) =>
+      ts.isIdentifier(o)
+        ? [...(mutatorNamespaceAliases.get(o.text) ?? [])]
+        : [],
+    );
+  const calleeObjMember = (callee) => {
+    if (ts.isPropertyAccessExpression(callee)) {
+      const objs = mutatorReceiverIdents(callee.expression);
+      if (objs.length > 0 && ts.isIdentifier(callee.name)) {
+        return [objs, callee.name.text];
+      }
+    }
+    if (ts.isElementAccessExpression(callee)) {
+      const objs = mutatorReceiverIdents(callee.expression);
+      // Desenvolver la KEY: `Object[("assign")]` (paréntesis), `Object["assign" as const]`
+      // (as) — nodos ERASED en runtime → misma normalización que los otros member-name paths
+      // (codex P1: la key envuelta se colaba). NO se foldea una key COMPUTADA por un OPERADOR
+      // (`Object[1 && "assign"]`, `Object[(0, "assign")]`, `Object["as"+"sign"]`, ternario): exige
+      // constant-folding del operador → es la frontera §141 ratificada (token-UNIDAD literal en su
+      // sitio se caza; ENSAMBLAJE/operador-computed = RESIDUAL). Aquí el residual es FAIL-OPEN (la key
+      // no resuelve → el mutador no se detecta → React no se taintea → su hook sigue exento), MISMA
+      // clase que la invocación indirecta del mutador (`.call`/`.bind`/alias del callee) ya residual.
+      // Cerrarlo = reimplementar el evaluador de constantes (whack-a-mole: &&, ||, comma, ?:, concat,
+      // array-access, method-call…), justo lo que §141 renuncia por diseño (codex P2 sobre 9c97cdd).
+      const key = callee.argumentExpression
+        ? unwrapErased(callee.argumentExpression)
+        : null;
+      if (objs.length > 0 && key && ts.isStringLiteralLike(key)) {
+        return [objs, key.text];
+      }
+    }
+    return null;
+  };
+  const visit = (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    ) {
+      collectWriteTargets(node.left); // X.m=… / X[m]+=… / ({x:X.m}=…) / [X.m]=…
+    } else if (
+      (ts.isForOfStatement(node) || ts.isForInStatement(node)) &&
+      !ts.isVariableDeclarationList(node.initializer)
+    ) {
+      collectWriteTargets(node.initializer); // for ({x: React.m} of …) — patrón sin const/let
+    } else if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken)
+    ) {
+      addIfMemberAccess(node.operand); // ++X.m / X.m--
+    } else if (ts.isDeleteExpression(node)) {
+      addIfMemberAccess(node.expression); // delete X.m
+    } else if (ts.isCallExpression(node)) {
+      const om = calleeObjMember(unwrapErased(node.expression));
+      if (
+        om &&
+        om[0].some((o) => MUTATORS[o]?.has(om[1])) &&
+        node.arguments.length > 0
+      ) {
+        // Object.assign(X,…) / Reflect.set(X,…) — X (1er arg) es el target. Value-transparent
+        // (`Object.assign((0, React), …)` → React). El CALLEE (Object.assign) se resolvió
+        // arriba con unwrapErased (callee indirecto = residual); el target sí cruza VT. El modelo
+        // de candidatos branch-aware cubre spread literal/ALTERNATIVAS (`Object.assign(...(c ?
+        // [React, …] : []))`) — taintea el target de TODAS las ramas (codex P2).
+        for (const cand of candidatesAt(node.arguments, 0)) addReceiverRoots(cand);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return roots;
+}
+
+/**
+ * FAMILIA de aliases del OBJETO de un import react — todos los nombres que apuntan al MISMO
+ * objeto (file-wide, cualquier scope, `const`/`let`/`var`/import-equals identifier-alias). Para
+ * PROPAGAR el taint por member-write (codex P1 #4): el objeto default-export es COMPARTIDO, así
+ * que `const A = React; A.useEffect = sync` muta el mismo objeto que `React` → si CUALQUIER miembro
+ * de la familia tiene un member-write, NINGUNO es de fiar. Incluye `let`/`var` (un alias mutable
+ * sigue apuntando al objeto al momento de la escritura → su mutación también lo contamina).
+ *
+ * Scope-blind (file-wide) por diseño: el taint es file-wide y debe alcanzar cualquier llamada sin
+ * importar el orden. Over-aproxima en el caso raro de colisión de nombre entre scopes (`const A =
+ * React` en uno, `const A = otro` mutado en otro) → over-taint fail-closed (acepta). Sólo se usa
+ * si la familia ESTÁ mutada; sin member-write a la familia, no taintea nada (0-FP del caso común).
+ */
+function gatherReactNamespaceFamily(sourceFile) {
+  const family = new Set();
   for (const stmt of sourceFile.statements) {
-    if (!ts.isImportDeclaration(stmt)) continue;
-    if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) {
+      continue;
+    }
     if (stmt.moduleSpecifier.text !== "react") continue;
-    const importClause = stmt.importClause;
-    if (!importClause) continue;
-    if (importClause.name) names.add(importClause.name.text);
-    const namedBindings = importClause.namedBindings;
-    if (namedBindings) {
-      if (ts.isNamespaceImport(namedBindings)) {
-        names.add(namedBindings.name.text);
-      } else if (ts.isNamedImports(namedBindings)) {
-        for (const spec of namedBindings.elements) {
-          names.add(spec.name.text);
+    const clause = stmt.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    if (clause.name) family.add(clause.name.text); // import React (default)
+    const nb = clause.namedBindings;
+    if (nb && ts.isNamespaceImport(nb)) family.add(nb.name.text); // import * as React
+    if (nb && ts.isNamedImports(nb)) {
+      for (const spec of nb.elements) {
+        if (spec.isTypeOnly) continue;
+        const exp = spec.propertyName ? spec.propertyName.text : spec.name.text;
+        if (exp === "default") family.add(spec.name.text); // import { default as React }
+      }
+    }
+  }
+  if (family.size === 0) return family;
+  let changed = true;
+  // ¿El VALOR de `expr` es (value-transparente) un miembro de la familia react? Incluye la
+  // proyección array-literal-index `[React][0]` (token-en-su-sitio: el elemento está a la vista).
+  const exprIsFamilyValue = (expr) => {
+    if (!expr) return false;
+    for (const leaf of valueTransparentLeaves(expr)) {
+      // La proyección container-literal (`[React][0]`, `({0:React})[0]`) YA la desciende
+      // valueTransparentChildren (INV-VT, re-hunt2) → la hoja es `React` directo. No hay rama
+      // ElementAccess aquí: sería código muerto (el leaf nunca es un ElementAccess foldable).
+      if (ts.isIdentifier(leaf) && family.has(leaf.text)) return true;
+    }
+    return false;
+  };
+  // Enrola los identifiers de `target` ligados a un valor react de `init`. Cubre: identifier
+  // (`A = React`), object/array binding-pattern (decl `const {a:A}=…`) y object/array literal
+  // como target de assignment (`({a:A}={a:React})`, `[A]=[React]`). Match ESTRUCTURAL para no
+  // over-taintear hermanos no-react (`const {a:A,b:B}={a:React,b:x}` enrola solo A). deepest re-hunt.
+  const enrollBinding = (target, init) => {
+    if (!target) return;
+    const t = unwrapErased(target);
+    if (ts.isIdentifier(t)) {
+      if (!family.has(t.text) && exprIsFamilyValue(init)) {
+        family.add(t.text);
+        changed = true;
+      }
+      return;
+    }
+    // Element DEFAULTS de un binding-pattern (`{ R = React }`, `[R = React]`) son aliases
+    // INTRÍNSECOS al pattern, independientes del init: el elemento puede resolver a su default →
+    // taint fail-closed. Cubre param destructurado `f({ R = React } = {})` Y `const { R = React }
+    // = x` (codex P2). Se compone con el match estructural contra el object/array literal de abajo.
+    if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
+      for (const e of t.elements) {
+        if (!ts.isBindingElement(e)) continue;
+        if (e.initializer) enrollBinding(e.name, e.initializer); // default de ESTE elemento
+        if (
+          ts.isObjectBindingPattern(e.name) ||
+          ts.isArrayBindingPattern(e.name)
+        ) {
+          // Pattern ANIDADO (`{ opts: { R = React } }`): recurre por sus propios defaults,
+          // independiente del match estructural contra el init (codex P2).
+          enrollBinding(e.name, undefined);
+        }
+      }
+    }
+    // Iterar TODAS las alternativas literal de init (`c ? { R: React } : { R: React }`), fail-closed
+    // — paridad con collectStructuralAliases (codex P2).
+    for (const lit of literalLeaves(init)) {
+    if (
+      (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
+      ts.isObjectLiteralExpression(lit)
+    ) {
+      const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
+      for (const e of elems) {
+        // sub + DEFAULT del elemento, paridad con collectStructuralAliases: `{ R = React }` (shorthand
+        // -default, objectAssignmentInitializer), `{ x: R = React }` (rename-default, BinaryExpression),
+        // `{ x: R = React }` binding-default — el default provee el alias react cuando la key falta (codex P2).
+        let keyNode, sub, def;
+        def = null;
+        if (ts.isBindingElement(e)) {
+          keyNode = e.propertyName || e.name;
+          sub = e.name;
+          def = e.initializer ?? null;
+        } else if (ts.isPropertyAssignment(e)) {
+          keyNode = e.name;
+          const v = e.initializer;
+          if (
+            v &&
+            ts.isBinaryExpression(v) &&
+            v.operatorToken.kind === ts.SyntaxKind.EqualsToken
+          ) {
+            sub = v.left;
+            def = v.right;
+          } else {
+            sub = v;
+          }
+        } else if (ts.isShorthandPropertyAssignment(e)) {
+          keyNode = e.name;
+          sub = e.name;
+          def = e.objectAssignmentInitializer ?? null;
+        } else continue;
+        // Key COMPUTADA value-transparente (`{ ["a"]: A } = { a: React }`) → "a", como el resto del
+        // gate (structuralKeyText), para no dejar `A` fuera de la familia react (codex P2).
+        if (structuralKeyTexts(keyNode).length === 0 || !sub) continue;
+        const ip = lit.properties.find(
+          (p) =>
+            ts.isPropertyAssignment(p) &&
+            p.name &&
+            structuralKeysOverlap(p.name, keyNode),
+        );
+        if (ip) enrollBinding(sub, ip.initializer);
+        if (def) enrollBinding(sub, def);
+      }
+    }
+    if (
+      (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
+      ts.isArrayLiteralExpression(lit)
+    ) {
+      const elems = t.elements;
+      elems.forEach((e, i) => {
+        if (ts.isOmittedExpression(e)) return;
+        const sub = ts.isBindingElement(e) ? e.name : e;
+        enrollBinding(sub, lit.elements[i]);
+      });
+    }
+    }
+  };
+  while (changed) {
+    changed = false;
+    const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        // `const A = (0, React)` / binding-pattern `const {a:A}=…` / `const [A]=[React]`.
+        enrollBinding(node.name, node.initializer);
+      } else if (
+        ts.isImportEqualsDeclaration(node) &&
+        ts.isIdentifier(node.name)
+      ) {
+        const ref = node.moduleReference;
+        if (
+          ref &&
+          ts.isIdentifier(ref) &&
+          family.has(ref.text) &&
+          !family.has(node.name.text)
+        ) {
+          family.add(node.name.text); // import X = Y (Y ∈ familia)
+          changed = true;
+        }
+      } else if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        // ASSIGNMENT-alias: `A = React`, `[A] = [React]`, `({a:A} = {a:React})`. El target
+        // member-path (`box.r = React`) NO se enrola (alias de miembro = data-flow, residual).
+        enrollBinding(node.left, node.right);
+      } else if (ts.isParameter(node)) {
+        if (ts.isIdentifier(node.name)) {
+          // PARAM-default identifier: `function go(A = React) { A.useEffect = sync }`.
+          if (
+            node.initializer &&
+            !family.has(node.name.text) &&
+            exprIsFamilyValue(node.initializer)
+          ) {
+            family.add(node.name.text);
+            changed = true;
+          }
+        } else {
+          // PARAM binding-pattern: `function go({ R = React } = {})` — defaults intrínsecos +
+          // match estructural contra el param-default literal (codex P2).
+          enrollBinding(node.name, node.initializer);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return family;
+}
+
+const TIMER_GLOBAL_NAMES = new Set([
+  "setTimeout",
+  "setInterval",
+  "setImmediate",
+]);
+
+/**
+ * ¿`expr` resuelve (value-transparente) a un timer GLOBAL no sombreado, o a un alias ya conocido
+ * en este scope? `setTimeout`/`globalThis.setInterval`/un alias previo. El shadow se evalúa contra
+ * `context.localBindings` (SCOPE-ACCURATE en el punto de la declaración) — NO file-level: un
+ * `setTimeout` declarado en un scope HERMANO/interno NO debe ocultar un alias del global real aquí
+ * (codex P2). Los timers están en SAFE_GLOBALS → su read no se flaggea aguas arriba (≠ eval, sink)
+ * → sin resolver el alias `later("código")` sería fail-open.
+ */
+// La única hoja value-transparente de `expr` SI es un literal object/array (para matchear patrones
+// de destructuring contra `{a: X}` / `[X]`). Versión module-level del `literalInit` de react-family.
+// TODOS los object/array literal leaves value-transparentes de `expr` — ALTERNATIVAS incluidas
+// (`cond ? { a: X } : { a: Y }` → [{a:X},{a:Y}]) y carriers identity-return EN-SITIO (R11 pt.3).
+// Delega en el MISMO resolver que arrayLiteralAlternatives/objectLiteralAlternatives: el destructure
+// estructural no puede divergir de la proyección member/timer/eval. Fail-closed: el match corre contra
+// CADA rama (si CUALQUIER rama liga el token, enrola/flaggea).
+function literalLeaves(expr) {
+  if (!expr) return [];
+  return containerLiteralAlternatives(expr, isAnyContainerLiteral);
+}
+
+/**
+ * Recorre `target` (identifier | array/object binding pattern) contra `init`, llamando
+ * `emit(name, value)` por cada binding cuyo valor (vía `resolve(expr, context)` → truthy) es un
+ * alias. Cubre: identifier directo, DEFAULTS de binding-element (`{ X = WebAssembly }`), match
+ * ESTRUCTURAL contra object/array literal (`const [later] = [setTimeout]`, `const {a:X}={a:React}`),
+ * patterns ANIDADOS, y proyección `[X][i]` (vía resolve). Espejo genérico de `enrollBinding`
+ * (react-family) para los colectores de timer/partial alias. codex P2 (alias-form completeness).
+ */
+// Texto de una key de propiedad/binding, foldeando keys COMPUTADAS value-transparentes
+// (`["wa"]`, `[1 && "wa"]` → "wa"), como el resto de paths del gate (codex P2). null si no es
+// estáticamente conocible.
+// TODAS las candidatas string de una key de pattern/propiedad — incluye ALTERNATIVAS de una key
+// COMPUTADA value-transparente (`[c ? "a" : "b"]` → ["a","b"]); fail-closed, cualquiera cuenta
+// (codex P2). Operador no-VT (concat) = ensamblaje §141 residual (no produce string-literal leaf).
+function structuralKeyTexts(keyNode) {
+  if (!keyNode) return [];
+  if (ts.isComputedPropertyName(keyNode)) {
+    return valueTransparentLeaves(keyNode.expression)
+      .filter((l) => ts.isStringLiteralLike(l))
+      .map((l) => l.text);
+  }
+  return ts.isIdentifier(keyNode) || ts.isStringLiteralLike(keyNode)
+    ? [keyNode.text]
+    : [];
+}
+
+// ¿comparten las keys `a` y `b` alguna candidata? (match estructural fail-closed entre alternativas).
+function structuralKeysOverlap(a, b) {
+  const sa = structuralKeyTexts(a);
+  const sb = structuralKeyTexts(b);
+  return sa.some((k) => sb.includes(k));
+}
+
+function collectStructuralAliases(target, init, context, resolve, emit, enrollRest = false) {
+  if (!target) return;
+  const t = unwrapErased(target);
+  if (ts.isIdentifier(t)) {
+    const v = resolve(init, context);
+    if (v) emit(t.text, v);
+    return;
+  }
+  // Element DEFAULTS de un binding-pattern (`{ X = setTimeout }`) + patterns ANIDADOS,
+  // independientes del init.
+  if (ts.isObjectBindingPattern(t) || ts.isArrayBindingPattern(t)) {
+    for (const e of t.elements) {
+      if (!ts.isBindingElement(e)) continue;
+      // OBJECT-REST `const { ...WA } = WebAssembly`: WA es un (shallow copy del) root → los miembros
+      // peligrosos van con él (o faltan igual) → alias del partial-root (codex P2). Solo PARTIAL
+      // (enrollRest): para un timer, `{ ...later } = setTimeout` da un objeto NO invocable (TypeError
+      // genérico al llamarlo, no eval del navegador), así que no es un timer-alias.
+      if (
+        enrollRest &&
+        ts.isObjectBindingPattern(t) &&
+        e.dotDotDotToken &&
+        ts.isIdentifier(e.name)
+      ) {
+        const v = resolve(init, context);
+        if (v) emit(e.name.text, v);
+        continue;
+      }
+      if (e.initializer) {
+        collectStructuralAliases(e.name, e.initializer, context, resolve, emit, enrollRest);
+      }
+      if (
+        ts.isObjectBindingPattern(e.name) ||
+        ts.isArrayBindingPattern(e.name)
+      ) {
+        collectStructuralAliases(e.name, undefined, context, resolve, emit, enrollRest);
+      }
+    }
+  }
+  // OBJECT-REST en un ASSIGNMENT-pattern (`({ ...WA } = WebAssembly)`): el SpreadAssignment del
+  // object-literal TARGET copia el root → WA aliasa el partial-root (codex P2). Gemelo del
+  // binding-rest de arriba; solo PARTIAL (enrollRest).
+  if (enrollRest && ts.isObjectLiteralExpression(t)) {
+    for (const e of t.properties) {
+      if (ts.isSpreadAssignment(e) && ts.isIdentifier(e.expression)) {
+        const v = resolve(init, context);
+        if (v) emit(e.expression.text, v);
+      }
+    }
+  }
+  // DEFAULTS de un object/array-LITERAL target (assignment-destructure `({ X = setTimeout } = …)`,
+  // for-of `for ({ X = setTimeout } of …)`) — INDEPENDIENTES del init, como los binding-element
+  // defaults de arriba; el default ejecuta cuando la prop/índice falta (codex P2).
+  if (ts.isObjectLiteralExpression(t)) {
+    for (const e of t.properties) {
+      if (
+        ts.isShorthandPropertyAssignment(e) &&
+        e.objectAssignmentInitializer
+      ) {
+        collectStructuralAliases(e.name, e.objectAssignmentInitializer, context, resolve, emit, enrollRest);
+      } else if (
+        ts.isPropertyAssignment(e) &&
+        e.initializer &&
+        ts.isBinaryExpression(e.initializer) &&
+        e.initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        collectStructuralAliases(e.initializer.left, e.initializer.right, context, resolve, emit, enrollRest);
+      }
+    }
+  }
+  if (ts.isArrayLiteralExpression(t)) {
+    for (const e of t.elements) {
+      if (
+        ts.isBinaryExpression(e) &&
+        e.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        collectStructuralAliases(e.left, e.right, context, resolve, emit, enrollRest);
+      }
+    }
+  }
+  // Iterar TODAS las alternativas literal (`cond ? {a:X} : {a:Y}`): el match estructural corre
+  // contra cada rama, fail-closed (codex P2).
+  for (const lit of literalLeaves(init)) {
+  // Object: binding-pattern DECL (`const {a:X}=…`) O object-LITERAL target de assignment-destr
+  // (`({a:X}={a:setTimeout})`). Match estructural por key (codex P2).
+  if (
+    (ts.isObjectBindingPattern(t) || ts.isObjectLiteralExpression(t)) &&
+    ts.isObjectLiteralExpression(lit)
+  ) {
+    const elems = ts.isObjectBindingPattern(t) ? t.elements : t.properties;
+    for (const e of elems) {
+      let keyNode;
+      let sub;
+      if (ts.isBindingElement(e)) {
+        keyNode = e.propertyName || e.name;
+        sub = e.name;
+      } else if (ts.isPropertyAssignment(e)) {
+        keyNode = e.name;
+        sub = e.initializer;
+        // default en assignment-destr RENOMBRADO `({ x: later = setTimeout } = {})`: el initializer
+        // es `later = setTimeout` (BinaryExpression). Desempaquetar: target=left, default=right —
+        // el target puede resolver a su default aunque el init no matchee la key (codex P2).
+        if (
+          sub &&
+          ts.isBinaryExpression(sub) &&
+          sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+          collectStructuralAliases(sub.left, sub.right, context, resolve, emit, enrollRest);
+          sub = sub.left;
+        }
+      } else if (ts.isShorthandPropertyAssignment(e)) {
+        keyNode = e.name;
+        sub = e.name;
+        // default en assignment-destr `({ X = setTimeout } = {})`.
+        if (e.objectAssignmentInitializer) {
+          collectStructuralAliases(
+            e.name,
+            e.objectAssignmentInitializer,
+            context,
+            resolve,
+            emit,
+            enrollRest,
+          );
+        }
+      } else continue;
+      if (structuralKeyTexts(keyNode).length === 0) continue;
+      // R11 (gap-5 + F1): SIEMPRE el resolver canónico last-wins (objectLiteralMemberValues/
+      // resolveKeyInLiteral), NUNCA el first-match `lit.properties.find`. Con dup-keys
+      // `{p: Math, p: performance}` el first-match resolvía al PRIMERO (Math, no-root) y el override
+      // runtime (last-wins) se perdía → FN. El resolver canónico cubre directo + shorthand + spread +
+      // last-wins en UN sitio; unifica este locus (alias) con flagPartialDestructure (member-extract).
+      for (const key of structuralKeyTexts(keyNode)) {
+        for (const val of objectLiteralMemberValues(lit, key)) {
+          collectStructuralAliases(sub, val, context, resolve, emit, enrollRest);
         }
       }
     }
   }
+  // Array: binding-pattern DECL (`const [X]=…`) O array-LITERAL target (`[X]=[setTimeout]`).
+  if (
+    (ts.isArrayBindingPattern(t) || ts.isArrayLiteralExpression(t)) &&
+    ts.isArrayLiteralExpression(lit)
+  ) {
+    // R10 DESTRUCT: aplanar spreads de LITERAL en-sitio para el match POSICIONAL (`[x]=[...[perf]]`);
+    // un spread de VARIABLE → null → §141 (no casar; los DEFAULTS ya se procesan fuera del lit-loop).
+    const posEls = positionalArrayElements(lit);
+    if (posEls) {
+      t.elements.forEach((e, i) => {
+        if (ts.isOmittedExpression(e)) return;
+        let sub = ts.isBindingElement(e) ? e.name : e;
+        // default en array assignment-destr `[WA = WebAssembly] = []`: el elemento es la
+        // BinaryExpression `WA = WebAssembly`. Desempaquetar: target=left, default=right (codex P2).
+        if (
+          sub &&
+          ts.isBinaryExpression(sub) &&
+          sub.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+          collectStructuralAliases(sub.left, sub.right, context, resolve, emit, enrollRest);
+          sub = sub.left;
+        }
+        collectStructuralAliases(sub, posEls[i], context, resolve, emit, enrollRest);
+      });
+    }
+  }
+  }
+}
+
+function exprIsTimerValued(expr, context) {
+  if (!expr) return false;
+  const known = context.scopeTimerAliases;
+  for (const leaf of valueTransparentLeaves(expr)) {
+    if (ts.isIdentifier(leaf)) {
+      if (known && known.has(leaf.text)) return true;
+      if (
+        TIMER_GLOBAL_NAMES.has(leaf.text) &&
+        !context.localBindings.has(leaf.text)
+      ) {
+        return true;
+      }
+    } else if (
+      ts.isPropertyAccessExpression(leaf) ||
+      ts.isElementAccessExpression(leaf)
+    ) {
+      // Receiver value-transparente (`(0, globalThis).setTimeout`, `(c ? window : self).setTimeout`)
+      // → resolver por valueTransparentLeaves, no solo unwrapErased; paridad con la rama de callee
+      // directo del string-timer (codex P2). Shadow-aware.
+      const receiverIsGlobalObj = valueTransparentLeaves(leaf.expression).some(
+        (r) =>
+          ts.isIdentifier(r) &&
+          (r.text === "globalThis" ||
+            r.text === "window" ||
+            r.text === "self" ||
+            r.text === "global") &&
+          !context.localBindings.has(r.text),
+      );
+      if (receiverIsGlobalObj) {
+        const mn = accessedMemberName(leaf);
+        if (mn && TIMER_GLOBAL_NAMES.has(mn)) return true;
+      }
+      // La proyección `[setTimeout][0]` YA la desciende valueTransparentChildren (INV-VT) → la hoja es
+      // `setTimeout` directo, cazado arriba. Sin rama ElementAccess (sería código muerto).
+    } else if (ts.isCallExpression(leaf)) {
+      // `<timer>.bind(thisArg?)` SIN handler bindeado → la fn ligada SIGUE siendo un timer (el
+      // handler llega en la llamada externa: `setTimeout.bind(null)("código")`). Con ≥1 handler
+      // bindeado el string ya está en los args de `.bind` (lo caza la rama `.bind`). codex P2.
+      const callee = unwrapErased(leaf.expression);
+      if (
+        (ts.isPropertyAccessExpression(callee) ||
+          ts.isElementAccessExpression(callee)) &&
+        accessedMemberName(callee) === "bind" &&
+        leaf.arguments.length <= 1 &&
+        exprIsTimerValued(callee.expression, context)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Nombres de alias de timer global declarados por `stmt` (`const later = setTimeout`, `f = later`).
+ * SCOPE-AWARE: el shadow del nombre-timer se resuelve contra `context.localBindings` en este punto.
+ */
+function timerAliasNamesDeclaredBy(stmt, context) {
+  const names = new Set();
+  const emit = (name) => names.add(name);
+  // import-equals value-alias: `import later = setTimeout` / `import Y = X` (X alias). El
+  // moduleReference es un EntityName; un Identifier que resuelve a timer enrola el alias (codex P2).
+  if (
+    ts.isImportEqualsDeclaration(stmt) &&
+    !stmt.isTypeOnly &&
+    ts.isIdentifier(stmt.moduleReference) &&
+    exprIsTimerValued(stmt.moduleReference, context)
+  ) {
+    names.add(stmt.name.text);
+    return names;
+  }
+  // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
+  if (ts.isVariableDeclaration(stmt)) {
+    collectStructuralAliases(stmt.name, stmt.initializer, context, exprIsTimerValued, emit);
+    // Assignments EMBEBIDAS en el initializer (`const _ = (later = setTimeout)`) (codex P2).
+    eachEmbeddedAssignment(stmt.initializer, (a) =>
+      collectStructuralAliases(a.left, a.right, context, exprIsTimerValued, emit),
+    );
+    return names;
+  }
+  // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
+  const declList = ts.isVariableStatement(stmt)
+    ? stmt.declarationList
+    : ts.isVariableDeclarationList(stmt)
+      ? stmt
+      : null;
+  if (declList) {
+    // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
+    // Declaradores LEFT-TO-RIGHT: un alias en cadena dentro del mismo statement (`const a =
+    // setTimeout, b = a`) — `b` debe ver `a` ya enrolado (codex P2). Avanzar un ctx local.
+    let ctx = context;
+    for (const d of declList.declarations) {
+      const local = new Set();
+      const addLocal = (n) => {
+        local.add(n);
+        names.add(n);
+      };
+      collectStructuralAliases(d.name, d.initializer, ctx, exprIsTimerValued, addLocal);
+      // Assignments EMBEBIDAS en el initializer (`const _ = (later = setTimeout), id = …`) (codex P2).
+      eachEmbeddedAssignment(d.initializer, (a) =>
+        collectStructuralAliases(a.left, a.right, ctx, exprIsTimerValued, addLocal),
+      );
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopeTimerAliases: new Set([
+            ...(ctx.scopeTimerAliases ?? []),
+            ...local,
+          ]),
+        };
+      }
+    }
+  } else if (ts.isExpressionStatement(stmt)) {
+    // Assignments TOP-LEVEL (`later = setTimeout;`, `({later}={…})`) Y EMBEBIDAS en operadores value-
+    // transparentes (`(later = setTimeout, 0);`) → enrolar para statements POSTERIORES (la asignación
+    // YA ejecutó antes del sink siguiente; codex P2). `eachEmbeddedAssignment` (mismo predicado §141,
+    // sin path paralelo) cubre las tres; threadea ctx left-to-right para cadenas.
+    let ctx = context;
+    eachEmbeddedAssignment(stmt.expression, (assign) => {
+      const local = new Set();
+      collectStructuralAliases(assign.left, assign.right, ctx, exprIsTimerValued, (n) => {
+        local.add(n);
+        names.add(n);
+      });
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopeTimerAliases: new Set([...(ctx.scopeTimerAliases ?? []), ...local]),
+        };
+      }
+    });
+  }
   return names;
+}
+
+/**
+ * Acumula (scope-aware) en `context.scopeTimerAliases` los alias de timer declarados por `stmt`.
+ * Gemelo de `addReactAliases`: vive en el scope donde se declara, no filtra a hermanos; un alias
+ * forward (`const a = setTimeout; const b = a`) se reconoce porque `a` ya está en el set al
+ * procesar la siguiente sentencia. Devuelve el mismo context si no hay alias.
+ */
+function addTimerAliases(context, stmt) {
+  const names = timerAliasNamesDeclaredBy(stmt, context);
+  if (names.size === 0) return context;
+  return {
+    ...context,
+    scopeTimerAliases: new Set([
+      ...(context.scopeTimerAliases ?? []),
+      ...names,
+    ]),
+  };
+}
+
+/**
+ * SET de globals parcial-safe candidatos a los que `expr` resuelve (value-transparente): cada hoja de
+ * `valueTransparentLeaves` que es un root de PARTIAL_SAFE_GLOBAL_MEMBERS no sombreado (`WebAssembly`,
+ * `performance`), un alias ya conocido en scope (`const WA = WebAssembly`; puede aliasar VARIOS roots si
+ * su init es multi-rama, FIX-2), o `import.meta` (root-sentinel). El read del root está en SAFE_GLOBALS →
+ * un alias sería invisible aguas arriba = bypass del partial-member gate (codex P2). Respeta shadow
+ * (localBindings) y forward value-read.
+ *
+ * ∃-QUANTIFICACIÓN (Auditoría B FIX-1): un receptor multi-rama (`b ? crypto : WebAssembly`, `crypto ||
+ * WebAssembly`, `[crypto,WA][k]`) resuelve a VARIAS hojas; devolver solo la 1ª (first-match) enmascara un
+ * `(root,member)` divergente en una hoja posterior → FN. `valueTransparentLeaves` YA respeta la semántica
+ * por-operador (coma→right, &&→right, ||/??→ambos, ternario→ramas, container-proj→selectivos) → el set
+ * hereda la polaridad correcta sin enumerar hojas a mano. Paridad con los hermanos
+ * `accessedMemberNames`/`objectLiteralMemberValues`, que ya devuelven sets.
+ *
+ * LEY DE POLARIDAD (Auditoría B §1): esto es un resolver de RAÍZ (fail-open), no de clave. Solo se acumulan
+ * los candidatos RESUELTOS; una hoja irresoluble (variable, objeto local, forma no enumerada) es procedencia
+ * renunciada → se IGNORA, NO dispara warn (si no, `(b?crypto:local).x` inundaría de FPs). Discriminador
+ * gap-vs-renuncia (INV-SYM): si intercambiar ramas cambia el veredicto, era un gap.
+ */
+function exprPartialRoots(expr, context) {
+  const out = new Set();
+  if (!expr) return out;
+  const known = context.scopePartialAliases;
+  for (const leaf of valueTransparentLeaves(expr)) {
+    if (ts.isIdentifier(leaf)) {
+      if (known && known.has(leaf.text)) {
+        for (const r of known.get(leaf.text)) out.add(r);
+        continue;
+      }
+      if (
+        isPartialMemberRoot(leaf.text) &&
+        !context.localBindings.has(leaf.text) &&
+        !(
+          context.isInFunctionBody &&
+          context.moduleDeclaredNames?.has(leaf.text)
+        )
+      ) {
+        out.add(leaf.text);
+      }
+    } else if (
+      ts.isMetaProperty(leaf) &&
+      leaf.keywordToken === ts.SyntaxKind.ImportKeyword
+    ) {
+      // `import.meta` como root-sentinel (Fable cross-review rc.1, root C): enrola el destructure
+      // (`const {resolve}=import.meta`, c.1c) y el const-alias (`const m=import.meta; m.resolve()`,
+      // scopePartialAliases). NO es identifier → no shadowable (`import` es reserved). ACUMULA al set (no
+      // early-return, Auditoría B FIX-1/#2): restaura la semántica existencial perdida en 71be882
+      // (`(c?crypto:import.meta).dirname` enmascaraba import.meta tras crypto). La POLARIDAD la despacha
+      // `partialMemberDenied` (import.meta = ALLOWLIST).
+      out.add(IMPORT_META_ROOT);
+    }
+    // La proyección container-literal (`[WebAssembly][0]`, `({0:WebAssembly})[0]`) YA la desciende
+    // valueTransparentChildren (INV-VT, re-hunt2) → la hoja es el root directo.
+  }
+  return out;
+}
+
+/**
+ * Resolver de raíces para consumidores en-sitio de un receptor.
+ *
+ * Compone las raíces directas/alias con carriers reflexivos sintácticos. No se
+ * usa al ENROLAR alias: una copia guardada y leída después continúa siendo flujo §141.
+ */
+function resolveRoots(expr, context) {
+  const out = exprPartialRoots(expr, context);
+  for (const source of reflectiveCarrierSources(expr, "chain")) {
+    for (const root of exprPartialRoots(source, context)) out.add(root);
+  }
+  return out;
+}
+
+/**
+ * ∃-quantificación de construcción-denegada sobre `resolveRoots(target.expression)` (Auditoría B FIX-1):
+ * un ctor multi-rama (`new (b?crypto:WebAssembly).Module`) enmascaraba el root denegado tras uno safe/no-
+ * denegante → FN. Devuelve el primer `(root, member)` construcción-denegado; o el primer root allowlist-style
+ * con miembro COMPUTADO (fail-closed). `ctorCandidates` es root-independiente (accessedMemberNames del target).
+ * Compartido por las posiciones `new` y `Reflect.construct` (≡ new).
+ */
+function resolveConstructionDeny(target, context) {
+  // Orígenes-global del ctor: DIRECTOS (`resolveRoots` del receptor, con members = accessedMemberNames del
+  // target) + REFLEXIVOS (idiomas property-copy que leen `R.Module`: Object.assign/create/gOPDs/gOPD.value —
+  // Auditoría B R5 / U4, cierra #8). Paridad read-vs-construct: la construcción consume el MISMO pass reflexivo
+  // que el member-read. `new (Object.assign(WebAssembly,{}).Module)(b)` resuelve WebAssembly.Module → denegado.
+  const originSets = [
+    { roots: resolveRoots(target.expression, context), members: null },
+  ];
+  for (const rv of reflectiveValueReads(target)) {
+    originSets.push({
+      roots: resolveRoots(rv.receiver, context),
+      members: rv.members,
+    });
+  }
+  for (const { roots, members } of originSets) {
+    const candidates = members
+      ? [...members]
+      : roots.size
+        ? accessedMemberNames(target)
+        : [];
+    // BLOQUEO-A: key INCOMPLETA de un element-access directo (ternario `new WebAssembly[c?'Instance':mm]` con
+    // rama irresoluble) → la construcción FAIL-CIERRA (no renuncia como el read): un ctor desconocido sobre un
+    // root con ctors denegados podría ser el denegado. El subset resoluble ya se comprobó arriba.
+    const incomplete =
+      !members &&
+      ts.isElementAccessExpression(target) &&
+      !keyExprComplete(target.argumentExpression);
+    for (const root of roots) {
+      if (candidates.length > 0) {
+        const m = candidates.find((mm) => isConstructionDeniedMember(root, mm));
+        if (m) return { ctorRoot: root, ctorMember: m, ctorComputedDenied: false };
+      }
+      if (
+        (candidates.length === 0 || incomplete) &&
+        CONSTRUCTION_DENIED_MEMBERS[root] !== undefined
+      ) {
+        return { ctorRoot: root, ctorMember: null, ctorComputedDenied: true };
+      }
+    }
+  }
+  return { ctorRoot: null, ctorMember: null, ctorComputedDenied: false };
+}
+
+/**
+ * resolve para collectStructuralAliases (partial-aliases): SET de roots candidatos, o null si vacío.
+ * collectStructuralAliases usa `if (v) emit(...)`, y un Set vacío es truthy → devolver null para "sin
+ * alias". Un init multi-rama (`const R = b ? crypto : performance`) aliasa AMBOS roots (Auditoría B FIX-2).
+ */
+function resolvePartialRootSet(expr, context) {
+  const s = exprPartialRoots(expr, context);
+  return s.size ? s : null;
+}
+
+/** Mapa aliasName→Set<rootGlobalName> declarados por `stmt` (`const WA = WebAssembly`, `p = performance`). */
+function partialAliasesDeclaredBy(stmt, context) {
+  const out = new Map();
+  const emit = (name, roots) => out.set(name, roots);
+  // import-equals ROOT-alias: `import WA = WebAssembly` (Identifier moduleReference) → WA aliasa el
+  // root parcial. (El `import compile = WA.compile` MIEMBRO lo caza la rama c.1d.) codex P2.
+  if (
+    ts.isImportEqualsDeclaration(stmt) &&
+    !stmt.isTypeOnly &&
+    ts.isIdentifier(stmt.moduleReference)
+  ) {
+    const roots = exprPartialRoots(stmt.moduleReference, context);
+    if (roots.size) out.set(stmt.name.text, roots);
+    return out;
+  }
+  // Un único VariableDeclaration (un declarador suelto, p.ej. desde el walk multi-declarator).
+  if (ts.isVariableDeclaration(stmt)) {
+    collectStructuralAliases(stmt.name, stmt.initializer, context, resolvePartialRootSet, emit, true);
+    eachEmbeddedAssignment(stmt.initializer, (a) =>
+      collectStructuralAliases(a.left, a.right, context, resolvePartialRootSet, emit, true),
+    );
+    return out;
+  }
+  // Acepta un VariableStatement O un VariableDeclarationList directo (el init de un for; codex P2).
+  const declList = ts.isVariableStatement(stmt)
+    ? stmt.declarationList
+    : ts.isVariableDeclarationList(stmt)
+      ? stmt
+      : null;
+  if (declList) {
+    // identifier / array-object-destructure / binding-element-default / `[X][i]` (codex P2).
+    // Declaradores LEFT-TO-RIGHT: cadena en el mismo statement (`const A = WebAssembly, B = A`) —
+    // `B` debe ver `A` ya enrolado (codex P2). Avanzar un ctx local.
+    let ctx = context;
+    for (const d of declList.declarations) {
+      const local = new Map();
+      const addLocal = (n, root) => {
+        local.set(n, root);
+        out.set(n, root);
+      };
+      collectStructuralAliases(d.name, d.initializer, ctx, resolvePartialRootSet, addLocal, true);
+      // Assignments EMBEBIDAS en el initializer (`const _ = (WA = WebAssembly), …`) (codex P2).
+      eachEmbeddedAssignment(d.initializer, (a) =>
+        collectStructuralAliases(a.left, a.right, ctx, resolvePartialRootSet, addLocal, true),
+      );
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopePartialAliases: new Map([
+            ...(ctx.scopePartialAliases ?? []),
+            ...local,
+          ]),
+        };
+      }
+    }
+  } else if (ts.isExpressionStatement(stmt)) {
+    // Assignments TOP-LEVEL (`({WA}={…})`) Y EMBEBIDAS (`(WA = WebAssembly, 0);`) → enrolar para
+    // statements POSTERIORES (codex P2). Mismo eachEmbeddedAssignment del §141; threadea ctx.
+    let ctx = context;
+    eachEmbeddedAssignment(stmt.expression, (assign) => {
+      const local = new Map();
+      collectStructuralAliases(
+        assign.left,
+        assign.right,
+        ctx,
+        resolvePartialRootSet,
+        (n, r) => {
+          local.set(n, r);
+          out.set(n, r);
+        },
+        true,
+      );
+      if (local.size > 0) {
+        ctx = {
+          ...ctx,
+          scopePartialAliases: new Map([
+            ...(ctx.scopePartialAliases ?? []),
+            ...local,
+          ]),
+        };
+      }
+    });
+  }
+  return out;
+}
+
+/** Acumula (scope-aware) en `context.scopePartialAliases` los alias de root parcial-safe de `stmt`. */
+function addPartialAliases(context, stmt) {
+  const m = partialAliasesDeclaredBy(stmt, context);
+  if (m.size === 0) return context;
+  return {
+    ...context,
+    scopePartialAliases: new Map([
+      ...(context.scopePartialAliases ?? []),
+      ...m,
+    ]),
+  };
+}
+
+/**
+ * HOIST de aliases de asignación a bindings EXTERIORES desde los scopes anidados de `stmt` (Auditoría B R5 /
+ * #7, D1-b — enmienda medida de la frontera FIX-2). El tracking base (addPartialAliases / eachEmbeddedAssignment)
+ * YA cubre same-scope y pattern-assign estructural; el gap MEDIDO era la asignación DENTRO de un block/función
+ * anidada a un binding declarado FUERA, usado tras el scope anidado (`let c; { c = performance; } c.elu()` y
+ * `let c; function g(){ c = performance; } g(); c.elu()`). Unión MONOTÓNICA: sin kill-set, orden ni alcanzabilidad
+ * — léxico y sintáctico; orden/camino/llamadas siguen §141. POR-BINDING (criterio de shadowing): un let/const/
+ * param/class/función INTERIOR sombrea → sus asignaciones NO propagan (el interior NO contamina el exterior).
+ * `var` es function-scoped → SÍ propaga. RHS por `exprPartialRoots` (multi-rama gratis; copias {...R}/assign NO
+ * resuelven → renunciadas por medición). member-LHS y pattern-LHS renunciados (solo identifier-LHS). Devuelve
+ * Map<name, Set<root>> de los bindings EXTERIORES enrolados.
+ */
+function hoistNestedAssignmentAliases(stmt, context) {
+  const out = new Map();
+  const emit = (name, roots) => {
+    if (!roots || roots.size === 0) return;
+    const prev = out.get(name);
+    out.set(name, prev ? new Set([...prev, ...roots]) : roots);
+  };
+  const isAliasOp = (k) =>
+    k === ts.SyntaxKind.EqualsToken ||
+    k === ts.SyntaxKind.QuestionQuestionEqualsToken ||
+    k === ts.SyntaxKind.BarBarEqualsToken ||
+    k === ts.SyntaxKind.AmpersandAmpersandEqualsToken;
+  const isFnLike = (n) =>
+    ts.isFunctionDeclaration(n) ||
+    ts.isFunctionExpression(n) ||
+    ts.isArrowFunction(n) ||
+    ts.isMethodDeclaration(n) ||
+    ts.isConstructorDeclaration(n) ||
+    ts.isGetAccessorDeclaration(n) ||
+    ts.isSetAccessorDeclaration(n);
+  // Declaraciones const/structural DIRECTAS de una lista de statements — para DECL-THREADING al descender
+  // (P-DEF-7): un `{ const A = performance; c = A; }` debe resolver `c = A` contra la `A` LOCAL del bloque
+  // (posición-independiente por la misma lógica call-time). Solo declaraciones (VariableStatement/import-equals),
+  // NO assignments (esos son value-flow orden-dependiente = el punto fijo del scope los maneja como ∃).
+  const declAliasesOf = (stmts, ctx) => {
+    const m = new Map();
+    // R7-B / BLOQUEO-B (sibling): PUNTO FIJO while-stable con update por UNIÓN — encadena las declaraciones-alias
+    // DENTRO del bloque/CaseBlock (`const A = performance; const B = A`) resolviendo el RHS contra `ctx ⊕
+    // m-hasta-ahora`. One-pass perdía la cadena intra-bloque (B no veía su propio A → P-DEF-7 solo pineó one-hop).
+    // Monotónico (unión, dominio finito) → termina.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const ectx = m.size ? mergePartialAliases(ctx, m) : ctx;
+      for (const s of stmts) {
+        if (ts.isVariableStatement(s) || ts.isImportEqualsDeclaration(s)) {
+          for (const [n, r] of partialAliasesDeclaredBy(s, ectx)) {
+            const prev = m.get(n);
+            const merged = prev ? new Set([...prev, ...r]) : new Set(r);
+            if (!prev || merged.size !== prev.size) {
+              m.set(n, merged);
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    return m;
+  };
+  // ctx de resolución del scope hijo (BLOQUEO 2): PURGA los nombres redeclarados (sombreados) del alias-map
+  // ANTES de mergear las decls locales. Sin la purga, el RHS de una asignación en el hijo (`c = x`) resolvería
+  // `x` contra el alias EXTERIOR de un homónimo local → FP. Orden purge→merge OBLIGATORIO: mergePartialAliases
+  // es UNIÓN — una decl local homónima (`const x = WebAssembly`) se MEZCLARÍA con el exterior (`x→{perf, WA}`)
+  // en vez de sustituirlo. Aplica en TODA rama que amplía childShadow (Block/CaseBlock/fnLike/for/catch).
+  const descendCtx = (ctx, newNames, decls) => {
+    let base = ctx;
+    if (ctx.scopePartialAliases && newNames.size) {
+      const purged = new Map(ctx.scopePartialAliases);
+      let changed = false;
+      for (const n of newNames) if (purged.delete(n)) changed = true;
+      if (changed) base = { ...ctx, scopePartialAliases: purged };
+    }
+    return decls && decls.size ? mergePartialAliases(base, decls) : base;
+  };
+  const walk = (node, shadowed, ctx) => {
+    if (!node) return;
+    // (1) var-decl con init a un binding NO sombreado (`var` = function-scoped → propaga al scope de función).
+    if (
+      ts.isVariableStatement(node) &&
+      !isBlockScopedDeclList(node.declarationList.flags)
+    ) {
+      for (const d of node.declarationList.declarations) {
+        if (
+          ts.isIdentifier(d.name) &&
+          d.initializer &&
+          !shadowed.has(d.name.text)
+        ) {
+          emit(d.name.text, exprPartialRoots(d.initializer, ctx));
+        }
+      }
+    }
+    // (2) asignación identifier-LHS (=, ??=, ||=, &&=) a un binding NO sombreado. RHS contra `ctx` (enriquecido
+    // con las declaraciones del nivel + el punto fijo del scope) → `c = A`/`c = d` resuelven donde deban.
+    if (
+      ts.isBinaryExpression(node) &&
+      isAliasOp(node.operatorToken.kind) &&
+      ts.isIdentifier(node.left) &&
+      !shadowed.has(node.left.text)
+    ) {
+      emit(node.left.text, exprPartialRoots(node.right, ctx));
+    }
+    // (2b) PATTERN-assign (`[c] = [performance]`, `({ c } = { c: performance })`) — mismo matcher estructural
+    // que la vista forward (partialAliasesDeclaredBy usa resolvePartialRootSet), gateado por shadow. Cierra la
+    // asimetría diferida-vs-same-scope de la frontera pattern-anidado (Auditoría B R5). Solo `=` destructura.
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      (ts.isObjectLiteralExpression(node.left) ||
+        ts.isArrayLiteralExpression(node.left))
+    ) {
+      collectStructuralAliases(
+        node.left,
+        node.right,
+        ctx,
+        resolvePartialRootSet,
+        (name, roots) => {
+          if (!shadowed.has(name)) emit(name, roots);
+        },
+        true,
+      );
+    }
+    // (3) descender, SOMBREANDO los block-scoped del scope anidado (por-binding) + DECL-THREADING + PURGA del
+    // ctx (descendCtx) para los redeclarados — en TODA rama que amplía childShadow.
+    let childShadow = shadowed;
+    let childCtx = ctx;
+    if (ts.isBlock(node) || ts.isModuleBlock(node)) {
+      const newNames = gatherBlockLexicalNames(node.statements);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, declAliasesOf(node.statements, ctx));
+    } else if (ts.isCaseBlock(node)) {
+      // CaseBlock = UN scope léxico compartido por TODAS las clauses (P-SHADOW-CASE): sus let/const sombran el
+      // subtree (un `let c` directo en un `case` es CaseBlock-scoped → su asignación NO fuga al exterior).
+      const allStmts = node.clauses.flatMap((cl) => cl.statements);
+      const newNames = gatherBlockLexicalNames(allStmts);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, declAliasesOf(allStmts, ctx));
+    } else if (isFnLike(node)) {
+      const newNames = new Set();
+      for (const p of node.parameters) addBindingNamesFromPattern(p.name, newNames);
+      if (node.name && ts.isIdentifier(node.name)) newNames.add(node.name.text);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, null);
+    } else if (
+      ts.isForStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isForOfStatement(node)
+    ) {
+      const init = node.initializer;
+      if (
+        init &&
+        ts.isVariableDeclarationList(init) &&
+        isBlockScopedDeclList(init.flags)
+      ) {
+        const newNames = new Set();
+        for (const d of init.declarations) {
+          addBindingNamesFromPattern(d.name, newNames);
+        }
+        childShadow = new Set([...shadowed, ...newNames]);
+        childCtx = descendCtx(ctx, newNames, null);
+      }
+    } else if (ts.isCatchClause(node) && node.variableDeclaration) {
+      const newNames = new Set();
+      addBindingNamesFromPattern(node.variableDeclaration.name, newNames);
+      childShadow = new Set([...shadowed, ...newNames]);
+      childCtx = descendCtx(ctx, newNames, null);
+    }
+    ts.forEachChild(node, (c) => walk(c, childShadow, childCtx));
+  };
+  walk(stmt, new Set(), context);
+  return out;
+}
+
+/** Une (monotónico) el Map<name,Set<root>> `extra` en el scopePartialAliases de `context` (Auditoría B R5 / #7). */
+function mergePartialAliases(context, extra) {
+  if (!extra || extra.size === 0) return context;
+  const merged = new Map(context.scopePartialAliases ?? []);
+  for (const [name, roots] of extra) {
+    const prev = merged.get(name);
+    merged.set(name, prev ? new Set([...prev, ...roots]) : roots);
+  }
+  return { ...context, scopePartialAliases: merged };
+}
+
+/**
+ * VISTA DIFERIDA (Auditoría B R5 / #7, D1-b rama 2): unión FULL-SCOPE de los aliases de asignación de una lista
+ * de statements, resuelta a PUNTO FIJO. Un cuerpo diferido (fn/arrow/método/field-init/param-default) LEE a
+ * call-time → la vista diferida es ∃ SOBRE ÓRDENES DE EJECUCIÓN (la doctrina ∃ del gate en el eje temporal):
+ * `c = d` taintea `c` con TODO lo que `d` pueda llegar a valer. El punto fijo (`ctx = context ⊕ unión-parcial`,
+ * iterar hasta estable; dominio finito de roots → ≤ #stmts pasos) cierra las cadenas por asignación en CUALQUIER
+ * orden, y hace que **INV-VIEW** (`diferida ⊇ forward-fin-de-scope`) se cumpla POR CONSTRUCCIÓN: el punto-fijo-
+ * DESordenado ⊇ cualquier aplicación ordenada = forward-fin. Contrasta con la vista FORWARD (posición-statement:
+ * solo asignaciones anteriores, con PRECISIÓN de orden → preserva read-before-assign SILENT out-of-mandate). El
+ * orden inverso `c = d; d = performance` es forward-SILENT (out-of-mandate) pero diferida-FLAG (∃ órdenes) —
+ * divergencia PERMITIDA porque INV-VIEW es ⊇ unidireccional. Custodia: INV-ORDER + INV-VIEW. Mismo eje que F4.
+ */
+function scopeAssignmentUnion(statements, context) {
+  // ITERAR HASTA ESTABILIDAD (Auditoría B R5 / BLOQUEO 1): `iter <= statements.length` era una COTA FALSA — una
+  // cadena de asignaciones en UN solo statement (`{ f=perf; e=f; …; a=b }`, o condensada por coma) es más larga
+  // que el nº de statements top-level, y salir sin estabilidad devolvía un SUB-punto-fijo en silencio. Termina
+  // por MONOTONICIDAD: `acc` solo crece (ctx crece ⇒ emits ⊇), cada pasada INESTABLE añade ≥1 par (nombre,root),
+  // dominio finito (nombres × roots) ⇒ ≤ longitud-de-cadena+1 pasadas. Cap = # nodos de asignación/decl del
+  // subtree + 1 (cota REAL de la cadena) como cinturón anti-bucle — jamás `statements.length`.
+  let cap = 1;
+  const countAssignNodes = (n) => {
+    if (!n) return;
+    if (
+      (ts.isBinaryExpression(n) && ts.isIdentifier(n.left)) ||
+      (ts.isVariableDeclaration(n) && n.initializer)
+    ) {
+      cap++;
+    }
+    ts.forEachChild(n, countAssignNodes);
+  };
+  for (const s of statements) countAssignNodes(s);
+  let acc = new Map();
+  let stable = false;
+  for (let iter = 0; !stable && iter <= cap; iter++) {
+    const ctx = acc.size ? mergePartialAliases(context, acc) : context;
+    const next = new Map();
+    for (const stmt of statements) {
+      for (const [name, roots] of hoistNestedAssignmentAliases(stmt, ctx)) {
+        const prev = next.get(name);
+        next.set(name, prev ? new Set([...prev, ...roots]) : roots);
+      }
+    }
+    stable = next.size === acc.size;
+    if (stable) {
+      for (const [name, roots] of next) {
+        const prev = acc.get(name);
+        if (
+          !prev ||
+          prev.size !== roots.size ||
+          [...roots].some((r) => !prev.has(r))
+        ) {
+          stable = false;
+          break;
+        }
+      }
+    }
+    acc = next;
+  }
+  return acc;
+}
+
+/**
+ * Purga de `scopeTimerAliases` / `scopePartialAliases` los nombres que `names` REDECLARA en este
+ * scope (param/const/función/…). Un binding homónimo SOMBREA el alias → en este scope ya no es el
+ * global (codex P2: `const later = setTimeout; function f(later){ later("x") }`). Devuelve solo los
+ * campos que cambian (para no romper la igualdad referencial del resto del context).
+ */
+function purgeScopeAliasShadows(context, names) {
+  if (!names || names.size === 0) return null;
+  const out = {};
+  const timers = context.scopeTimerAliases;
+  if (timers && timers.size > 0) {
+    let changed = false;
+    const next = new Set(timers);
+    for (const n of names) if (next.delete(n)) changed = true;
+    if (changed) out.scopeTimerAliases = next;
+  }
+  const partials = context.scopePartialAliases;
+  if (partials && partials.size > 0) {
+    let changed = false;
+    const next = new Map(partials);
+    for (const n of names) if (next.delete(n)) changed = true;
+    if (changed) out.scopePartialAliases = next;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Imports de "react", resueltos por su EXPORT CANÓNICO (no el binding local). Un
+ * deferred-hook se reconoce por el nombre que EXPORTA react, no por el alias local:
+ * `import { useState as useEffect }` tiene binding local "useEffect" ∈ DEFERRED_HOOKS
+ * pero su export es "useState" (render-phase, su lazy-init corre en SSR) → NO deferred
+ * (deep adversarial: alias-spoof bypass). Devuelve { named, namespaces }:
+ *   named: Map<localName, exportName> de named imports (`useEffect`→`useEffect`,
+ *          `useEffect`(alias de useState)→`useState`).
+ *   namespaces: Set<localName> de default (`import React`) + `import * as React`,
+ *          cuyos miembros `React.useEffect` YA son el nombre canónico.
+ *
+ * `mutatedRoots`: la familia react tainteada (si hubo member-write a cualquier alias) → esos
+ * namespaces NO se reconocen como react (su `.useEffect` puede ser síncrono).
+ */
+function gatherReactImports(sourceFile, mutatedRoots) {
+  const named = new Map();
+  const namespaces = new Set();
+  for (const stmt of sourceFile.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue;
+    if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+    if (stmt.moduleSpecifier.text !== "react") continue;
+    const clause = stmt.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    if (clause.name) namespaces.add(clause.name.text); // default import: React
+    const nb = clause.namedBindings;
+    if (!nb) continue;
+    if (ts.isNamespaceImport(nb)) {
+      namespaces.add(nb.name.text); // import * as React
+    } else if (ts.isNamedImports(nb)) {
+      for (const spec of nb.elements) {
+        if (spec.isTypeOnly) continue;
+        const exportName = spec.propertyName ? spec.propertyName.text : spec.name.text;
+        // `import { default as React }` ≡ `import React` — el export `default` de react
+        // ES el objeto-namespace (React.useEffect…). Va a namespaces, no a named (codex
+        // P2: si no, React.useEffect no se reconoce → FP).
+        if (exportName === "default") {
+          namespaces.add(spec.name.text);
+        } else {
+          named.set(spec.name.text, exportName);
+        }
+      }
+    }
+  }
+  // import-equals que aliasan react: `import R = React` (R es namespace si React lo es),
+  // `import ue = React.useEffect` (ue→"useEffect" si React es namespace). Fixpoint para
+  // cadenas (`import R = React; import ue = R.useEffect`). Sound: solo resuelve contra
+  // react YA reconocido; un alias-spoof `import ue = React.useState` mapea al canónico
+  // "useState" (render-phase → NO deferred). deepest re-hunt #173 (import-alias).
+  // SOLO TOP-LEVEL (sourceFile.statements). La recursión a cuerpos de función/namespace era
+  // INSEGURA (codex P1): un `const { useEffect } = React` en `helper` registraría useEffect
+  // file-global, y un `useEffect` de OTRO scope —importado de un módulo no-react (`./sync`,
+  // que NO está en nonImportBindings → el shadow-guard NO dispara)— se eximiría como hook
+  // diferido aunque corra síncrono = BYPASS. La resolución de alias react NO puede ser
+  // file-global; un alias en scope hermano no aplica. El destructure/alias TOP-LEVEL (caso
+  // COMÚN) se reconoce aquí (sound: top-level ES el scope externo). El NESTED lo cierra
+  // `addReactAliases` SCOPE-AWARE (acumulado posicionalmente en context.scopeReactNs/Named
+  // durante el walk, vive solo en su scope → no filtra a hermanos) — NO aquí.
+  // Fixpoint para cadenas (`const R = React; const { ue } = R`; `import R = React; import ue =
+  // R.useEffect`). Usa el MISMO núcleo `reactAliasesDeclaredBy` que el path scope-aware → const-only
+  // (un top-level `let ue = React.useEffect` reasignable NO se registra, codex P1), element-access,
+  // computed-literal y rest-de-namespace tratados idénticos aquí. SOLO TOP-LEVEL (sound: top-level ES
+  // el scope externo); el NESTED lo cierra `addReactAliases` scope-aware (no filtra a hermanos).
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const stmt of sourceFile.statements) {
+      const { ns: aliasNs, named: aliasNamed } = reactAliasesDeclaredBy(stmt, {
+        reactImports: { named, namespaces },
+        mutatedNamespaceRoots: mutatedRoots,
+      });
+      for (const n of aliasNs) {
+        if (!namespaces.has(n)) {
+          namespaces.add(n);
+          changed = true;
+        }
+      }
+      for (const [local, canon] of aliasNamed) {
+        if (named.get(local) !== canon) {
+          named.set(local, canon);
+          changed = true;
+        }
+      }
+    }
+  }
+  return { named, namespaces };
 }
 
 /**
@@ -799,20 +3477,28 @@ function gatherModulePreloadedBindings(sourceFile) {
   const nonImports = new Set();
   for (const stmt of sourceFile.statements) {
     if (ts.isImportDeclaration(stmt)) {
-      const importClause = stmt.importClause;
-      if (importClause) {
-        if (importClause.name) all.add(importClause.name.text);
-        const namedBindings = importClause.namedBindings;
-        if (namedBindings) {
-          if (ts.isNamespaceImport(namedBindings)) {
-            all.add(namedBindings.name.text);
-          } else if (ts.isNamedImports(namedBindings)) {
-            for (const spec of namedBindings.elements) {
-              all.add(spec.name.text);
-            }
-          }
-        }
-      }
+      addRuntimeImportBindings(stmt.importClause, all);
+      continue;
+    }
+    // `enum E {}` / `namespace NS {}` value-producing a nivel de módulo: su
+    // binding es referenciable desde cualquier render body (inicializado en
+    // module-eval). `enum` emite; `namespace` SOLO si está instanciado — un
+    // namespace type-only/vacío se elide y NO debe sombrear (mismo predicado
+    // central que extractPostStatementBindings). beta.27 BLOCKER-1.
+    if (
+      (ts.isEnumDeclaration(stmt) || ts.isModuleDeclaration(stmt)) &&
+      stmt.name &&
+      ts.isIdentifier(stmt.name) &&
+      producesRuntimeValue(stmt)
+    ) {
+      all.add(stmt.name.text);
+      continue;
+    }
+    // `import X = NS.Y` / `import X = require("y")` (TS import-equals): emite un
+    // binding runtime `X` SOLO si el RHS produce valor — un alias a un miembro-TIPO
+    // same-file se borra y NO debe sombrear (mismo predicado central; re-hunt B4).
+    if (ts.isImportEqualsDeclaration(stmt) && producesRuntimeValue(stmt)) {
+      all.add(stmt.name.text);
       continue;
     }
     const captured = new Set();
@@ -826,34 +3512,216 @@ function gatherModulePreloadedBindings(sourceFile) {
 }
 
 /**
- * Si la expresión es `typeof <ident> !== "undefined"` (o `!=`), donde
- * `<ident>` es un client global, devuelve el nombre. Si no, null.
+ * Clasifica un typeof-guard de EXISTENCIA: `{ name, presentWhenTrue }` o null.
+ * `presentWhenTrue` = el identificador está DEFINIDO cuando la expresión es true
+ * (positivo) o cuando es false (negativo). Único predicado para todas las formas de
+ * comparación + negación (re-hunt F1/F2). Soundness de existencia:
+ *   typeof X !== "undefined"        → present cuando TRUE   (positivo)
+ *   typeof X === "undefined"        → present cuando FALSE  (negativo)
+ *   typeof X === S  (S≠"undefined") → present cuando TRUE   (si fuera undefined no sería S)
+ *   typeof X !== S  (S≠"undefined") → present cuando FALSE  (false ⇒ typeof===S≠undefined)
+ *   !(expr)                         → invierte presentWhenTrue
+ * Acepta `==`/`!=` (typeof siempre da string). MANTIENE las exclusiones SAFE (irrelevante)
+ * y NON_ABSENCE_DENIALS (un guard sobre eval/Function/globalThis/global/self/setImmediate
+ * es vacuo en Edge → reconocerlo suprimiría la detección — load-bearing, no tocar).
  */
-function extractPositiveTypeofGuard(expr) {
+function classifyTypeofGuard(expr, guardAliases) {
+  // Desenvolver wrappers RUNTIME-TRANSPARENTES de TODA la expresión-guard:
+  // `(G)`, `(G) as boolean`, `(G)!`, `(G satisfies …)`, `<T>(G)` narrowean
+  // idéntico a G en runtime (el cast se borra). Antes solo se desenvolvía el
+  // paréntesis → `(typeof window !== "undefined") as boolean` no se reconocía
+  // (FP, asimetría con el unwrap de operandos en L1251/1258). isErasedOuterExpr
+  // NO incluye el `!` LÓGICO (PrefixUnary) — ese SÍ flipea presentWhenTrue y se
+  // maneja justo debajo; solo el `!` NonNull (postfijo) es erased.
+  expr = unwrapErased(expr);
+  if (
+    ts.isPrefixUnaryExpression(expr) &&
+    expr.operator === ts.SyntaxKind.ExclamationToken
+  ) {
+    const inner = classifyTypeofGuard(expr.operand, guardAliases);
+    return inner ? { name: inner.name, presentWhenTrue: !inner.presentWhenTrue } : null;
+  }
+  // Alias booleano de un guard: `const has = typeof X !== "undefined"; … has ? X : …`.
+  // guardAliases mapea el nombre del const (SOLO const, inmutable) a la clasificación
+  // de su initializer; se construye en visitOrderedStatements y solo contiene guards
+  // REALES (NON_ABSENCE_DENIALS/SAFE ya excluidos al clasificar el initializer).
+  // deepest re-hunt #173 (boolean-alias-typeof-guard).
+  if (guardAliases && ts.isIdentifier(expr) && guardAliases.has(expr.text)) {
+    return guardAliases.get(expr.text);
+  }
   if (!ts.isBinaryExpression(expr)) return null;
   const op = expr.operatorToken.kind;
-  // Solo formas positivas: !== y !=. El negativo (=== / ==) NO es guard.
-  if (
-    op !== ts.SyntaxKind.ExclamationEqualsEqualsToken &&
-    op !== ts.SyntaxKind.ExclamationEqualsToken
-  ) {
-    return null;
-  }
-  // Permitir orden: `typeof X !== "undefined"` O `"undefined" !== typeof X`.
-  const candidates = [
+  const isEq =
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsToken;
+  const isNeq =
+    op === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+    op === ts.SyntaxKind.ExclamationEqualsToken;
+  if (!isEq && !isNeq) return null;
+  for (const cand of [
     { typeofExpr: expr.left, stringExpr: expr.right },
     { typeofExpr: expr.right, stringExpr: expr.left },
-  ];
-  for (const { typeofExpr, stringExpr } of candidates) {
+  ]) {
+    // Ambos lados pueden venir en wrappers erased: `(typeof window) !== ("undefined")`,
+    // `(typeof window as string) !== …` ≡ `typeof window !== …` (runtime-transparente,
+    // tsc lo narrowea). Desenvolver antes del check (deep adversarial FP).
+    let typeofExpr = cand.typeofExpr;
+    while (typeofExpr && isErasedOuterExpr(typeofExpr)) typeofExpr = typeofExpr.expression;
+    let stringExpr = cand.stringExpr;
+    while (stringExpr && isErasedOuterExpr(stringExpr)) stringExpr = stringExpr.expression;
     if (!ts.isTypeOfExpression(typeofExpr)) continue;
-    const operand = typeofExpr.expression;
+    // El operando puede venir en wrappers runtime-transparentes: `typeof (window)`,
+    // `typeof (window as any)` ≡ `typeof window` (re-hunt FP paren-operand).
+    let operand = typeofExpr.expression;
+    while (operand && isErasedOuterExpr(operand)) operand = operand.expression;
     if (!ts.isIdentifier(operand)) continue;
-    if (!CLIENT_GLOBALS.has(operand.text)) continue;
-    if (!ts.isStringLiteral(stringExpr)) continue;
-    if (stringExpr.text !== "undefined") continue;
-    return operand.text;
+    if (SAFE_GLOBALS.has(operand.text)) continue;
+    if (NON_ABSENCE_DENIALS.has(operand.text)) continue;
+    // El lado string puede ser StringLiteral, template SIN sustitución (`` `undefined` ``)
+    // O template CON sustituciones CONSTANTES (`` `${"undefined"}` `` → "undefined"):
+    // runtime-idénticos. foldConstString los folda todos (deepest re-hunt #173:
+    // typeof-guard-template-substitution). Un template con sustitución dinámica → undefined.
+    const stringValue = foldConstString(stringExpr);
+    if (stringValue === undefined) continue;
+    const isUndefined = stringValue === "undefined";
+    // undefined: presente cuando !==; otro tipo: presente cuando ===.
+    const presentWhenTrue = isUndefined ? isNeq : isEq;
+    return { name: operand.text, presentWhenTrue };
   }
   return null;
+}
+
+/** Nombre con guard que prueba PRESENCIA cuando la expresión es TRUE (positivo), o null. */
+function extractPositiveTypeofGuard(expr, guardAliases) {
+  const c = classifyTypeofGuard(expr, guardAliases);
+  return c && c.presentWhenTrue ? c.name : null;
+}
+
+/** Nombre con guard que prueba PRESENCIA cuando la expresión es FALSE (negativo), o null. */
+function extractNegativeTypeofGuard(expr, guardAliases) {
+  const c = classifyTypeofGuard(expr, guardAliases);
+  return c && !c.presentWhenTrue ? c.name : null;
+}
+
+/**
+ * Nombres con typeof-guard POSITIVO garantizados definidos a la DERECHA de un `&&`
+ * (y en el whenTrue de un ternario): `typeof a !== "undefined" && typeof b !==
+ * "undefined" && <aquí>`. Chain-aware (recurre por `&&`/parens). CONSERVADOR: NO
+ * recurre por `||` — `(typeof a !== "undefined" || foo) && <aquí>` NO garantiza `a`.
+ * Sobre-añadir un guard suprimiría un read real (bypass), por eso solo lo PROVADO.
+ * Reusa `extractPositiveTypeofGuard` (mismo predicado que el if-guard, hereda la
+ * exclusión SAFE + NON_ABSENCE_DENIALS). beta.27 BLOCKER-1 (re-hunt: guard por expr).
+ */
+function collectConjunctionGuards(expr, out, guardAliases) {
+  const g = extractPositiveTypeofGuard(expr, guardAliases);
+  if (g !== null) {
+    out.add(g);
+    return;
+  }
+  if (ts.isParenthesizedExpression(expr)) {
+    collectConjunctionGuards(expr.expression, out, guardAliases);
+    return;
+  }
+  if (
+    ts.isBinaryExpression(expr) &&
+    expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+  ) {
+    collectConjunctionGuards(expr.left, out, guardAliases);
+    collectConjunctionGuards(expr.right, out, guardAliases);
+  }
+}
+
+/**
+ * Análogo para `||` con guards NEGATIVOS (y el whenFalse de un ternario): a la
+ * derecha de `typeof a === "undefined" || typeof b === "undefined" || <aquí>`,
+ * todos los a/b están definidos (la disyunción es falsa). Chain-aware por `||`.
+ */
+function collectDisjunctionGuards(expr, out, guardAliases) {
+  const g = extractNegativeTypeofGuard(expr, guardAliases);
+  if (g !== null) {
+    out.add(g);
+    return;
+  }
+  if (ts.isParenthesizedExpression(expr)) {
+    collectDisjunctionGuards(expr.expression, out, guardAliases);
+    return;
+  }
+  if (
+    ts.isBinaryExpression(expr) &&
+    expr.operatorToken.kind === ts.SyntaxKind.BarBarToken
+  ) {
+    collectDisjunctionGuards(expr.left, out, guardAliases);
+    collectDisjunctionGuards(expr.right, out, guardAliases);
+  }
+}
+
+/**
+ * Si `stmt` es `const X = <typeof-guard>` (UN solo declarator, nombre identificador,
+ * inicializador clasificable como guard de existencia), devuelve `[X, classification]`
+ * para registrarlo como alias booleano del guard; si no, null. SOLO `const` (inmutable
+ * — un `let`/`var` reasignable haría el alias unsound → bypass). El initializer se
+ * clasifica con el guardAliases vigente (permite `const b = a` si `a` ya es alias).
+ * deepest re-hunt #173 (boolean-alias-typeof-guard).
+ */
+function extractConstGuardAlias(stmt, guardAliases) {
+  if (!ts.isVariableStatement(stmt)) return null;
+  const list = stmt.declarationList;
+  if ((list.flags & ts.NodeFlags.Const) === 0) return null;
+  if (list.declarations.length !== 1) return null;
+  const decl = list.declarations[0];
+  if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+  const c = classifyTypeofGuard(decl.initializer, guardAliases);
+  return c ? [decl.name.text, c] : null;
+}
+
+/**
+ * `true` si `stmt` completa SIEMPRE de forma abrupta (return/throw/break/
+ * continue), de modo que el control NO cae a los statements posteriores. Para
+ * un Block, mira el último statement (simplificación conservadora: no analiza
+ * todos los paths, pero el caso idiomático `{ return null; }` se cubre).
+ */
+function statementAlwaysExits(stmt) {
+  if (!stmt) return false;
+  if (
+    ts.isReturnStatement(stmt) ||
+    ts.isThrowStatement(stmt) ||
+    ts.isBreakStatement(stmt) ||
+    ts.isContinueStatement(stmt)
+  ) {
+    return true;
+  }
+  if (ts.isBlock(stmt) && stmt.statements.length > 0) {
+    return statementAlwaysExits(stmt.statements[stmt.statements.length - 1]);
+  }
+  // if/else donde AMBAS ramas salen siempre → el control no cae (re-hunt FP6).
+  if (ts.isIfStatement(stmt) && stmt.elseStatement) {
+    return (
+      statementAlwaysExits(stmt.thenStatement) &&
+      statementAlwaysExits(stmt.elseStatement)
+    );
+  }
+  return false;
+}
+
+/**
+ * Narrowing por EARLY-RETURN: `if (typeof X === "undefined") return null;`
+ * (sin else, then-branch que sale abrupto) implica que TRAS el `if`, X existe
+ * → acceso a X es safe en los statements posteriores del mismo bloque. Es el
+ * idioma React/SSR dominante (equivalente al narrowing de TS/ESLint). Devuelve
+ * el nombre guardado o null. beta.27 BLOCKER-1 (workflow honest-construct).
+ */
+function extractNegativeEarlyReturnGuards(stmt, guardAliases) {
+  if (!ts.isIfStatement(stmt) || stmt.elseStatement) return new Set();
+  // `||` de guards negativos: `if (typeof a === "undefined" || typeof b ===
+  // "undefined") return` → tras el return AMBOS están definidos (la disyunción
+  // es falsa) (re-hunt FP5). Reusa collectDisjunctionGuards (chain-aware).
+  // guardAliases hila el alias booleano (`const noWin = typeof X === "undefined";
+  // if (noWin) return; X`) — antes faltaba aquí → FP (codex P2, 3ª ronda).
+  const names = new Set();
+  collectDisjunctionGuards(stmt.expression, names, guardAliases);
+  if (names.size === 0) return names;
+  if (!statementAlwaysExits(stmt.thenStatement)) return new Set();
+  return names;
 }
 
 /**
@@ -870,7 +3738,3674 @@ function extractPositiveTypeofGuard(expr) {
  * `obj.window`, `function fn(window) {}`, `typeof window` NO leen el
  * binding global — son safe.
  */
-function isNonReferencePosition(node) {
+/**
+ * `true` si `node` es un member access cuyo nombre accedido es
+ * `constructor` — property access (`x.constructor`) o element access con
+ * string literal (`x["constructor"]`). Usado para cazar el escape al
+ * Function constructor (`x.constructor.constructor("code")()`,
+ * `f.constructor("code")`) cuando la base NO es un identificador denegado.
+ * beta.27 BLOCKER-1 (cruce A+B, FN-hunt).
+ */
+/**
+ * Nombre del miembro accedido, sea punto (`x.foo` → "foo") o bracket con string
+ * literal (`x["foo"]` → "foo"). `undefined` si no es member access o la key no es
+ * un string literal (computed dinámico). Unifica ambas formas para que ningún
+ * check de nombre de método tenga asimetría punto-vs-bracket (codex P2: el
+ * eval-sink escapaba por `x.constructor["call"]`). beta.27 BLOCKER-1.
+ */
+function accessedMemberName(node) {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (ts.isElementAccessExpression(node)) {
+    // La key se resuelve por las MISMAS hojas value-transparentes que la base
+    // (`valueTransparentLeaves`) — no solo coma/erased: `x.constructor[1 && "call"]`
+    // reduce su key a "call" igual que `(0,"call")`. Antes la key solo desenvolvía
+    // erased+coma mientras la base seguía &&/||/??/ternario → asimetría base-vs-key
+    // por la que escapaba `({})["constructor"][1 && "constructor"](…)` (re-hunt B1).
+    // Fail-closed: si ALGUNA hoja es un nombre weaponizable, ese gana (la key PUEDE
+    // resolverse a él aunque otra rama no). Una key `[k]` (variable) es su propia hoja
+    // no-literal → undefined → residual data-flow (#3); `[k || "x"]` con "x" benigno
+    // tampoco da weaponizable → sigue residual.
+    const leaves = valueTransparentLeaves(node.argumentExpression);
+    // foldConstString resuelve SOLO un string-literal único por hoja (frontera
+    // token-unidad-vs-ensamblado, §141): `["constructor"]`, `` [`constructor`] `` y los
+    // wrappers value-transparentes (`[1 && "constructor"]`, `[(0,"constructor")]`) se cazan;
+    // CUALQUIER key ENSAMBLADA (`["construc"+"tor"]`, `` [`cons${"tructor"}`] ``,
+    // `[String.fromCharCode(…)]`, `[k]` variable) → undefined → residual por diseño.
+    const literals = leaves
+      .map(foldConstString)
+      .filter((s) => s !== undefined);
+    const weaponizable = literals.find(
+      (t) => t === "constructor" || t === "call" || t === "apply" || t === "bind",
+    );
+    if (weaponizable !== undefined) return weaponizable;
+    // Forma simple `x["foo"]` (hoja única literal) → ese nombre.
+    if (leaves.length === 1 && literals.length === 1) return literals[0];
+  }
+  return undefined;
+}
+
+// TODAS las candidatas del member-name accedido — incluye ALTERNATIVAS de una key computada
+// (`WebAssembly[c ? "compile" : "validate"]` → ["compile","validate"]); fail-closed, cualquiera
+// cuenta para el chequeo partial-member (codex P2). `accessedMemberName` (singular) prioriza el
+// weaponizable para el eval-sink; ésta enumera para el set partial.
+function accessedMemberNames(node) {
+  if (ts.isPropertyAccessExpression(node)) return [node.name.text];
+  if (ts.isElementAccessExpression(node)) {
+    // Devuelve el SUBSET resoluble de member-names (las hojas VT que foldean). Las irresolubles se DROPEAN aquí
+    // — pero el caller NO debe confiar solo en el subset: R7-A / BLOQUEO-A. Un ternario `x[c ? 'now' : dyn]`
+    // (dyn = const-string-alias a un denegado) → subset `['now']`; la rama irresoluble la decide el caller vía
+    // `keyExprComplete` + la POLARIDAD del root (allowlist → fail-closed; denylist → renunciado). La forma es
+    // `deny ⟺ ∃(subset ∩ denegados) ∨ (incompleto ∧ polaridad-fail-closed)`. El subset SIEMPRE se comprueba
+    // (por eso NO devolver []: eso tiraba la mitad ∃ y regresaba `WebAssembly[c?'compile':m]` a SILENT).
+    return valueTransparentLeaves(node.argumentExpression)
+      .map(foldConstString)
+      .filter((s) => s !== undefined);
+  }
+  return [];
+}
+
+// ¿el selector de un member-access está completamente resuelto? Dot siempre; bracket solo si TODAS sus
+// hojas VT son literal-string/numéricas. Gemelo estructural de `keyExprComplete`, centralizado para los
+// idiomas reflexivos que reciben el member-access completo en vez de la key aislada. R13 gap#3.
+function accessedMemberKeyComplete(node) {
+  return (
+    ts.isPropertyAccessExpression(node) ||
+    (ts.isElementAccessExpression(node) &&
+      keyExprComplete(node.argumentExpression))
+  );
+}
+
+/**
+ * Valor string CONSTANTE de un nodo si es foldeable en compile-time: StringLiteral,
+ * NoSubstitutionTemplate, o TemplateExpression cuyas sustituciones son TODAS strings
+ * constantes (recursivo). Desenvuelve wrappers erased. `` `cal${"l"}` `` → "call".
+ * Cierra el bypass eval-sink por template-substitution en el selector — el gate ya
+ * cazaba `["call"]`, `` [`call`] ``, `[(0,"call")]`; solo la sustitución escapaba
+ * `valueTransparentLeaves` (deepest re-hunt #173). undefined si alguna parte NO es
+ * constante (→ residual data-flow, como `[k]`).
+ */
+function foldConstString(node) {
+  node = unwrapErased(node);
+  if (ts.isStringLiteralLike(node)) return node.text;
+  // FRONTERA token-unidad-vs-ENSAMBLADO (ADR §141, eje del eval-sink). SOLO se resuelve
+  // una key que sea un string-literal ÚNICO — `StringLiteral` o template SIN sustitución
+  // (`` `constructor` ``); ambos son `isStringLiteralLike`. Los wrappers value-transparentes
+  // (`(0,"x")`, `("x")`, `"x" as T`, `1 && "x"`, ternario-literal) los desenvuelve antes
+  // `valueTransparentLeaves`, así que el token ENVUELTO sigue cazándose (B1).
+  //
+  // CUALQUIER ENSAMBLAJE del token queda SIN RESOLVER → residual POR DISEÑO:
+  //   - concat:           `["construc" + "tor"]`
+  //   - sustitución tmpl: `` [`cons${"tructor"}`] ``
+  //   - intrínsecos:      `[String.fromCharCode(99,…)]`, `[[".."].join("")]`, `[".".slice()]`
+  //   - indirección:      `const k = "constructor"; [k]` (data-flow)
+  //
+  // Foldear un SUBCONJUNTO del ensamblaje (lo hacían el `+`-concat —CLASE B 4924427— y la
+  // sustitución de template) era FALSA COMPLETITUD, exactamente lo que el §141 (ratificado)
+  // rechaza: cazaba 1-de-∞ escrituras equivalentes (el ternario-concat `"cons"+(true?"tructor":"")`
+  // y fromCharCode se escapaban igual → verificado), daba falsa confianza ("manejamos
+  // string-building" = mentira), y bajo el modelo opt-in-first-party NINGÚN autor honesto
+  // ensambla el token sin querer (todo ensamblaje es deliberado = el no-adversario descartado).
+  // Revertir ambos folds hace VERDADERA la afirmación de la frontera ("cazo el token en su
+  // sitio como unidad; ensamblaje e indirección son residual") y reduce la superficie de FP
+  // (§184). La alternativa "folder TODO inline-constante" (fromCharCode/join/slice/…) es el
+  // mismo 1-de-∞ sin cierre + reimplementar el evaluador de constantes. Línea = ¿el token está
+  // presente como UNIDAD (literal/member), o ARMADO de piezas? — sintáctica, sin folder ni
+  // call-graph. deepest final hunt #173.
+  return undefined;
+}
+
+// KEY DE PROPIEDAD JS de una EXPRESIÓN-LITERAL-NUMÉRICA, FIEL a ToPropertyKey (Fable cross-review 3): en
+// runtime `obj[<literal-num>]` selecciona la clave `String(<valor>)`. Se reproduce ESA operación exacta —
+// `String(Number(text))` para NumericLiteral (fiel: "0.5", "1e+21", "Infinity"), `String(BigInt(...))` para
+// BigIntLiteral (fiel >2^53 donde Number redondea), y PrefixUnary(+/-) sobre esos. SIN filtro entero/n>=0:
+// esa restricción es del CONSUMIDOR (array-index solo acepta enteros en rango), NO de esta capa — mezclarlas
+// fue el bug de layering de #8 (`({"-1":X})[-1]` y `({"0.5":X})[0.5]` son keys de objeto perfectamente
+// decidibles). `+<bigint>` LANZA en runtime (ToNumber de BigInt) → nunca selecciona → residual seguro (null).
+// Devuelve la key string, o null si no es una expresión-literal-numérica decidible.
+function canonicalNumericKey(node) {
+  const u = unwrapErased(node);
+  if (ts.isNumericLiteral(u)) return String(Number(u.text));
+  if (ts.isBigIntLiteral(u)) {
+    return String(BigInt(u.text.slice(0, -1).replace(/_/g, "")));
+  }
+  if (
+    ts.isPrefixUnaryExpression(u) &&
+    (u.operator === ts.SyntaxKind.PlusToken ||
+      u.operator === ts.SyntaxKind.MinusToken)
+  ) {
+    const inner = unwrapErased(u.operand);
+    const sign = u.operator === ts.SyntaxKind.MinusToken ? -1 : 1;
+    if (ts.isNumericLiteral(inner)) return String(sign * Number(inner.text));
+    if (ts.isBigIntLiteral(inner)) {
+      if (sign === 1) return null; // `+<bigint>` lanza TypeError → residual
+      return String(-BigInt(inner.text.slice(0, -1).replace(/_/g, "")));
+    }
+  }
+  return null;
+}
+
+// INV-VT (Fable cross-review 2): helper CENTRALIZADO de resolución de índice/key/selector. TODA
+// resolución de key en el gate rutea por aquí — NUNCA `isNumericLiteral(unwrapErased(...))` ni `.text`
+// crudo. Devuelve el Set de KEYS canónicas a las que `argExpr` puede VT-foldar: string-literals
+// (`foldConstString`: unidad + erased + VT ternario/coma/`&&`/`||`) ∪ enteros canonicalizados
+// (`canonicalNumericKey`). Key VARIABLE/ENSAMBLADA → hoja no-foldable → sin candidata → §141 (paridad
+// `R[dynKey]`). Múltiples hojas VT (`c?"a":"b"`) → múltiples candidatas; el consumidor cuantifica la
+// polaridad (∃-deny para rutas denegación; ∀-safe para allowlist — vía `partialMemberDenied` que ya
+// codifica la polaridad por-root).
+function resolveKeyCandidates(argExpr) {
+  const out = new Set();
+  if (!argExpr) return out;
+  for (const leaf of valueTransparentLeaves(argExpr)) {
+    const s = foldConstString(leaf);
+    if (s !== undefined) out.add(s);
+    const n = canonicalNumericKey(leaf);
+    if (n !== null) out.add(n);
+  }
+  return out;
+}
+
+// ¿la key resuelve COMPLETAMENTE (TODAS las hojas VT foldean a string/numérico)? false si alguna es irresoluble
+// (variable/ensamblada). Contextos ∃-DENY (Reflect.get, defineProperty) deben tratar una key INCOMPLETA como
+// conservadora (members VACÍO → fail-closed sobre root allowlist), NO confiar en el subconjunto foldeado — una
+// rama safe en un ternario `c ? 'now' : dyn` taparía la irresoluble (R7-A). El def-side (propNameCanonical) NO
+// lo usa: allí el subconjunto foldeado es preciso (matchea una key específica del literal).
+function keyExprComplete(argExpr) {
+  if (!argExpr) return true;
+  return valueTransparentLeaves(argExpr).every(
+    (l) => foldConstString(l) !== undefined || canonicalNumericKey(l) !== null,
+  );
+}
+
+// ¿el VALOR de `child` puede llegar intacto al consumidor de `parent`? Compartido por la inspección del
+// resultado de sondas optional y value-fallback. En `||`/`??` el operando izquierdo queda rescatado por el
+// derecho; el derecho sí llega. En `&&` cualquiera puede ser el resultado. R13 gap#5 centraliza la simetría.
+function resultCrossesToConsumer(parent, child) {
+  if (isErasedOuterExpr(parent)) return true;
+  if (ts.isBinaryExpression(parent)) {
+    const op = parent.operatorToken.kind;
+    if (
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+    ) {
+      return true;
+    }
+    if (
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
+    ) {
+      return parent.right === child;
+    }
+  }
+  return valueTransparentChildren(parent).includes(child);
+}
+
+function stableValueDeclarations(sourceFile, name) {
+  const out = [];
+  let unstableBinding = false;
+  const bindsName = (binding) => {
+    const names = new Set();
+    addBindingNamesFromPattern(binding, names);
+    return names.has(name);
+  };
+  const visit = (node) => {
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+      node.name?.text === name
+    ) {
+      out.push(node);
+    } else if (ts.isVariableDeclaration(node) && bindsName(node.name)) {
+      if (
+        ts.isIdentifier(node.name) &&
+        node.name.text === name &&
+        node.initializer &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.Const) !== 0
+      ) {
+        out.push(node.initializer);
+      } else {
+        // let/var, catch binding o destructuring: no hay un valor const demostrable.
+        unstableBinding = true;
+      }
+    } else if (ts.isParameter(node) && bindsName(node.name)) {
+      unstableBinding = true;
+    } else if (ts.isImportDeclaration(node)) {
+      const imports = new Set();
+      addRuntimeImportBindings(node.importClause, imports);
+      if (imports.has(name)) unstableBinding = true;
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name
+    ) {
+      unstableBinding = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  // La prueba es intencionadamente más estrecha que un resolver de scopes: cualquier binding homónimo no
+  // demostrable invalida el alias. Puede over-flagear, pero nunca convierte un parámetro/let sombreante en
+  // "callable" por haber visto un const homónimo en otro scope.
+  return unstableBinding ? [] : out;
+}
+
+function everyStableValue(expr, sourceFile, predicate, seen = new Set()) {
+  const leaves = valueTransparentLeaves(expr).map(unwrapErased);
+  if (leaves.length === 0) return false;
+  return leaves.every((leaf) => {
+    if (!ts.isIdentifier(leaf)) return predicate(leaf, seen);
+    if (seen.has(leaf.text)) return false;
+    const declarations = stableValueDeclarations(sourceFile, leaf.text);
+    if (declarations.length === 0) return false;
+    const nextSeen = new Set([...seen, leaf.text]);
+    return declarations.every((decl) =>
+      ts.isFunctionDeclaration(decl) || ts.isClassDeclaration(decl)
+        ? predicate(decl, nextSeen)
+        : everyStableValue(decl, sourceFile, predicate, nextSeen),
+    );
+  });
+}
+
+function valueProvablyCallable(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) =>
+    ts.isArrowFunction(leaf) ||
+    ts.isFunctionExpression(leaf) ||
+    ts.isFunctionDeclaration(leaf),
+  );
+}
+
+function valueProvablyConstructible(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) =>
+    ts.isFunctionExpression(leaf) ||
+    ts.isFunctionDeclaration(leaf) ||
+    ts.isClassExpression(leaf) ||
+    ts.isClassDeclaration(leaf),
+  );
+}
+
+function valueProvablyNonNullish(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) => {
+    if (
+      ts.isArrowFunction(leaf) ||
+      ts.isFunctionExpression(leaf) ||
+      ts.isFunctionDeclaration(leaf) ||
+      ts.isClassExpression(leaf) ||
+      ts.isClassDeclaration(leaf) ||
+      ts.isObjectLiteralExpression(leaf) ||
+      ts.isArrayLiteralExpression(leaf) ||
+      ts.isNewExpression(leaf) ||
+      ts.isStringLiteralLike(leaf) ||
+      ts.isNumericLiteral(leaf) ||
+      ts.isBigIntLiteral(leaf)
+    ) {
+      return true;
+    }
+    return (
+      leaf.kind === ts.SyntaxKind.TrueKeyword ||
+      leaf.kind === ts.SyntaxKind.FalseKeyword
+    );
+  });
+}
+
+function valueProvablyIterable(expr, sourceFile) {
+  return everyStableValue(expr, sourceFile, (leaf) => {
+    if (ts.isArrayLiteralExpression(leaf) || ts.isStringLiteralLike(leaf)) {
+      return true;
+    }
+    if (ts.isNewExpression(leaf)) {
+      const ctor = unwrapErased(leaf.expression);
+      return ts.isIdentifier(ctor) && (ctor.text === "Map" || ctor.text === "Set");
+    }
+    return false;
+  });
+}
+
+// ¿el fallback garantiza que el consumidor concreto no crashea cuando el miembro parcial está ausente?
+// No intenta probar expresiones arbitrarias: solo literales/funciones y aliases const-estables; lo demás
+// degrada fail-closed. Un consumidor opcional (`?.`) se rescata por sí mismo.
+function fallbackProtectsConsumer(fallback, consumer, result, sourceFile) {
+  if (!consumer) return true;
+  if (
+    (ts.isCallExpression(consumer) ||
+      ts.isPropertyAccessExpression(consumer) ||
+      ts.isElementAccessExpression(consumer)) &&
+    consumer.expression === result
+  ) {
+    if (consumer.questionDotToken !== undefined) return true;
+    return ts.isCallExpression(consumer)
+      ? valueProvablyCallable(fallback, sourceFile)
+      : valueProvablyNonNullish(fallback, sourceFile);
+  }
+  if (ts.isTaggedTemplateExpression(consumer) && consumer.tag === result) {
+    return valueProvablyCallable(fallback, sourceFile);
+  }
+  if (ts.isNewExpression(consumer) && consumer.expression === result) {
+    return valueProvablyConstructible(fallback, sourceFile);
+  }
+  if (
+    (ts.isVariableDeclaration(consumer) ||
+      ts.isBindingElement(consumer) ||
+      ts.isParameter(consumer)) &&
+    consumer.initializer === result
+  ) {
+    if (ts.isObjectBindingPattern(consumer.name)) {
+      return valueProvablyNonNullish(fallback, sourceFile);
+    }
+    if (ts.isArrayBindingPattern(consumer.name)) {
+      return valueProvablyIterable(fallback, sourceFile);
+    }
+  }
+  if (ts.isSpreadElement(consumer) && consumer.expression === result) {
+    return valueProvablyIterable(fallback, sourceFile);
+  }
+  if (ts.isForOfStatement(consumer) && consumer.expression === result) {
+    return valueProvablyIterable(fallback, sourceFile);
+  }
+  return true;
+}
+
+function isConstructorMemberAccess(node) {
+  return accessedMemberName(node) === "constructor";
+}
+
+/**
+ * ¿`node` es un wrapper que se BORRA al emit (runtime-transparente)? Cubre los
+ * paréntesis Y las expresiones type-only que TS elimina: `x!` (NonNull), `x as T`
+ * (As), `x satisfies T` (Satisfies), `<T>x` (TypeAssertion). Todos emiten
+ * EXACTAMENTE su operando — son contiguos y legibles, no ofuscación. Tratarlos
+ * solo como ParenthesizedExpression dejaba escapar el eval-sink envuelto en `!`/
+ * `as`/`satisfies` (re-hunt: hermanos del paren-wrap C). beta.27 BLOCKER-1.
+ */
+function isErasedOuterExpr(node) {
+  return (
+    ts.isParenthesizedExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isAsExpression(node) ||
+    (typeof ts.isSatisfiesExpression === "function" &&
+      ts.isSatisfiesExpression(node)) ||
+    (typeof ts.isTypeAssertionExpression === "function" &&
+      ts.isTypeAssertionExpression(node))
+  );
+}
+
+/**
+ * Desenvuelve TODOS los wrappers runtime-transparentes (`()`,`!`,`as`,`satisfies`,
+ * `<T>`) que rodean `node` y devuelve el operando real. Espejo iterativo de
+ * `isErasedOuterExpr`: el valor emitido de `(((x as T)))!` ES `x`. Centraliza el
+ * patrón `while (n && isErasedOuterExpr(n)) n = n.expression` que ya aparecía en
+ * isDeferredExecutionContext (callback), classifyTypeofGuard (operandos) e
+ * isNonReferencePosition (typeof-operand) — el CALLEE y su chain-root no lo
+ * aplicaban → FP `(useEffect)(cb)` / `(React).useEffect(cb)` (hunt final
+ * deferred-alias-spoof). beta.27 BLOCKER-1.
+ */
+function unwrapErased(node) {
+  while (node && isErasedOuterExpr(node)) node = node.expression;
+  return node;
+}
+
+// ASCENSO inverso de `unwrapErased`+`valueTransparentLeaves`: desde `node` sube por los MISMOS wrappers
+// —erased (`isErasedOuterExpr`, el predicado que usa `unwrapErased`) + operadores value-transparent
+// (`isValueTransparentParent`)— hasta el member-access que lo ENVUELVE; lo devuelve si `node` (a través de
+// los wrappers) es su `.expression`/root, si no null. La allowance de root-de-miembro-seguro es sobre el
+// VALOR (¿`process`/`import.meta` llega al member-access?), y los wrappers (erased Y VT) PRESERVAN el valor:
+// `(0, process).env` ≡ `process.env`, Edge-safe, NO diverge → el gate caza divergencia, no ofuscación, así
+// que no le toca penalizarlo (mandato divergencia-Edge, ratificado B). Espeja el camino DESCENDENTE de
+// import.meta (`valueSurvivalLeaves`) → los dos roots de la familia tratan VT IGUAL, sin drift. ORTOGONAL al
+// eje receiver-detach: éste extiende la allowance de miembros-VALOR no-método (env/url ∈ SAFE_MEMBERS_OF_
+// DENIED_ROOT/SAFE_IMPORT_META_MEMBERS); el detach-de-this por VT aplica a métodos branded (RECEIVER_BOUND,
+// crypto) — sets distintos, checks distintos, no se pisan. codex P2 + ratificación mandato (Iván).
+function wrapperEnclosingMemberAccess(node) {
+  let top = node;
+  while (
+    top.parent &&
+    ((isErasedOuterExpr(top.parent) && top.parent.expression === top) ||
+      isValueTransparentParent(top.parent, top))
+  ) {
+    top = top.parent;
+  }
+  const acc = top.parent;
+  return acc &&
+    (ts.isPropertyAccessExpression(acc) ||
+      ts.isElementAccessExpression(acc)) &&
+    acc.expression === top
+    ? acc
+    : null;
+}
+
+/**
+ * Mapeo ÚNICO del set ACOTADO de constructos VALUE-TRANSPARENTES → las sub-expresiones
+ * cuyo valor ES (sintácticamente) el de la expresión, sin evaluar nada: wrappers erased
+ * (`()`,`!`,`as`,`satisfies`,`<T>`) + `await` (→operando — transparente para no-thenables,
+ * cuyo `await` es identidad; un THENABLE corre `.then` y NO es transparente, por eso este
+ * cruce SOLO vale para FLAGGING fail-closed —cazar `(await fn.constructor)(...)`—; la
+ * EXENCIÓN rechaza receivers que cruzan await vía `valueTransparentPathCrossesAwait`, codex
+ * P2) + coma (→right) + `&&`/`&&=` (→right:
+ * una base truthy como un constructor pasa a la derecha) + `||`/`??`/`||=`/`??=` (→left|right)
+ * + asignación `=` (→right) + ternario (→ambas ramas). `[]` si `node` es una HOJA.
+ *
+ * CRÍTICO — EXCLUYE las CALLS/IIFE: `(() => X)()` NO es transparente, su valor exige EVALUAR
+ * el cuerpo = data-flow = residual infinito. El bound (legible-contiguo vs ofuscado) aguanta
+ * SOLO porque este set es finito y no incluye calls.
+ *
+ * Centralización (re-hunt B1): ESTE es el ÚNICO sitio que define el set. El descenso
+ * (`valueTransparentLeaves` → base de reachesConstructorAccess + resolución de la key en
+ * accessedMemberName) y el ascenso (`isValueTransparentParent`) lo CONSULTAN. Antes la key
+ * solo desenvolvía erased+coma → el bypass `({})["constructor"][1 && "constructor"](…)`
+ * escapaba por la asimetría base-vs-key. beta.27 BLOCKER-1.
+ */
+/**
+ * Elementos-valor de un array-literal para descenso ∃-peligro, APLANANDO spread-de-array-literal
+ * recursivamente (Auditoría B FIX-5, cierra #5): `[...['fs']]` aporta `'fs'`; `[...[...['fs']]]` recursivo;
+ * `[X, ...['a'], Y]` aporta X, 'a', Y. Un spread NO resoluble a array-literal (variable/Set/generator/string)
+ * es §141 (contenido desconocido, posiciones desplazadas) → se ignora su contenido (el ∃-peligro sobre los
+ * demás elementos ya es fail-closed). El VALOR sobrevive el spread-de-literal EN-SITIO (decidible sin data-
+ * flow), igual que la proyección container. `depth` acota recursión patológica.
+ */
+function spreadFlattenedElements(elements, out) {
+  // R8 / MEC-E: SIN cap de profundidad. El predecesor `if (depth > 16) return out` degradaba FAIL-OPEN — truncaba
+  // el aplanado → un root a profundidad 17+ se DROPEABA → oculto → SILENT. La recursión termina por DESCENSO del
+  // AST (cada nivel entra en un array-literal más interno, dominio finito), igual que los `.bind`-chains
+  // iterativos SIN cap (L4099: "un cap numérico es una frontera FALSA"). Doctrina de degradación de caps (kit):
+  // un límite de análisis excedido degrada FAIL-CLOSED (blocked/deny) o FAIL-LOUD, JAMÁS fail-open — aquí se
+  // elimina el límite (fail-CORRECTO) porque la terminación no lo necesita.
+  for (const el of elements) {
+    if (!el || ts.isOmittedExpression(el)) continue;
+    if (ts.isSpreadElement(el)) {
+      for (const arr of iterableArrayAlternatives(el.expression)) {
+        spreadFlattenedElements(arr.elements, out);
+      }
+      continue;
+    }
+    out.push(el);
+  }
+  return out;
+}
+
+// ¿Un array-literal aplana sus spreads SIN pérdida de posición? — cada SpreadElement resuelve
+// ENTERAMENTE (recursivo) a array-literals. Un spread de VARIABLE/call NO resuelve →
+// spreadFlattenedElements lo DROPEA → DESPLAZA las posiciones → el match POSICIONAL dejaría de ser
+// fiel. Espejo del guard `litAlts.length === leaves.length` de resolveKeyInLiteral (eje object). R10 DESTRUCT.
+function arrayLiteralSpreadsFullyResolve(lit) {
+  for (const el of lit.elements) {
+    if (!ts.isSpreadElement(el)) continue;
+    const leaves = valueTransparentLeaves(el.expression);
+    if (leaves.length === 0) return false;
+    for (const leaf of leaves) {
+      const arrs = iterableArrayAlternatives(leaf);
+      if (arrs.length === 0) return false;
+      for (const arr of arrs) {
+        if (!arrayLiteralSpreadsFullyResolve(arr)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Elementos POSICIONALES de un array-literal init para el match destructure/alias, aplanando spreads
+// de LITERAL en-sitio (`[...[perf]]` → posiciones EXACTAS). Sin spread → los elementos tal cual. Con
+// algún spread NO-resoluble (variable) → null: las posiciones son indeterminadas → §141 (el caller no
+// casa → SILENT, paridad con el spread-de-variable del eje object en resolveKeyInLiteral). R10 DESTRUCT.
+function positionalArrayElements(lit) {
+  if (!lit.elements.some(ts.isSpreadElement)) return lit.elements;
+  if (!arrayLiteralSpreadsFullyResolve(lit)) return null;
+  return spreadFlattenedElements(lit.elements, []);
+}
+
+// R8 C2: recolecta TODOS los valores de las props de un object-literal Y de sus spreads ANIDADOS de
+// object-literal, para la enum conservadora de clave IRRESOLUBLE (`({...{a:R}})[k]`, k variable → cualquier
+// own-prop podría ser la seleccionada → ∃-peligro). El predecesor iteraba solo props directas y DROPEABA el
+// SpreadAssignment → el root del spread escapaba (read/construct/import). Un spread de VARIABLE/call (no literal)
+// queda §141 (objectLiteralAlternatives no lo resuelve → sin hoja).
+function allObjectLiteralValuesDeep(expr, out) {
+  // R9-4a: SIN cap. El predecesor `if (depth > 64) return out` degradaba FAIL-OPEN (truncaba → el root profundo
+  // escapaba). Termina por descenso del AST (cada spread anidado es un literal más interno, dominio finito),
+  // como spreadFlattenedElements. Doctrina de degradación de caps (R8/MEC-E) aplicada al CONJUNTO completo.
+  for (const obj of objectLiteralAlternatives(expr)) {
+    for (const p of obj.properties) {
+      if (ts.isPropertyAssignment(p)) out.push(p.initializer);
+      else if (ts.isShorthandPropertyAssignment(p)) out.push(p.name);
+      else if (ts.isSpreadAssignment(p))
+        allObjectLiteralValuesDeep(p.expression, out);
+    }
+  }
+  return out;
+}
+
+// R9 Causa 2: proyección posicional de un contenedor LITERAL por clave/índice — el fold COMPARTIDO por
+// `container[key]` (element-access), `Reflect.get(container, key)` y `[container].at(index)` (gemelos
+// runtime-idénticos; INV-PARITY forma-de-proyección). Fail-CLOSED §141: clave IRRESOLUBLE (variable/ensamblada)
+// → ∃-descenso a TODOS los elementos/valores (un hueco degrada a FP, nunca a FN); container no-literal → vacío
+// (sin descenso — lo manejan computedDefaultDenyRoot etc.). Índice array entero-canónico-en-rango preciso;
+// spread desplaza posiciones → ∃-descenso aplanado.
+function elementProjection(containerExpr, keyExpr) {
+  const out = [];
+  const keys = resolveKeyCandidates(keyExpr);
+  // R14: el carrier estructural SOLO entra con índice/key completamente literal. Un índice mixto/variable
+  // conserva la frontera §141 del finding; los carriers históricos mantienen su política previa.
+  const allowStructuralFallback = keys.size > 0 && keyExprComplete(keyExpr);
+  const arrayAlternatives = arrayLiteralAlternatives(
+    containerExpr,
+    allowStructuralFallback,
+  );
+  if (keys.size === 0) {
+    for (const arr of arrayAlternatives) {
+      spreadFlattenedElements(arr.elements, out);
+    }
+    allObjectLiteralValuesDeep(containerExpr, out);
+  } else {
+    for (const key of keys) {
+      if (/^(0|[1-9]\d*)$/.test(key)) {
+        const i = Number(key);
+        for (const arr of arrayAlternatives) {
+          if (arr.elements.some(ts.isSpreadElement)) {
+            spreadFlattenedElements(arr.elements, out);
+            continue;
+          }
+          const el = arr.elements[i];
+          if (el && !ts.isOmittedExpression(el)) out.push(el);
+        }
+      }
+      out.push(...objectLiteralMemberValues(containerExpr, key));
+    }
+  }
+  return out;
+}
+
+function valueTransparentChildren(node) {
+  if (!node) return [];
+  if (isErasedOuterExpr(node)) return [node.expression];
+  if (ts.isAwaitExpression(node)) return [node.expression];
+  if (ts.isConditionalExpression(node)) {
+    // Condición literal CONSTANTE → solo la rama viva (la muerta no se evalúa).
+    // `true ? "name" : "constructor"` es SIEMPRE "name" → la rama "constructor" es
+    // código muerto, no un selector alcanzable. Puro fold sintáctico (no data-flow):
+    // solo `true`/`false` keyword (desenvueltos de erased). `false ? fn.ctor : null`
+    // → solo null (no alcanza el constructor) — el lado base se beneficia igual.
+    // deepest re-hunt #173 (FP eval-sink con key estáticamente reducible). Fail-closed
+    // intacto: una condición VARIABLE devuelve ambas ramas (si alguna es weaponizable,
+    // flaggea).
+    const cond = unwrapErased(node.condition);
+    if (cond.kind === ts.SyntaxKind.TrueKeyword) return [node.whenTrue];
+    if (cond.kind === ts.SyntaxKind.FalseKeyword) return [node.whenFalse];
+    return [node.whenTrue, node.whenFalse];
+  }
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    if (op === ts.SyntaxKind.CommaToken) return [node.right];
+    if (
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+    ) {
+      return [node.right];
+    }
+    if (
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
+    ) {
+      return [node.left, node.right];
+    }
+    if (op === ts.SyntaxKind.EqualsToken) return [node.right];
+  }
+  // Proyección CONTAINER-LITERAL (Fable cross-review rc.1, root A): `[X][0]` (array-index literal) y
+  // `({k:X}).k` / `({k:X})["k"]` (object-member literal). El VALOR llega EN-SITIO (índice/key literal,
+  // decidible sin data-flow) → descender para que TODOS los checks value-survival (eval-sink,
+  // construcción, import.meta, import(), string-timer) lo vean; cierra la familia de 8 fail-opens del
+  // re-hunt de una vez. Fail-CLOSED (queda §141) ante índice no-literal/negativo/float/fuera-de-rango,
+  // spread en el array, key computada/variable, y spread/accessor/método en el object.
+  if (ts.isElementAccessExpression(node)) {
+    // El ÍNDICE/KEY se resuelve por resolveKeyCandidates (INV-VT, re-hunt2 + Fable): VT-fold
+    // (ternario/coma/erased) + canonicalización numérica por valor. Cada key candidata desciende
+    // AMBOS contenedores — array si es índice entero (`[X][0]`, `[X]["0"]`: string-index coacciona
+    // sobre arrays) Y object-member (la key coacciona a string: `({0:X})[0] ≡ ({0:X})["0"]`; `{1e2:X}`
+    // canonicaliza a "100"). UNIÓN, no fallback: una alternativa VT mixta `(c?[X]:{0:Y})[0]` desciende
+    // ambas ramas. Fail-CLOSED (§141) ante key variable/ensamblada, spread en el array, índice
+    // float/negativo (canonicalNumericKey→null → sin candidata).
+    const out = elementProjection(node.expression, node.argumentExpression);
+    if (out.length > 0) return out;
+  }
+  if (ts.isPropertyAccessExpression(node)) {
+    const vals = objectLiteralMemberValues(node.expression, node.name.text);
+    if (vals.length > 0) return vals;
+  }
+  // R9 Causa 2: gemelos runtime-idénticos de la proyección posicional `[X][i]`, en el eje value-survival.
+  if (ts.isCallExpression(node)) {
+    const callee = unwrapErased(node.expression);
+    // `Reflect.get(receiverLit, keyLit)` ≡ `receiverLit[keyLit]` en-sitio (espejo de reflectGetMemberRead, que
+    // ya lo modela en el eje member-read). elementProjection hereda la polaridad fail-closed (receiver/key
+    // no-literal → vacío/∃-descenso).
+    if (staticNamespaceCall(node, "Reflect", "get")) {
+      for (const branch of expandArgLists(node.arguments)) {
+        if (branch.truncated || branch.nodes.length < 2) continue;
+        const out = elementProjection(branch.nodes[0], branch.nodes[1]);
+        if (out.length > 0) return out;
+      }
+    }
+    // R13 gap#1: `new Map([[k,X]]).get(k)` conserva el VALOR de la entrada elegida. Resolución
+    // key-aware literal + last-wins; key miss/unknown no aporta hojas (OOM/§141). Al vivir en el seam VT,
+    // TODOS los consumidores value-survival heredan la cobertura, no solo el member-read observado.
+    const mapValues = mapGetValueAlternatives(node, callee);
+    if (mapValues.length > 0) return mapValues;
+    // R15: pop/shift son carriers ESCALARES (no arrays). La selección es exacta sobre un receptor
+    // literal en-sitio; vacío no aporta hoja porque el resultado universal es `undefined`.
+    const scalarArrayValues = arrayScalarElementAlternatives(node, callee);
+    if (scalarArrayValues.length > 0) return scalarArrayValues;
+    // WeakRef.deref conserva el target cuando éste es demostrablemente un objeto en-sitio. Un target
+    // primitivo queda fuera: `new WeakRef(primitive)` lanza universalmente y permanece OOM.
+    const weakRefValues = weakRefDerefAlternatives(node, callee);
+    if (weakRefValues.length > 0) return weakRefValues;
+    // `[containerLit].at(i)`: un integer literal selecciona EXACTAMENTE la posición (negativo = length+i;
+    // sin arg = 0). Índice variable/float conserva el fallback ∃ a todos los elementos: no se cruza data-flow,
+    // pero tampoco se deja de ver un peligro alcanzable. DOT/BRACKET y spreads literales de args comparten
+    // expandArgLists. Un receiver variable continúa fuera del seam.
+    if (
+      (ts.isPropertyAccessExpression(callee) ||
+        ts.isElementAccessExpression(callee)) &&
+      accessedMemberNames(callee).includes("at")
+    ) {
+      const out = [];
+      for (const arr of arrayLiteralAlternatives(callee.expression)) {
+        const positional = positionalArrayElements(arr);
+        const fallback = spreadFlattenedElements(arr.elements, []);
+        for (const branch of expandArgLists(node.arguments)) {
+          if (branch.truncated) continue;
+          const indices =
+            branch.nodes.length === 0
+              ? [0]
+              : literalIntegerAlternatives(branch.nodes[0]);
+          if (!indices || !positional) {
+            out.push(...fallback);
+            continue;
+          }
+          for (const rawIndex of indices) {
+            const index = rawIndex < 0 ? positional.length + rawIndex : rawIndex;
+            if (index < 0 || index >= positional.length) continue;
+            const element = positional[index];
+            if (element && !ts.isOmittedExpression(element)) out.push(element);
+          }
+        }
+      }
+      if (out.length > 0) return out;
+    }
+  }
+  return [];
+}
+
+/**
+ * Hojas value-transparentes de `node`: las expresiones terminales a las que su valor se
+ * reduce siguiendo `valueTransparentChildren`. Multi-hoja (`||`/`??`/ternario). Un operando
+ * VARIABLE es una hoja (su valor no se resuelve → data-flow residual).
+ */
+function valueTransparentLeaves(node, out) {
+  const acc = out || [];
+  const kids = valueTransparentChildren(node);
+  if (kids.length === 0) {
+    if (node) acc.push(node);
+    return acc;
+  }
+  for (const kid of kids) valueTransparentLeaves(kid, acc);
+  return acc;
+}
+
+/** ¿`child` es una sub-expresión value-transparente de `parent`? (ascenso). */
+function isValueTransparentParent(parent, child) {
+  return valueTransparentChildren(parent).indexOf(child) !== -1;
+}
+
+// VALUE-SURVIVAL: las hojas a las que se reduce el VALOR de `expr` saltando erased (parens/as/!/satisfies)
+// Y operadores value-transparent (ternario/coma/`&&`/`||`/`??`/`=`), o `[expr-erased]` si no hay wrapper VT.
+// Helper CENTRALIZADO del eje value-survival ("¿el token/valor peligroso llega a la operación a través de
+// wrappers?"), consultado por TODOS los checks value-survival: eval-sink (`.constructor`), construcción
+// (`new <root>.Module`), `import.meta.<member>`. Cierra la clase "olvido-VT sobre operación-en-sitio" POR
+// CONSTRUCCIÓN: un check value-survival nuevo reusa esto en vez de re-implementar/olvidar el VT-skip.
+// ⚠️ NO es para el eje RECEIVER-DETACH (unbound branded methods): ese usa el set VT SPLIT (this-detaching
+// detecta / this-preserving preserva el bound) — pregunta ortogonal, fusionarla aquí re-crearía el bug
+// "ejes ortogonales bajo predicado compartido". value-survival = set UNIFORME; receiver-detach = set SPLIT.
+function valueSurvivalLeaves(expr) {
+  const u = unwrapErased(expr);
+  return valueTransparentChildren(u).length > 0
+    ? valueTransparentLeaves(u).map(unwrapErased)
+    : [u];
+}
+
+// Desliga una cadena de `.bind(...)` al receiver subyacente: `X.bind(a).bind(b)` → X. Un bound function,
+// al hacer `new` o llamarse, construye/invoca el ORIGINAL (`new (X.bind(t,...a))()` ≡ `new X(...a)`;
+// `(X.m.bind(t))()` ≡ `X.m.call(t)`). RESOLUCIÓN axis-agnóstica (no política) COMPARTIDA por las DOS ramas
+// de detach-por-bind — construcción (constructor ligado) y unbound (método branded ligado) — para que la
+// forma `.bind` ENCADENADA esté cubierta con la MISMA exhaustividad en ambas (el sub-hueco simétrico que
+// si no reaparece de rama en rama). dotted/bracket(`["bind"]`)/optional vía accessedMemberNames; el caller
+// aplica DESPUÉS su política (isConstructionDeniedMember / RECEIVER_BOUND) → desligar un `.bind` inocuo es
+// inerte (se filtra después). depth-guard anti-runaway. Devuelve el expr erased si no hay `.bind`.
+function unwrapBindChain(expr) {
+  // ITERATIVO (no recursivo) → SIN cap de profundidad: la PROFUNDIDAD de `.bind` encadenado tiene final
+  // (el member base) y el bucle TERMINA por descenso estricto del AST (`ic.expression` es un sub-nodo).
+  // Un cap numérico sería una frontera-FALSA (dejaría pasar 9+ niveles); la profundidad es decidible
+  // hasta el fondo, así que se cierra hasta el fondo. (codex P1 + barra "no-residual-si-tiene-final".)
+  let u = unwrapErased(expr);
+  while (ts.isCallExpression(u)) {
+    const ic = unwrapErased(u.expression);
+    if (
+      (ts.isPropertyAccessExpression(ic) || ts.isElementAccessExpression(ic)) &&
+      accessedMemberNames(ic).includes("bind")
+    ) {
+      u = unwrapErased(ic.expression);
+      continue;
+    }
+    break;
+  }
+  return u;
+}
+
+// Pela la CADENA DE RECEIVER completa hasta el member base: `.bind(...)` calls (constructor/método LIGADO
+// construye/invoca el receiver → `unwrapBindChain`) Y `.call`/`.apply` members (INVOCAN el receiver `Y` →
+// ver a través a `Y`). Iterativo, sin cap (profundidad e INTERLEAVING arbitrarios `.bind(a).call(b)`,
+// `.call.bind(c)()`, etc. cierran hasta el fondo por construcción). El branded method está en la cadena de
+// RECEIVER (resoluble sin ejecutar). NO pela cuando el branded llega por ARGUMENTO (`.bind.call(X,…)`: `X`
+// es el arg de `.call`, no el receiver → requiere data-flow del arg = §141 residual, eval, no estructural).
+function peelReceiverChain(expr) {
+  let u = unwrapBindChain(expr);
+  while (
+    (ts.isPropertyAccessExpression(u) || ts.isElementAccessExpression(u)) &&
+    accessedMemberNames(u).some((m) => m === "call" || m === "apply")
+  ) {
+    u = unwrapBindChain(u.expression);
+  }
+  return u;
+}
+
+// ¿`n` es `Reflect.construct(T,…)` o `Reflect.apply(T,…)`? → {method, target=arg0}. `Reflect` construye/
+// invoca FUERA del universo `new`/`.call/.apply/.bind` (`Reflect.construct(T,a)≡new T(...a)`,
+// `Reflect.apply(T,t,a)≡T.apply(t,a)`) → salta los checks NewExpression/detach. PERO el TARGET es el arg0
+// EN-SITIO (decidible con los MISMOS resolvers, NO data-flow) → gap a cerrar, no residual. El gate ya
+// modela esto para el eval-sink (`.constructor→Function`); aquí se extiende a construcción-denegada
+// (WebAssembly.Module) y receiver-bound (crypto). El callee resuelve value-transparent (`(0,Reflect).apply`,
+// `(0,Reflect.apply)(…)`). RESIDUAL (target NO-en-sitio): `Reflect.get(x,"k")()` (key-string→getter),
+// alias (`const rc=Reflect.construct; rc(T,a)`), `Reflect.construct.bind(…)()` = data-flow/value-passing.
+function reflectCallTarget(n) {
+  if (!ts.isCallExpression(n) || n.arguments.length === 0) return null;
+  for (const callee of valueTransparentLeaves(unwrapErased(n.expression))) {
+    const c = unwrapErased(callee);
+    if (
+      !ts.isPropertyAccessExpression(c) &&
+      !ts.isElementAccessExpression(c)
+    ) {
+      continue;
+    }
+    const method = accessedMemberNames(c).find(
+      (x) => x === "construct" || x === "apply",
+    );
+    if (
+      method &&
+      valueTransparentLeaves(c.expression).some((o) => {
+        const oo = unwrapErased(o);
+        return ts.isIdentifier(oo) && oo.text === "Reflect";
+      })
+    ) {
+      // Aplanar spread-de-array-literal de los args ANTES de tomar el target (arg0) — Auditoría B R5 / U5,
+      // cierra #9: `Reflect.construct(...[WebAssembly.Module, [b]])` / `Reflect.apply(...[X.m, t, a])` esconden
+      // el target tras un SpreadElement. Mismo helper de FIX-5 (spreadFlattenedElements). Spread de VARIABLE
+      // (`...args`) no resuelve → target irresoluble → null (§141).
+      const effectiveArgs = spreadFlattenedElements(n.arguments, []);
+      if (effectiveArgs.length === 0) return null;
+      return { method, target: effectiveArgs[0] };
+    }
+  }
+  return null;
+}
+
+// ¿`n` es `Reflect.get(R, "k")` con key STRING-LITERAL? → {receiver: R, member: "k"}. Es un member-read
+// EN-SITIO ≡ `R["k"]`, decidible con los MISMOS resolvers (R por resolveRoots, k literal), NO data-flow
+// → gap a cerrar para el eje PRESENCIA-DE-MIEMBRO (root B / Fable). El gate ya modela Reflect.construct/
+// apply (reflectCallTarget); 'get' faltaba para este eje. DISTINTO del residual §141 documentado de
+// `Reflect.get(x,"constructor")()` (eje EVAL-SINK: x variable + result-chasing por invocación). Key
+// VARIABLE (`Reflect.get(R,k)`) → §141 (paridad con `R[dynKey]`). Callee value-transparent (`(0,Reflect).get`).
+function reflectGetMemberRead(n) {
+  if (!ts.isCallExpression(n) || n.arguments.length === 0) return null;
+  for (const callee of valueTransparentLeaves(unwrapErased(n.expression))) {
+    const c = unwrapErased(callee);
+    if (
+      !ts.isPropertyAccessExpression(c) &&
+      !ts.isElementAccessExpression(c)
+    ) {
+      continue;
+    }
+    const isGet = accessedMemberNames(c).some((x) => x === "get");
+    const isReflect =
+      isGet &&
+      valueTransparentLeaves(c.expression).some((o) => {
+        const oo = unwrapErased(o);
+        return ts.isIdentifier(oo) && oo.text === "Reflect";
+      });
+    if (isReflect) {
+      // La KEY se resuelve por resolveKeyCandidates (INV-VT): paridad byte-a-byte con `R[key]` (coma/
+      // ternario/`&&`/`||`/proyección/canonicalización). Se devuelve SIEMPRE (incl. members VACÍO = key
+      // variable/ensamblada) para que el caller espeje `computedDefaultDenyRoot` (`R[dynKey]` fail-cierra
+      // sobre root allowlist). Fable cross-review 2 (B2) + 3 (#4).
+      // BLOQUEO-A: devolver el SUBSET resoluble (∃-deny lo comprueba SIEMPRE → `Reflect.get(WebAssembly,
+      // c?'compile':m)` FLAG por 'compile') + el flag `complete`; la rama irresoluble la decide el caller según
+      // la polaridad del root (allowlist fail-closed / denylist renunciado), espejo de `R[dynKey]`.
+      for (const branch of expandArgLists(n.arguments)) {
+        if (branch.truncated || branch.nodes.length < 2) continue;
+        return {
+          receiver: branch.nodes[0],
+          members: resolveKeyCandidates(branch.nodes[1]),
+          complete: keyExprComplete(branch.nodes[1]),
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/** ¿`node` es un CALL a `<ns>.<method>(...)` (ns = "Object"/"Reflect"), value-transparente? Espejo del
+ *  patrón de reflectGetMemberRead (callee VT-fold; ns por identifier-text, misma asunción de no-shadow). */
+function staticNamespaceCall(node, ns, method) {
+  if (!ts.isCallExpression(node)) return false;
+  for (const callee of valueTransparentLeaves(unwrapErased(node.expression))) {
+    const c = unwrapErased(callee);
+    if (
+      !ts.isPropertyAccessExpression(c) &&
+      !ts.isElementAccessExpression(c)
+    ) {
+      continue;
+    }
+    if (!accessedMemberNames(c).some((x) => x === method)) continue;
+    if (
+      valueTransparentLeaves(c.expression).some((o) => {
+        const oo = unwrapErased(o);
+        return ts.isIdentifier(oo) && oo.text === ns;
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * IDIOMAS REFLEXIVOS de lectura-de-valor (Auditoría B FIX-3, ACOTA #3 — NO cierra): rutas que leen el VALOR
+ * de `R.k` a través de un intrínseco de copia/reflexión, evadiendo el member-read directo. Lista FINITA
+ * (denylist de idiomas dentro de una regla allowlist → espacio ABIERTO, no correct-by-construction; V3 halló
+ * 2 idiomas fuera de la lista al 1er intento). Devuelve `[{receiver, members}]` (receiver = R-expr; members =
+ * Set de nombres de miembro leídos), a ∃-quantificar por el caller vía `resolveRoots(receiver)` +
+ * `partialMemberDenied`. `R` hereda cobertura multi-rama de resolveRoots.
+ *
+ * SOUNDNESS de la equivalencia `X(R).k ≡ R.k`: exacta para miembros OWN-DATA (verificado import.meta.dirname/
+ * filename/resolve en V1). Para miembros heredados/non-enumerable de otras raíces la equivalencia puede no
+ * valer (gOPD own-only; assign/spread copian solo enumerable-own) → el flag es sobre-aproximación FAIL-CLOSED
+ * (dirección FP, consistente con que el gate ya flaggea el read literal `WebAssembly.compile`). Key VARIABLE
+ * (resolveKeyCandidates vacío) o receptor-vía-flujo (`const c={...R}; c.k`) = §141 renunciado (no en-sitio).
+ * RENUNCIADOS explícitos (tabla ADR): entries/values/keys→índice (key-implícita), fromEntries∘entries
+ * (composición copia key-implícita), structuredClone (lanza DataCloneError, V4), Proxy (handler altera lectura).
+ */
+// R8 MEC-B: fuentes value-carrier de un receptor reflexivo, recursivas y SEMÁNTICAS-por-familia (la matriz medida
+// en runtime, no recursión ciega — `assign({},create(R))`/`{...create(R)}` NO leen, medido undefined). Devuelve
+// las expresiones cuya lectura de un miembro alcanza el mismo miembro que leer `expr.k`.
+//   mode 'chain' = identity-return + proto-walk: lee TODA la cadena de la fuente (own+heredado).
+//   mode 'own'   = own-copy (spread `{...S}` / `Object.assign` sources): solo own-enumerable → un creador-de-
+//                  prototipo (`create`/`setPrototypeOf`/`{__proto__}`) sin own-props NO aporta (para).
+// Terminal = una raíz parcial directa (o alias); `resolveRoots` del caller filtra los no-root (§141).
+function reflectiveCarrierSources(expr, mode, viaReflective = false) {
+  // R9-4a: SIN cap. El predecesor `depth > 64` degradaba FAIL-OPEN (`return []` ocultaba el root). Termina por
+  // descenso del AST (cada rec entra en un sub-nodo, dominio finito). Doctrina de caps (R8/MEC-E) al conjunto —
+  // este cap estaba DENTRO de mi propio código R8, escapó a la auditoría single-site de MEC-E.
+  if (!expr) return [];
+  const e = unwrapErased(expr);
+  const call = (ns, name) =>
+    ts.isCallExpression(e) && staticNamespaceCall(e, ns, name);
+  // rec por una capa REFLEXIVA (marca viaReflective) vs recV por un wrapper value-transparent (preserva la marca).
+  const rec = (x, m) => reflectiveCarrierSources(x, m, true);
+  const recV = (x, m) => reflectiveCarrierSources(x, m, viaReflective);
+  // identity-return arg0 (result === arg0, cadena intacta): freeze/seal/preventExtensions + el TARGET de
+  // defineProperty/defineProperties (rol arg0, ortogonal al rol descriptor-FUENTE que maneja el bloque B).
+  if (
+    (call("Object", "freeze") ||
+      call("Object", "seal") ||
+      call("Object", "preventExtensions") ||
+      call("Object", "defineProperty") ||
+      call("Object", "defineProperties")) &&
+    e.arguments.length >= 1
+  ) {
+    return rec(e.arguments[0], mode);
+  }
+  // prototype-creators: create(R)/setPrototypeOf(_,R) → proto = R. En 'chain' lee vía proto; en 'own' NO aporta.
+  if (call("Object", "create") && e.arguments.length >= 1) {
+    return mode === "chain" ? rec(e.arguments[0], "chain") : [];
+  }
+  if (call("Object", "setPrototypeOf") && e.arguments.length >= 2) {
+    return mode === "chain" ? rec(e.arguments[1], "chain") : [];
+  }
+  // getPrototypeOf(X) → el prototipo establecido en X (create/setPrototypeOf/{__proto__}).
+  if (
+    (call("Object", "getPrototypeOf") || call("Reflect", "getPrototypeOf")) &&
+    e.arguments.length >= 1
+  ) {
+    const x = unwrapErased(e.arguments[0]);
+    if (ts.isCallExpression(x) && staticNamespaceCall(x, "Object", "create"))
+      return rec(x.arguments[0], "chain");
+    if (
+      ts.isCallExpression(x) &&
+      staticNamespaceCall(x, "Object", "setPrototypeOf") &&
+      x.arguments.length >= 2
+    )
+      return rec(x.arguments[1], "chain");
+    if (ts.isObjectLiteralExpression(x)) {
+      const out = [];
+      for (const p of x.properties)
+        if (
+          ts.isPropertyAssignment(p) &&
+          !p.name.computed &&
+          (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) &&
+          p.name.text === "__proto__"
+        )
+          out.push(...rec(p.initializer, "chain"));
+      return out;
+    }
+    return [];
+  }
+  // Object.assign(t, ...s): result = t (identity) con own de cada s copiado → t en modo actual, cada s en 'own'.
+  if (call("Object", "assign")) {
+    const out = [];
+    e.arguments.forEach((a, i) => {
+      if (!ts.isSpreadElement(a)) out.push(...rec(a, i === 0 ? mode : "own"));
+    });
+    return out;
+  }
+  // object-literal: spreads `{...S}` = own-copy de S; `{__proto__: R}` (no-computed) = proto (chain).
+  if (ts.isObjectLiteralExpression(e)) {
+    const out = [];
+    for (const p of e.properties) {
+      if (ts.isSpreadAssignment(p)) out.push(...rec(p.expression, "own"));
+      else if (
+        mode === "chain" &&
+        ts.isPropertyAssignment(p) &&
+        !p.name.computed &&
+        (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) &&
+        p.name.text === "__proto__"
+      )
+        out.push(...rec(p.initializer, "chain"));
+    }
+    return out;
+  }
+  // wrappers VALUE-TRANSPARENT (ternario/coma/&&/||/asignación): el resultado fluye por ellos → el idiom
+  // reflexivo puede estar en una rama (`(true ? Object.create(R) : 0).k`). Recursa cada hoja PRESERVANDO la
+  // marca (recV) — cruzar un ternario NO es cruzar una capa reflexiva, así un root DESNUDO bajo el ternario
+  // sigue sin contar aquí (lo maneja el check directo con su probe).
+  const vtKids = valueTransparentChildren(e);
+  if (vtKids.length > 0) {
+    const out = [];
+    for (const k of vtKids) out.push(...recV(k, mode));
+    return out;
+  }
+  // terminal: raíz parcial directa/alias → fuente. Una own-copy de `performance` no conserva NINGÚN
+  // miembro relevante: la instancia no tiene string-properties own-enumerable y su API (incluido
+  // `eventLoopUtilization`) vive en el prototipo. Proyectarla aquí fabricaba valores que en runtime son
+  // `undefined` (`{...performance}` / `Object.assign({}, performance)`). Los namespaces con métodos own
+  // enumerable (WebAssembly/URL/console/process) NO se filtran: su copia sí puede conservar el peligro.
+  if (mode === "own" && ts.isIdentifier(e) && e.text === "performance") {
+    return [];
+  }
+  // SOLO cuenta si se atravesó ≥1 capa REFLEXIVA (viaReflective):
+  // un root DESNUDO (`performance.elu`, o `(cond ? performance : 0).elu`) NO es una lectura reflexiva — lo maneja
+  // el check de partial-member DIRECTO (con su lógica de safe-probe `?.()`); tratarlo aquí lo FLAGgearía
+  // saltándose el probe (regresión medida).
+  return viaReflective ? [e] : [];
+}
+
+function reflectiveValueReads(node) {
+  const out = [];
+  const add = (receiver, members, complete = true) => {
+    // Una key incompleta sobre import.meta debe sobrevivir hasta el consumidor aunque el subset resoluble
+    // esté vacío: allí se aplica la polaridad allowlist fail-closed. Las keys completas sin candidatas siguen
+    // sin representar una lectura modelable.
+    if (receiver && members && (members.size > 0 || complete === false)) {
+      out.push({ receiver, members, complete });
+    }
+  };
+  // (A/A2) `<descriptor>.value` — el idioma getOwnPropertyDescriptor(s). La lectura de `.value` se resuelve
+  // por el resolver COMPARTIDO `accessedMemberNames` (Auditoría B R5 / U3, cierra #4): bracket `["value"]` ≡
+  // dotted `.value` ≡ template, gratis. El ENSAMBLADO (`["va"+"lue"]`) sigue §141 (accessedMemberNames no folda
+  // concat, #173) — coherente con el rechazo de #2.
+  if (
+    (ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)) &&
+    accessedMemberNames(node).includes("value")
+  ) {
+    // R11 (gap-6): el receptor del `.value` se resuelve VALUE-TRANSPARENTE por-hoja
+    // (`||`/`??`/ternario/coma/proyección/erased), NO solo unwrapErased — simetría con los gemelos
+    // reflectGetMemberRead/staticNamespaceCall que ya usan valueTransparentLeaves. `(gOPD(R,'k') ||
+    // alt).value` foldea a la hoja gOPD; una hoja VARIABLE no aporta (§141).
+    for (const inner of valueTransparentLeaves(node.expression)) {
+      if (
+        ts.isCallExpression(inner) &&
+        inner.arguments.length >= 2 &&
+        (staticNamespaceCall(inner, "Object", "getOwnPropertyDescriptor") ||
+          staticNamespaceCall(inner, "Reflect", "getOwnPropertyDescriptor"))
+      ) {
+        // getOwnPropertyDescriptor(R, "k").value → member = k (key VT-fold canónica); receiver = R.
+        add(
+          inner.arguments[0],
+          resolveKeyCandidates(inner.arguments[1]),
+          keyExprComplete(inner.arguments[1]),
+        );
+      } else if (
+        ts.isPropertyAccessExpression(inner) ||
+        ts.isElementAccessExpression(inner)
+      ) {
+        // getOwnPropertyDescriptors(R).k.value / [.]["k"].value (plural, solo Object) → member = k; receiver = R.
+        const innerCall = unwrapErased(inner.expression);
+        if (
+          ts.isCallExpression(innerCall) &&
+          innerCall.arguments.length >= 1 &&
+          staticNamespaceCall(innerCall, "Object", "getOwnPropertyDescriptors")
+        ) {
+          add(
+            innerCall.arguments[0],
+            new Set(accessedMemberNames(inner)),
+            accessedMemberKeyComplete(inner),
+          );
+        }
+      }
+    }
+  }
+  // (B) `<copia/proto/descriptor-transfer>.k` / `["k"]` — Object.assign / Object.create / spread-de-root +
+  // la familia descriptor-transfer (Auditoría B R5 / #5, D2): create(_, gOPDs(R)) / defineProperties(_, gOPDs(R))
+  // / defineProperty(_, "k", gOPD(R,"k")). Frontera = property-copy (transfiere own-props/descriptores de R);
+  // los round-trips de representación (entries/values/fromEntries/JSON/structuredClone) quedan RENUNCIADOS.
+  if (
+    ts.isPropertyAccessExpression(node) ||
+    ts.isElementAccessExpression(node)
+  ) {
+    const members = new Set(accessedMemberNames(node));
+    const membersComplete = accessedMemberKeyComplete(node);
+    if (members.size > 0 || !membersComplete) {
+      const recv = unwrapErased(node.expression);
+      // R8 MEC-B: fuentes value-carrier por FAMILIA (identity-return arg0 / proto-walk / own-copy), RECURSIVAS —
+      // reemplaza el dispatch inline assign/create-arg0/spread (ahora un caso del helper) y AÑADE freeze/seal/
+      // preventExtensions/defineProperty-TARGET/defineProperties-TARGET/setPrototypeOf/getPrototypeOf/{__proto__}
+      // + la composición (create∘create, freeze∘create, {...{...R}}), con la matriz chain-vs-own que NO lee
+      // `assign({},create(R))`/`{...create(R)}` (medido undefined → SILENT-correcto).
+      for (const src of reflectiveCarrierSources(recv, "chain")) {
+        add(src, members, membersComplete);
+      }
+      // descriptor-transfer (R como FUENTE de descriptor, ORTOGONAL al value-carrier): gOPDs(R) → 2º arg de
+      // create/defineProperties; gOPD(R,k2) → 3er arg de defineProperty. El helper cubre el TARGET (arg0).
+      const gOPDsRoot = (arg) => {
+        const a = unwrapErased(arg);
+        return ts.isCallExpression(a) &&
+          a.arguments.length >= 1 &&
+          staticNamespaceCall(a, "Object", "getOwnPropertyDescriptors")
+          ? a.arguments[0]
+          : null;
+      };
+      if (
+        ts.isCallExpression(recv) &&
+        recv.arguments.length >= 2 &&
+        (staticNamespaceCall(recv, "Object", "create") ||
+          staticNamespaceCall(recv, "Object", "defineProperties"))
+      ) {
+        const r = gOPDsRoot(recv.arguments[1]); // create(proto, gOPDs(R)) / defineProperties(_, gOPDs(R))
+        if (r) add(r, members, membersComplete);
+      } else if (
+        ts.isCallExpression(recv) &&
+        recv.arguments.length >= 3 &&
+        staticNamespaceCall(recv, "Object", "defineProperty")
+      ) {
+        // defineProperty(_, keyArg, gOPD(R, k2)).<read> → define keyArg con el valor de R.k2; leerlo lee R.k2.
+        const desc = unwrapErased(recv.arguments[2]);
+        if (
+          ts.isCallExpression(desc) &&
+          desc.arguments.length >= 2 &&
+          (staticNamespaceCall(desc, "Object", "getOwnPropertyDescriptor") ||
+            staticNamespaceCall(desc, "Reflect", "getOwnPropertyDescriptor"))
+        ) {
+          const defKeys = resolveKeyCandidates(recv.arguments[1]);
+          if ([...members].some((m) => defKeys.has(m))) {
+            add(
+              desc.arguments[0],
+              resolveKeyCandidates(desc.arguments[1]),
+              membersComplete && keyExprComplete(desc.arguments[1]),
+            );
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Targets de CONSTRUCCIÓN de `expr`: hojas value-survival, DESLIGANDO `.bind(...)` recursivamente (un
+// constructor LIGADO, al `new`, construye el ORIGINAL: `new (X.M.bind(t,...a))()` ≡ `new X.M(...a)`).
+// SIN cap (termina por descenso del AST). Compartido por el check `NewExpression` Y `Reflect.construct`
+// (mismo target-en-sitio decidible). El member-alias (`const M=X.M; new M(b)`) sigue residual (no en-sitio).
+function constructionTargets(expr) {
+  return valueSurvivalLeaves(expr).flatMap((leaf) => {
+    const receiver = unwrapBindChain(leaf);
+    if (receiver !== leaf) return constructionTargets(receiver);
+    // ClassExpression con `extends <ctor>` EN-SITIO: `new (class extends X.Module {})(b)` ≡ `super(b)` ≡
+    // `new X.Module(b)` — toda subclase INSTANCIABLE de un ctor llama `super` (un derived class DEBE llamar
+    // super antes de usar `this`), así que construir la subclase construye el ORIGINAL. El `extends` está
+    // a-la-vista (contiguo con el `new`) → decidible: resolver la heritage-extends como target (recursivo →
+    // extends VT-envuelto `extends (c?X.Module:Y)`). El `class X extends X.Module {}; new X(b)` con X NOMBRADA
+    // = data-flow residual (X es variable, el extends no está en-sitio en el `new`). codex P1.
+    if (ts.isClassExpression(leaf) && leaf.heritageClauses) {
+      const ext = leaf.heritageClauses.find(
+        (h) => h.token === ts.SyntaxKind.ExtendsKeyword,
+      );
+      if (ext && ext.types.length > 0) {
+        return constructionTargets(ext.types[0].expression);
+      }
+    }
+    return [leaf];
+  });
+}
+
+// Argumento cuyo valor conserva EXACTAMENTE un carrier identity-return que no cambia las props/elementos
+// observables del contenedor. Acotado a freeze/seal/preventExtensions: defineProperty/defineProperties también
+// devuelven arg0, pero PUEDEN mutar/sobrescribir la key proyectada; assign/create/copies cambian contenido o
+// identidad. Pelarlos aquí sería unsound (`defineProperty({m:R},"m",{value:safe}).m`). R11 pt.3.
+function identityPreservingContainerArgument(expr) {
+  const e = unwrapErased(expr);
+  if (
+    ts.isCallExpression(e) &&
+    e.arguments.length >= 1 &&
+    (staticNamespaceCall(e, "Object", "freeze") ||
+      staticNamespaceCall(e, "Object", "seal") ||
+      staticNamespaceCall(e, "Object", "preventExtensions"))
+  ) {
+    return e.arguments[0];
+  }
+  return null;
+}
+
+function isAnyContainerLiteral(node) {
+  return ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node);
+}
+
+// R12: resolución COMPLETA de un expr a contenedores del tipo pedido. A diferencia del resolver público
+// (∃-acumula las ramas conocidas y renuncia las opacas), los carriers de MERGE necesitan probar que CADA hoja
+// del source es un contenedor modelable: un source-variable posterior puede sobrescribir la key → §141.
+// `null` = al menos una rama opaca; array = todas las ramas resueltas. Termina por descenso AST.
+function completeContainerLiteralAlternatives(
+  expr,
+  isLiteral,
+  allowStructuralFallback = true,
+) {
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length === 0) return null;
+  const out = [];
+  for (const leaf of leaves) {
+    const alts = containerLiteralAlternatives(
+      leaf,
+      isLiteral,
+      allowStructuralFallback,
+    );
+    if (alts.length === 0) return null;
+    out.push(...alts);
+  }
+  return out;
+}
+
+// Variante OWN para el source de un object-spread. Acepta literales, carriers identity-return y resultados
+// semánticos PRECISOS; `create({m:X})`/`setPrototypeOf` mantienen tratamiento propio porque exponen `m` por
+// PROTOTIPO y un spread NO la copia. El fallback estructural desconocido nunca entra en este resolver.
+function ownObjectFromArrayLiteral(array) {
+  // Object-spread copia los índices own-enumerable de un array. Se virtualiza como un object-literal
+  // numérico; holes no son own-properties. Spreads internos deben resolverse completamente para no
+  // inventar posiciones.
+  if (!arrayLiteralSpreadsFullyResolve(array)) return null;
+  const elements = positionalArrayElements(array);
+  if (!elements) return null;
+  return syntheticObject(
+    [...elements].flatMap((element, index) =>
+      !element || ts.isOmittedExpression(element)
+        ? []
+        : [
+            ts.factory.createPropertyAssignment(
+              ts.factory.createStringLiteral(String(index)),
+              element,
+            ),
+          ],
+    ),
+  );
+}
+
+// Object.assign produce un objeto cuyas own-enumerable son el merge ordered de target+sources. Para un
+// consumer OWN (otro spread, o mapa de descriptors) materializar las props evita dejar SpreadAssignments
+// sintéticos que volverían opaco un source que ya demostramos completo.
+function completeOwnObjectAssignAlternatives(call) {
+  if (
+    !ts.isCallExpression(call) ||
+    !staticNamespaceCall(call, "Object", "assign") ||
+    call.arguments.length === 0 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return null;
+  }
+  let variants = completeOwnObjectLiteralAlternatives(call.arguments[0]);
+  if (!variants) return null;
+  for (const sourceExpr of call.arguments.slice(1)) {
+    const sources = completeOwnObjectLiteralAlternatives(sourceExpr);
+    if (!sources) return null;
+    const next = [];
+    for (const target of variants) {
+      for (const source of sources) {
+        next.push(syntheticObject([...target.properties, ...source.properties]));
+      }
+    }
+    variants = next;
+  }
+  return variants;
+}
+
+function completeOwnObjectLiteralAlternatives(expr) {
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length === 0) return null;
+  const out = [];
+  for (const leaf of leaves) {
+    const e = unwrapErased(leaf);
+    if (ts.isObjectLiteralExpression(e)) {
+      out.push(e);
+      continue;
+    }
+    if (ts.isArrayLiteralExpression(e)) {
+      const own = ownObjectFromArrayLiteral(e);
+      if (!own) return null;
+      out.push(own);
+      continue;
+    }
+    const arg = identityPreservingContainerArgument(e);
+    if (arg) {
+      const nested = completeOwnObjectLiteralAlternatives(arg);
+      if (!nested) return null;
+      out.push(...nested);
+      continue;
+    }
+    if (ts.isCallExpression(e) && staticNamespaceCall(e, "Object", "assign")) {
+      const assigned = completeOwnObjectAssignAlternatives(e);
+      if (!assigned) return null;
+      out.push(...assigned);
+      continue;
+    }
+    if (
+      ts.isCallExpression(e) &&
+      staticNamespaceCall(e, "Object", "create") &&
+      e.arguments.length >= 1 &&
+      e.arguments.length <= 2 &&
+      !e.arguments.some(ts.isSpreadElement)
+    ) {
+      if (e.arguments.length === 1) {
+        out.push(syntheticObject([]));
+        continue;
+      }
+      const descriptorMaps = completeOwnObjectLiteralAlternatives(
+        e.arguments[1],
+      );
+      if (!descriptorMaps) return null;
+      out.push(
+        ...descriptorMaps.map((map) =>
+          syntheticObject(descriptorOverlayProperties(map)),
+        ),
+      );
+      continue;
+    }
+    if (
+      ts.isCallExpression(e) &&
+      staticNamespaceCall(e, "Object", "setPrototypeOf") &&
+      e.arguments.length >= 2 &&
+      !e.arguments.some(ts.isSpreadElement)
+    ) {
+      const nested = completeOwnObjectLiteralAlternatives(e.arguments[0]);
+      if (!nested) return null;
+      out.push(...nested);
+      continue;
+    }
+    // R16 Tier-2: los resultados PRECISOS de Object.assign/defineProperty/fromEntries y carriers de
+    // array (slice/concat/Array.from/...) también tienen un conjunto own decidible. create/setPrototypeOf
+    // se resolvieron ARRIBA con semántica own específica: el resolver general incluye el prototipo y NO
+    // puede usarse para ellos. `false` desactiva el fallback estructural de métodos desconocidos.
+    const semantic = semanticContainerResultAlternatives(e, false);
+    if (semantic.length > 0) {
+      for (const result of semantic) {
+        if (ts.isObjectLiteralExpression(result)) {
+          out.push(result);
+          continue;
+        }
+        if (ts.isArrayLiteralExpression(result)) {
+          const own = ownObjectFromArrayLiteral(result);
+          if (!own) return null;
+          out.push(own);
+          continue;
+        }
+        return null;
+      }
+      continue;
+    }
+    return null;
+  }
+  return out;
+}
+
+function syntheticObject(properties) {
+  return ts.factory.createObjectLiteralExpression(properties, false);
+}
+
+function syntheticArray(elements) {
+  return ts.factory.createArrayLiteralExpression(elements, false);
+}
+
+// Une varios valores posibles en una expresión VT sintética. La condición NO es literal para que
+// valueTransparentLeaves conserve TODAS las ramas (∃-danger); el nodo solo vive dentro del resolver.
+// R16: aplana uniones sintéticas previas, deduplica por identidad del nodo AST original y memoiza la
+// secuencia canónica en un trie WeakMap. Sin esto, cada `.sort()` 8-wide envolvía ocho copias de la unión
+// anterior y volvía a expandirlas O(8^depth), hasta colgar o lanzar RangeError. Las claves débiles evitan
+// retener SourceFiles entre análisis y la semántica ∃ permanece idéntica.
+const syntheticValueUnionMembers = new WeakMap();
+const syntheticValueUnionCache = { children: new WeakMap(), value: null };
+
+function syntheticValueUnion(values) {
+  const members = [];
+  const seen = new Set();
+  for (const value of values) {
+    for (const member of syntheticValueUnionMembers.get(value) ?? [value]) {
+      if (!seen.has(member)) {
+        seen.add(member);
+        members.push(member);
+      }
+    }
+  }
+  if (members.length === 1) return members[0];
+
+  let cacheNode = syntheticValueUnionCache;
+  for (const member of members) {
+    let next = cacheNode.children.get(member);
+    if (!next) {
+      next = { children: new WeakMap(), value: null };
+      cacheNode.children.set(member, next);
+    }
+    cacheNode = next;
+  }
+  if (cacheNode.value) return cacheNode.value;
+
+  let out = members[members.length - 1];
+  for (let i = members.length - 2; i >= 0; i -= 1) {
+    out = ts.factory.createConditionalExpression(
+      ts.factory.createIdentifier("__r12_branch"),
+      ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+      members[i],
+      ts.factory.createToken(ts.SyntaxKind.ColonToken),
+      out,
+    );
+  }
+  syntheticValueUnionMembers.set(out, members);
+  cacheNode.value = out;
+  return out;
+}
+
+// Object.assign(target,...sources) sobre TARGET object-literal: virtualiza EXACTAMENTE el orden own-copy
+// como `{...targetOwn,...source1,...sourceN}`. resolveKeyInLiteral aplica last-wins PER-KEY; un source opaco
+// queda SpreadAssignment opaco → blocked (§141), y una prop posterior literal puede volver a probar el override.
+function objectAssignObjectAlternatives(
+  call,
+  allowStructuralFallback = true,
+) {
+  if (
+    !staticNamespaceCall(call, "Object", "assign") ||
+    call.arguments.length === 0 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const targets = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isObjectLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!targets) return [];
+  if (call.arguments.length === 1) return targets;
+  return targets.map((target) =>
+    syntheticObject([
+      ...target.properties,
+      ...call.arguments
+        .slice(1)
+        .map((source) => ts.factory.createSpreadAssignment(source)),
+    ]),
+  );
+}
+
+function assignArrayElements(target, source) {
+  if (
+    target.elements.some(ts.isSpreadElement) ||
+    source.elements.some(ts.isSpreadElement)
+  ) {
+    return null;
+  }
+  const merged = [...target.elements];
+  for (let i = 0; i < source.elements.length; i += 1) {
+    const el = source.elements[i];
+    // Un hole NO es una own-property y Object.assign no copia `length` (non-enumerable).
+    if (ts.isOmittedExpression(el)) continue;
+    merged[i] = el;
+  }
+  return syntheticArray(merged);
+}
+
+// Object.assign sobre TARGET array-literal: copia índices own-enumerable SIN concatenar/desplazar posiciones.
+// Requiere sources completamente array-literal; objeto/variable/call queda §141 (no inventa conversión mixta).
+function objectAssignArrayAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !staticNamespaceCall(call, "Object", "assign") ||
+    call.arguments.length === 0 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const targets = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!targets || targets.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  let variants = [...targets];
+  for (const sourceExpr of call.arguments.slice(1)) {
+    const sources = completeContainerLiteralAlternatives(
+      sourceExpr,
+      ts.isArrayLiteralExpression,
+      allowStructuralFallback,
+    );
+    if (!sources) return [];
+    const next = [];
+    for (const target of variants) {
+      for (const source of sources) {
+        const merged = assignArrayElements(target, source);
+        if (!merged) return [];
+        next.push(merged);
+      }
+    }
+    variants = next;
+  }
+  return variants;
+}
+
+// Convierte el MAPA de descriptors de Object.create a own-properties virtuales. `{m:{value:X}}` → `m:X`;
+// descriptor sin `value`, accessor u opaco → valor opaco que SOMBREA el proto (nunca deja filtrar su `m`).
+function descriptorOverlayProperties(descriptors) {
+  const out = [];
+  for (const p of descriptors.properties) {
+    if (ts.isPropertyAssignment(p)) {
+      const vals = objectLiteralMemberValues(p.initializer, "value");
+      out.push(
+        ts.factory.createPropertyAssignment(
+          p.name,
+          vals.length > 0
+            ? syntheticValueUnion(vals)
+            : syntheticObject([]),
+        ),
+      );
+    } else if (ts.isShorthandPropertyAssignment(p)) {
+      out.push(ts.factory.createPropertyAssignment(p.name, p.name));
+    } else if (ts.isSpreadAssignment(p)) {
+      // Un spread/descriptor-map opaco podría definir cualquier key → el resolver lo marca blocked.
+      out.push(ts.factory.createSpreadAssignment(p.expression));
+    } else if (p.name) {
+      out.push(
+        ts.factory.createPropertyAssignment(p.name, syntheticObject([])),
+      );
+    }
+  }
+  return out;
+}
+
+function objectCreateAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !staticNamespaceCall(call, "Object", "create") ||
+    call.arguments.length < 1 ||
+    call.arguments.length > 2 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const protoExpr = unwrapErased(call.arguments[0]);
+  const protos =
+    protoExpr.kind === ts.SyntaxKind.NullKeyword
+      ? [syntheticObject([])]
+      : completeContainerLiteralAlternatives(
+          call.arguments[0],
+          ts.isObjectLiteralExpression,
+          allowStructuralFallback,
+        );
+  if (!protos) return [];
+  if (call.arguments.length === 1) return protos;
+
+  const descriptorExpr = call.arguments[1];
+  const descriptors = completeOwnObjectLiteralAlternatives(descriptorExpr);
+  // Descriptors opacos pueden sombrear CUALQUIER key: conservar un spread opaco posterior bloquea el proto.
+  if (!descriptors) {
+    return protos.map((proto) =>
+      syntheticObject([
+        ...proto.properties,
+        ts.factory.createSpreadAssignment(descriptorExpr),
+      ]),
+    );
+  }
+  const out = [];
+  for (const proto of protos) {
+    for (const descriptorMap of descriptors) {
+      out.push(
+        syntheticObject([
+          ...proto.properties,
+          ...descriptorOverlayProperties(descriptorMap),
+        ]),
+      );
+    }
+  }
+  return out;
+}
+
+function objectSetPrototypeAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !staticNamespaceCall(call, "Object", "setPrototypeOf") ||
+    call.arguments.length < 2 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const targets = completeOwnObjectLiteralAlternatives(call.arguments[0]);
+  const protos = completeContainerLiteralAlternatives(
+    call.arguments[1],
+    ts.isObjectLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!targets || !protos) return [];
+  const out = [];
+  for (const proto of protos) {
+    for (const target of targets) {
+      // Lookup: own target gana sobre proto → orden last-wins del resolver virtual.
+      out.push(syntheticObject([...proto.properties, ...target.properties]));
+    }
+  }
+  return out;
+}
+
+// Object.defineProperty devuelve el target mutado. Modelar el descriptor `value` de forma POSICIONAL
+// (append last-wins) cierra el carrier sin reintroducir el FP R12: un override safe posterior sigue safe.
+function objectDefinePropertyAlternatives(
+  call,
+  allowStructuralFallback = true,
+) {
+  if (
+    !staticNamespaceCall(call, "Object", "defineProperty") ||
+    call.arguments.length !== 3 ||
+    call.arguments.some(ts.isSpreadElement) ||
+    !keyExprComplete(call.arguments[1])
+  ) {
+    return [];
+  }
+  const keys = [...resolveKeyCandidates(call.arguments[1])];
+  if (keys.length === 0) return [];
+  const targets = completeContainerLiteralAlternatives(
+    call.arguments[0],
+    ts.isObjectLiteralExpression,
+    allowStructuralFallback,
+  );
+  const descriptors = completeOwnObjectLiteralAlternatives(call.arguments[2]);
+  if (!targets || !descriptors) return [];
+  const out = [];
+  for (const target of targets) {
+    for (const descriptor of descriptors) {
+      const read = resolveKeyInLiteral(descriptor, "value", 0);
+      if (read.blocked) continue;
+      const value =
+        read.vals.length > 0
+          ? syntheticValueUnion(read.vals)
+          : syntheticObject([]);
+      for (const key of keys) {
+        out.push(
+          syntheticObject([
+            ...target.properties,
+            ts.factory.createPropertyAssignment(
+              ts.factory.createStringLiteral(key),
+              value,
+            ),
+          ]),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+function objectPrototypeAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !(
+      staticNamespaceCall(call, "Object", "getPrototypeOf") ||
+      staticNamespaceCall(call, "Reflect", "getPrototypeOf")
+    )
+  ) {
+    return [];
+  }
+  const out = [];
+  for (const branch of expandArgLists(call.arguments)) {
+    if (branch.truncated || branch.nodes.length !== 1) continue;
+    const source = unwrapErased(branch.nodes[0]);
+    if (!ts.isCallExpression(source)) continue;
+    if (
+      staticNamespaceCall(source, "Object", "create") &&
+      source.arguments.length >= 1 &&
+      !source.arguments.some(ts.isSpreadElement)
+    ) {
+      const proto = unwrapErased(source.arguments[0]);
+      if (proto.kind === ts.SyntaxKind.NullKeyword) continue;
+      const alternatives = completeContainerLiteralAlternatives(
+        source.arguments[0],
+        ts.isObjectLiteralExpression,
+        allowStructuralFallback,
+      );
+      if (alternatives) out.push(...alternatives);
+      continue;
+    }
+    if (
+      staticNamespaceCall(source, "Object", "setPrototypeOf") &&
+      source.arguments.length >= 2 &&
+      !source.arguments.some(ts.isSpreadElement)
+    ) {
+      const alternatives = completeContainerLiteralAlternatives(
+        source.arguments[1],
+        ts.isObjectLiteralExpression,
+        allowStructuralFallback,
+      );
+      if (alternatives) out.push(...alternatives);
+    }
+  }
+  return out;
+}
+
+// fromEntries es codificable cuando CADA key está escrita como literal en el carrier. No se enruta
+// Object.entries/values: ese round-trip de key implícita sigue expresamente renunciado por D2.
+function objectFromEntriesAlternatives(call) {
+  if (
+    !staticNamespaceCall(call, "Object", "fromEntries") ||
+    call.arguments.length !== 1 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const sources = iterableArrayAlternatives(call.arguments[0], true);
+  const out = [];
+  for (const source of sources) {
+    const entries = concreteArrayElements(source);
+    if (!entries) continue;
+    let variants = [[]];
+    for (const entry of entries) {
+      const pairs = completeContainerLiteralAlternatives(
+        entry,
+        ts.isArrayLiteralExpression,
+        true,
+      );
+      if (!pairs) {
+        variants = [];
+        break;
+      }
+      const next = [];
+      for (const properties of variants) {
+        for (const pair of pairs) {
+          const elements = concreteArrayElements(pair);
+          if (!elements || elements.length < 2 || !keyExprComplete(elements[0])) {
+            continue;
+          }
+          const keys = [...resolveKeyCandidates(elements[0])];
+          for (const key of keys) {
+            next.push([
+              ...properties,
+              ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                elements[1],
+              ),
+            ]);
+          }
+        }
+      }
+      variants = next;
+    }
+    out.push(...variants.map(syntheticObject));
+  }
+  return out;
+}
+
+function identityArrayFromMapper(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isArrowFunction(e) && !ts.isFunctionExpression(e)) return false;
+  if (e.parameters.length !== 1 || !ts.isIdentifier(e.parameters[0].name)) {
+    return false;
+  }
+  const param = e.parameters[0].name.text;
+  if (!ts.isBlock(e.body)) {
+    const body = unwrapErased(e.body);
+    return ts.isIdentifier(body) && body.text === param;
+  }
+  if (e.body.statements.length !== 1) return false;
+  const stmt = e.body.statements[0];
+  if (!ts.isReturnStatement(stmt) || !stmt.expression) return false;
+  const returned = unwrapErased(stmt.expression);
+  return ts.isIdentifier(returned) && returned.text === param;
+}
+
+// Subconjunto decidible del overload array-like de Array.from. Solo materializa índices own explícitos
+// dentro de un `length` entero literal; posiciones ausentes son `undefined` y no aportan una raíz.
+function objectArrayLikeAlternatives(expr) {
+  const objects = completeOwnObjectLiteralAlternatives(expr);
+  if (!objects) return [];
+  const out = [];
+  for (const object of objects) {
+    if (
+      object.properties.some(
+        (p) =>
+          ts.isSpreadAssignment(p) ||
+          (p.name && ts.isComputedPropertyName(p.name)),
+      )
+    ) {
+      continue;
+    }
+    const lengthRead = resolveKeyInLiteral(object, "length", 0);
+    if (lengthRead.blocked || lengthRead.vals.length === 0) continue;
+    const lengths = [];
+    for (const value of lengthRead.vals) {
+      const candidates = literalIntegerAlternatives(value);
+      if (!candidates) continue;
+      lengths.push(...candidates.filter((n) => n >= 0));
+    }
+    for (const length of lengths) {
+      const indexed = new Map();
+      let blocked = false;
+      for (const property of object.properties) {
+        const names = propNameCanonical(property.name);
+        for (const name of names) {
+          if (!/^(0|[1-9]\d*)$/.test(name)) continue;
+          const index = Number(name);
+          if (index >= length) continue;
+          const read = resolveKeyInLiteral(object, name, 0);
+          if (read.blocked) {
+            blocked = true;
+            break;
+          }
+          if (read.vals.length > 0) {
+            indexed.set(index, syntheticValueUnion(read.vals));
+          }
+        }
+        if (blocked) break;
+      }
+      if (blocked || indexed.size === 0) {
+        if (!blocked) out.push(syntheticArray([]));
+        continue;
+      }
+      const max = Math.max(...indexed.keys());
+      const elements = Array.from({ length: max + 1 }, () =>
+        ts.factory.createOmittedExpression(),
+      );
+      for (const [index, value] of indexed) elements[index] = value;
+      out.push(syntheticArray(elements));
+    }
+  }
+  return out;
+}
+
+function arrayFromAlternatives(call, allowStructuralFallback = true) {
+  if (
+    !staticNamespaceCall(call, "Array", "from") ||
+    (call.arguments.length !== 1 && call.arguments.length !== 2) ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  if (call.arguments.length === 2 && !identityArrayFromMapper(call.arguments[1])) {
+    return [];
+  }
+  const sources = [
+    ...iterableArrayAlternatives(
+      call.arguments[0],
+      allowStructuralFallback,
+    ),
+    ...objectArrayLikeAlternatives(call.arguments[0]),
+  ];
+  if (sources.some((a) => a.elements.some(ts.isSpreadElement))) return [];
+  return sources.map((source) => syntheticArray([...source.elements]));
+}
+
+function arrayOfAlternatives(call) {
+  if (!staticNamespaceCall(call, "Array", "of")) return [];
+  return expandArgLists(call.arguments)
+    .filter((branch) => !branch.truncated)
+    .map((branch) => syntheticArray(branch.nodes));
+}
+
+function singleNumericArrayLengthArgument(expr) {
+  return valueTransparentLeaves(expr).every((leaf) => {
+    const e = unwrapErased(leaf);
+    const operand = ts.isPrefixUnaryExpression(e)
+      ? unwrapErased(e.operand)
+      : null;
+    return (
+      ts.isNumericLiteral(e) ||
+      (ts.isPrefixUnaryExpression(e) &&
+        (e.operator === ts.SyntaxKind.PlusToken ||
+          e.operator === ts.SyntaxKind.MinusToken) &&
+        operand !== null &&
+        ts.isNumericLiteral(operand))
+    );
+  });
+}
+
+// `Array(x)`/`new Array(x)`: un único Number es longitud (no elemento); un arg no-numérico o ≥2
+// son elementos. El spread de variable queda §141; spread literal se aplana con el seam común.
+function arrayConstructorAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e) && !ts.isNewExpression(e)) return [];
+  if (
+    !valueTransparentLeaves(e.expression).some((leaf) => {
+      const callee = unwrapErased(leaf);
+      return ts.isIdentifier(callee) && callee.text === "Array";
+    })
+  ) {
+    return [];
+  }
+  const out = [];
+  for (const branch of expandArgLists(e.arguments ?? [])) {
+    if (branch.truncated) continue;
+    if (
+      branch.nodes.length === 1 &&
+      singleNumericArrayLengthArgument(branch.nodes[0])
+    ) {
+      continue;
+    }
+    out.push(syntheticArray(branch.nodes));
+  }
+  return out;
+}
+
+function concatenateArrayAlternatives(
+  call,
+  callee,
+  allowStructuralFallback = true,
+) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("concat")
+  ) {
+    return [];
+  }
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!receivers || receivers.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  const out = [];
+  for (const branch of expandArgLists(call.arguments)) {
+    if (branch.truncated) continue;
+    let variants = receivers.map((r) => [...r.elements]);
+    let complete = true;
+    for (const arg of branch.nodes) {
+      const arrays = completeContainerLiteralAlternatives(
+        arg,
+        ts.isArrayLiteralExpression,
+        allowStructuralFallback,
+      );
+      if (!arrays || arrays.some((a) => a.elements.some(ts.isSpreadElement))) {
+        complete = false;
+        break;
+      }
+      const next = [];
+      for (const current of variants) {
+        for (const arr of arrays) next.push([...current, ...arr.elements]);
+      }
+      variants = next;
+    }
+    if (complete) out.push(...variants.map(syntheticArray));
+  }
+  return out;
+}
+
+function slicedArrayAlternatives(call, callee, allowStructuralFallback = true) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("slice") ||
+    call.arguments.some(ts.isSpreadElement) ||
+    call.arguments.length > 1 ||
+    (call.arguments.length === 1 && canonicalNumericKey(call.arguments[0]) !== "0")
+  ) {
+    return [];
+  }
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!receivers || receivers.some((a) => a.elements.some(ts.isSpreadElement))) {
+    return [];
+  }
+  return receivers.map((receiver) => syntheticArray([...receiver.elements]));
+}
+
+function concreteArrayElements(lit) {
+  // Los holes cambian posiciones/iteración según el carrier (reverse conserva; flat elimina; Set materializa
+  // undefined). No inventar una semántica común: quedan fuera hasta que un consumer los adjudique.
+  if (
+    lit.elements.some(ts.isOmittedExpression) ||
+    !arrayLiteralSpreadsFullyResolve(lit)
+  ) {
+    return null;
+  }
+  return spreadFlattenedElements(lit.elements, []);
+}
+
+// reverse/toReversed/toSorted/toSpliced producen una secuencia cuyos elementos provienen del receiver (y,
+// para toSpliced, de los inserts). El ORDEN no es una prueba segura común — comparator/índices cambian la
+// posición — así que cada posición virtual contiene la unión ∃ de elementos posibles, igual que `.at`.
+// Es over-aprox fail-closed deliberada y central: cualquier consumidor posicional hereda el mismo resultado.
+function reorderedArrayAlternatives(
+  call,
+  callee,
+  allowStructuralFallback = true,
+) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const method = accessedMemberNames(callee).find((name) =>
+    ["reverse", "toReversed", "toSorted", "toSpliced"].includes(name),
+  );
+  if (!method) return [];
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!receivers) return [];
+
+  const branches =
+    method === "toSpliced"
+      ? expandArgLists(call.arguments).filter((branch) => !branch.truncated)
+      : [{ nodes: [], truncated: false }];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements) continue;
+    for (const branch of branches) {
+      const inserts = method === "toSpliced" ? branch.nodes.slice(2) : [];
+      const candidates = [...elements, ...inserts];
+      if (candidates.length === 0) {
+        out.push(syntheticArray([]));
+        continue;
+      }
+      const union = syntheticValueUnion(candidates);
+      const width = Math.max(1, elements.length + inserts.length);
+      out.push(syntheticArray(Array.from({ length: width }, () => union)));
+    }
+  }
+  return out;
+}
+
+// `flat()` / `flat(1)` sobre arrays completamente literales: virtualiza exactamente un nivel. Las ramas
+// alternativas de un elemento-array se cartesianizan; `flat(0)` es copia. Profundidades >1 permanecen fuera
+// del mandato R13 para no fingir un folder recursivo no adjudicado.
+function flattenedArrayAlternatives(
+  call,
+  callee,
+  allowStructuralFallback = true,
+) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("flat") ||
+    call.arguments.some(ts.isSpreadElement) ||
+    call.arguments.length > 1
+  ) {
+    return [];
+  }
+  const depth =
+    call.arguments.length === 0 ? "1" : canonicalNumericKey(call.arguments[0]);
+  if (depth !== "0" && depth !== "1") return [];
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!receivers) return [];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements) continue;
+    if (depth === "0") {
+      out.push(syntheticArray(elements));
+      continue;
+    }
+    let variants = [[]];
+    for (const element of elements) {
+      const nested = completeContainerLiteralAlternatives(
+        element,
+        ts.isArrayLiteralExpression,
+        allowStructuralFallback,
+      );
+      if (!nested) {
+        variants = variants.map((current) => [...current, element]);
+        continue;
+      }
+      const next = [];
+      for (const current of variants) {
+        for (const array of nested) {
+          const flattened = concreteArrayElements(array);
+          if (flattened) next.push([...current, ...flattened]);
+        }
+      }
+      variants = next;
+    }
+    out.push(...variants.map(syntheticArray));
+  }
+  return out;
+}
+
+// pop()/shift() devuelven un ELEMENTO, no un contenedor. Mantener este seam en value-survival evita
+// fingir que el resultado es indexable y conserva la frontera OOM de los arrays vacíos.
+function arrayScalarElementAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    call.arguments.length !== 0
+  ) {
+    return [];
+  }
+  const method = accessedMemberNames(callee).find((name) =>
+    name === "pop" || name === "shift",
+  );
+  if (!method) return [];
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    true,
+  );
+  if (!receivers) return [];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements || elements.length === 0) continue;
+    out.push(method === "pop" ? elements[elements.length - 1] : elements[0]);
+  }
+  return out;
+}
+
+function definitelyObjectWeakRefTargets(expr) {
+  const out = [];
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const e = unwrapErased(leaf);
+    if (
+      ts.isObjectLiteralExpression(e) ||
+      ts.isArrayLiteralExpression(e) ||
+      ts.isFunctionExpression(e) ||
+      ts.isArrowFunction(e) ||
+      ts.isClassExpression(e) ||
+      ts.isNewExpression(e)
+    ) {
+      out.push(e);
+      continue;
+    }
+    if (
+      (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) &&
+      accessedMemberNames(e).includes("constructor")
+    ) {
+      const receiver = unwrapErased(e.expression);
+      if (
+        receiver.kind !== ts.SyntaxKind.NullKeyword &&
+        !(ts.isIdentifier(receiver) && receiver.text === "undefined")
+      ) {
+        out.push(e);
+      }
+      continue;
+    }
+    if (
+      containerLiteralAlternatives(e, isAnyContainerLiteral, true).length > 0
+    ) {
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+function weakRefDerefAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("deref") ||
+    call.arguments.length !== 0
+  ) {
+    return [];
+  }
+  const receiver = unwrapErased(callee.expression);
+  if (
+    !isStaticGlobalNew(receiver, "WeakRef") ||
+    !receiver.arguments ||
+    receiver.arguments.length !== 1 ||
+    receiver.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  return definitelyObjectWeakRefTargets(receiver.arguments[0]);
+}
+
+// Métodos cuyo resultado NO es un array proyectable de valores del receiver, o cuya selección depende de
+// ejecutar un callback. Son la frontera negativa del carrier estructural R14: `map/filter/flatMap` siguen
+// §141; scalar/iterator/element-returning tampoco se fingen como arrays. La dirección anti-drift está en el
+// COMPLEMENTO: un método nuevo/desconocido sobre array-literal falla cerrado como potencial value-preserver.
+const NON_PROJECTABLE_ARRAY_METHODS = new Set([
+  "at",
+  "constructor",
+  "entries",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flatMap",
+  "forEach",
+  "includes",
+  "indexOf",
+  "join",
+  "keys",
+  "lastIndexOf",
+  "map",
+  "pop",
+  "push",
+  "reduce",
+  "reduceRight",
+  "shift",
+  "some",
+  "toLocaleString",
+  "toString",
+  "unshift",
+  "values",
+]);
+
+// Ya tienen virtualización semántica propia (más precisa) en semanticContainerResultAlternatives. Excluirlos
+// del fallback evita que una rama estructural más ancha borre sus controles OOM/§141. `slice` no está aquí:
+// R14 amplía su semántica exacta a start/end literales, no solo `slice()`/`slice(0)`.
+const PRECISE_ARRAY_RESULT_METHODS = new Set([
+  "concat",
+  "flat",
+  "reverse",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+]);
+
+// Alternativas ENTERAS numéricas decidibles de un argumento VT. Rechaza BigInt (los métodos Array hacen
+// ToNumber y lanzarían), strings/coerciones e identifiers: son §141, no un evaluador de constantes parcial.
+function literalIntegerAlternatives(expr) {
+  const leaves = valueTransparentLeaves(expr);
+  if (leaves.length === 0) return null;
+  const out = [];
+  for (const leaf of leaves) {
+    const u = unwrapErased(leaf);
+    if (
+      ts.isBigIntLiteral(u) ||
+      (ts.isPrefixUnaryExpression(u) &&
+        ts.isBigIntLiteral(unwrapErased(u.operand)))
+    ) {
+      return null;
+    }
+    const canonical = canonicalNumericKey(u);
+    if (canonical === null) return null;
+    const value = Number(canonical);
+    if (!Number.isFinite(value) || !Number.isInteger(value)) return null;
+    out.push(value);
+  }
+  return [...new Set(out)];
+}
+
+function literalIntegerArgumentLists(args) {
+  let branches = [[]];
+  for (const arg of args) {
+    if (ts.isSpreadElement(arg)) return null;
+    const values = literalIntegerAlternatives(arg);
+    if (!values) return null;
+    const next = [];
+    for (const branch of branches) {
+      for (const value of values) next.push([...branch, value]);
+    }
+    branches = next;
+  }
+  return branches;
+}
+
+// Para el default desconocido solo aceptamos args en-sitio sin identifiers/calls. Si el comportamiento del
+// método depende de data-flow (`futureCopy(n)`), permanece §141; `futureCopy()`/args literales falla cerrado.
+function arrayMethodArgumentsAreInline(args) {
+  if (args.some(ts.isSpreadElement)) return false;
+  return args.every((arg) =>
+    valueTransparentLeaves(arg).every((leaf) => {
+      const u = unwrapErased(leaf);
+      return (
+        !ts.isIdentifier(u) &&
+        !ts.isCallExpression(u) &&
+        !ts.isArrowFunction(u) &&
+        !ts.isFunctionExpression(u)
+      );
+    }),
+  );
+}
+
+// R14: carrier por ESTRUCTURA, no catálogo positivo método-a-método. Solo se consulta cuando un CallExpression
+// sobre receiver array-literal se PROYECTA por índice literal completo. Los cuatro métodos con semántica de
+// rango/replacement se virtualizan exactamente para conservar OOM y el origen de `.fill`; cualquier método
+// futuro no clasificado degrada a unión ∃ de los elementos del receiver (fail-closed anti-drift).
+function projectedArrayMethodAlternatives(
+  expr,
+  allowStructuralFallback = true,
+) {
+  const out = [];
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const call = unwrapErased(leaf);
+    if (!ts.isCallExpression(call)) continue;
+    const callee = unwrapErased(call.expression);
+    if (
+      !(
+        ts.isPropertyAccessExpression(callee) ||
+        ts.isElementAccessExpression(callee)
+      )
+    ) {
+      continue;
+    }
+    const methods = [...new Set(accessedMemberNames(callee))];
+    if (methods.length === 0) continue; // método por key variable → §141
+    const receivers = completeContainerLiteralAlternatives(
+      callee.expression,
+      ts.isArrayLiteralExpression,
+      allowStructuralFallback,
+    );
+    if (!receivers) continue;
+    const argBranches = expandArgLists(call.arguments);
+
+    for (const method of methods) {
+      if (
+        NON_PROJECTABLE_ARRAY_METHODS.has(method) ||
+        PRECISE_ARRAY_RESULT_METHODS.has(method)
+      ) {
+        continue;
+      }
+      for (const receiver of receivers) {
+        const elements = concreteArrayElements(receiver);
+        if (!elements) continue;
+        for (const branch of argBranches) {
+          if (branch.truncated) continue; // spread de variable → §141
+          const args = branch.nodes;
+
+          if (method === "with") {
+            if (args.length !== 2) continue;
+            const indices = literalIntegerAlternatives(args[0]);
+            if (!indices) continue;
+            for (const rawIndex of indices) {
+              const index = rawIndex < 0 ? elements.length + rawIndex : rawIndex;
+              if (index < 0 || index >= elements.length) continue; // runtime RangeError → OOM universal
+              const next = [...elements];
+              next[index] = args[1];
+              out.push(syntheticArray(next));
+            }
+            continue;
+          }
+
+          if (method === "slice") {
+            if (args.length > 2) continue;
+            const branches = literalIntegerArgumentLists(args);
+            if (!branches) continue;
+            for (const intArgs of branches) {
+              out.push(syntheticArray(elements.slice(...intArgs)));
+            }
+            continue;
+          }
+
+          if (method === "copyWithin") {
+            if (args.length > 3) continue;
+            const branches = literalIntegerArgumentLists(args);
+            if (!branches) continue;
+            for (const intArgs of branches) {
+              const next = [...elements];
+              next.copyWithin(...intArgs);
+              out.push(syntheticArray(next));
+            }
+            continue;
+          }
+
+          if (method === "fill") {
+            if (args.length < 1 || args.length > 3) continue;
+            const branches = literalIntegerArgumentLists(args.slice(1));
+            if (!branches) continue;
+            for (const intArgs of branches) {
+              const next = [...elements];
+              next.fill(args[0], ...intArgs);
+              out.push(syntheticArray(next));
+            }
+            continue;
+          }
+
+          if (!arrayMethodArgumentsAreInline(args)) continue;
+          if (elements.length === 0) {
+            out.push(syntheticArray([]));
+            continue;
+          }
+          const union = syntheticValueUnion(elements);
+          out.push(
+            syntheticArray(
+              Array.from({ length: elements.length }, () => union),
+            ),
+          );
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function isStaticGlobalNew(node, name) {
+  if (!ts.isNewExpression(node)) return false;
+  return valueTransparentLeaves(node.expression).some((leaf) => {
+    const e = unwrapErased(leaf);
+    return ts.isIdentifier(e) && e.text === name;
+  });
+}
+
+// SameValueZero key para el subconjunto LITERAL adjudicado de Map/Set. El prefijo de tipo evita confluir
+// `1` con `"1"`; Number -0/0 sí confluyen como en runtime. null/boolean son valores literales distintos.
+function literalCollectionKey(expr) {
+  const leaves = valueTransparentLeaves(expr).map(unwrapErased);
+  if (leaves.length !== 1) return null;
+  const e = leaves[0];
+  if (ts.isStringLiteralLike(e)) return `string:${e.text}`;
+  if (ts.isBigIntLiteral(e)) {
+    return `bigint:${String(BigInt(e.text.slice(0, -1).replace(/_/g, "")))}`;
+  }
+  if (
+    ts.isPrefixUnaryExpression(e) &&
+    e.operator === ts.SyntaxKind.MinusToken &&
+    ts.isBigIntLiteral(unwrapErased(e.operand))
+  ) {
+    const b = unwrapErased(e.operand);
+    return `bigint:${String(-BigInt(b.text.slice(0, -1).replace(/_/g, "")))}`;
+  }
+  const numeric = canonicalNumericKey(e);
+  if (numeric !== null) return `number:${numeric}`;
+  if (e.kind === ts.SyntaxKind.TrueKeyword) return "boolean:true";
+  if (e.kind === ts.SyntaxKind.FalseKeyword) return "boolean:false";
+  if (e.kind === ts.SyntaxKind.NullKeyword) return "null";
+  return null;
+}
+
+// Variantes de entradas de `new Map(<array-literal>)`. Cada entrada conserva keyExpr para la eventual
+// iteración y key canónica (null = key opaca). Las entradas/pairs opacas quedan §141; no se extraen parciales.
+function mapEntryAlternatives(expr) {
+  const out = [];
+  // El receiver puede llegar por una proyección literal o por otro Map.get. Ambos son value-transparent
+  // en el seam central; resolver sus hojas aquí mantiene la frontera (un identifier/variable queda hoja
+  // opaca) y permite `[Map][0]`, `({m:Map}).m` y Map-en-Map sin catálogo paralelo.
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const e = unwrapErased(leaf);
+    if (!isStaticGlobalNew(e, "Map")) continue;
+    const args = [...(e.arguments ?? [])];
+    if (args.some(ts.isSpreadElement) || args.length > 1) continue;
+    if (args.length === 0) {
+      out.push([]);
+      continue;
+    }
+    const sources = completeContainerLiteralAlternatives(
+      args[0],
+      ts.isArrayLiteralExpression,
+    );
+    if (!sources) continue;
+    for (const source of sources) {
+      const entryExprs = concreteArrayElements(source);
+      if (!entryExprs) continue;
+      let variants = [[]];
+      for (const entryExpr of entryExprs) {
+        const pairs = completeContainerLiteralAlternatives(
+          entryExpr,
+          ts.isArrayLiteralExpression,
+        );
+        if (!pairs) {
+          variants = [];
+          break;
+        }
+        const next = [];
+        for (const current of variants) {
+          for (const pair of pairs) {
+            const pairElements = concreteArrayElements(pair);
+            if (!pairElements || pairElements.length < 2) continue;
+            next.push([
+              ...current,
+              {
+                key: literalCollectionKey(pairElements[0]),
+                keyExpr: pairElements[0],
+                value: pairElements[1],
+              },
+            ]);
+          }
+        }
+        variants = next;
+      }
+      out.push(...variants);
+    }
+  }
+  return out;
+}
+
+// `Map.get`: match literal, bloqueado por cualquier key opaca posterior, y last-wins exacto.
+function mapGetValueAlternatives(call, callee) {
+  if (
+    !ts.isCallExpression(call) ||
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("get") ||
+    call.arguments.length < 1 ||
+    call.arguments.some(ts.isSpreadElement)
+  ) {
+    return [];
+  }
+  const wanted = literalCollectionKey(call.arguments[0]);
+  if (wanted === null) return [];
+  const out = [];
+  for (const entries of mapEntryAlternatives(callee.expression)) {
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+      const entry = entries[i];
+      if (entry.key === null) break; // podría sombrear la key buscada → §141
+      if (entry.key === wanted) {
+        out.push(entry.value);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function materializedMapEntries(entries) {
+  if (entries.some((entry) => entry.key === null)) return null;
+  const positions = new Map();
+  const ordered = [];
+  for (const entry of entries) {
+    const position = positions.get(entry.key);
+    if (position === undefined) {
+      positions.set(entry.key, ordered.length);
+      ordered.push({ ...entry });
+    } else {
+      ordered[position] = { ...ordered[position], value: entry.value };
+    }
+  }
+  return ordered;
+}
+
+function mapIteratorArrayAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = [...new Set(accessedMemberNames(callee))];
+  if (methods.length === 0) return [];
+  const negative = new Set([
+    "clear",
+    "constructor",
+    "delete",
+    "forEach",
+    "get",
+    "has",
+    "set",
+  ]);
+  const out = [];
+  for (const entries of mapEntryAlternatives(callee.expression)) {
+    const ordered = materializedMapEntries(entries);
+    if (!ordered) continue;
+    for (const method of methods) {
+      if (negative.has(method)) continue;
+      if (method === "values") {
+        out.push(syntheticArray(ordered.map((entry) => entry.value)));
+        continue;
+      }
+      if (method === "keys") {
+        out.push(syntheticArray(ordered.map((entry) => entry.keyExpr)));
+        continue;
+      }
+      if (method === "entries") {
+        out.push(
+          syntheticArray(
+            ordered.map((entry) =>
+              syntheticArray([entry.keyExpr, entry.value]),
+            ),
+          ),
+        );
+        continue;
+      }
+      if (!arrayMethodArgumentsAreInline(e.arguments)) continue;
+      const candidates = ordered.flatMap((entry) => [entry.keyExpr, entry.value]);
+      if (candidates.length === 0) {
+        out.push(syntheticArray([]));
+        continue;
+      }
+      const union = syntheticValueUnion(candidates);
+      out.push(
+        syntheticArray(Array.from({ length: ordered.length }, () => union)),
+      );
+    }
+  }
+  return out;
+}
+
+function mapDefaultIteratorAlternatives(expr) {
+  const out = [];
+  for (const entries of mapEntryAlternatives(expr)) {
+    const ordered = materializedMapEntries(entries);
+    if (!ordered) continue;
+    out.push(
+      syntheticArray(
+        ordered.map((entry) => syntheticArray([entry.keyExpr, entry.value])),
+      ),
+    );
+  }
+  return out;
+}
+
+function setArrayAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!isStaticGlobalNew(e, "Set")) return [];
+  const args = [...(e.arguments ?? [])];
+  if (args.some(ts.isSpreadElement) || args.length > 1) return [];
+  if (args.length === 0) return [syntheticArray([])];
+  const sources = completeContainerLiteralAlternatives(
+    args[0],
+    ts.isArrayLiteralExpression,
+  );
+  if (!sources) return [];
+  const out = [];
+  for (const source of sources) {
+    const elements = concreteArrayElements(source);
+    if (!elements) continue;
+    const seen = new Set();
+    const unique = [];
+    for (const element of elements) {
+      const key = literalCollectionKey(element);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      unique.push(element);
+    }
+    out.push(syntheticArray(unique));
+  }
+  return out;
+}
+
+function setIteratorArrayAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = [...new Set(accessedMemberNames(callee))];
+  if (methods.length === 0) return [];
+  const sources = setArrayAlternatives(callee.expression);
+  const negative = new Set([
+    "add",
+    "clear",
+    "constructor",
+    "delete",
+    "forEach",
+    "has",
+  ]);
+  const out = [];
+  for (const source of sources) {
+    const elements = concreteArrayElements(source);
+    if (!elements) continue;
+    for (const method of methods) {
+      if (negative.has(method)) continue;
+      if (method === "entries") {
+        out.push(
+          syntheticArray(elements.map((value) => syntheticArray([value, value]))),
+        );
+        continue;
+      }
+      if (method === "keys" || method === "values") {
+        out.push(syntheticArray([...elements]));
+        continue;
+      }
+      if (!arrayMethodArgumentsAreInline(e.arguments)) continue;
+      if (elements.length === 0) {
+        out.push(syntheticArray([]));
+        continue;
+      }
+      const union = syntheticValueUnion(elements);
+      out.push(
+        syntheticArray(Array.from({ length: elements.length }, () => union)),
+      );
+    }
+  }
+  return out;
+}
+
+function arrayIteratorArrayAlternatives(
+  expr,
+  allowStructuralFallback = true,
+) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e) || e.arguments.length !== 0) return [];
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = accessedMemberNames(callee);
+  if (!methods.some((method) => ["entries", "keys", "values"].includes(method))) {
+    return [];
+  }
+  const receivers = completeContainerLiteralAlternatives(
+    callee.expression,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (!receivers) return [];
+  const out = [];
+  for (const receiver of receivers) {
+    const elements = concreteArrayElements(receiver);
+    if (!elements) continue;
+    for (const method of methods) {
+      if (method === "values") out.push(syntheticArray([...elements]));
+      else if (method === "keys") {
+        out.push(
+          syntheticArray(
+            elements.map((_element, index) =>
+              ts.factory.createNumericLiteral(index),
+            ),
+          ),
+        );
+      } else if (method === "entries") {
+        out.push(
+          syntheticArray(
+            elements.map((element, index) =>
+              syntheticArray([
+                ts.factory.createNumericLiteral(index),
+                element,
+              ]),
+            ),
+          ),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+function iteratorHelperArrayAlternatives(call, callee) {
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    ) ||
+    !accessedMemberNames(callee).includes("toArray") ||
+    call.arguments.length !== 0
+  ) {
+    return [];
+  }
+  return iterableArrayAlternatives(callee.expression, true).map((array) =>
+    syntheticArray([...array.elements]),
+  );
+}
+
+const NON_PROJECTABLE_ITERATOR_HELPERS = new Set([
+  "constructor",
+  "every",
+  "filter",
+  "find",
+  "flatMap",
+  "forEach",
+  "map",
+  "reduce",
+  "some",
+]);
+
+// Un Iterator helper intermedio sigue siendo un iterable. Los helpers con callback permanecen §141;
+// drop/take se virtualizan exactamente y cualquier helper futuro sin data-flow degrada a unión ∃.
+function iteratorCarrierAlternatives(expr) {
+  const e = unwrapErased(expr);
+  if (!ts.isCallExpression(e)) return [];
+  if (
+    staticNamespaceCall(e, "Iterator", "from") &&
+    e.arguments.length === 1 &&
+    !e.arguments.some(ts.isSpreadElement)
+  ) {
+    return iterableArrayAlternatives(e.arguments[0], true);
+  }
+  const callee = unwrapErased(e.expression);
+  if (
+    !(
+      ts.isPropertyAccessExpression(callee) ||
+      ts.isElementAccessExpression(callee)
+    )
+  ) {
+    return [];
+  }
+  const methods = [...new Set(accessedMemberNames(callee))];
+  if (methods.length === 0) return [];
+  const sources = iterableArrayAlternatives(callee.expression, true);
+  if (sources.length === 0) return [];
+  const branches = expandArgLists(e.arguments);
+  const out = [];
+  for (const method of methods) {
+    if (NON_PROJECTABLE_ITERATOR_HELPERS.has(method)) continue;
+    for (const source of sources) {
+      const elements = concreteArrayElements(source);
+      if (!elements) continue;
+      for (const branch of branches) {
+        if (branch.truncated) continue;
+        const args = branch.nodes;
+        if (method === "drop" || method === "take") {
+          if (args.length !== 1) continue;
+          const counts = literalIntegerAlternatives(args[0]);
+          if (!counts) continue;
+          for (const count of counts) {
+            if (count < 0) continue; // RangeError universal
+            out.push(
+              syntheticArray(
+                method === "drop"
+                  ? elements.slice(count)
+                  : elements.slice(0, count),
+              ),
+            );
+          }
+          continue;
+        }
+        if (method === "asIndexedPairs" && args.length === 0) {
+          out.push(
+            syntheticArray(
+              elements.map((element, index) =>
+                syntheticArray([
+                  ts.factory.createNumericLiteral(index),
+                  element,
+                ]),
+              ),
+            ),
+          );
+          continue;
+        }
+        if (!arrayMethodArgumentsAreInline(args)) continue;
+        if (elements.length === 0) {
+          out.push(syntheticArray([]));
+          continue;
+        }
+        const union = syntheticValueUnion(elements);
+        out.push(
+          syntheticArray(Array.from({ length: elements.length }, () => union)),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+// Secuencias iterables materializables SOLO cuando el consumidor es spread/iteración. Mantener este seam
+// separado evita la falsa equivalencia `new Set([X])[0] ≡ X` (Set no tiene index properties) mientras permite
+// `[...new Set([X])][0]` y `[...new Map([[k,X]]).values()][0]`.
+function iterableArrayAlternatives(expr, allowStructuralFallback = true) {
+  const arrays = containerLiteralAlternatives(
+    expr,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+  if (arrays.length > 0) return arrays;
+  const e = unwrapErased(expr);
+  const sets = setArrayAlternatives(e);
+  if (sets.length > 0) return sets;
+  const mapDefault = mapDefaultIteratorAlternatives(e);
+  if (mapDefault.length > 0) return mapDefault;
+  if (ts.isCallExpression(e)) {
+    const mapIterators = mapIteratorArrayAlternatives(e);
+    if (mapIterators.length > 0) return mapIterators;
+    const setIterators = setIteratorArrayAlternatives(e);
+    if (setIterators.length > 0) return setIterators;
+    const arrayIterators = arrayIteratorArrayAlternatives(
+      e,
+      allowStructuralFallback,
+    );
+    if (arrayIterators.length > 0) return arrayIterators;
+    return iteratorCarrierAlternatives(e);
+  }
+  return [];
+}
+
+function staticNamespaceMethodNames(call, namespace) {
+  if (!ts.isCallExpression(call)) return [];
+  const out = [];
+  for (const leaf of valueTransparentLeaves(unwrapErased(call.expression))) {
+    const callee = unwrapErased(leaf);
+    if (
+      !ts.isPropertyAccessExpression(callee) &&
+      !ts.isElementAccessExpression(callee)
+    ) {
+      continue;
+    }
+    const isNamespace = valueTransparentLeaves(callee.expression).some(
+      (receiver) => {
+        const e = unwrapErased(receiver);
+        return ts.isIdentifier(e) && e.text === namespace;
+      },
+    );
+    if (isNamespace) out.push(...accessedMemberNames(callee));
+  }
+  return [...new Set(out)];
+}
+
+const NON_CONTAINER_OBJECT_STATICS = new Set([
+  "assign",
+  "create",
+  "defineProperties",
+  "defineProperty",
+  "entries",
+  "freeze",
+  "fromEntries",
+  "getOwnPropertyDescriptor",
+  "getOwnPropertyDescriptors",
+  "getOwnPropertyNames",
+  "getOwnPropertySymbols",
+  "getPrototypeOf",
+  "groupBy",
+  "hasOwn",
+  "is",
+  "isExtensible",
+  "isFrozen",
+  "isSealed",
+  "keys",
+  "preventExtensions",
+  "seal",
+  "setPrototypeOf",
+  "values",
+]);
+
+// Default anti-drift para un Object static futuro/no-clasificado. No adivina transformación ni key:
+// conserva el espacio de keys visibles y pone en cada una la unión ∃ de todos los valores resolubles del
+// source. Los statics conocidos conservan arriba su semántica separada o su renuncia explícita.
+function structuralObjectStaticAlternatives(call) {
+  const methods = staticNamespaceMethodNames(call, "Object").filter(
+    (method) => !NON_CONTAINER_OBJECT_STATICS.has(method),
+  );
+  if (methods.length === 0) return [];
+  const out = [];
+  for (const branch of expandArgLists(call.arguments)) {
+    if (branch.truncated || !arrayMethodArgumentsAreInline(branch.nodes)) {
+      continue;
+    }
+    for (const source of branch.nodes) {
+      for (const array of arrayLiteralAlternatives(source, true)) {
+        const elements = concreteArrayElements(array);
+        if (!elements) continue;
+        if (elements.length === 0) {
+          out.push(syntheticArray([]));
+          continue;
+        }
+        const union = syntheticValueUnion(elements);
+        out.push(
+          syntheticArray(Array.from({ length: elements.length }, () => union)),
+        );
+      }
+      for (const object of objectLiteralAlternatives(source, true)) {
+        const values = allObjectLiteralValuesDeep(object, []);
+        if (values.length === 0) {
+          out.push(syntheticObject([]));
+          continue;
+        }
+        const union = syntheticValueUnion(values);
+        const keys = new Set();
+        for (const property of object.properties) {
+          for (const key of propNameCanonical(property.name)) keys.add(key);
+        }
+        out.push(
+          syntheticObject(
+            [...keys].map((key) =>
+              ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                union,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+// Carriers de RESULTADO R12. No son value-transparentes ni identity-carriers genéricos: cada familia
+// virtualiza SU semántica observable de contenedor y el consumer existente sigue resolviendo keys/posiciones.
+function semanticContainerResultAlternatives(
+  expr,
+  allowStructuralFallback = true,
+) {
+  const e = unwrapErased(expr);
+  const constructedArrays = arrayConstructorAlternatives(e);
+  if (!ts.isCallExpression(e)) return constructedArrays;
+  const callee = unwrapErased(e.expression);
+  const precise = [
+    ...objectAssignObjectAlternatives(e, allowStructuralFallback),
+    ...objectAssignArrayAlternatives(e, allowStructuralFallback),
+    ...objectCreateAlternatives(e, allowStructuralFallback),
+    ...objectSetPrototypeAlternatives(e, allowStructuralFallback),
+    ...objectDefinePropertyAlternatives(e, allowStructuralFallback),
+    ...objectPrototypeAlternatives(e, allowStructuralFallback),
+    ...objectFromEntriesAlternatives(e),
+    ...arrayFromAlternatives(e, allowStructuralFallback),
+    ...arrayOfAlternatives(e),
+    ...concatenateArrayAlternatives(e, callee, allowStructuralFallback),
+    ...slicedArrayAlternatives(e, callee, allowStructuralFallback),
+    ...reorderedArrayAlternatives(e, callee, allowStructuralFallback),
+    ...flattenedArrayAlternatives(e, callee, allowStructuralFallback),
+    ...iteratorHelperArrayAlternatives(e, callee),
+    ...constructedArrays,
+  ];
+  if (!allowStructuralFallback) return precise;
+  return [
+    ...precise,
+    ...projectedArrayMethodAlternatives(e, true),
+    ...structuralObjectStaticAlternatives(e),
+  ];
+}
+
+// Memo por nodo+predicado: staticNamespaceCall consulta valueTransparentLeaves, que para un member-access
+// puede volver a pedir alternatives de su receiver. Sin memo, probar los 3 carriers sobre `.bind`×N repetía
+// los mismos subárboles con ramificación exponencial. Los nodos AST son inmutables durante el check y las tres
+// funciones-predicado son estables; WeakMap evita retener SourceFiles entre invocaciones. R11 pt.3 perf-guard.
+const containerLiteralAlternativesCache = new WeakMap();
+
+// Ramas literales alcanzables value-transparentemente, pelando SOLO carriers que preservan identidad Y
+// contenido. La recursión termina por descenso del AST (arg0 es hijo del CallExpression); sin cap fail-open.
+// Centraliza la composición `carrier ∘ contenedor-proyectado` para array/object y sus consumidores.
+function containerLiteralAlternatives(
+  expr,
+  isLiteral,
+  allowStructuralFallback = true,
+) {
+  if (!expr) return [];
+  let byPredicate = containerLiteralAlternativesCache.get(expr);
+  const byMode = byPredicate?.get(isLiteral);
+  if (byMode?.has(allowStructuralFallback)) {
+    return byMode.get(allowStructuralFallback);
+  }
+  const out = [];
+  for (const leaf of valueTransparentLeaves(expr)) {
+    const e = unwrapErased(leaf);
+    if (isLiteral(e)) {
+      out.push(e);
+      continue;
+    }
+    const arg = identityPreservingContainerArgument(e);
+    if (arg) {
+      out.push(
+        ...containerLiteralAlternatives(
+          arg,
+          isLiteral,
+          allowStructuralFallback,
+        ),
+      );
+      continue;
+    }
+    for (const semantic of semanticContainerResultAlternatives(
+      e,
+      allowStructuralFallback,
+    )) {
+      if (isLiteral(semantic)) out.push(semantic);
+    }
+  }
+  if (!byPredicate) {
+    byPredicate = new Map();
+    containerLiteralAlternativesCache.set(expr, byPredicate);
+  }
+  let modes = byPredicate.get(isLiteral);
+  if (!modes) {
+    modes = new Map();
+    byPredicate.set(isLiteral, modes);
+  }
+  modes.set(allowStructuralFallback, out);
+  return out;
+}
+
+// Aplana los SPREAD de ARRAY-LITERAL en una lista de args: `f(...["a", b], c)` → ["a", b, c]. Un
+// spread de VARIABLE (`...args`) NO se aplana (data-flow residual): se conserva como SpreadElement
+// (no produce un string-leaf, así que no flaggea). Usado para que el handler/target/string de un
+// sink (timer directo/.call/.apply/.bind, Reflect.apply, mutador react) no quede oculto tras un
+// spread literal (codex P2). Token-en-su-sitio: el array literal está a la vista.
+// Ramas array-literal que un arg-expr puede tomar value-transparentemente: array directo `["a"]` o
+// ALTERNATIVAS `cond ? ["a"] : ["b"]` (codex P2), incl. identity-carrier EN-SITIO (R11 pt.3).
+// Fail-closed: cualquiera cuenta.
+function arrayLiteralAlternatives(expr, allowStructuralFallback = true) {
+  return containerLiteralAlternatives(
+    expr,
+    ts.isArrayLiteralExpression,
+    allowStructuralFallback,
+  );
+}
+
+// Ramas object-literal que un expr puede tomar value-transparentemente (`({k:X}).k`, o vía VT
+// `(c ? {k:X} : {k:Y}).k`), incl. identity-carrier EN-SITIO (R11 pt.3). Espejo de
+// arrayLiteralAlternatives para el eje object-member (root A).
+function objectLiteralAlternatives(expr, allowStructuralFallback = true) {
+  return containerLiteralAlternatives(
+    expr,
+    ts.isObjectLiteralExpression,
+    allowStructuralFallback,
+  );
+}
+
+// Nombre(s) canónico(s) de una PropertyName (INV-VT): identifier/string → [text]; numeric → key JS FIEL
+// (`{1e2:…}`→"100", `{0.5:…}`→"0.5", vía canonicalNumericKey — misma capa que el use-side, def-side simétrico,
+// Fable cross-review 3); computed-LITERAL → foldeada (`["m"]`→"m", `` [`m`] ``→"m", `[0]`→"0"). Computed
+// NO-foldable (ensamblaje/variable) → [] (indeterminada).
+function propNameCanonical(name) {
+  if (!name) return [];
+  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return [name.text];
+  // Nombre-de-propiedad literal-numérico → MISMA función que use-side (canonicalNumericKey): NumericLiteral
+  // Y BigIntLiteral (`({100n:X})` es un nombre válido, canoniza a "100" como use-side; Auditoría B R5 / U2.2,
+  // cierra #3 def-side). PrefixUnary(±) NO puede ser nombre directo (syntax) → solo llega vía ComputedPropertyName.
+  if (ts.isNumericLiteral(name) || ts.isBigIntLiteral(name)) {
+    const c = canonicalNumericKey(name);
+    return c === null ? [] : [c];
+  }
+  if (ts.isComputedPropertyName(name)) return [...resolveKeyCandidates(name.expression)];
+  return [];
+}
+
+// Valores de la propiedad `key` (canónica) en los object-literals a los que `baseExpr` se reduce
+// value-transparentemente (`({k:X}).k`, `({0:X})[0]`, `({["m"]:X}).m`). Resolución PER-KEY (Fable
+// cross-review 2 — evita el POISON-AMPLIFIER: un sibling benigno NO opaca la key objetivo):
+//   - property (assignment/shorthand) con nombre canónico == key → candidato = initializer (last-wins).
+//   - accessor/método con nombre == key → OPACO (getter/setter/método → no descender).
+//   - sibling con nombre != key → IGNORAR (no envenena).
+//   - spread (cualquier posición) o computed NO-foldable (cualquier posición) → INDETERMINADO (§141:
+//     podría definir/sombrear la key).
+// Resuelve la `key` en UN object-literal → { val, blocked }. POSICIONAL last-wins (Fable cross-review 3 #2 —
+// SIN `break`): spread/computed-nofold bloquean, pero un PropertyAssignment/shorthand POSTERIOR con la key gana
+// por orden de fuente y restaura el override determinista. `({...o, m:X}).m`→X; `({m:X, ...o}).m`→bloqueado;
+// `({...a, m:MALO, m:X}).m`→X (duplicate last-wins).
+function resolveKeyInLiteral(obj, key, depth) {
+  let vals = []; // conjunto de valores POSIBLES de la key en este punto (positional last-wins; un spread de
+  // disjunción `cond ? A : B` puede aportar VARIOS a la vez → ∃-unión, no un único valor)
+  let blocked = false;
+  for (const p of obj.properties) {
+    if (ts.isSpreadAssignment(p)) {
+      // H3 (Auditoría B R6) + R7-C: un spread de OBJECT-LITERAL resoluble EN-SITIO es decidible SIN data-flow
+      // (`{...{m:X}}.m` === X). Si el spread-source resuelve ENTERAMENTE a object-literals, ∃-UNIONAR los vals de
+      // TODAS las alternativas (la fuente es una DISJUNCIÓN runtime `cond ? A : B` → la key puede ser la de A O
+      // la de B → si ALGUNA es danger, FLAG). El predecesor SOBRESCRIBÍA (`spreadVal = r.val`) → una rama safe
+      // POSTERIOR tapaba la danger (R7-C, ruptura de INV-PARITY: el gemelo array ∃-une en `out`). Un spread
+      // NO-resoluble a literal (variable/call/Object.assign) o profundidad excedida → §141 blocked.
+      const litAlts = completeOwnObjectLiteralAlternatives(p.expression);
+      // R9-4a: quitado el `depth > 16` — degradaba FAIL-OPEN (un spread anidado profundo pero RESOLUBLE se
+      // etiquetaba §141 y el root escapaba). El resto (no-literal / alternativas mixtas) SÍ es §141 genuino.
+      // Termina por descenso del AST. Doctrina de caps (R8/MEC-E) al conjunto.
+      if (!litAlts) {
+        blocked = true; // no resuelve ENTERAMENTE a literales → indeterminado (§141)
+        continue;
+      }
+      let anyBlocked = false;
+      const spreadVals = [];
+      for (const alt of litAlts) {
+        const r = resolveKeyInLiteral(alt, key, depth + 1);
+        if (r.blocked) anyBlocked = true;
+        if (r.vals.length > 0) spreadVals.push(...r.vals);
+      }
+      if (anyBlocked) {
+        blocked = true;
+      } else if (spreadVals.length > 0) {
+        vals = spreadVals; // el spread aporta la key (∃-unión de sus ramas) → gana por orden; una prop POSTERIOR lo sobreescribe
+        blocked = false;
+      }
+      // si no anyBlocked y spreadVals vacío: ninguna alternativa define la key → no aporta, vals se mantiene.
+      continue;
+    }
+    const names = propNameCanonical(p.name);
+    if (p.name && ts.isComputedPropertyName(p.name) && names.length === 0) {
+      blocked = true; // computed no-foldable → podría ser la key → §141
+      continue;
+    }
+    if (!names.includes(key)) continue; // sibling != key → no envenena
+    if (ts.isPropertyAssignment(p)) {
+      vals = [p.initializer];
+      blocked = false;
+    } else if (ts.isShorthandPropertyAssignment(p)) {
+      vals = [p.name];
+      blocked = false;
+    } else {
+      vals = []; // accessor/método con nombre == key → opaco
+      blocked = true;
+    }
+  }
+  return { vals, blocked };
+}
+
+function objectLiteralMemberValues(baseExpr, key, depth = 0) {
+  const out = [];
+  for (const obj of objectLiteralAlternatives(baseExpr)) {
+    const { vals, blocked } = resolveKeyInLiteral(obj, key, depth);
+    if (!blocked) out.push(...vals);
+  }
+  return out;
+}
+
+// Enumera las listas de args APLANADAS posibles, RAMIFICANDO en cada spread de ALTERNATIVAS de
+// array-literal y reconstruyendo la lista COMPLETA por rama — incl. ramas de longitud DISTINTA que
+// desplazan los args trailing (`...(cond ? [] : [fn]), "x"` → ["x"] | [fn, "x"]), e inner-spreads
+// ANIDADOS (recursión: la rama se vuelve a expandir). Un spread OPACO (variable) TRUNCA la rama
+// (data-flow residual). Devuelve [{ nodes, truncated }]. codex P2.
+function expandArgLists(rawArgs) {
+  let lists = [{ nodes: [], truncated: false }];
+  for (const a of rawArgs) {
+    if (ts.isSpreadElement(a)) {
+      const alts = arrayLiteralAlternatives(a.expression);
+      if (alts.length === 0) {
+        lists = lists.map((l) => ({ ...l, truncated: true }));
+        continue;
+      }
+      const next = [];
+      for (const l of lists) {
+        if (l.truncated) {
+          next.push(l);
+          continue;
+        }
+        for (const alt of alts) {
+          for (const sub of expandArgLists(alt.elements)) {
+            next.push({
+              nodes: [...l.nodes, ...sub.nodes],
+              truncated: sub.truncated,
+            });
+          }
+        }
+      }
+      lists = next;
+    } else {
+      lists = lists.map((l) =>
+        l.truncated ? l : { ...l, nodes: [...l.nodes, a] },
+      );
+    }
+  }
+  return lists;
+}
+
+// Candidatos al nodo en la posición lógica `idx` de `rawArgs` sobre TODAS las ramas posibles
+// (codex P2). Descarta los SpreadElement residuales (spread opaco → posición indeterminable).
+function candidatesAt(rawArgs, idx) {
+  const cands = [];
+  for (const l of expandArgLists(rawArgs)) {
+    const n = l.nodes[idx];
+    if (n && !ts.isSpreadElement(n)) cands.push(n);
+  }
+  return cands;
+}
+
+// Elemento [0] del array de args de `.apply`/`Reflect.apply` (`apply(thisArg, ["código"])`),
+// considerando alternativas del array Y inner-spreads/longitud-variable (codex P2).
+function applyHandlerCandidates(arg) {
+  if (!arg) return [];
+  const cands = [];
+  for (const alt of arrayLiteralAlternatives(arg)) {
+    cands.push(...candidatesAt(alt.elements, 0));
+  }
+  return cands;
+}
+
+// ¿`node` es un NODO operador value-transparente? Mismo SET de operadores que `valueTransparentChildren`
+// (erased/await/?:/coma/&&/||/??/=) — si se añade uno allí, añadirlo aquí. Usado para detectar el TOP
+// de una cadena value-transparente (enrolar alias embebidos una sola vez).
+function isValueTransparentOperatorNode(node) {
+  if (!node) return false;
+  if (
+    isErasedOuterExpr(node) ||
+    ts.isAwaitExpression(node) ||
+    ts.isConditionalExpression(node)
+  ) {
+    return true;
+  }
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    return (
+      op === ts.SyntaxKind.CommaToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken ||
+      op === ts.SyntaxKind.EqualsToken
+    );
+  }
+  return false;
+}
+
+/**
+ * Twin SIDE-EFFECT de `valueTransparentChildren`: recorre los operandos EVALUADOS del MISMO set de
+ * operadores value-transparentes (no solo el value-child del `&&`/coma — también el operando lateral
+ * con efecto), llamando `visit(assignmentNode)` por cada assignment-expression embebida (`X = Y`,
+ * `X &&=/||=/??= Y`). NO atraviesa CALLS/IIFE — el caveat del §141: un RHS que exige evaluar un call
+ * es data-flow → residual. Cierra el under-catch de `(later = setTimeout) && later("…")`: el root está
+ * presente COMO UNIDAD y el alias se forma con operadores value-transparentes ya ratificados → lado
+ * CAZAR de la frontera, no el assembled/indirection residual.
+ */
+function eachEmbeddedAssignment(node, visit) {
+  if (!node) return;
+  if (isErasedOuterExpr(node) || ts.isAwaitExpression(node)) {
+    eachEmbeddedAssignment(node.expression, visit);
+    return;
+  }
+  if (ts.isConditionalExpression(node)) {
+    eachEmbeddedAssignment(node.condition, visit);
+    eachEmbeddedAssignment(node.whenTrue, visit);
+    eachEmbeddedAssignment(node.whenFalse, visit);
+    return;
+  }
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    if (
+      op === ts.SyntaxKind.EqualsToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+      op === ts.SyntaxKind.BarBarEqualsToken ||
+      op === ts.SyntaxKind.QuestionQuestionEqualsToken
+    ) {
+      visit(node); // `X = Y` (o `X &&=/||=/??= Y` → X←Y condicional)
+      eachEmbeddedAssignment(node.right, visit); // cadena `a = b = root`
+      return;
+    }
+    if (
+      op === ts.SyntaxKind.CommaToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.BarBarToken ||
+      op === ts.SyntaxKind.QuestionQuestionToken
+    ) {
+      eachEmbeddedAssignment(node.left, visit);
+      eachEmbeddedAssignment(node.right, visit);
+      return;
+    }
+  }
+  // call / identifier / member / literal / arrow / etc. → STOP (no atravesar calls — caveat §141).
+}
+
+/**
+ * `context` enriquecido con los alias de timer/partial creados por assignment-expressions embebidas
+ * en `node` (operadores value-transparentes). Reusa `collectStructuralAliases` (un solo predicado, no
+ * un path paralelo). Order-INDEPENDENT fail-closed: un use-before-assign sobre-flaggea (seguro).
+ */
+function withEmbeddedAssignmentAliases(context, node) {
+  // `eachEmbeddedAssignment` visita en ORDEN DE EVALUACIÓN (left-to-right). Threadeamos un ctx
+  // evolutivo para que una cadena en la misma expresión (`(later = setTimeout, alias = later,
+  // alias)(…)`) reconozca el alias creado por una asignación ANTERIOR (codex P2).
+  let ctx = context;
+  eachEmbeddedAssignment(node, (assign) => {
+    let timer = null;
+    let partial = null;
+    collectStructuralAliases(
+      assign.left,
+      assign.right,
+      ctx,
+      exprIsTimerValued,
+      (n) => (timer ||= new Set()).add(n),
+    );
+    collectStructuralAliases(
+      assign.left,
+      assign.right,
+      ctx,
+      resolvePartialRootSet,
+      (n, r) => (partial ||= new Map()).set(n, r),
+      true,
+    );
+    if (timer) {
+      ctx = {
+        ...ctx,
+        scopeTimerAliases: new Set([...(ctx.scopeTimerAliases ?? []), ...timer]),
+      };
+    }
+    if (partial) {
+      ctx = {
+        ...ctx,
+        scopePartialAliases: new Map([
+          ...(ctx.scopePartialAliases ?? []),
+          ...partial,
+        ]),
+      };
+    }
+  });
+  return ctx;
+}
+
+/**
+ * ¿El valor de `node` ES (vía constructos value-transparentes, sin calls) un member access
+ * `constructor`? ALGUNA hoja value-transparente es un `.constructor`. Cierra el anidamiento;
+ * usado para la base del doble `.constructor.constructor`.
+ */
+function reachesConstructorAccess(node) {
+  return valueTransparentLeaves(node).some((leaf) => isConstructorMemberAccess(leaf));
+}
+
+/**
+ * ¿El receiver de un `.constructor` tiene un valor PROVABLEMENTE no-función? — i.e. TODAS
+ * sus hojas value-transparentes son literales cuyo `.constructor` es un builtin conocido
+ * ≠ `Function`: `{}`→Object, `[]`→Array, string/template→String, number→Number,
+ * bigint→BigInt, `true`/`false`→Boolean, regex→RegExp. Entonces `recv.constructor` NUNCA
+ * es `Function` → invocarlo (`({}).constructor()`, `[].constructor(3)`, `.call/.apply/.bind`,
+ * tagged) NO es eval, solo construye Object/Array/… → flaggearlo es FP (codex P2 sobre
+ * 27c5d18: bloqueaba server-safe legítimo). El escape al eval-sink exige un receiver FUNCIÓN
+ * (class/function expr, identifier, call, `this`…) o un SEGUNDO `.constructor` (rama (a),
+ * que SÍ dispara con base literal: `({}).constructor.constructor()` = Function). Cualquier
+ * hoja NO-literal → no se excluye → FAIL-CLOSED. **NO** incluye class/function expressions
+ * (su `.constructor` ES Function → eval) ni null/undefined (lanzan TypeError, no instancian).
+ * beta.27 BLOCKER-1.
+ */
+/**
+ * ¿El valor del receiver pasa por un `await` en su estructura value-transparente? — codex
+ * P2 (fail-open): `await` es transparente SOLO para no-thenables; un objeto THENABLE corre
+ * su `.then` y resuelve a un valor ARBITRARIO, incluida una función → `(await { then(r){
+ * r(function f(){}) } }).constructor("...")` alcanza `Function`. Como parser-puro NO puede
+ * probar que el operando es no-thenable, la EXENCIÓN (provably-non-function) debe rechazar
+ * cualquier receiver que cruce un await. (El FLAGGING sí cruza await en `valueTransparent
+ * Children` —fail-closed— para cazar `(await fn.constructor)(...)`; la asimetría es a
+ * propósito: cruzar await flagea de más, jamás exime de más.)
+ */
+function valueTransparentPathCrossesAwait(node) {
+  if (!node) return false;
+  if (ts.isAwaitExpression(node)) return true;
+  return valueTransparentChildren(node).some(valueTransparentPathCrossesAwait);
+}
+
+function constructorReceiverIsProvablyNonFunction(receiver) {
+  // Un receiver tras `await` puede ser un thenable que resuelve a Function → NO es
+  // provably-non-function (codex P2). Fail-closed: no eximir.
+  if (valueTransparentPathCrossesAwait(receiver)) return false;
+  const leaves = valueTransparentLeaves(receiver);
+  if (leaves.length === 0) return false;
+  return leaves.every(
+    (leaf) =>
+      (ts.isObjectLiteralExpression(leaf) &&
+        objectLiteralCannotOverrideConstructor(leaf)) ||
+      // Los demás literales NO pueden definir un `constructor` propio (sintaxis
+      // imposible): array/string/template/number/bigint/regex/boolean → su
+      // `.constructor` ES SIEMPRE el builtin heredado (Array/String/…).
+      ts.isArrayLiteralExpression(leaf) ||
+      ts.isStringLiteralLike(leaf) ||
+      ts.isTemplateExpression(leaf) ||
+      ts.isNumericLiteral(leaf) ||
+      ts.isBigIntLiteral(leaf) ||
+      ts.isRegularExpressionLiteral(leaf) ||
+      leaf.kind === ts.SyntaxKind.TrueKeyword ||
+      leaf.kind === ts.SyntaxKind.FalseKeyword,
+  );
+}
+
+/**
+ * ¿Un OBJECT LITERAL tiene `.constructor` PROVABLEMENTE = `Object` (heredado), o
+ * podría OVERRIDEarlo? — codex P1 (fail-open que abrió el fast-path de literales):
+ * `({ constructor: (()=>{}).constructor }).constructor("return window")()` define un
+ * `constructor` PROPIO = `Function` → alcanza eval sin nombrar `Function`. También vía
+ * `__proto__` (cadena de prototipo → `Function.prototype.constructor`), spread (puede
+ * traer `constructor`/`__proto__`), o key computada (podría ser "constructor").
+ * FAIL-CLOSED: el fast-path solo aplica si NINGUNA propiedad puede afectar la resolución
+ * de `.constructor` — sin spread, sin key computada, y ningún nombre (id/string)
+ * `constructor` ni `__proto__` (cualquier kind: assignment/shorthand/método/get/set).
+ */
+function objectLiteralCannotOverrideConstructor(objLit) {
+  for (const prop of objLit.properties) {
+    if (ts.isSpreadAssignment(prop)) return false; // `...x` puede traer constructor/__proto__
+    const name = prop.name;
+    if (!name || ts.isComputedPropertyName(name)) return false; // computed → podría ser "constructor"
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
+      if (name.text === "constructor" || name.text === "__proto__") return false;
+    } else if (!ts.isNumericLiteral(name)) {
+      return false; // forma de nombre desconocida → fail-closed
+    }
+  }
+  return true;
+}
+
+/**
+ * El member access `constructor` `node` está "weaponizado" (alcanza+invoca el
+ * `Function` constructor). Salta los constructos VALUE-TRANSPARENTES a AMBOS lados
+ * (wrappers erased + coma/lógico/ternario/asignación, sin calls): son contiguos y
+ * legibles — `((x).constructor)()` ≡ `x.constructor!()` ≡ `(0, x.constructor)()` ≡
+ * `x.constructor()`. Exigir `node.parent` directo dejaba escapar la forma envuelta.
+ * beta.27 BLOCKER-1 (hunt: paren-wrap C; re-hunt: `!`/`as`/`satisfies` + operadores).
+ */
+// ¿La `ClassExpression` `cls` es CONSTRUIDA inline — target DIRECTO de `new`/`Reflect.construct` a través de
+// parens/value-transparentes? `new (class…)()` / `Reflect.construct(class…, a)` → sí; `const X = class…;
+// new X()` (NOMBRADA/aliased) → no (data-flow residual). Simétrico con el manejo de subclase de
+// `constructionTargets` (heritage-extends EN-SITIO de la clase construida). codex P1.
+function classExpressionIsConstructed(cls) {
+  let top = cls;
+  while (
+    top.parent &&
+    (isValueTransparentParent(top.parent, top) ||
+      (isErasedOuterExpr(top.parent) && top.parent.expression === top))
+  ) {
+    top = top.parent;
+  }
+  const p = top.parent;
+  if (!p) return false;
+  if (ts.isNewExpression(p) && p.expression === top) return true;
+  if (ts.isCallExpression(p)) {
+    const rc = reflectCallTarget(p);
+    if (rc && rc.method === "construct" && rc.target === top) return true;
+  }
+  // NESTING anónimo: `top` es el extends-heritage de OTRA `ClassExpression` que a su vez se construye →
+  // al construir la subclase externa su `super` construye ESTA (el derived ctor delega a super), así que
+  // ESTA también se construye → su propio heritage eval-sink debe cazarse. Recursivo por la cadena de
+  // heritage (AST finito, sube hasta el `new`). El extends NOMBRADO (`extends A` identifier) NO recurre →
+  // data-flow residual. codex P1 (sub-hueco del cruce, diligencia).
+  if (
+    ts.isExpressionWithTypeArguments(p) &&
+    p.expression === top &&
+    p.parent &&
+    ts.isHeritageClause(p.parent) &&
+    p.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+    ts.isClassExpression(p.parent.parent)
+  ) {
+    return classExpressionIsConstructed(p.parent.parent);
+  }
+  return false;
+}
+function isWeaponizedConstructorAccess(node) {
+  // (a) doble `x.constructor.constructor` (ES Function, se llame o no) — la base
+  //     puede venir envuelta en value-transparentes: `(0, x.constructor).constructor`.
+  if (reachesConstructorAccess(node.expression)) return true;
+  // (codex P2) Receiver PROVABLEMENTE no-función (`({}).constructor()` = Object(),
+  // `[].constructor(3)` = Array(3)) → su `.constructor` ≠ Function → NO es eval. Tras (a)
+  // (que ya cazó el doble-constructor con base literal), un single `.constructor` de un
+  // literal no-función no es weaponizable. Base variable/no-literal → fail-closed.
+  if (constructorReceiverIsProvablyNonFunction(node.expression)) return false;
+  // Ancestro efectivo saltando value-transparentes hacia ARRIBA; `child` es el nodo
+  // (quizá envuelto) que es hijo directo de ese ancestro.
+  let child = node;
+  let parent = node.parent;
+  while (parent) {
+    if (isValueTransparentParent(parent, child)) {
+      child = parent;
+      parent = parent.parent;
+      continue;
+    }
+    // ASCENSO = DESCENSO (Auditoría B R5 / U6, cierra #10): `child` está dentro de un container-literal
+    // INMEDIATAMENTE proyectado — array `[..child..][idx]` (child = elemento, 1 nivel a la proyección) u
+    // objeto `({k:child}).k`/`["k"]` (child = valor de propiedad, 2 niveles: PropertyAssignment→ObjectLiteral→
+    // selección). El descenso (valueTransparentChildren) YA baja la proyección a `child`; el ascenso de la
+    // weaponización era asimétrico y `[x.constructor][0]("code")()` se saltaba. Simetrizado: saltar a la
+    // proyección-ancestro (≤3 niveles) cuyo descenso VT resuelva a `child`.
+    let proj = parent.parent;
+    let advanced = false;
+    for (let i = 0; i < 3 && proj; i++) {
+      if (isValueTransparentParent(proj, child)) {
+        child = proj;
+        parent = proj.parent;
+        advanced = true;
+        break;
+      }
+      proj = proj.parent;
+    }
+    if (advanced) continue;
+    break;
+  }
+  if (!parent) return false;
+  // (b) callee de CallExpression: `x.constructor("code")` (incl. optional call).
+  if (ts.isCallExpression(parent) && parent.expression === child) return true;
+  // (d) tagged template: `` x.constructor`code` ``.
+  if (ts.isTaggedTemplateExpression(parent) && parent.tag === child) return true;
+  // (c) Function.prototype: `x.constructor.call/.apply/.bind(...)` — punto O
+  //     bracket-string `x.constructor["call"](...)` (codex P2). Ambas formas son
+  //     contiguas y legibles; `accessedMemberName` las trata por igual.
+  if (
+    (ts.isPropertyAccessExpression(parent) ||
+      ts.isElementAccessExpression(parent)) &&
+    parent.expression === child
+  ) {
+    const m = accessedMemberName(parent);
+    if (m === "call" || m === "apply" || m === "bind") return true;
+  }
+  // (f) heritage `extends <fn>.constructor` de una clase CONSTRUIDA inline: `new (class extends
+  //     (f.constructor) { constructor(){ super("return 1"); } })()` — al construir la subclase, `super`
+  //     INVOCA el `Function` constructor (el default derived ctor reenvía args vía `super(...args)`; un
+  //     `super("code")` explícito igual). El `.constructor` está EN-SITIO en la cláusula extends (contiguo
+  //     con el `new`) → decidible, ANÁLOGO eval-sink de la subclase WebAssembly.Module (`constructionTargets`).
+  //     El guard de receiver (arriba) ya descartó `extends [].constructor` (= Array, no Function). Solo la
+  //     clase ANÓNIMA inline-construida; la NOMBRADA (`class X extends f.constructor {}; new X()`) = data-flow
+  //     residual (token en la declaración, no en el `new`). codex P1.
+  if (
+    ts.isExpressionWithTypeArguments(parent) &&
+    parent.expression === child &&
+    parent.parent &&
+    ts.isHeritageClause(parent.parent) &&
+    parent.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+    ts.isClassExpression(parent.parent.parent) &&
+    classExpressionIsConstructed(parent.parent.parent)
+  ) {
+    return true;
+  }
+  // (e) `Reflect.construct(x.constructor, [...])` / `Reflect.apply(x.constructor, …)` — el
+  //     `.constructor` (acceso DIRECTO contiguo) se INVOCA vía un builtin Reflect nombrado
+  //     directamente, con el `.constructor` como 1er arg TOKEN-EN-SU-SITIO (análogo a
+  //     `Object.assign(React,…)`/`Reflect.set(React,…)` del member-write taint). `Reflect.
+  //     construct(F,a) ≡ new F(...a)`, `Reflect.apply(F,t,a) ≡ F.apply(t,a)` → si F = Function,
+  //     es eval. El guard de receiver (arriba) ya descartó `Reflect.construct(({}).constructor,…)`
+  //     (= new Object, no eval). DISTINTO del residual `Reflect.get(x,"constructor")` (ACCESO
+  //     indirecto, sin nodo `.constructor` a la vista). dot O bracket-string. codex P1.
+  // El `.constructor` puede llegar como 1er arg DIRECTO o dentro de un array/spread/condicional
+  // (`Reflect.construct(...[F.constructor, […]])`, `...(c ? [F.constructor, […]] : [])`): subir por
+  // los wrappers array-literal / spread / value-transparentes hasta el call, y exigir que el
+  // `.constructor` sea un CANDIDATO de la posición 0 (modelo branch-aware) — token-en-su-sitio. codex P2.
+  let callNode = parent;
+  while (
+    callNode &&
+    (ts.isArrayLiteralExpression(callNode) ||
+      ts.isSpreadElement(callNode) ||
+      ts.isParenthesizedExpression(callNode) ||
+      isValueTransparentOperatorNode(callNode))
+  ) {
+    callNode = callNode.parent;
+  }
+  if (
+    callNode &&
+    ts.isCallExpression(callNode) &&
+    callNode.arguments.length > 0 &&
+    candidatesAt(callNode.arguments, 0).some(
+      (c) => c === child || valueTransparentLeaves(c).includes(child),
+    )
+  ) {
+    // El CALLEE entero puede ir VALUE-TRANSPARENTE: receiver Reflect (`(0, Reflect).apply(…)`) Y/O
+    // la member-access completa (`(0, Reflect.apply)(…)`, `(c ? Reflect.apply : Reflect.apply)(…)`).
+    // Resolver AMBOS por valueTransparentLeaves: una hoja member-access `Reflect.construct`/`.apply`
+    // cuyo receiver resuelve VT a `Reflect` (codex P2). No solo unwrapErased.
+    for (const callee of valueTransparentLeaves(callNode.expression)) {
+      if (
+        !ts.isPropertyAccessExpression(callee) &&
+        !ts.isElementAccessExpression(callee)
+      ) {
+        continue;
+      }
+      const member = accessedMemberName(callee);
+      const receiverIsReflect = valueTransparentLeaves(callee.expression).some(
+        (o) => ts.isIdentifier(o) && o.text === "Reflect",
+      );
+      if (
+        receiverIsReflect &&
+        (member === "construct" || member === "apply")
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * ¿`node` (un identifier o property-access) es —o es el ROOT cualificado de— la
+ * expresión de una heritage TYPE-ONLY? `interface X extends a.B.C` y
+ * `class X implements a.B` son type-only (se borran). El `extends` de una CLASE
+ * (`class X extends a.B`) es runtime read → false. Sube por el PropertyAccess
+ * (los miembros ya están cubiertos) hasta la heritage expression. Usado en la
+ * regla 12 (identifier bare) Y en la rama (c) (root de property-access), porque
+ * ambas detectan el global por caminos distintos. beta.27 BLOCKER-1 (re-hunt FP).
+ */
+function isInTypeOnlyHeritageExpr(node) {
+  let top = node;
+  while (
+    ts.isPropertyAccessExpression(top.parent) &&
+    top.parent.expression === top
+  ) {
+    top = top.parent;
+  }
+  return (
+    ts.isExpressionWithTypeArguments(top.parent) &&
+    top.parent.expression === top &&
+    ts.isHeritageClause(top.parent.parent) &&
+    (top.parent.parent.token === ts.SyntaxKind.ImplementsKeyword ||
+      ts.isInterfaceDeclaration(top.parent.parent.parent))
+  );
+}
+
+function isNonReferencePosition(node, declaredNames) {
   const parent = node.parent;
   if (!parent) return false;
 
@@ -886,9 +7421,20 @@ function isNonReferencePosition(node) {
     return true;
   }
 
-  // 2. Operand of TypeOfExpression: `typeof window` short-circuita
-  //    ReferenceError sobre identifiers bare.
-  if (ts.isTypeOfExpression(parent) && parent.expression === node) {
+  // 2. Operand of TypeOfExpression: `typeof window` short-circuita ReferenceError
+  //    sobre el identifier BARE — incluso envuelto en wrappers RUNTIME-TRANSPARENTES
+  //    (`typeof (window)`, `typeof (window as any)`): los parens/erased no cambian
+  //    que el operando es el bare ident, así que sigue sin lanzar. `typeof window.foo`
+  //    (property access, NO erased) SÍ ejecuta el read → no se exime (el up-walk para
+  //    en el PropertyAccess). re-hunt FP paren-operand.
+  let typeofTop = node;
+  while (typeofTop.parent && isErasedOuterExpr(typeofTop.parent)) {
+    typeofTop = typeofTop.parent;
+  }
+  if (
+    ts.isTypeOfExpression(typeofTop.parent) &&
+    typeofTop.parent.expression === typeofTop
+  ) {
     return true;
   }
 
@@ -942,8 +7488,67 @@ function isNonReferencePosition(node) {
       ts.isExportSpecifier(parent) ||
       ts.isNamespaceImport(parent) ||
       ts.isNamespaceExportDeclaration(parent) ||
-      ts.isLabeledStatement(parent) ||
+      // `export * as Icons from "./icons"` (y `export type * as …`): el alias es un
+      // NamespaceExport (NO un NamespaceExportDeclaration, que es el `export as namespace
+      // Foo` de UMD). El nombre es metadata del re-export, sin read runtime; el módulo
+      // target lo sigue extractModuleReferences aparte. Antes caía al fail-closed y FP-eaba
+      // un barrel con alias homónimo de un global (`export * as location from …`). codex P2.
+      ts.isNamespaceExport(parent) ||
+      // Nombre de campo de clase: `class C { count = 0 }` — `count` es el
+      // nombre de un PropertyDeclaration, no un read del binding global.
+      // beta.27 BLOCKER-1 (cruce A+B, FP-hunt).
+      ts.isPropertyDeclaration(parent) ||
       ts.isTypeParameterDeclaration(parent)) &&
+    "name" in parent &&
+    parent.name === node
+  ) {
+    return true;
+  }
+
+  // 6b. Computed-property key DENTRO de un miembro TYPE-SPACE
+  //     (PropertySignature/MethodSignature de interface o type-literal):
+  //     `interface I { [sym]: T }`, `type U = { [sym](): void }`, branded
+  //     types `T & { readonly [brand]: B }`. El miembro entero se BORRA al
+  //     emit → la key nunca lee un binding runtime. Solo PropertySignature/
+  //     MethodSignature (NUNCA Property/MethodDeclaration de clase u object
+  //     literal, que SÍ emiten) → no exime computed keys de clase (runtime).
+  //     Dispara con `declare const sym: unique symbol` ambient (sin binding
+  //     runtime, antes caía al fail-closed y FP-eaba). hunt final nonref-heritage.
+  if (
+    ts.isComputedPropertyName(parent) &&
+    parent.parent &&
+    (ts.isPropertySignature(parent.parent) ||
+      ts.isMethodSignature(parent.parent) ||
+      // get/set accessor SIGNATURE de interface/type-literal (sin cuerpo) — type-space
+      // erased. El accessor de CLASE lleva cuerpo → no se exime (deepest re-hunt #173).
+      ((ts.isGetAccessorDeclaration(parent.parent) ||
+        ts.isSetAccessorDeclaration(parent.parent)) &&
+        parent.parent.body === undefined))
+  ) {
+    return true;
+  }
+
+  // 6c. parameterName de un TypePredicateNode (`x is T`, `asserts x is T`) en
+  //     posición de TIPO standalone: `type G = (val) => val is string`,
+  //     `interface { check(val): val is T }`, callback-prop `(item: T) => item
+  //     is T`, anotación de un const `(x) => asserts x is number`. El predicate
+  //     es type-space (se borra); en una función REAL el param está en
+  //     localBindings y queda enmascarado, pero en un tipo suelto no hay binding
+  //     → caía al fail-closed y flaggeaba el nombre (`val`,`item`) aunque ni es
+  //     global. `this is T` no afecta: `this` es keyword, no Identifier. hunt
+  //     final new-fp-source.
+  if (ts.isTypePredicateNode(parent) && parent.parameterName === node) {
+    return true;
+  }
+
+  // 6d. Nombre de un import-attribute (`import x from "./y.json" with { type: "json" }`,
+  //     o el viejo `assert { type: "json" }`): es metadata del loader/resolver, NO una
+  //     ref runtime al global. TS lo modela como ImportAttribute.name (AssertEntry.name
+  //     en versiones previas). deepest re-hunt #173 (exotic-syntax).
+  if (
+    ((typeof ts.isImportAttribute === "function" &&
+      ts.isImportAttribute(parent)) ||
+      (typeof ts.isAssertEntry === "function" && ts.isAssertEntry(parent))) &&
     "name" in parent &&
     parent.name === node
   ) {
@@ -979,14 +7584,23 @@ function isNonReferencePosition(node) {
     return true;
   }
 
-  // 9. JSX tag name: `<window />`, `<Buffer />`. Lowercase = string
-  //    literal HTML element (no ref). Uppercase ES ref a binding,
-  //    pero el caso es extremadamente raro y skip pragmático.
+  // 9. JSX tag name. Lowercase (`<div/>`, `<span/>`) = elemento intrínseco
+  //    (string literal, NO lee binding) → exento. Uppercase (`<HTMLElement/>`,
+  //    `<Foo/>`) = referencia de VALOR a un binding que el runtime JSX
+  //    evalúa: se exime SOLO si el nombre está declarado en algún sitio del
+  //    módulo (componente importado / local / forward-ref / mutuo, válido en
+  //    render-time). Un global DOM bare como `<HTMLElement/>` NO se declara →
+  //    cae al check fail-closed y se flaggea (ReferenceError en SSR). Bajo la
+  //    denylist esto era skip pragmático; fail-closed lo hace load-bearing.
+  //    Codex P2 beta.27 BLOCKER-1.
   if (
     (ts.isJsxOpeningElement(parent) ||
       ts.isJsxClosingElement(parent) ||
       ts.isJsxSelfClosingElement(parent)) &&
-    parent.tagName === node
+    parent.tagName === node &&
+    ts.isIdentifier(node) &&
+    (/^[a-z]/.test(node.text) ||
+      (declaredNames !== undefined && declaredNames.has(node.text)))
   ) {
     return true;
   }
@@ -999,6 +7613,116 @@ function isNonReferencePosition(node) {
       ts.isElementAccessExpression(parent)) &&
     parent.expression === node
   ) {
+    return true;
+  }
+
+  // ── Reglas 11-13: añadidas en beta.27 BLOCKER-1 al pasar a fail-closed.
+  // Bajo la denylist anterior nunca se ejercitaban (el predicado
+  // `CLIENT_GLOBALS.has` short-circuitaba antes de llegar aquí); el modelo
+  // whitelist hace `isNonReferencePosition` load-bearing para TODO
+  // identificador, exponiendo posiciones type-space y meta-properties que
+  // se borran en compilación y no leen ningún binding global.
+
+  // 11. Entity name de tipo (`A.B` en posición de tipo es un
+  //     QualifiedName, p.ej. `React.ReactNode`). A diferencia del acceso a
+  //     valor `a.b` (PropertyAccessExpression), el QualifiedName SOLO
+  //     aparece en type-space → ni `left` ni `right` leen un binding
+  //     runtime. (Caza `React`/`ReactNode` en `children?: React.ReactNode`.)
+  //
+  //     EXCEPCIÓN: el `moduleReference` de un `import x = A.B.C` NO-type-only es
+  //     una EntityName en posición de VALOR. `import h = window.location.href`
+  //     emite `var h = window.location.href` — un read runtime del root
+  //     (`window`). El root es el `.left` más interno; los miembros (`.right`,
+  //     `location`/`href`) ya los exime la regla 1. Solo el root se des-exime.
+  //     Discriminador conservador `!isTypeOnly` (acotado, sin binder): NO se intenta
+  //     resolver si el RHS same-file es un miembro-TIPO — eso exige el binder de TS
+  //     y queda RESIDUAL por diseño (ver ADR). Caso bounded que SÍ cazamos: el root
+  //     es un GLOBAL (`window`/`navigator`…), flaggeado pase lo que pase el RHS.
+  //     beta.27 BLOCKER-1 (hunt: import-equals value-alias).
+  if (ts.isQualifiedName(parent)) {
+    if (parent.left === node) {
+      let top = parent;
+      while (top.parent && ts.isQualifiedName(top.parent)) top = top.parent;
+      if (
+        top.parent &&
+        ts.isImportEqualsDeclaration(top.parent) &&
+        top.parent.moduleReference === top &&
+        !top.parent.isTypeOnly
+      ) {
+        return false; // root de import-equals value-alias = read runtime
+      }
+    }
+    return true;
+  }
+
+  // 12. Heritage type-only: `interface X extends Omit<...>` o
+  //     `class X implements Y`. El `extends` de una INTERFACE y el
+  //     `implements` de una CLASE son type-only (se borran). CRÍTICO: el
+  //     `extends` de una CLASE (`class X extends Base`) SÍ es una ref
+  //     runtime — no se excluye, para que `class X extends HTMLElement`
+  //     (custom element, client-only) siga flaggeándose.
+  //
+  //     Cubre también el ROOT de una heritage CUALIFICADA (`interface X extends
+  //     navigator.Connection`): `isInTypeOnlyHeritageExpr` sube por el
+  //     PropertyAccess (los miembros ya los exime la regla 1) hasta la heritage
+  //     expression. Solo type-only — `class X extends navigator.Foo` es runtime.
+  if (isInTypeOnlyHeritageExpr(node)) {
+    return true;
+  }
+
+  // 13. Nombre de MetaProperty: el `meta` de `import.meta` (y `target` de
+  //     `new.target`). Construcción sintáctica ESM estándar, disponible en
+  //     SSR/RSC — no es un read de global. (Caza `meta` en
+  //     `import.meta.env.DEV`.)
+  if (ts.isMetaProperty(parent) && parent.name === node) {
+    return true;
+  }
+
+
+  // 14. Labels: `outer: for (...)` y los targets de `break outer` /
+  //     `continue outer`. El identificador es el NOMBRE del label (en
+  //     `parent.label`, no `parent.name`), metadata de control de flujo, no
+  //     un read del binding global. La antigua regla 6 listaba
+  //     `LabeledStatement` pero comprobaba `parent.name` → rama muerta.
+  //     beta.27 BLOCKER-1 (cruce A+B, FP-hunt).
+  if (
+    (ts.isLabeledStatement(parent) ||
+      ts.isBreakStatement(parent) ||
+      ts.isContinueStatement(parent)) &&
+    parent.label === node
+  ) {
+    return true;
+  }
+
+  // 15. JsxNamespacedName: el `ns` y el `name` de `<svg:rect/>` (tag) o de
+  //     `<use xlink:href=.../>` (atributo). Compila a un STRING (`"svg:rect"`,
+  //     `{ "xlink:href": … }`) — ni `ns` ni `name` leen un binding runtime.
+  //     beta.27 BLOCKER-1 (workflow: FP en SVG/XML namespaced).
+  if (ts.isJsxNamespacedName(parent)) {
+    return true;
+  }
+
+  // 16. ImportTypeNode.qualifier: el `Name` de `import("mod").Name` en
+  //     posición de TIPO (`p: import("react").ReactNode`). Type-space puro,
+  //     se borra en compilación — análogo a la regla 11 (QualifiedName). El
+  //     `import()` DINÁMICO de runtime no es un ImportTypeNode, así que sigue
+  //     flaggeándose. beta.27 BLOCKER-1 (workflow: FP type-space).
+  if (ts.isImportTypeNode(parent) && parent.qualifier === node) {
+    return true;
+  }
+
+  // 17. Label de NamedTupleMember: el `first`/`second` de
+  //     `type Pair = [first: number, second: string]`. Type-space puro,
+  //     se borra en compilación — no lee binding. beta.27 BLOCKER-1
+  //     (workflow honest-construct: FP en tuplas con labels).
+  if (ts.isNamedTupleMember(parent) && parent.name === node) {
+    return true;
+  }
+
+  // 18. Nombre de ImportEqualsDeclaration (`import X = NS.Y`): es la
+  //     declaración del binding `X`, no un read. El binding runtime se añade
+  //     al scope en gatherModulePreloadedBindings. beta.27 BLOCKER-1.
+  if (ts.isImportEqualsDeclaration(parent) && parent.name === node) {
     return true;
   }
 
@@ -1015,10 +7739,12 @@ function isNonReferencePosition(node) {
 // real al binding y debe ser chequeado normalmente, esté o no
 // envuelto en `typeof`.
 //
-// El walker solo chequea PropertyAccessExpression y
-// ElementAccessExpression — no chequea reads de Identifier bare —
-// así que `typeof window` solo (sin acceso) ni se detecta ni se
-// flagea, que es el comportamiento correcto.
+// El walker SÍ chequea reads de Identifier bare (rama (d) — `const w =
+// window`, `f(navigator)`, etc.; el modelo fail-closed la hizo load-bearing
+// para todo identificador). `typeof window` (sin acceso a propiedad) NO se
+// flaggea porque el operando de un `TypeOfExpression` es non-reference-
+// position (regla 2 de `isNonReferencePosition`): leer `typeof X` no lanza
+// ReferenceError aunque X no exista. Comportamiento correcto.
 
 // ─── Cross-module smuggling (beta.26 HIGH-2) ──────────────────────
 //
@@ -1125,6 +7851,202 @@ function tryResolveFile(noExtAbsPath, fileExists) {
   return null;
 }
 
+// Vite resuelve un import SIN extensión a estas exts NO-auditables (JS-family + `.mts` ESM-TS)
+// — están en `resolve.extensions` ANTES o junto a `.ts`/`.tsx` (VITE_RESOLVE_EXTS). Si la cascada
+// auditable falla pero existe uno de estos, el import SÍ resuelve en el bundler, a un archivo que
+// el gate no audita → debe reportar el error PRECISO "JS no auditable" (fail-closed), no el genérico
+// "no resolvió" — que MIENTE (el archivo existe; el `.mts` modelado en VITE_RESOLVE_EXTS exigía un
+// resolver coherente). `.cjs`/`.cts` NO están: Vite no los resuelve extensionless. codex P3.
+const RESOLUTION_NONAUDITABLE_CASCADE = [
+  ".mjs",
+  ".js",
+  ".mts",
+  ".jsx",
+  "/index.mjs",
+  "/index.js",
+  "/index.mts",
+  "/index.jsx",
+];
+function tryResolveNonAuditable(noExtAbsPath, fileExists) {
+  for (const ext of RESOLUTION_NONAUDITABLE_CASCADE) {
+    const candidate = `${noExtAbsPath}${ext}`;
+    if (fileExists(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Orden REAL de `resolve.extensions` de Vite (DEFAULT_EXTENSIONS, .json excluido
+// — no se audita). El gate resuelve `.ts` primero; Vite rankea `.mjs`/`.js`/`.mts` ANTES
+// que `.ts` (y `.jsx` antes que `.tsx`). Si para un import extensionless existe un hermano
+// que Vite preferiría, el BUNDLER ENVÍA ESE archivo y el gate auditaría OTRO → divergencia
+// silenciosa (hunt final: helper.ts limpio + helper.mjs `screen.width` → gate `[]`, Vite
+// envía el .mjs) = bypass cross-module. Hoy LATENTE (0 .mjs/.js en src) → fail-closed.
+// INVARIANTE file-beats-dir (codex P2 / dirEntryShadowedByPackageJson): `[...VITE_RESOLVE_EXTS, ".json"]` DEBE
+// ser EXACTAMENTE el set que Vite trata como file-beats-dir (un archivo `<base>.<ext>` gana al directorio ANTES
+// de que Vite mire `<dir>/package.json`/`index.*`). Verificado vs Vite 8.1 real (oráculo ssrLoadModule):
+// {.mjs,.js,.mts,.ts,.jsx,.tsx,.json} ganan al dir; `.cjs`/`.cts` NO (Vite los IGNORA y ENTRA al dir). Una ext
+// de MÁS aquí (p.ej. `.cjs`) suprimiría el guard cuando existe un hermano `pkg.cjs` mientras Vite corre el
+// código del dir → fail-open reintroducido; por eso NUNCA añadir `.cjs`/`.cts`. Si `vite.config` customiza
+// `resolve.extensions`, este hardcode driftaría → #190 (derivar del config efectivo).
+const VITE_RESOLVE_EXTS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
+
+// Orden COMPLETO de resolución de Vite para un specifier SIN extensión: file-ext (resolve.extensions, con
+// `.json` ÚLTIMO) ANTES que dir-index (Vite prueba `<base>.<ext>` archivo antes que `<base>/index.<ext>`).
+// La PRIMERA extensión que existe es la que Vite ENVÍA. codex P2 (`.json`).
+const VITE_RESOLVE_ORDER = [
+  ...VITE_RESOLVE_EXTS,
+  ".json",
+  ...VITE_RESOLVE_EXTS.map((e) => `/index${e}`),
+  "/index.json",
+];
+// ¿`<base>` (extensionless) resuelve a un `.json`? — el PRIMER candidato existente en el orden de Vite es
+// un `.json`. Vite (resolve.extensions incluye `.json` + resolveJsonModule) lo carga como DATOS, no código
+// de render → external. Captura la precedencia exacta: `<base>.json` FILE gana al dir-index (`<base>/
+// index.ts`, file-beats-dir) pero PIERDE ante un `<base>.<source/js-ext>` FILE (más precedencia). codex P2.
+function resolvesToJsonAsset(noExt, fileExists) {
+  for (const ext of VITE_RESOLVE_ORDER) {
+    if (fileExists(`${noExt}${ext}`)) return ext.endsWith(".json");
+  }
+  return false;
+}
+// Vite consulta `<dir>/package.json` (main/module/browser/exports → puede apuntar a CÓDIGO ejecutable) ANTES
+// del dir-index (`<dir>/index.*`). resolveImportPath solo tiene `fileExists`, NO readFile → no puede resolver
+// el campo main/exports (el subsistema de resolución de paquetes que el resolver renuncia, §373). Detecta el
+// RIESGO con fileExists: `<base>` resuelve VÍA DIRECTORIO (ningún archivo `<base>.<ext>` ni `<base>.json` gana
+// primero, file-beats-dir) Y `<base>/package.json` existe → el redirect podría enviar Vite a un `.ts` que el
+// gate vería como el `index.json` asset (external) y NO auditaría = fail-open. Verificado vs Vite 8 real
+// (`./pkg` con package.json main→edge.ts EJECUTA edge.ts). El consumer fail-closea RUIDOSO. codex P2;
+// generaliza el guard 2c de bundlerShadowSibling (que solo cubría el dir-index ya resuelto a `.ts`).
+function dirEntryShadowedByPackageJson(noExt, fileExists) {
+  if (!fileExists(`${noExt}/package.json`)) return false;
+  // Un archivo `<base>.<sourceext>` o `<base>.json` gana file-beats-dir → Vite NO entra al directorio.
+  for (const ext of [...VITE_RESOLVE_EXTS, ".json"]) {
+    if (fileExists(`${noExt}${ext}`)) return false;
+  }
+  return true;
+}
+
+// Cascada DIR-INDEX de Vite (`<base>/index.<ext>`) en el orden de resolve.extensions + `.json` último. El
+// PRIMER `/index.<ext>` existente decide (byte-fiel a `tryCleanFsResolve` con tryIndex). Usado por el fix de
+// TRAILING-SLASH (root D / Fable): una barra final fuerza DIRECTORIO-only (Vite NUNCA mira `<base>.<ext>` ni
+// el sibling file), así que se resuelve SOLO por aquí, saltando todo file-beats-dir. Devuelve {absPath, ext}.
+function resolveDirIndex(noExt, fileExists) {
+  for (const ext of VITE_RESOLVE_EXTS) {
+    const p = `${noExt}/index${ext}`;
+    if (fileExists(p)) return { absPath: p, ext };
+  }
+  const j = `${noExt}/index.json`;
+  if (fileExists(j)) return { absPath: j, ext: ".json" };
+  return null;
+}
+
+// Extensiones de SOURCE que TS/Vite resuelven (sin .json — no se audita). Un specifier que YA las
+// trae (`./helper.mjs`, `@/x/helper.ts`) es EXPLÍCITO: Vite lo resuelve EXACTAMENTE (resolve.extensions
+// solo aplica a imports SIN extensión), así que se chequea el archivo exacto ANTES de la cascada y NO
+// se corre el shadow-check de precedencia (no hay ambigüedad: la extensión está fijada). codex P2: sin
+// esto, seguir el consejo del propio gate ("usa extensión explícita") rompía el resolver — `./helper.mjs`
+// caía a la cascada `helper.mjs.ts`/`helper.mjs.tsx` y se reportaba unresolved aunque Vite sí lo envía.
+const EXPLICIT_SOURCE_EXTS = [
+  ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
+];
+function hasExplicitSourceExt(p) {
+  return EXPLICIT_SOURCE_EXTS.some((e) => p.endsWith(e));
+}
+
+// El gate AUDITA solo `.ts`/`.tsx` (el formato de autoría del DS; 0 archivos JS en src). Auditar
+// JS-family (`.js/.jsx/.mjs/.cjs/.mts/.cts`) requeriría seguir edges `require()` de CJS (data-flow),
+// descubrir entries JS y modelar su parser — un subsistema que el gate no necesita. codex P1: incluir
+// `.cjs` como interno reabría el smuggling cross-módulo (el walker solo extrae imports ESM, no
+// `require()`). Frontera fail-closed: un import del grafo @server-safe a un archivo JS-family →
+// unresolvable RUIDOSO (no se audita JS, no se asume safe). El DS usa `.ts`/`.tsx`.
+const AUDITABLE_EXTS = [".ts", ".tsx"];
+function isAuditableExt(p) {
+  // `.d.ts`/`.d.mts`/`.d.cts` terminan en `.ts` pero son DECLARACIONES type-only (sin runtime que
+  // auditar) → NO auditables: un `Foo.d.ts` marcado @server-safe debe fallar ruidoso, no "pasar"
+  // auditando declaraciones borradas (falsa sensación de enforcement; codex P2). Marca la implementación.
+  return !/\.d\.[mc]?ts$/.test(p) && AUDITABLE_EXTS.some((e) => p.endsWith(e));
+}
+
+// ScriptKind por extensión — determina si el parser de TS habilita JSX. `ScriptKind.TS` trata
+// `<X>` como TYPE ASSERTION (Standard), así que parsear un `.jsx`/`.js` con JSX como TS lo mal-parsea
+// y se PIERDE el read de global del componente JSX (`<HTMLElement/>`) = BYPASS. JSX/TSX/JS habilitan
+// JSX (LanguageVariant.JSX); TS no. codex P2: al resolver `.jsx` como interno (exact-file), el gate
+// ahora los SIGUE → hay que parsearlos con el ScriptKind correcto.
+function scriptKindForPath(p) {
+  if (p.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (p.endsWith(".jsx")) return ts.ScriptKind.JSX;
+  if (p.endsWith(".js") || p.endsWith(".mjs") || p.endsWith(".cjs")) {
+    return ts.ScriptKind.JS; // .js/.mjs/.cjs → JSX habilitado (LanguageVariant.JSX)
+  }
+  return ts.ScriptKind.TS; // .ts/.mts/.cts
+}
+
+/**
+ * Si `resolvedAbsPath` (lo que el gate resolvió, `.ts`/`.tsx` o `…/index.ts`) tiene un
+ * hermano que Vite PREFERIRÍA, devuelve su path (= el archivo que el bundler REALMENTE
+ * envía, distinto del que el gate auditaría). null si no hay divergencia. DOS casos:
+ *
+ *   1. FILE `<base>.ts` resuelto → un `<base>.<extMayorPrecedencia>` (`.mjs`/`.js`/`.mts`)
+ *      lo sombrea (mismo basename, hunt final #173 — guard original).
+ *   2. DIRECTORY-INDEX `<dir>/index.ts` resuelto → un FILE `<dir>.<cualquierExtVite>` lo
+ *      sombrea ENTERO: Vite intenta `<dir>.<ext>` como ARCHIVO antes que `<dir>/index.<ext>`
+ *      como directorio (file beats directory). Mi guard original solo miraba el basename
+ *      del path resuelto (`<dir>/index`) → se le escapaba el `<dir>.mjs` padre = BYPASS
+ *      (hunt scope-aware: file-vs-directory + barrel anidado, 4 confirmados screen/location).
+ */
+function bundlerShadowSibling(resolvedAbsPath, fileExists) {
+  // Caso 2: el gate resolvió un index de DIRECTORIO → un archivo hermano del NOMBRE DEL
+  // DIRECTORIO (cualquier ext Vite) lo sombrea, porque Vite prueba file antes que dir.
+  const idx = resolvedAbsPath.match(/[\\/]index(\.[mc]?[jt]sx?)$/);
+  if (idx) {
+    // (2a) `<dir>.<ext>` ARCHIVO gana al directorio ENTERO (Vite prueba file antes que dir).
+    const dirBase = resolvedAbsPath.slice(0, resolvedAbsPath.length - idx[0].length);
+    for (const ext of VITE_RESOLVE_EXTS) {
+      const sib = `${dirBase}${ext}`;
+      if (fileExists(sib)) return sib; // `<dir>.<ext>` archivo gana al directorio
+    }
+    // (2b) MISMO index-dir, extensión de MAYOR precedencia: `<dir>/index.mjs` gana a
+    // `<dir>/index.ts` (Vite rankea por VITE_RESOLVE_EXTS dentro del index también). Antes
+    // solo se probaba `<dir>.<ext>` → un `helper/index.mjs` sucio junto a `helper/index.ts`
+    // limpio se auditaba mal = BYPASS (codex P1). El index resuelto tiene ext `idx[1]`; un
+    // index hermano con rank menor lo sombrea. (`.cjs`/`.cts` no están en VITE_RESOLVE_EXTS
+    // → idxRank -1 → se salta; el index auditable es `.ts`/`.tsx`.)
+    const idxRank = VITE_RESOLVE_EXTS.indexOf(idx[1]);
+    if (idxRank > 0) {
+      const indexBase = resolvedAbsPath.slice(0, -idx[1].length); // `<dir>/index`
+      for (let i = 0; i < idxRank; i++) {
+        const sib = `${indexBase}${VITE_RESOLVE_EXTS[i]}`;
+        if (fileExists(sib)) return sib; // `<dir>/index.<extMayorPrecedencia>`
+      }
+    }
+    // (2c) `<dir>/package.json`: su `main`/`module`/`exports`(browser/import/default) puede
+    // REDIRIGIR a Vite a otro archivo que el gate NO audita (el resolver parser-puro no lee
+    // package.json — es el subsistema de resolución de paquetes) → el gate auditaría index.ts
+    // mientras Vite envía el archivo del redirect = BYPASS. Fail-NOISY: devolver el package.json
+    // como shadow → import unresolvable/AMBIGUO. (0 package.json en src del DS; contrivado y
+    // fail-closed.) deepest re-hunt #173. SUBSUMIDO por `dirEntryShadowedByPackageJson` (codex P2), que corre
+    // ANTES (de resolvesToJsonAsset/tryResolveFile) y fail-closea TODO `<dir>` con package.json sin file-winner
+    // padre → para llegar AQUÍ con package.json haría falta un file-winner padre, pero entonces tryResolveFile
+    // resuelve el ARCHIVO padre (no el index) → esta rama 2c-package.json es inalcanzable. Mismo verdicto
+    // (unresolvable), sin drift; se mantiene como backstop defensivo.
+    const pkg = `${dirBase}/package.json`;
+    if (fileExists(pkg)) return pkg;
+    return null;
+  }
+  // Caso 1: file resuelto → hermano de mayor precedencia con el mismo basename.
+  const m = resolvedAbsPath.match(/(\.[mc]?[jt]sx?)$/);
+  if (!m) return null;
+  const ext = m[1];
+  const rank = VITE_RESOLVE_EXTS.indexOf(ext);
+  if (rank <= 0) return null; // .mjs (rank 0) o ext no-Vite → nada gana precedencia
+  const base = resolvedAbsPath.slice(0, -ext.length);
+  for (let i = 0; i < rank; i++) {
+    const sib = `${base}${VITE_RESOLVE_EXTS[i]}`;
+    if (fileExists(sib)) return sib;
+  }
+  return null;
+}
+
 /**
  * Resuelve un module specifier a uno de tres resultados:
  *   - `{ kind: "internal", absPath }`: archivo dentro de `src/`. Sigue.
@@ -1135,6 +8057,82 @@ function tryResolveFile(noExtAbsPath, fileExists) {
  *     a ningún archivo. El gate falla ruidosamente — un skip silencioso
  *     aquí reproduce el bypass que este gate cierra.
  */
+// LOADERS de asset de bundler: el import se DESVÍA a string/URL/Worker/WasmModule — el cuerpo del módulo NO se
+// EJECUTA en este module-eval → external (no se audita). Replicamos las regex REALES de Vite 8 (copiadas
+// data-driven de node_modules/vite/dist, NO a-ojo: una réplica a-ojo DIVERGE — workflow-final cazó 3
+// divergencias: trailing-ws `?raw `, `#`-fragment `#.wasm?init`, y `?raw=1`). Vite detecta el loader sobre el
+// REQUEST CRUDO (no trimea borde ni token), por eso un trailing whitespace / `=` / `#`-antes rompe el match y
+// Vite TRANSPILA+EJECUTA el módulo → hay que AUDITARLO. `raw`/`url`/`worker`/`sharedworker` desvían CUALQUIER
+// base; `?init` SOLO sobre `.wasm` (lookbehind `(?<![?#].*)` → un `#`/`?` antes lo descalifica); `inline`/
+// `module` NO son loaders standalone (sobre un `.ts` Vite ejecuta; un asset vuelve external vía hasAssetExt
+// tras cleanUrl). codex P1/P2 + breaker + workflow-final (verificado vs Vite 8.0.14 ssrLoadModule real).
+const VITE_RAW_RE = /(?:\?|&)raw(?:&|$)/;
+const VITE_URL_RE = /(?:\?|&)url(?:&|$)/;
+const VITE_WORKER_RE = /(?:\?|&)(?:worker|sharedworker)(?:&|$)/;
+const VITE_WASM_INIT_RE = /(?<![?#].*)\.wasm\?init/;
+// cleanUrl de Vite = postfixRE EXACTO (sin `/s`, byte-idéntico a node_modules/vite/dist): quita `?query` Y
+// `#hash` desde el PRIMERO de ambos. (Las 4 regex de loader de arriba se fuzzearon byte-equivalentes a Vite 8 —
+// 300k casos, 0 divergencias; el `/s` previo era la única discrepancia de carácter → eliminado. Sin `/s`, un
+// specifier con newline INTERNO tras `?`/`#` no se stripea → cae a resolución → unresolvable, NUNCA external,
+// igual que Vite que tampoco resuelve ese request.) workflow-final xhigh (fidelidad de regex).
+const VITE_CLEAN_URL_RE = /[?#].*$/;
+// ¿`p` (path resuelto) es un ASSET que Vite NO ejecuta como código? — ALLOWLIST de los tipos que Vite
+// asset-handlea: KNOWN_ASSET_TYPES verbatim del dist de Vite 8 + CSS_LANGS + json (datos) + wasm. Una ext
+// FUERA del set la resuelve el resolver exacto y `vite:load-fallback` la lee como MÓDULO → la EJECUTA (un
+// `.payload` con JS válido CORRE — verificado vs Vite 8 real) → NO es asset → cae a unresolvable fail-closed
+// (NO external). codex P2: el boundary seguro es un ALLOWLIST de assets, no un deny-list de JS/TS — un
+// deny-list externaliza `.payload`/`.weirdext` ejecutables = fail-open. (assetsInclude custom en vite.config
+// añadiría exts → drift #190.)
+// ROOT E (Fable cross-review rc.1): Vite decide asset por DOS familias con CASE-SENSITIVITY DISTINTA
+// (medido vs vite@8.0.14 dist, el oráculo — NO a-ojo):
+//   (a) KNOWN_ASSET_TYPES (media/font/pdf/txt/webmanifest) → DEFAULT_ASSETS_RE = `new RegExp(…, "i")` →
+//       CASE-INSENSITIVE. `.PNG`/`.Woff2` siguen siendo asset (correcto, no FP).
+//   (b) css-langs (CSS_LANGS_RE = `/\.(css|less|…|sss)(?:$|\?)/` SIN /i) + json + wasm (external-ext RE
+//       `/\.(?:json|json5|wasm)$/` SIN /i) → CASE-SENSITIVE. `.CSS`/`.JSON`/`.WASM`/mixtas NO son asset
+//       para Vite → caen al pipeline JS y se EJECUTAN → un `.CSS` con body JS leyendo `process` corría sin
+//       auditar (fail-open). Sin /i dejan de clasificar como asset → unresolvable fail-closed (igual que
+//       .payload/.mjsx).
+// El `/i` único previo sobre TODA la unión era el bug: trataba `.CSS`/`.JSON`/`.WASM` como asset cuando Vite
+// las ejecuta. `json5` se DEJA FUERA a propósito (no estaba en el set → status quo fail-closed; añadirlo
+// abriría el hueco si el consumer ejecuta `.json5` como JS — Fable). Over-flag de un `.json5` legítimo es
+// fail-CLOSED (aceptable), no fail-open.
+const VITE_ASSET_INSENSITIVE_RE =
+  /\.(apng|bmp|png|jpe?g|jfif|pjpeg|pjp|gif|svg|ico|webp|avif|cur|jxl|mp4|webm|ogg|mp3|wav|flac|aac|opus|mov|m4a|vtt|woff2?|eot|ttf|otf|webmanifest|pdf|txt)$/i;
+const VITE_ASSET_SENSITIVE_RE =
+  /\.(css|less|sass|scss|styl|stylus|pcss|postcss|sss|json|wasm)$/;
+function hasAssetExt(p) {
+  const base = p.slice(Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
+  return VITE_ASSET_INSENSITIVE_RE.test(base) || VITE_ASSET_SENSITIVE_RE.test(base);
+}
+// Devuelve el nombre del paquete SI puede self-referenciarse (declara `exports`), si no `null`. NO es "el
+// nombre del paquete" a secas — el valor está CONDICIONADO a que la self-reference sea posible (de ahí el
+// nombre `readSelfReferenceName`, no `readOwnPackageName`: un caller que esperase el nombre a secas recibiría
+// null para un paquete con name pero sin exports). Leído del `package.json` del repoRoot vía el `readFile`
+// INYECTADO (NO `import.meta.url`, que vite-node transforma → null bajo vitest). `checkFileWithImports` lo
+// enhebra hasta el resolver para fail-cerrar la self-reference (`import … from "reactigoded"`), que PUEDE
+// auto-resolverse vía package.json#exports a la entrada del paquete (dist), fuera del src auditado. Degrada a
+// null (check inerte) si no se puede leer. Auditor-B + CC.
+function readSelfReferenceName(rootDir, readFile) {
+  try {
+    // `crossOsResolve` (no `resolve`): produce forward-slashes en TODOS los OS → matchea la key del vfs
+    // (`/repo/package.json`) en los tests Windows y readFileSync acepta forward-slashes en Windows prod. El
+    // `resolve` plano daba `\repo\package.json` en Windows → ENOENT → null → check inerte (CI Windows rojo).
+    const pkg = JSON.parse(readFile(crossOsResolve(rootDir, "package.json")));
+    // Node permite self-reference SOLO si el paquete declara `exports` (sin él, `import "ownname"` desde
+    // DENTRO no auto-resuelve → va a node_modules/external, no es vector). Chequear que `exports` EXISTA es
+    // decidible con readFile → descarta el eje SIN-exports. NO se chequea qué clave matchea un subpath (eso
+    // exige evaluar el map = §373) NI se discrimina `exports: {}` / solo-assets (mismo §373): "presente y
+    // no-null" es la señal, y `exports: {}` (rarísimo, no es el caso del DS) cae en fail-close. O sea: el
+    // guard es APROXIMADO — exacto solo en el eje sin/con-exports, NO en qué resuelve; el over-catch de
+    // subpaths no-exportados de un paquete CON exports se conserva (§373, ver predicado ancho abajo). Sin
+    // `exports` (o sin name válido) → null = check inerte.
+    if (pkg == null || pkg.exports == null) return null;
+    const name = pkg.name;
+    return typeof name === "string" && name.length > 0 ? name : null;
+  } catch {
+    return null;
+  }
+}
 function resolveImportPath(
   specifier,
   importerAbsPath,
@@ -1157,16 +8155,220 @@ function resolveImportPath(
   // preservación manual).
   const projectRoot = rootsOverride?.repoRoot ?? repoRoot;
   const srcRoot = rootsOverride?.srcRoot ?? SRC_ROOT;
+  const selfReferenceName = rootsOverride?.selfReferenceName ?? null;
+
+  // NORMALIZACIÓN: el edge-trim (whitespace/C0-control inicial/final) es GLOBAL — un specifier legítimo nunca
+  // lo lleva y los guards de `//`/esquema están anclados en char[0] (` data:…` se vería como bare→external
+  // sin él). El strip de tab/LF/CR INTERNO, en cambio, es propiedad SOLO del parser WHATWG-URL (data:/http:/
+  // `//`), NO de la detección de loader-query de Vite (regex sobre el request CRUDO). Aplicarlo global era un
+  // fail-open NUEVO: `./x.ts?ra\tw` fabricaba un loader `raw` que Vite NUNCA hace (Vite transpila+EJECUTA el
+  // .ts, idéntico a `?v=1`) → external sin auditar. Por eso: edge-trim al `specifier` (lo usan `?query` +
+  // resolución, con el token de query ÍNTEGRO), y el strip interno SOLO en `urlProbe`, que alimenta los
+  // guards de `//`/esquema (`da\tta:` → `data:` se sigue cazando). breaker-adversarial (regresión que la
+  // normalización global de workflow-hunt introdujo; verificado vs Vite 8 real: URL-parse y loader-regex
+  // normalizan DISTINTO).
+  // `rawSpecifier` = el ORIGINAL sin tocar: la detección de loader-query de abajo lo usa porque Vite NO
+  // trimea el borde ni el token (un trailing whitespace / `#`-antes tras el flag NO es un loader → Vite
+  // EJECUTA el .ts). workflow-final: el edge-trim alimentaba la detección de loader y fabricaba `?raw ` →
+  // external sin auditar (fail-open). El edge-trim sigue para la RESOLUCIÓN del path (URL-parse).
+  const rawSpecifier = specifier;
+  specifier = specifier
+    // eslint-disable-next-line no-control-regex -- rango C0+space INTENCIONAL: modela el trim de borde WHATWG-URL del runtime ESM, no un control char accidental.
+    .replace(/^[\u0000-\u0020]+/, "")
+    // eslint-disable-next-line no-control-regex -- idem, borde final.
+    .replace(/[\u0000-\u0020]+$/, "");
+  // Copia URL-normalizada (tab/LF/CR interno eliminado, como el parser WHATWG) SOLO para detectar `//`/esquema.
+  const urlProbe = specifier.replace(/[\t\n\r]/g, "");
+
+  // Protocol-relative URL (`//host/x` — hereda el protocolo http/https de la página) → CÓDIGO REMOTO, no un
+  // peer de npm ni un archivo local. La regex de esquema URL de abajo (letra+`:`) NO lo caza (empieza con
+  // `//`); la rama relativa lo haría unresolvable solo INCIDENTALMENTE (not-found) y con mensaje engañoso.
+  // Explícito → fail-closed por DISEÑO, robusto. (Hermano del esquema-URL: ambos cargan código remoto que el
+  // gate no puede auditar y corre en el render.) codex-diligencia (barrido de dimensiones del resolver).
+  if (urlProbe.startsWith("//")) {
+    return {
+      kind: "unresolvable",
+      reason: `import protocol-relative \`${urlProbe.slice(0, 48)}${urlProbe.length > 48 ? "…" : ""}\` — URL REMOTA (hereda http/https), NO un peer de npm ni archivo local: carga código que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local.`,
+    };
+  }
+  // Esquema URL (`data:`/`http:`/`https:`/`blob:`/`file:`/`node:`/…) → dispatch ANTES del bloque `?query`:
+  // un `data:text/javascript,…?raw` lleva un loader bare (`raw`) en SU PROPIA query; si el `?query` corriera
+  // primero tomaría el atajo loader→external y el módulo inline (`process.cwd()`) se saltaría la auditoría
+  // (corre en un runtime Node de dev, rompe en el target Edge donde `process` no existe). El rechazo de
+  // esquema DEBE ganar al atajo de loader. codex P2 (eff6e1b). `node:` → builtin de Node (edge-denied); el
+  // resto carga código ejecutable INLINE (`data:`=JS) o remoto/dinámico (`http:`/`blob:`/`file:`) que el gate
+  // no puede auditar y corre en el render → unresolvable RUIDOSO. (Un peer/`@scope/pkg`/relativo NO tiene
+  // esquema `letra+:` → no matchea: `@/x?raw` y `./x?raw` caen al `?query` de abajo como loaders locales
+  // legítimos; este es el mismo eje de ordenación que el `?query` over-broad — un check temprano no debe
+  // interceptar un caso que un check posterior debía rechazar.)
+  const urlScheme = /^[a-z][a-z0-9+.-]*:/i.exec(urlProbe);
+  if (urlScheme) {
+    if (isNodeBuiltinSpecifier(urlProbe)) {
+      return { kind: "edge-denied", specifier: urlProbe };
+    }
+    return {
+      kind: "unresolvable",
+      reason: `import con esquema URL \`${urlScheme[0]}\` (\`${urlProbe.slice(0, 48)}${urlProbe.length > 48 ? "…" : ""}\`) — NO es un peer de npm: carga código ejecutable (\`data:\`=JS inline; \`http:\`/\`blob:\`/\`file:\`=módulo remoto/dinámico) que el gate no puede auditar y corre en el render. Usa un módulo .ts/.tsx local, o no importes por esquema URL en @server-safe.`,
+    };
+  }
+  // Subpath-import de package (`#edge`, `#internal/x` — el specifier EMPIEZA con `#`): Node/Vite lo resuelven
+  // vía `package.json#imports` (resolveSubpathImports), que puede mapear a CÓDIGO local (`#edge` → ./src/edge.ts,
+  // EJECUTADO — verificado vs Vite 8 real). El resolver NO lee package.json#imports (subsistema de resolución de
+  // paquetes que renuncia, §373) → fail-closed RUIDOSO. DEBE ir ANTES de cleanUrl (que borraría el `#` inicial
+  // como fragment → "" → external = fail-open) y ANTES del loader: un `#edge?raw` NO ejecuta (Vite devuelve el
+  // source como string — oráculo Auditor-B) → external sería más preciso, pero fail-cerramos por conservadurismo
+  // (discriminar el caso inexistente `#alias?raw` no compensa; el `#edge` SIN loader SÍ ejecuta). Un `#`
+  // NO-inicial (`./x.ts#frag`) es un fragment de verdad → lo maneja cleanUrl. codex P2.
+  if (specifier.startsWith("#")) {
+    return {
+      kind: "unresolvable",
+      reason: `subpath-import ${specifier} — se resuelve vía package.json#imports (puede mapear a código local ejecutable) y el gate no lee package.json. Importa el módulo destino directamente con su ruta .ts/.tsx.`,
+    };
+  }
+  // LOADER de asset vs query/código: Vite detecta el loader con regex sobre el REQUEST CRUDO (rawSpecifier).
+  // Si matchea → el import es string/URL/Worker/WasmModule (NO ejecuta el cuerpo) → external. Si NO → cleanUrl
+  // quita `?query`+`#hash` y Vite TRANSPILA+EJECUTA la base → resolver+auditar. Un trailing-ws, un `=`, o un
+  // `#`-antes rompen el match igual que en Vite. workflow-final (vs Vite 8 real): cerró `?raw ` (trailing-ws),
+  // `#.wasm?init` (`#`-fragment) y `?raw=1`, que el `split("&")`+`endsWith(".wasm")` a-ojo clasificaba mal.
+  if (
+    VITE_RAW_RE.test(rawSpecifier) ||
+    VITE_URL_RE.test(rawSpecifier) ||
+    VITE_WORKER_RE.test(rawSpecifier) ||
+    VITE_WASM_INIT_RE.test(rawSpecifier)
+  ) {
+    return { kind: "external" };
+  }
+  // cleanUrl: quita `?query` y `#hash` → la base que Vite resuelve+ejecuta (el edge-trim ya tocó el path).
+  specifier = specifier.replace(VITE_CLEAN_URL_RE, "");
+
+  // Self-reference por NOMBRE PROPIO: un specifier bare cuyo primer segmento == el nombre del paquete
+  // (`reactigoded`, `reactigoded/components/X`). Node/Vite SOLO auto-resuelven esto si el paquete declara
+  // `exports` (garantizado: readSelfReferenceName devuelve null sin `exports`). Las claves EXPORTADAS resuelven a
+  // la ENTRADA del paquete (dist), NO al src que el gate audita → external SILENCIOSO = fail-open latente
+  // (verificado vs Vite). PERO el predicado es MÁS ANCHO que el peligro y es una DECISIÓN CONSCIENTE (§373):
+  // un subpath NO-exportado (`reactigoded/internal/guts` sin clave que matchee) NO resuelve a dist — Vite tira
+  // `ERR_PACKAGE_PATH_NOT_EXPORTED`, no ejecuta NADA. Distinguir qué subpaths matchean una clave (patrones
+  // `./*`, condiciones import/worker, precedencia) exige EVALUAR el exports map = subsistema de resolución
+  // RENUNCIADO → fail-cerramos TODO primer-segmento==nombre, incluido el ruido BENIGNO de los no-exportados
+  // (que de todas formas fallarían en runtime; el gate solo cambia QUIÉN grita: build vs resolución de Vite, y
+  // no oculta nada ejecutable). El intento "exacto" (probar el subpath contra src vía fileExists) sería PEOR:
+  // adivina el mapeo del exports map → audita el archivo equivocado mientras Vite ejecuta otro = fail-open
+  // nuevo. 0 casos en source (el DS usa relativo/alias). DESPUÉS del loader (`reactigoded?raw` ya salió
+  // external) y de cleanUrl (la base limpia es la que matchearía exports). Auditor-B + CC.
+  if (
+    selfReferenceName &&
+    (specifier === selfReferenceName ||
+      specifier.startsWith(`${selfReferenceName}/`))
+  ) {
+    return {
+      kind: "unresolvable",
+      reason: `self-reference por nombre propio \`${specifier}\` — un specifier cuyo primer segmento es el nombre del paquete PUEDE auto-resolverse vía package.json#exports a la entrada del paquete (dist), fuera del src que el gate audita (si exports declara una clave que lo cubra → dist; si no, el specifier —root o subpath— fallaría en runtime con ERR_PACKAGE_PATH_NOT_EXPORTED). Importa el módulo destino directamente con su ruta relativa/alias .ts/.tsx.`,
+    };
+  }
+
+  // TRAILING-SLASH (root D / Fable): una barra final en el specifier (tras cleanUrl de `?query#hash`)
+  // fuerza en Vite resolución DIRECTORIO-only — `<base>/index.<ext>` únicamente, NUNCA `<base>.<ext>` ni el
+  // sibling file. `crossOsResolve`→`path.posix.resolve` BORRA la barra, así que sin esto file-beats-dir
+  // elegía el sibling `pkg.ts` (limpio) mientras Vite ejecuta `pkg/index.tsx` (sucio) = fail-open. `./pkg/`
+  // y `./pkg//` y `./pkg/./` → DIR; `./pkg/.` → FILE (termina en `.`). Verificado vs vite@8 ssrLoadModule.
+  const forceDir = /\/$/.test(specifier.replace(VITE_CLEAN_URL_RE, ""));
 
   // Bare specifier (no empieza con "." ni "/") → puede ser alias o peer.
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
-    for (const { prefix, targetPrefix } of tsconfigPaths) {
+    // Builtin de Node (bare `fs`/`path`, prefijado `node:fs`, subpath `fs/promises`) — Node-only POR
+    // CONSTRUCCIÓN, fuera de la intersección cross-runtime. En el baseline Edge (Vercel/Workers) la
+    // mayoría no existen → un import `@server-safe` lanza en bundle/render (igual clase que
+    // `setImmediate`: algo Node-only clasificado como seguro). El bare `fs` es el caso COMÚN, no el
+    // exótico — y "¿es fs un builtin?" es un lookup ESTÁTICO contra el oráculo (`isBuiltin`), no
+    // data-flow → cazable, NO un residual §141. Blanket-deny vía el oráculo (sin lista a mano); el
+    // allowlist del subset disponible-en-Edge (`node:buffer`, …) es #190. La ambigüedad bare-shim-vs-
+    // builtin (`import {Buffer} from "buffer"` = builtin o npm-shim según el bundler) SÍ es resolución/
+    // provenance que el gate renuncia (§141) → deny-conservador-ahora + allowlist-#190. codex P1/P2
+    // (review genérico). El `import type` ya se salta antes (type-only, erased).
+    // `node:fs`/`data:`/`http:`/… (esquema `letra+:`) ya se dispatcharon ARRIBA, antes del `?query` (codex P2).
+    // Aquí solo llega el bare/subpath SIN esquema: `fs`, `path`, `fs/promises` → builtin edge-denied.
+    if (isNodeBuiltinSpecifier(specifier)) {
+      return { kind: "edge-denied", specifier };
+    }
+    // TypeScript/Vite seleccionan el patrón de path MÁS ESPECÍFICO. El orden de declaración no puede
+    // decidir qué fichero se audita: un alias ancho escrito antes de uno solapante desviaba el gate al
+    // target equivocado mientras el bundler ejecutaba el longest-prefix.
+    for (const { prefix, targetPrefix } of [...tsconfigPaths].sort(
+      (a, b) => b.prefix.length - a.prefix.length,
+    )) {
       if (specifier.startsWith(prefix)) {
         const tail = specifier.slice(prefix.length);
         const noExt = crossOsResolve(projectRoot, targetPrefix + tail);
-        const resolved = tryResolveFile(noExt, fileExists);
+        // Barra final → DIRECTORIO-only (root D): solo la cascada dir-index, saltando exact/file-beats-dir.
+        if (forceDir) {
+          // package.json en el dir sombrea el /index (Vite resuelve main/module/exports → posible código
+          // ejecutable ANTES del index; skipPackageJson=false en alias/relativos). Bajo forceDir Vite NO
+          // considera hermanos `<base>.<ext>` (la barra fuerza dir) → basta la EXISTENCIA de package.json,
+          // sin la exclusión file-winner de dirEntryShadowedByPackageJson (que sí aplica a la rama sin-barra).
+          // El gate no lee package.json → fail-closed (§373), paridad de TRATAMIENTO con la rama sin-barra.
+          // Cierra la REGRESIÓN D2 (Fable cross-review 2), incl. el sub-caso con hermano `pkg.ts`.
+          if (fileExists(`${noExt}/package.json`)) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` (barra final) resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+            };
+          }
+          const dirHit = resolveDirIndex(noExt, fileExists);
+          if (!dirHit) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` (barra final) fuerza resolución de DIRECTORIO pero no existe \`${crossOsRelative(projectRoot, noExt)}/index.{ts,tsx,…}\` — Vite lanza "Cannot find module". Importa el índice con su ruta .ts/.tsx.`,
+            };
+          }
+          if (dirHit.ext === ".json") return { kind: "external" };
+          if (!isAuditableExt(dirHit.absPath)) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` (barra final) resuelve al dir-index JS NO auditable (\`${crossOsRelative(projectRoot, dirHit.absPath)}\`): el gate solo audita .ts/.tsx. Conviértelo a .ts/.tsx.`,
+            };
+          }
+          return { kind: "internal", absPath: dirHit.absPath };
+        }
+        // Extensión explícita (`@/x/helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
+        const exact =
+          hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
+        // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
+        // `<base>.json` FILE gana al dir-index (file-beats-dir). codex P2.
+        if (!exact && dirEntryShadowedByPackageJson(noExt, fileExists)) {
+          return {
+            kind: "unresolvable",
+            reason: `alias ${specifier} resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+          };
+        }
+        if (!exact && resolvesToJsonAsset(noExt, fileExists)) {
+          return { kind: "external" };
+        }
+        const resolved = exact ?? tryResolveFile(noExt, fileExists);
         if (resolved) {
+          if (exact && !isAuditableExt(exact)) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` resuelve a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, exact)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+            };
+          }
+          const shadow = exact ? null : bundlerShadowSibling(resolved, fileExists);
+          if (shadow) {
+            return {
+              kind: "unresolvable",
+              reason: `alias \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita \`.ts\`/\`.tsx\` o elimina el hermano JS.`,
+            };
+          }
           return { kind: "internal", absPath: resolved };
+        }
+        const nonAuditable = tryResolveNonAuditable(noExt, fileExists);
+        if (nonAuditable) {
+          return {
+            kind: "unresolvable",
+            reason: `alias \`${specifier}\` resuelve (extensionless) a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, nonAuditable)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+          };
+        }
+        if (hasAssetExt(noExt) && fileExists(noExt)) {
+          return { kind: "external" };
         }
         return {
           kind: "unresolvable",
@@ -1180,13 +8382,93 @@ function resolveImportPath(
   // Relative.
   const importerDir = crossOsDirname(importerAbsPath);
   const noExt = crossOsResolve(importerDir, specifier);
-  const resolved = tryResolveFile(noExt, fileExists);
+  // Barra final → DIRECTORIO-only (root D): solo la cascada dir-index, saltando exact/file-beats-dir.
+  if (forceDir) {
+    // package.json en el dir sombrea el /index (ver rama alias) → fail-closed. Cierra REGRESIÓN D2.
+    if (fileExists(`${noExt}/package.json`)) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` (barra final) resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+      };
+    }
+    const dirHit = resolveDirIndex(noExt, fileExists);
+    if (!dirHit) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` (barra final) fuerza resolución de DIRECTORIO pero no existe \`${crossOsRelative(projectRoot, noExt)}/index.{ts,tsx,…}\` — Vite lanza "Cannot find module". Importa el índice con su ruta .ts/.tsx.`,
+      };
+    }
+    if (dirHit.ext === ".json") return { kind: "external" };
+    const relDir = crossOsRelative(srcRoot, dirHit.absPath);
+    const escapesSrcDir =
+      relDir === ".." || relDir.startsWith("../") || relDir.startsWith("..\\");
+    const inSrcDir = !escapesSrcDir && !relDir.startsWith("/");
+    if (!inSrcDir) return { kind: "external" };
+    if (!isAuditableExt(dirHit.absPath)) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` (barra final) resuelve al dir-index JS NO auditable (\`${crossOsRelative(projectRoot, dirHit.absPath)}\`): el gate solo audita .ts/.tsx. Conviértelo a .ts/.tsx.`,
+      };
+    }
+    return { kind: "internal", absPath: dirHit.absPath };
+  }
+  // Extensión explícita (`./helper.mjs`) → archivo exacto, sin cascada ni shadow-check.
+  const exact = hasExplicitSourceExt(noExt) && fileExists(noExt) ? noExt : null;
+  // JSON (extensionless) que Vite carga como DATOS → external; ANTES de tryResolveFile porque un
+  // `<base>.json` FILE gana al dir-index (file-beats-dir). codex P2.
+  if (!exact && dirEntryShadowedByPackageJson(noExt, fileExists)) {
+    return {
+      kind: "unresolvable",
+      reason: `relativo ${specifier} resuelve a un DIRECTORIO con package.json: Vite resuelve su main/exports (posible código ejecutable) ANTES del index.*, y el gate no lee package.json (resolución de paquetes). Importa el entry directamente con su ruta .ts/.tsx.`,
+    };
+  }
+  if (!exact && resolvesToJsonAsset(noExt, fileExists)) {
+    return { kind: "external" };
+  }
+  const resolved = exact ?? tryResolveFile(noExt, fileExists);
   if (resolved) {
     // Solo seguimos dentro de src/ (proxy para "archivo del DS, no
     // node_modules, no scripts/ ni fixtures/ ni dist/").
     const rel = crossOsRelative(srcRoot, resolved);
-    const inSrc = !rel.startsWith("..") && !rel.startsWith("/");
-    if (inSrc) return { kind: "internal", absPath: resolved };
+    const escapesSrc = rel === ".." || rel.startsWith("../") || rel.startsWith("..\\");
+    const inSrc = !escapesSrc && !rel.startsWith("/");
+    if (inSrc) {
+      if (exact && !isAuditableExt(exact)) {
+        // JS-family dentro de src importado desde el grafo @server-safe → fail-closed (no auditable).
+        return {
+          kind: "unresolvable",
+          reason: `relativo \`${specifier}\` resuelve a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, exact)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+        };
+      }
+      const shadow = exact ? null : bundlerShadowSibling(resolved, fileExists);
+      if (shadow) {
+        return {
+          kind: "unresolvable",
+          reason: `relativo \`${specifier}\` es AMBIGUO: el gate auditaría \`${crossOsRelative(projectRoot, resolved)}\` pero Vite envía \`${crossOsRelative(projectRoot, shadow)}\` (mayor precedencia de extensión). Usa una extensión explícita \`.ts\`/\`.tsx\` o elimina el hermano JS.`,
+        };
+      }
+      return { kind: "internal", absPath: resolved };
+    }
+    return { kind: "external" };
+  }
+  const nonAuditable = tryResolveNonAuditable(noExt, fileExists);
+  if (nonAuditable) {
+    const relNA = crossOsRelative(srcRoot, nonAuditable);
+    const escapesSrc =
+      relNA === ".." || relNA.startsWith("../") || relNA.startsWith("..\\");
+    const naInSrc = !escapesSrc && !relNA.startsWith("/");
+    // Fuera de src (node_modules/peer) → external; dentro → JS-family no auditable (fail-closed).
+    if (naInSrc) {
+      return {
+        kind: "unresolvable",
+        reason: `relativo \`${specifier}\` resuelve (extensionless) a un archivo JS NO auditable (\`${crossOsRelative(projectRoot, nonAuditable)}\`): el gate solo audita .ts/.tsx (los edges \`require()\` de CJS no se siguen). Conviértelo a .ts/.tsx.`,
+      };
+    }
+    return { kind: "external" };
+  }
+  // Asset no-código que EXISTE (`./styles.css`, `./add.wasm`): el bundler lo maneja, no es módulo
+  // ejecutado en el render → external (el `?query` ya salió arriba; esto cubre el asset sin query).
+  if (hasAssetExt(noExt) && fileExists(noExt)) {
     return { kind: "external" };
   }
   return {
@@ -1230,8 +8512,14 @@ function isImportPurelyTypeOnly(importDecl) {
   if (!nb) return false;
   if (ts.isNamespaceImport(nb)) return false;
   if (ts.isNamedImports(nb)) {
-    if (nb.elements.length === 0) return false; // `import {} from "x"` = side-effect
-    return nb.elements.every((spec) => spec.isTypeOnly === true);
+    // Bajo verbatimModuleSyntax (ACTIVO en este repo, tsconfig.json), un named-imports clause
+    // —AUNQUE todos los specifiers sean inline-type (`import { type A, type B } from "./m"`)—
+    // se PRESERVA como side-effect import `import "./m"` → el módulo SE EJECUTA en SSR (sus
+    // reads top-level de window crashean). Solo el CLAUSE-level `import type { … }`
+    // (ic.isTypeOnly, arriba) se borra entero. Así que cualquier named-imports → SEGUIRLO.
+    // codex P1: el chequeo inline-specifier (pre-verbatim) asumía elisión y colaba un módulo
+    // sucio importado solo por su tipo = BYPASS cross-módulo.
+    return false;
   }
   return false;
 }
@@ -1255,8 +8543,10 @@ function isExportPurelyTypeOnly(exportDecl) {
   if (!ec) return false; // export * from "./m"
   if (ts.isNamespaceExport(ec)) return false;
   if (ts.isNamedExports(ec)) {
-    if (ec.elements.length === 0) return false;
-    return ec.elements.every((spec) => spec.isTypeOnly === true);
+    // Igual que los imports: bajo verbatimModuleSyntax `export { type A } from "./m"` preserva
+    // el re-export → "./m" se carga/ejecuta. Solo `export type { … }` (clause-level) se borra.
+    // Cualquier named re-export → SEGUIRLO. codex P1.
+    return false;
   }
   return false;
 }
@@ -1272,8 +8562,11 @@ function isExportPurelyTypeOnly(exportDecl) {
  * (`import type {...}`) como inline (`import { type X }`) — codex round
  * 1 sobre #106.
  *
- * Los `import("...")` dynamic NO se incluyen — hueco conocido
- * documentado en el header del archivo.
+ * Los `import("...")` dynamic NO salen de aquí (esta fn solo ve estáticos):
+ * el dynamic import RENDER-PATH con specifier literal lo recolecta el walker
+ * per-file `checkSourceFile` (que tiene el context `isInClientOnlyDeferredBody`)
+ * y `checkFileWithImports` lo sigue junto a estos refs. `import(variable)`/
+ * ensamblado = data-flow §141 residual. codex P1 (@<este commit>).
  */
 function extractModuleReferences(sourceFile) {
   const refs = [];
@@ -1298,6 +8591,24 @@ function extractModuleReferences(sourceFile) {
         specifier: stmt.moduleSpecifier.text,
         kind: isTypeOnly ? "type-only" : "value",
         modulePos: stmt.moduleSpecifier.getStart(sourceFile),
+      });
+      continue;
+    }
+    // import-equals con external-module-reference (`import X = require("m")`, incl. `export import X = require`)
+    // — Auditoría B R6 / H1: el statement-kind se caía del enumerador → ni el check no-node-builtin ni el
+    // follow transitivo corrían → ocultaba subárboles relativos ENTEROS del auditor (soundness del grafo, no
+    // solo el eje builtin). El statement-kind es conocido por otros subsistemas (producesRuntimeValue L1418,
+    // alias R4) — solo faltaba aquí. Respeta `isTypeOnly` (coherente con producesRuntimeValue(importEquals)=
+    // !isTypeOnly, D1-P1 R8). El modificador `export` es el MISMO nodo → cae en esta rama igual.
+    if (
+      ts.isImportEqualsDeclaration(stmt) &&
+      ts.isExternalModuleReference(stmt.moduleReference) &&
+      ts.isStringLiteral(stmt.moduleReference.expression)
+    ) {
+      refs.push({
+        specifier: stmt.moduleReference.expression.text,
+        kind: stmt.isTypeOnly ? "type-only" : "value",
+        modulePos: stmt.moduleReference.expression.getStart(sourceFile),
       });
       continue;
     }
@@ -1341,11 +8652,19 @@ function checkFileWithImports(entryAbsPath, options = {}) {
     // producción no se setean — defaults a los paths físicos del repo.
     repoRoot: optsRepoRoot,
     srcRoot: optsSrcRoot,
+    selfReferenceName: optsSelfReferenceName,
   } = options;
 
   const effectiveRepoRoot = optsRepoRoot ?? repoRoot;
   const effectiveSrcRoot =
     optsSrcRoot ?? (optsRepoRoot ? resolve(optsRepoRoot, "src") : SRC_ROOT);
+  // Nombre del paquete propio: computado UNA vez en el top-level y enhebrado por la recursión (la presencia
+  // de la key, no `??`, evita releer package.json por cada archivo aunque el nombre sea null). vfs-friendly:
+  // lee del repoRoot vía el readFile inyectado.
+  const effectiveSelfReferenceName =
+    "selfReferenceName" in options
+      ? optsSelfReferenceName
+      : readSelfReferenceName(effectiveRepoRoot, readFile);
 
   const violations = [];
   if (visited.has(entryAbsPath)) return violations;
@@ -1362,7 +8681,7 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       content,
       ts.ScriptTarget.Latest,
       /* setParentNodes */ true,
-      relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      scriptKindForPath(relPath),
     );
     cached = { sourceFile, content };
     parseCache.set(entryAbsPath, cached);
@@ -1370,18 +8689,39 @@ function checkFileWithImports(entryAbsPath, options = {}) {
 
   // Per-file analysis. Las violations heredan la chain del caller; el
   // archivo donde aparece la violation se añade al final.
-  const fileViolations = checkSourceFile(
-    cached.content,
-    relPath,
-    cached.sourceFile,
-  );
+  // El colector recibe los dynamic imports RENDER-PATH con specifier literal (codex P1): el walker
+  // per-file es quien tiene el context `isInClientOnlyDeferredBody`, así que recolecta ahí y los seguimos
+  // aquí como refs (no se duplica la detección de cuerpo-diferido en `extractModuleReferences`).
+  const dynamicRefs = [];
+  let fileViolations;
+  try {
+    fileViolations = checkSourceFile(
+      cached.content,
+      relPath,
+      cached.sourceFile,
+      dynamicRefs,
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+    fileViolations = [
+      {
+        file: relPath,
+        rule: "server-safe-analysis-error",
+        line: 1,
+        detail: `el analizador lanzó una excepción; el fichero NO se considera seguro y el gate continúa para informar el resto: ${message}`,
+      },
+    ];
+  }
   const fullChain = chain.length > 0 ? [...chain, relPath] : null;
   for (const v of fileViolations) {
     violations.push(fullChain ? { ...v, chain: fullChain } : v);
   }
 
-  // Seguir refs (imports + barrels).
-  const refs = extractModuleReferences(cached.sourceFile);
+  // Seguir refs (imports estáticos + barrels + dynamic-import render-path literal).
+  const refs = [...extractModuleReferences(cached.sourceFile), ...dynamicRefs];
   for (const ref of refs) {
     if (ref.kind === "type-only") continue;
     const resolution = resolveImportPath(
@@ -1389,9 +8729,22 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       entryAbsPath,
       tsconfigPaths,
       fileExists,
-      { repoRoot: effectiveRepoRoot, srcRoot: effectiveSrcRoot },
+      {
+        repoRoot: effectiveRepoRoot,
+        srcRoot: effectiveSrcRoot,
+        selfReferenceName: effectiveSelfReferenceName,
+      },
     );
     if (resolution.kind === "external") continue;
+    if (resolution.kind === "edge-denied") {
+      violations.push({
+        file: relPath,
+        rule: "no-node-builtin",
+        detail: `import de \`${resolution.specifier}\` — builtin \`node:*\`, Node-only y ausente del baseline Edge (Vercel/Workers) → lanza en render/SSR. El subset disponible-en-Edge (\`node:buffer\`, …) se allowlistará en #190.`,
+        ...(fullChain ? { chain: fullChain } : {}),
+      });
+      continue;
+    }
     if (resolution.kind === "unresolvable") {
       violations.push({
         file: relPath,
@@ -1411,6 +8764,7 @@ function checkFileWithImports(entryAbsPath, options = {}) {
       chain: childChain,
       repoRoot: effectiveRepoRoot,
       srcRoot: effectiveSrcRoot,
+      selfReferenceName: effectiveSelfReferenceName,
     });
     violations.push(...childViolations);
   }
@@ -1428,7 +8782,12 @@ function checkFileWithImports(entryAbsPath, options = {}) {
  *   `checkFileWithImports` lo pre-parsea y comparte vía cache para evitar
  *   re-parsear utils importados desde N componentes.
  */
-function checkSourceFile(content, relPath, preparsedSourceFile) {
+function checkSourceFile(
+  content,
+  relPath,
+  preparsedSourceFile,
+  dynamicRefsOut,
+) {
   const violations = [];
 
   const sourceFile =
@@ -1438,8 +8797,36 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       content,
       ts.ScriptTarget.Latest,
       /* setParentNodes */ true,
-      relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      scriptKindForPath(relPath),
     );
+
+  // Nombres declarados a nivel de módulo — para eximir tags JSX uppercase
+  // que son componentes (no globals). Se calcula una vez por archivo.
+  const moduleDeclaredNames = gatherModuleDeclaredNames(sourceFile);
+
+  // Una rama es CLIENT-ONLY (no corre en SSR/Edge) cuando está guardada por `typeof <browser-global> !==
+  // "undefined"` — el global SOLO está definido en el browser. classifyTypeofGuard añade a activeGuards
+  // CUALQUIER nombre del typeof (excluye SAFE_GLOBALS + NON_ABSENCE_DENIALS), incluidos LOCALS/PARAMS/module-
+  // decls cuyo guard es VACUO (`typeof ready` con ready local = siempre defined → la rama corre TAMBIÉN en
+  // SSR). Por eso `activeGuards.size` NO basta para "client-only" (un guard local lo inflaba → fail-open en el
+  // follow de import()/glob): hay que exigir que ALGÚN guard sea un browser-GLOBAL real (no-local). Mismos
+  // descalificadores de "es local" que el check no-bare-dom-access (localBindings + module-decl leído call-
+  // time). codex P2 (review sobre 6a32565).
+  const hasClientOnlyGuard = (ctx) => {
+    for (const name of ctx.activeGuards) {
+      // Sombra: un local/param/module-decl con el nombre de un browser-global lo des-cualifica (el `typeof`
+      // refiere al binding local, vacuo). Va ANTES del allowlist para que un `const window=…` no cuente.
+      if (ctx.localBindings.has(name)) continue;
+      if (ctx.isInFunctionBody && moduleDeclaredNames.has(name)) continue;
+      // POSITIVO + fail-CLOSED (codex P2): SOLO un browser-only CONOCIDO (∈ BROWSER_ONLY_GUARD_GLOBALS = ∈
+      // browser, ∉ Node, ∉ Edge) prueba que la rama es client-only. Subsume el caso Node-present
+      // (`BroadcastChannel` ∉ allowlist → audita) Y cierra el Edge-present/Node-absent (`EdgeRuntime`/`caches`/
+      // Deno/unknown ∉ allowlist → audita). El default del unknown es AUDITAR, no suprimir — enumeración del
+      // espacio {Node,Edge}×{present,absent}, no casos sueltos (Auditor-B).
+      if (BROWSER_ONLY_GUARD_GLOBALS.has(name)) return true;
+    }
+    return false;
+  };
 
   // Rule 1: no "use client" directive coexisting con @server-safe.
   // Inspect AST directive prologue: walk top-level statements mientras
@@ -1468,24 +8855,47 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
    * la distinción permite chequear si un callee de deferred sink está
    * shadow-eado por un local (skip exemption) vs es el import real (exempt).
    */
-  function addToScope(currentContext, names) {
+  function addToScope(currentContext, names, nonImportNames = names) {
     if (!names || names.size === 0) return currentContext;
+    // Un binding NUEVO (const/let/var/param/fn/clase…) SOMBREA cualquier guard-alias
+    // outer homónimo → invalidarlo en el scope interno, o `const has = false`
+    // (shadow no-guard) seguiría resolviendo al guard outer = BYPASS (deepest re-hunt
+    // #173, soundness). El alias propio se re-añade DESPUÉS en visitOrderedStatements.
+    let guardAliases = currentContext.guardAliases;
+    if (guardAliases && guardAliases.size > 0) {
+      let purged = null;
+      for (const n of names) {
+        if (guardAliases.has(n)) {
+          if (!purged) purged = new Map(guardAliases);
+          purged.delete(n);
+        }
+      }
+      if (purged) guardAliases = purged;
+    }
+    // `nonImportNames` (default = `names`) separa los locales NO-import de los
+    // import-like (`import X = …`): estos sombrean globals (localBindings) pero NO
+    // cuentan como shadow local de un hook (nonImportBindings) — ver
+    // extractPostStatementBindings (codex P2).
     return {
       ...currentContext,
       localBindings: new Set([...currentContext.localBindings, ...names]),
       nonImportBindings: new Set([
         ...currentContext.nonImportBindings,
-        ...names,
+        ...nonImportNames,
       ]),
+      ...(guardAliases !== currentContext.guardAliases ? { guardAliases } : {}),
+      // Un binding nuevo que SOMBREA un timer/partial alias lo purga en este scope (codex P2).
+      ...(purgeScopeAliasShadows(currentContext, names) ?? {}),
     };
   }
 
   // Walk AST con contexto:
   //   activeGuards: Set<api> guards activos por scope de typeof.
-  //   isInDeferredBody: estamos dentro de un body que NO corre durante
-  //                     render — body de handler JSX (onClick, onChange…),
-  //                     useEffect / useLayoutEffect / useCallback, timer
-  //                     (setTimeout, requestAnimationFrame…), etc.
+  //   isInClientOnlyDeferredBody: estamos dentro de un body que solo corre
+  //                     en el CLIENTE (no en SSR/Edge) — handler JSX (onClick,
+  //                     onChange…), useEffect / useLayoutEffect / useCallback.
+  //                     Un TIMER (setTimeout/queueMicrotask) NO cuenta: dispara
+  //                     en el isolate del server → no exime globals de cliente.
   //
   // Razón: codex round 10 mostró que el heurístico depth-based del
   // round 8 era demasiado grueso — `function readEnv() { return
@@ -1501,26 +8911,605 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   // (que se corrige reescribiendo en el patrón canónico useCallback +
   // JSX prop directo), uno espurio produce un silent bypass del gate.
   function visit(node, context) {
+    // §141 — alias de assignment-expressions EMBEBIDAS evaluadas ANTES de que `node` sea relevante
+    // para un sink, enroladas ANTES de los checks (codex P2): (1) operandos hermanos en una cadena
+    // value-transparente (`(later = setTimeout) && later(…)`) — enrolar en el TOP de la cadena; (2) el
+    // callee/receiver de un call/member/new/tagged (`((later = setTimeout), later)("x")`, `((WA =
+    // WebAssembly), WA).compile(…)`) — el head se EVALÚA antes del sink, y su check corre en ESTE
+    // nodo (no al descender). Mismo unwrap value-transparente; NO atraviesa calls (RHS-call = residual).
+    if (
+      isValueTransparentOperatorNode(node) &&
+      !isValueTransparentOperatorNode(node.parent)
+    ) {
+      context = withEmbeddedAssignmentAliases(context, node);
+    }
+    if (
+      ts.isCallExpression(node) ||
+      ts.isNewExpression(node) ||
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node) ||
+      ts.isTaggedTemplateExpression(node)
+    ) {
+      const head = ts.isTaggedTemplateExpression(node)
+        ? node.tag
+        : node.expression;
+      context = withEmbeddedAssignmentAliases(context, head);
+    }
+    // `import(<literal builtin>)` — import() DINÁMICO con specifier LITERAL EN-SITIO (`import("fs")`,
+    // `import("node:fs")`): no data-flow → cazable, rompe en Edge igual que el import estático. El BUILTIN
+    // se flaggea aquí inline (también en modo single-file sin grafo); el specifier relativo/alias se
+    // RECOLECTA en `dynamicRefsOut` y `checkFileWithImports` lo SIGUE como ref (cierra el hueco — codex P1).
+    // VALUE-survival: el specifier puede llegar por operadores VT (`import((0,"fs"))` coma,
+    // `import(c?"fs":"x")` ternario MULTI-hoja) → se resuelve por `valueSurvivalLeaves` (helper
+    // compartido) y se flaggea FAIL-CLOSED si CUALQUIER hoja es un builtin literal (paridad con
+    // construcción: una rama builtin basta). `import(variable)` = data-flow residual; `createRequire(
+    // ...)("fs")` = indirección residual (ambos §141). codex P1 + barrido VT (gap del ternario multi-hoja).
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0 &&
+      !context.isInClientOnlyDeferredBody &&
+      // typeof-guard client-only (`if (typeof window !== "undefined") import("./x")`): la rama solo corre en
+      // browser → el import NO se ejecuta en Edge → NO seguir/flaggear (paridad con no-bare-dom-access, que
+      // activeGuards ya suprime para reads directos, y con el deferred-body de arriba). DEBE ser un guard de
+      // browser-GLOBAL (no `activeGuards.size`, que un `typeof local` vacuo inflaba → fail-open: la rama corría
+      // en SSR pero no se auditaba — codex P2). Rama SERVER (`typeof window === "undefined"` then) → sin guard
+      // de global → SÍ se audita (no fail-open).
+      !hasClientOnlyGuard(context)
+    ) {
+      const litLeaves = valueSurvivalLeaves(node.arguments[0]).filter((l) =>
+        ts.isStringLiteralLike(l),
+      );
+      const builtinLeaf = litLeaves.find((l) => isNodeBuiltinSpecifier(l.text));
+      if (builtinLeaf) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-node-builtin",
+          line: line + 1,
+          detail: `import() dinámico de \`${builtinLeaf.text}\` — builtin Node-only, ausente del baseline Edge (Vercel/Workers) → falla al resolver en render/SSR. El subset disponible-en-Edge se allowlistará en #190. ${lineText}`,
+        });
+      }
+      // FOLLOW del dynamic import RENDER-PATH con specifier LITERAL relativo/alias (codex P1): el specifier
+      // está EN-SITIO (decidible) y el módulo corre en el render → auditarlo como un import estático. El
+      // colector lo recibe `checkFileWithImports` y lo resuelve+sigue igual que un ref estático (relativo→
+      // audita el .ts, builtin ya flaggeado arriba → se EXCLUYE para no doble-flaggear, bare→external). NO
+      // se dispara en cuerpo cliente-diferido (el `!isInClientOnlyDeferredBody` de arriba lo garantiza —
+      // paridad con el check de builtins). `import(variable)`/ensamblado = sin hoja literal → data-flow §141
+      // residual (no se sigue). Multi-hoja `import(c?"./a":"./b")` → se siguen AMBAS (value-survival).
+      if (dynamicRefsOut) {
+        for (const l of litLeaves) {
+          if (!isNodeBuiltinSpecifier(l.text)) {
+            dynamicRefsOut.push({
+              specifier: l.text,
+              kind: "value",
+              modulePos: l.getStart(sourceFile),
+            });
+          }
+        }
+      }
+    }
+    // LLAMADA UNBOUND de método branded host (codex P1): un método bucket-1 ALLOWED ∈
+    // RECEIVER_BOUND_MEMBERS es Edge-safe LIGADO (`crypto.getRandomValues(b)`; parens/cast preservan
+    // `this`) pero LANZA DESLIGADO (`(0, crypto.getRandomValues)(b)` → `this` ya no es el objeto host).
+    // El set value-transparente preserva el VALOR pero `,`/`&&`/`||`/`??`/`?:`/`=` DETACHAN el `this`;
+    // parens/`as`/`!`/`<T>` (erased) NO. Por eso este check SPLIT-ea el set SOLO aquí: `unwrapErased`
+    // (this-preserving) deja un nodo VT residual ⟺ el callee cruzó un operador this-detaching. El set
+    // VT unificado para eval-sinks (rama ①, `.constructor`) queda INTACTO. Se caza SOLO el callee
+    // INVOCADO en-sitio; el detach NO-invocado (`const f=(0,X.m)`) y el var-extract (`const r=X.m; r()`)
+    // = indirección/data-flow §141 residual (el receiver se pierde por seguimiento de valor, no en-sitio).
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      // ¿`expr` resuelve a un método ∈ RECEIVER_BOUND con el receiver DESLIGADO en-sitio? → {r, member}.
+      // Robusto a: wrapper VT (resuelve por las hojas this-detaching), alias del root (exprPartialRoot),
+      // y la CADENA DE RECEIVER de `.call/.apply/.bind` a CUALQUIER profundidad/orden (`peelReceiverChain`,
+      // iterativo sin cap → `X.m.call`, `X.m.bind(a).call(b)`, `(X.m.call).bind(X.m)()`, profundidad 50…
+      // todos pelan hasta el member base). Una hoja CallExpression (`.bind(…)` call) es candidata pelable.
+      const boundMemberOf = (expr) => {
+        const lu = unwrapErased(expr);
+        // Proyección container-literal (`[crypto.getRandomValues][0]`, `({m:crypto.getRandomValues}).m`):
+        // DETACHA el this (receiver = array/objeto ≠ crypto) → this-detaching → descender por
+        // valueTransparentChildren PRIMERO. Un member-access REAL (`crypto.getRandomValues`,
+        // `crypto["getRandomValues"]`) tiene 0 hijos VT → cae a `[lu]` (candidato directo). root A / Fable.
+        const candidates =
+          valueTransparentChildren(lu).length > 0
+            ? valueTransparentLeaves(lu).map(unwrapErased)
+            : ts.isPropertyAccessExpression(lu) ||
+                ts.isElementAccessExpression(lu) ||
+                ts.isCallExpression(lu)
+              ? [lu]
+              : [];
+        for (const cand of candidates) {
+          const c = peelReceiverChain(cand);
+          if (
+            !ts.isPropertyAccessExpression(c) &&
+            !ts.isElementAccessExpression(c)
+          ) {
+            continue;
+          }
+          // ∃-quantifica sobre resolveRoots(c.expression) (Auditoría B FIX-1): un receptor detach
+          // multi-rama (`(b?WebAssembly:crypto).getRandomValues`) enmascaraba el root con el miembro bound
+          // (crypto) tras uno sin ese bound (WebAssembly) → FN.
+          for (const r of resolveRoots(c.expression, context)) {
+            const bound = RECEIVER_BOUND_MEMBERS[r];
+            const member = bound
+              ? accessedMemberNames(c).find((mm) => bound.has(mm))
+              : null;
+            if (member) return { r, member };
+          }
+        }
+        return null;
+      };
+      const calleeStripped = unwrapErased(node.expression);
+      let hit = null;
+      let via = null;
+      // (a) DETACH por operador this-detaching: `(0, X.m)()`, `(X.m||y)()`, ternario, alias de root.
+      if (valueTransparentChildren(calleeStripped).length > 0) {
+        hit = boundMemberOf(calleeStripped);
+        via = "operador this-detaching";
+      }
+      // (b) DETACH por `Function.prototype.call/apply/bind` invocado EN-SITIO (simétrico con `.constructor.call`).
+      // `X.m.call(recv,…)` / `.apply` / `.bind(…)()` invocan el método con `this` controlado, contiguo → la
+      // MISMA divergencia-Edge que (a) (OK-Node / throws-Edge). Cubre dotted + bracket-literal (`X.m["call"]`)
+      // + optional (`X.m?.call?.()`) vía accessedMemberNames. NO se cazan (residual data-flow §141): `.bind(…)`
+      // cuyo resultado NO se invoca aquí (crea fn, no llama el método) ni el bind-extraído cross-statement
+      // (`const f=X.m.bind(null); f(b)`). `.call(<receiver-correcto>,…)` no diverge pero es indistinguible sin
+      // data-flow del 1er arg → flag-all fail-closed (over-strict-FP aceptado: nadie escribe `.call(crypto,…)`).
+      if (!hit) {
+        let detachTarget = null;
+        if (
+          ts.isPropertyAccessExpression(calleeStripped) ||
+          ts.isElementAccessExpression(calleeStripped)
+        ) {
+          const fm = accessedMemberNames(calleeStripped);
+          if (fm.includes("call") || fm.includes("apply")) {
+            detachTarget = calleeStripped.expression;
+          }
+        } else if (ts.isCallExpression(calleeStripped)) {
+          // `X.m.bind(…)()`: el callee de la call externa (este `node`) es la call a `X.m.bind`.
+          const innerCallee = unwrapErased(calleeStripped.expression);
+          if (
+            (ts.isPropertyAccessExpression(innerCallee) ||
+              ts.isElementAccessExpression(innerCallee)) &&
+            accessedMemberNames(innerCallee).includes("bind")
+          ) {
+            // `boundMemberOf` → `peelReceiverChain` pela el resto de la cadena de receiver (`.bind`
+            // encadenado, `.call/.apply` intercalados, VT-antes) a cualquier profundidad.
+            detachTarget = innerCallee.expression;
+          }
+        }
+        if (detachTarget) {
+          hit = boundMemberOf(detachTarget);
+          via = "Function.prototype.call/apply/bind";
+        }
+      }
+      // (c) `Reflect.apply(T, thisArg, args)` ≡ `T.apply(thisArg, args)` — invoca T con `this` CONTROLADO
+      // (arg1) → MISMO detach que `.call/.apply`, pero T (arg0) llega vía un builtin Reflect (fuera del
+      // universo `.call/.apply/.bind`). T EN-SITIO → decidible con `boundMemberOf` (el gate ya modela
+      // Reflect para el eval-sink). `Reflect.construct` → más abajo (construcción). codex P1.
+      const reflectTgt = reflectCallTarget(node);
+      if (!hit && reflectTgt && reflectTgt.method === "apply") {
+        hit = boundMemberOf(reflectTgt.target);
+        if (hit) via = "Reflect.apply (this controlado)";
+      }
+      if (hit) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail: `llamada UNBOUND de \`${hit.r}.${hit.member}\` — método branded host DESLIGADO de su receiver (${via}) → \`this\` no es el objeto ${hit.r} → TypeError en Edge/SSR. La llamada LIGADA (\`${hit.r}.${hit.member}(…)\`, o envuelta en parens/cast) es Edge-safe: ${lineText}`,
+        });
+      }
+      // `Reflect.construct(T, args)` ≡ `new T(...args)` — construye T (arg0) SIN `new` → salta el check
+      // `NewExpression`. T EN-SITIO → mismo resolver `constructionTargets`; cierra la construcción-vía-Reflect.
+      if (reflectTgt && reflectTgt.method === "construct") {
+        for (const target of constructionTargets(reflectTgt.target)) {
+          if (
+            !ts.isPropertyAccessExpression(target) &&
+            !ts.isElementAccessExpression(target)
+          ) {
+            continue;
+          }
+          // ∃-quantifica construcción-denegada sobre resolveRoots(target) (Auditoría B FIX-1); el
+          // computado vía Reflect.construct (`Reflect.construct(WebAssembly[m],…)`, m variable) fail-cierra
+          // igual que `new WebAssembly[m]()` (Reflect.construct ≡ new). No §141 (detecta el patrón).
+          const { ctorRoot, ctorMember, ctorComputedDenied } =
+            resolveConstructionDeny(target, context);
+          if (ctorMember || ctorComputedDenied) {
+            const start = node.getStart(sourceFile);
+            const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+            const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+            violations.push({
+              file: relPath,
+              rule: "no-bare-dom-access",
+              line: line + 1,
+              detail: ctorMember
+                ? `\`Reflect.construct(${ctorRoot}.${ctorMember}, …)\` ≡ \`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render: ${lineText}`
+                : `\`Reflect.construct(${ctorRoot}[<computado>], …)\` ≡ \`new ${ctorRoot}[<computado>](bytes)\` — constructor COMPUTADO: no se puede probar que el miembro no sea construcción-denegada (${[...CONSTRUCTION_DENIED_MEMBERS[ctorRoot]].join("/")} compila bytes) → fail-closed: ${lineText}`,
+            });
+            break;
+          }
+        }
+      }
+    }
+    // CONSTRUCCIÓN denegada: `new WebAssembly.Module(bytes)` compila bytes SIEMPRE (sin overload
+    // estático) → dynamic codegen deshabilitado en Edge. Bucket-2-por-OPERACIÓN: se caza SOLO en
+    // posición `new`, NO como member-read (`WebAssembly.Module` valor / instanceof / static-methods son
+    // Edge-safe). Root directo o vía ALIAS de WebAssembly (`new WA.Module(...)`). `new M(bytes)` con M =
+    // member-alias de `WebAssembly.Module` = indirección §141 residual (el token Module no está en-sitio).
+    // codex P2 (review genérico).
+    if (ts.isNewExpression(node) && !context.isInClientOnlyDeferredBody) {
+      // VALUE-survival: el callee del `new` puede alcanzar el constructor a través de operadores
+      // value-transparent (ternario/coma/`&&`/`||`/`??`/`=`) — el VALOR construido es el mismo, sigue
+      // compilando bytes. MISMA resolución value-survival que el eval-sink (`.constructor`): se resuelve
+      // por las hojas vía `valueSurvivalLeaves` (helper value-survival CENTRALIZADO), NO solo el callee
+      // directo/erased (codex P1 @fdd3fe5: `new (c?WebAssembly.Module:X)(bytes)` se saltaba). NOTA: bracket
+      // (`new WebAssembly["Module"]`) y cast (`new (… as any)`) YA estaban cubiertos (ElementAccess /
+      // unwrapErased); el gap era SOLO los operadores VT. El member-alias (`const M=WebAssembly.Module;
+      // new M(bytes)`) sigue residual §141 (token no en-sitio). Eje VALUE-survival (compartido con
+      // eval-sink/import.meta), DISTINTO del eje receiver-detach del unbound (set VT SPLIT, no fusionar).
+      // `constructionTargets` (module-level): hojas value-survival DESLIGANDO `.bind(...)` recursivo
+      // (`new (X.Module.bind(t,...a))()` ≡ `new X.Module(...a)`; `.bind` encadenado + VT-antes + dotted/
+      // bracket/optional). `.call/.apply` NO aplican a construcción. El member-alias sigue residual.
+      for (const target of constructionTargets(node.expression)) {
+        if (
+          !ts.isPropertyAccessExpression(target) &&
+          !ts.isElementAccessExpression(target)
+        ) {
+          continue;
+        }
+        // ∃-quantifica construcción-denegada sobre resolveRoots(target) (Auditoría B FIX-1). El
+        // COMPUTADO en posición `new` (`new WebAssembly[m](bytes)`, m variable → sin candidatos) fail-CIERRA
+        // (m podría ser "Module"); paridad con el literal-desconocido. Decidible SIN resolver m (detecta el
+        // patrón, no §141). SOLO en posición `new` → preserva el value-read Edge-safe (`const C =
+        // WebAssembly[m]`, `instanceof WebAssembly[m]` intactos). read-ban ≠ construct-ban. codex P2 + Auditor-B.
+        const { ctorRoot, ctorMember, ctorComputedDenied } =
+          resolveConstructionDeny(target, context);
+        if (ctorMember || ctorComputedDenied) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail: ctorMember
+              ? `\`new ${ctorRoot}.${ctorMember}(bytes)\` — compila bytes en runtime (dynamic codegen deshabilitado en el baseline Edge) → lanza en SSR/render. El VALOR \`${ctorRoot}.${ctorMember}\` (instanceof, static methods) es Edge-safe: ${lineText}`
+              : `\`new ${ctorRoot}[<computado>](bytes)\` — constructor COMPUTADO de ${ctorRoot}: no se puede probar que el miembro no sea construcción-denegada (${[...CONSTRUCTION_DENIED_MEMBERS[ctorRoot]].join("/")} compila bytes → dynamic codegen Edge) → fail-closed. Usa el constructor literal o reescribe: ${lineText}`,
+          });
+          break;
+        }
+      }
+    }
+    // `import.meta.<member>` (dot / bracket-literal / alias / proyección / VT) se maneja UNIFICADO en la
+    // rama partial-root c.1b (import.meta enrolado como root-sentinel en resolvePartialRootSet, root C; polaridad
+    // ALLOWLIST vía partialMemberDenied) — Fable cross-review 3 (#3). Se ELIMINÓ el bloque dedicado que había
+    // aquí: duplicaba la policy y, al no aplicar el safe-probe de c.1b, flaggeaba `typeof import.meta.dirname`
+    // / `import.meta.resolve?.()` de más (FP). `import.meta.hot`/`url`/`env`/`glob` ∈ allowlist → PASA;
+    // `import.meta[dynKey]` § 141; el CALL `import.meta.glob(...)` lo caza el check de glob dedicado (abajo).
+    // `Reflect.get(R, "k")` con key (VT-fold canónica) ≡ `R["k"]` (root B / Fable): member-read decidible
+    // EN-SITIO. Reusa resolveRoots (resuelve R: performance/WebAssembly/console/crypto/process E
+    // import.meta, con alias y proyección) + partialMemberDenied (dispatch de polaridad). B2
+    // (`Reflect.get(import.meta,"dirname")`) se cierra gratis con el enrolado de import.meta (root C).
+    // POLARIDAD: ∃-candidato-denegado → FLAG (partialMemberDenied ya codifica denylist/allowlist por-root,
+    // así que `R[c?"url":"dirname"]` flaggea por la rama denegada). Key variable/ensamblada → Set vacío → §141.
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      const rget = reflectGetMemberRead(node);
+      if (rget) {
+        // ∃-quantifica sobre resolveRoots(receiver) (Auditoría B FIX-1): un receiver multi-rama
+        // `Reflect.get(b?crypto:performance, k)` enmascaraba el root denegado tras uno wholesale-safe → FN.
+        // members RESUELTOS → ∃-candidato denegado. members VACÍO (key variable/ensamblada) sobre un root
+        // allowlist default-deny (SAFE_PARTIAL_MEMBERS) → fail-closed, ESPEJO de `<root>[<computado>]`
+        // (computedDefaultDenyRoot, codex P2): `Reflect.get(performance, k) ≡ performance[k]`. Fable #4.
+        // El receptor de Reflect.get pasa por el seam canónico resolveRoots: raíz directa/alias + familias
+        // identity-return/proto-walk/own-copy. El carrier se resuelve aquí sin contaminar el enrolado de alias
+        // (receiver-vía-flujo sigue §141).
+        const rgRoots = resolveRoots(rget.receiver, context);
+        let rgRoot = null;
+        let denied = undefined;
+        let computedDeny = false;
+        if (rget.members.size > 0) {
+          for (const root of rgRoots) {
+            const m = [...rget.members].find((mm) =>
+              partialMemberDenied(root, mm),
+            );
+            if (m !== undefined) {
+              rgRoot = root;
+              denied = m;
+              break;
+            }
+          }
+        }
+        // members VACÍO (key variable/ensamblada) O key INCOMPLETA (ternario `Reflect.get(R, c?'safe':dyn)`) sin
+        // denegado en el subset → allowlist default-deny (BLOQUEO-A: el ∃-deny del subset ya corrió; esto decide
+        // la rama irresoluble por polaridad — allowlist FLAG, denylist renunciado). Espejo de `R[computado]`.
+        if (
+          denied === undefined &&
+          (rget.members.size === 0 || rget.complete === false)
+        ) {
+          rgRoot =
+            [...rgRoots].find(
+              (root) =>
+                SAFE_PARTIAL_MEMBERS[root] !== undefined ||
+                root === IMPORT_META_ROOT,
+            ) ?? null;
+          computedDeny = rgRoot !== null;
+        }
+        if (denied !== undefined || computedDeny) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail: computedDeny
+              ? `\`Reflect.get(${rgRoot}, <computado>)\` ≡ \`${rgRoot}[<computado>]\` — key no resoluble sobre global parcial default-deny (allow: ${[...(SAFE_PARTIAL_MEMBERS[rgRoot] ?? SAFE_IMPORT_META_MEMBERS)].join("/")}) → fail-closed: ${lineText}`
+              : `\`Reflect.get(${rgRoot}, "${denied}")\` ≡ \`${rgRoot}.${denied}\` — member-read de un miembro ausente del baseline Edge → lanza/diverge en SSR/render (Reflect.get no lo oculta): ${lineText}`,
+          });
+        }
+      }
+    }
+    const inSiteMemberRoots =
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)
+        ? resolveRoots(node.expression, context)
+        : null;
+    // Idiomas REFLEXIVOS de lectura-de-valor (`gOPD(R,"k").value`, `gOPDs(R).k.value`, `Object.assign({},R).k`,
+    // `Object.create(R).k`, `({...R}).k`) ≡ `R.k` (Auditoría B FIX-3, ACOTA #3 — no cierra). ∃-quantifica sobre
+    // resolveRoots(receiver) + partialMemberDenied (dispatch de polaridad por-root, incl. import.meta
+    // allowlist). Fail-closed sobre-aproximado para miembros non-own-data (ver reflectiveValueReads).
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)) &&
+      !context.isInClientOnlyDeferredBody &&
+      // Si el receptor ya resuelve por el seam canónico de raíces (directo,
+      // alias o carrier), la rama c.1b de abajo aplica la semántica completa
+      // de safe-probe/present-throws. Este bloque queda para idiomas de
+      // descriptor-transfer cuyo receptor no es él mismo el root.
+      inSiteMemberRoots.size === 0
+    ) {
+      for (const { receiver, members, complete } of reflectiveValueReads(node)) {
+        let hitRoot = null;
+        let hitMember = null;
+        // El receptor descriptor pasa por el mismo resolveRoots que member-read/Reflect.get/construcción.
+        const rroots = resolveRoots(receiver, context);
+        for (const root of rroots) {
+          const m = [...members].find((mm) => partialMemberDenied(root, mm));
+          if (m !== undefined) {
+            hitRoot = root;
+            hitMember = m;
+            break;
+          }
+        }
+        // R13 gap#3: getOwnPropertyDescriptor(s) solo observa OWN members. Entre las raíces parciales
+        // modeladas, import.meta es la que tiene own-members allowlisted/Edge-divergentes; una key incompleta
+        // puede seleccionar dirname/filename/resolve y debe fail-cerrar. `gOPD(performance,k).value` conserva
+        // el pin OOM: eventLoopUtilization vive en el prototipo, gOPD devuelve undefined y `.value` lanza en
+        // todos los runtimes, así que NO se generaliza este fallback a todas las raíces.
+        const receiverHasInSiteImportMeta = [
+          ...valueSurvivalLeaves(receiver),
+          ...reflectiveCarrierSources(receiver, "chain"),
+        ].some(
+          (candidate) =>
+            ts.isMetaProperty(unwrapErased(candidate)) &&
+            unwrapErased(candidate).keywordToken === ts.SyntaxKind.ImportKeyword,
+        );
+        if (
+          !hitRoot &&
+          complete === false &&
+          rroots.has(IMPORT_META_ROOT) &&
+          receiverHasInSiteImportMeta
+        ) {
+          hitRoot = IMPORT_META_ROOT;
+        }
+        if (hitRoot) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "no-bare-dom-access",
+            line: line + 1,
+            detail:
+              hitMember === null
+                ? `lectura reflexiva de \`${hitRoot}[<computado>]\` mediante descriptor/copia — key no resoluble sobre import.meta (allow: ${[...SAFE_IMPORT_META_MEMBERS].join("/")}) → fail-closed: ${lineText}`
+                : `lectura reflexiva de \`${hitRoot}.${hitMember}\` (getOwnPropertyDescriptor/assign/create/spread) ≡ \`${hitRoot}.${hitMember}\` — miembro que diverge/lanza en el baseline Edge; la indirección reflexiva no lo oculta: ${lineText}`,
+          });
+          break;
+        }
+      }
+    }
+    // `import.meta.glob(...)` / `import.meta.globEager(...)` — bulk-import de Vite que carga N módulos por
+    // PATRÓN glob. El miembro `glob` ESTÁ en SAFE_IMPORT_META_MEMBERS (el ACCESO es Edge-safe, el namespace
+    // lo puebla el build) — ORTOGONAL a si los MÓDULOS cargados se auditan. El gate NO los sigue: expandir el
+    // glob exige `readdir` + replicar la semántica micromatch de Vite (`*`/`**`/`{a,b}`/negación) = el
+    // SUBSISTEMA que §373 RENUNCIA (igual que el parser de JS-family). Detectable sintácticamente → FAIL-
+    // CLOSED LOUD (no residual-silencioso): un mod del glob con `process.cwd` pasaría sin auditar = fail-open
+    // por N. El contribuidor audita por import directo (seguido) o evita glob en @server-safe. codex-diligencia.
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      // La KEY del bracket puede venir ERASED (`["glob" as const]`, `[("glob")]`) — el `as`/paren se borra al
+      // mismo `import.meta["glob"]` que el gate fail-cierra → desenvolver antes del StringLiteralLike (codex P2).
+      // Una key VARIABLE (`import.meta[k]`) sigue null = NO-glob: Vite tampoco la trata como macro (runtime error
+      // universal), §141 data-flow, no fail-open.
+      const globKey = ts.isElementAccessExpression(callee)
+        ? unwrapErased(callee.argumentExpression)
+        : null;
+      const globName =
+        ts.isPropertyAccessExpression(callee) &&
+        (callee.name.text === "glob" || callee.name.text === "globEager")
+          ? callee.name.text
+          : globKey &&
+              ts.isStringLiteralLike(globKey) &&
+              (globKey.text === "glob" || globKey.text === "globEager")
+            ? globKey.text
+            : null;
+      if (
+        globName &&
+        valueSurvivalLeaves(callee.expression).some(
+          (l) =>
+            ts.isMetaProperty(l) &&
+            l.keywordToken === ts.SyntaxKind.ImportKeyword,
+        )
+      ) {
+        // EAGER vs LAZY decide la paridad-con-deferred (codex P1 @30612a3): un EAGER glob (`globEager` o
+        // `glob(…,{eager:true})`) Vite lo BAJA a imports estáticos TOP-LEVEL → el módulo carga en module-eval
+        // (SSR/Edge) AUNQUE el call esté en un callback que nunca corre → se flaggea SIEMPRE, ignorando
+        // `isInClientOnlyDeferredBody`. Un LAZY glob devuelve importers on-call (posición-dependiente, como un
+        // dynamic import) → en cuerpo cliente-diferido es client-side → se respeta el skip.
+        // LAZY PROVABLE ⟺ object-literal donde CADA propiedad prueba que NO contribuye `eager:true`: o es una
+        // opción distinta de `eager` (nombre identifier/string-literal estático ≠ "eager"), o es `eager: false`
+        // LITERAL. CUALQUIER node-kind no-analizable → fail-closed EAGER: opts no-object-literal (variable),
+        // SPREAD (`{...o}`), SHORTHAND `{eager}` (valor=variable), COMPUTED-KEY `{["eager"]:…}` (nombre no
+        // estático), `eager:<no-false>` (variable/ternario/true). Barrido de node-kinds COMPLETO — codex P1
+        // (spread) + barrido proactivo (shorthand/computed): el chequeo viejo solo miraba PropertyAssignment-
+        // con-nombre y se saltaba los otros kinds → fail-open en callback. Vite baja el eager a estáticos
+        // top-level → carga en module-eval AUNQUE el call esté en callback.
+        const opts = node.arguments[1];
+        const propProvesNotEagerTrue = (p) => {
+          if (ts.isSpreadAssignment(p)) return false;
+          if (!p.name || ts.isComputedPropertyName(p.name)) return false;
+          const name = ts.isIdentifier(p.name)
+            ? p.name.text
+            : ts.isStringLiteralLike(p.name)
+              ? p.name.text
+              : null;
+          if (name === null) return false;
+          if (name !== "eager") return true;
+          return (
+            ts.isPropertyAssignment(p) &&
+            p.initializer.kind === ts.SyntaxKind.FalseKeyword
+          );
+        };
+        const eager =
+          globName === "globEager" ||
+          (opts !== undefined &&
+            (!ts.isObjectLiteralExpression(opts) ||
+              !opts.properties.every(propProvesNotEagerTrue)));
+        // typeof-guard client-only: un glob LAZY dentro de `if (typeof window !== "undefined")` solo aplica en
+        // browser → suprimir (paridad con el deferred-body y con el dynamic-import de arriba). DEBE ser guard de
+        // browser-GLOBAL (`hasClientOnlyGuard`, no `activeGuards.size` que un `typeof local` vacuo inflaba →
+        // fail-open, codex P2). Un EAGER NO se suprime: Vite lo HOISTEA a `import * as` en module-top → corre en
+        // module-eval (server-side) aunque el `import.meta.glob` esté dentro del guard → sigue flaggeando.
+        if (
+          eager ||
+          (!context.isInClientOnlyDeferredBody && !hasClientOnlyGuard(context))
+        ) {
+          const start = node.getStart(sourceFile);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+          const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+          violations.push({
+            file: relPath,
+            rule: "unresolved-import",
+            line: line + 1,
+            detail: `\`import.meta.${globName}(...)\` — bulk-import por patrón glob${eager ? " EAGER (Vite lo baja a imports estáticos top-level → carga en module-eval SSR/Edge aunque el callback nunca corra)" : ""}: el gate NO puede expandir el glob (exigiría readdir + la semántica micromatch de Vite, el subsistema que §373 renuncia) → los módulos cargados quedarían SIN auditar = fail-open por N. Audítalos por import directo (\`import "./mod"\`, que sí se sigue) o evita glob en @server-safe. ${lineText}`,
+          });
+        }
+      }
+    }
     // (a) Detectar typeof guards en if-statements: el then-branch
     // hereda el guard activo. El else-branch NO (en else, X está
     // undefined per la negación de la condición positiva).
     if (ts.isIfStatement(node)) {
-      const guardedApi = extractPositiveTypeofGuard(node.expression);
-      if (guardedApi) {
+      // chain-aware vía los mismos colectores que el guard por expresión (no
+      // forkeado). POSITIVO (`typeof X !== "undefined"`) → narrowea el THEN;
+      // NEGATIVO (`typeof X === "undefined"`) → narrowea el ELSE (X está definido
+      // ahí, espejo del ternario whenFalse). re-hunt FP7.
+      const posGuards = new Set();
+      collectConjunctionGuards(node.expression, posGuards, context.guardAliases);
+      const negGuards = new Set();
+      collectDisjunctionGuards(node.expression, negGuards, context.guardAliases);
+      if (posGuards.size > 0 || negGuards.size > 0) {
         visit(node.expression, context);
-        const thenContext = {
-          ...context,
-          activeGuards: new Set([...context.activeGuards, guardedApi]),
-        };
-        if (node.thenStatement) visit(node.thenStatement, thenContext);
-        if (node.elseStatement) visit(node.elseStatement, context);
+        if (node.thenStatement) {
+          visit(
+            node.thenStatement,
+            posGuards.size > 0
+              ? { ...context, activeGuards: new Set([...context.activeGuards, ...posGuards]) }
+              : context,
+          );
+        }
+        if (node.elseStatement) {
+          visit(
+            node.elseStatement,
+            negGuards.size > 0
+              ? { ...context, activeGuards: new Set([...context.activeGuards, ...negGuards]) }
+              : context,
+          );
+        }
         return;
       }
     }
 
-    // (b) Entrar en función/arrow/method: encender isInDeferredBody
-    // SI esta function expr es argumento de un sink diferido reconocido.
-    // Si ya estamos en deferred body, los bodies anidados heredan
+    // (a.2) typeof guards a nivel de EXPRESIÓN — MISMO predicado que el if-guard
+    // (reusado, no forkeado: un narrowing duplicado en path paralelo fue el bug
+    // del switch-case). El operando/branch guardado hereda el guard; el resto NO.
+    //   `typeof X !== "undefined" && <X aquí>`   (positivo → right)
+    //   `typeof X === "undefined" || <X aquí>`   (negativo → right)
+    //   `typeof X !== "undefined" ? <X> : …`     (positivo → whenTrue)
+    //   `typeof X === "undefined" ? … : <X>`     (negativo → whenFalse)
+    // La exclusión NON_ABSENCE_DENIALS se hereda vía los extractores → un
+    // `typeof Function !== "undefined" && Function("…")()` NO se exime (el guard
+    // es vacuamente true sobre un escape sink). El eval-sink (c.2) tampoco se
+    // suprime: solo se añade a activeGuards (que gatea no-bare-dom-access, no el
+    // eval-sink). beta.27 BLOCKER-1 (re-hunt: FP guard por expresión).
+    if (ts.isBinaryExpression(node)) {
+      const op = node.operatorToken.kind;
+      if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+        const guards = new Set();
+        collectConjunctionGuards(node.left, guards, context.guardAliases);
+        if (guards.size > 0) {
+          visit(node.left, context);
+          visit(node.right, {
+            ...context,
+            activeGuards: new Set([...context.activeGuards, ...guards]),
+          });
+          return;
+        }
+      } else if (op === ts.SyntaxKind.BarBarToken) {
+        const guards = new Set();
+        collectDisjunctionGuards(node.left, guards, context.guardAliases);
+        if (guards.size > 0) {
+          visit(node.left, context);
+          visit(node.right, {
+            ...context,
+            activeGuards: new Set([...context.activeGuards, ...guards]),
+          });
+          return;
+        }
+      }
+    }
+    if (ts.isConditionalExpression(node)) {
+      const pos = new Set();
+      collectConjunctionGuards(node.condition, pos, context.guardAliases);
+      const neg = new Set();
+      collectDisjunctionGuards(node.condition, neg, context.guardAliases);
+      if (pos.size > 0 || neg.size > 0) {
+        visit(node.condition, context);
+        visit(
+          node.whenTrue,
+          pos.size > 0
+            ? { ...context, activeGuards: new Set([...context.activeGuards, ...pos]) }
+            : context,
+        );
+        visit(
+          node.whenFalse,
+          neg.size > 0
+            ? { ...context, activeGuards: new Set([...context.activeGuards, ...neg]) }
+            : context,
+        );
+        return;
+      }
+    }
+
+    // (b) Entrar en función/arrow/method: encender isInClientOnlyDeferredBody
+    // SI esta function expr es argumento de un sink diferido CLIENT-ONLY reconocido
+    // (handler/effect; un timer NO). Si ya estamos en client-only, los bodies anidados heredan
     // el flag (un helper dentro de useEffect sigue siendo no-render).
     if (
       ts.isArrowFunction(node) ||
@@ -1531,15 +9520,369 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       ts.isSetAccessorDeclaration(node) ||
       ts.isConstructorDeclaration(node)
     ) {
-      const isDeferred = isDeferredExecutionContext(node, context);
+      const deferredKind = isDeferredExecutionContext(node, context);
       const fnScopeBindings = gatherFunctionVarHoisted(node);
+      // `arguments` es un binding implícito en funciones NO-arrow (no existe
+      // en arrows). Inyectarlo evita un falso positivo bajo fail-closed:
+      // `arguments` es un keyword contextual runtime-safe, no un global.
+      // beta.27 BLOCKER-1 (cruce A+B, FP-hunt).
+      if (!ts.isArrowFunction(node)) {
+        fnScopeBindings.add("arguments");
+      }
+      // El nombre de una named function-expr está en scope DENTRO de la función — tanto
+      // en los defaults de params como en el BODY: `const f = function self(){ return
+      // self }` → `self` es la FUNCIÓN, no el global homónimo (deep verify: runtime
+      // confirma "IS_FUNCTION"). Sin esto el body lo flaggeaba (FP). Una function
+      // DECLARATION ya tiene su nombre en el outer scope; añadirlo es redundante-inocuo.
+      if (
+        (ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
+        node.name
+      ) {
+        fnScopeBindings.add(node.name.text);
+      }
+      // VISTA DIFERIDA (#7, D1-b rama 2): el body lee a call-time → ve la unión FULL-SCOPE de asignaciones de
+      // los scopes ENCLOSING (`deferredAssignAliases`), insensible al orden textual — no solo las forward-
+      // acumuladas hasta la posición de la función. EXCLUYE los bindings PROPIOS del body (params/var/nombre):
+      // sombrean el enclosing → no se inyecta su alias (criterio por-binding a través de la frontera de función).
+      // Base = scopePartialAliases YA purgado por addToScope (shadow de params/locals sobre el alias del
+      // enclosing — p.ej. `const WA=WebAssembly; function g(WA){ WA.compile() }` purga WA). Sobre esa base se
+      // mergea la unión diferida (excluyendo los bindings propios del body, mismo criterio de shadow).
+      const scoped = addToScope(context, fnScopeBindings);
+      const deferredForBody = context.deferredAssignAliases;
+      // El mapa diferido también se enhebra a closures MÁS internas. Purgarlo en ESTA frontera de función
+      // evita que un param/var/local que sombrea un alias de módulo vuelva a ser reinyectado al entrar en la
+      // closure anidada (`const p=performance; function g(p){ return ()=>p.elu() }`).
+      const deferredForNestedBodies =
+        deferredForBody && deferredForBody.size > 0
+          ? new Map(
+              [...deferredForBody].filter(
+                ([name]) => !fnScopeBindings.has(name),
+              ),
+            )
+          : deferredForBody;
+      const bodyPartialAliases =
+        deferredForBody && deferredForBody.size > 0
+          ? (() => {
+              const m = new Map(scoped.scopePartialAliases ?? []);
+              for (const [name, roots] of deferredForBody) {
+                if (fnScopeBindings.has(name)) continue;
+                const prev = m.get(name);
+                m.set(name, prev ? new Set([...prev, ...roots]) : roots);
+              }
+              return m;
+            })()
+          : scoped.scopePartialAliases;
       // Acumular con outer scope. Estas bindings son TODAS non-import
       // (parameters + var hoisted dentro del fn body).
       const bodyContext = {
-        ...addToScope(context, fnScopeBindings),
-        isInDeferredBody: context.isInDeferredBody || isDeferred,
+        ...scoped,
+        scopePartialAliases: bodyPartialAliases,
+        deferredAssignAliases: deferredForNestedBodies,
+        // Dentro de un cuerpo de función: los reads son call-time. Un nombre
+        // declarado a NIVEL DE MÓDULO leído aquí ya está inicializado al llamarse
+        // (módulo evaluado) → es un local, no un global, independientemente del
+        // orden textual (F4: `function P(){ return X } const X = …`). Render-path
+        // directo (fuera de función) sí mantiene el orden TDZ.
+        isInFunctionBody: true,
+        // CLIENT-ONLY deferred (hook/handler) vs TIMER (setTimeout/setInterval/
+        // queueMicrotask). Sticky: una vez en client-only, los timers anidados
+        // también corren en cliente. CUALQUIER global de cliente (window/document,
+        // eval-sink, …) solo se exime en client-only, NO en timer: los timers disparan
+        // en el isolate Edge/SSR → su callback corre en el server → el read lanza (codex
+        // P1). Por eso solo se trackea el subset client-only (`isExemptInDeferredBody`).
+        isInClientOnlyDeferredBody:
+          context.isInClientOnlyDeferredBody || deferredKind === "client",
+        // ¿El cuerpo hereda los guards activos en SU posición de definición?
+        // El narrowing es POSICIONAL y sound para todo lo que se invoca según su
+        // posición léxica: una función-expr/arrow/método/IIFE solo es llamable
+        // DESPUÉS de su definición. Tras un guard-negativo early-return, el server
+        // ya retornó → lo definido después es client-only → hereda el guard (clean,
+        // SSR-safe). Lo definido ANTES del guard hereda el estado (vacío) → un read
+        // se flaggea. Caso 09/10/closure/.map/.reduce → todos correctos heredando.
+        //
+        // EXCEPCIÓN — function DECLARATION: está HOISTED, llamable ANTES de su
+        // posición textual (`const s = read(); if (guard) return; function read(){
+        // window }`) o en la rama undefined del guard. Su posición textual NO
+        // refleja cuándo se invoca → NO hereda los guards POSICIONALES (negative-
+        // early-return acumulados mid-block). Pero SÍ hereda los del BLOQUE entero
+        // (`blockEntryGuards`): el positivo de un `if (typeof X !== "undefined") {
+        // function read(){ X } }` vale para toda función hoisted del bloque (re-hunt
+        // FP5). beta.27 BLOCKER-1 (hunt D + re-hunt).
+        activeGuards: ts.isFunctionDeclaration(node)
+          ? new Set(context.blockEntryGuards ?? [])
+          : context.activeGuards,
       };
-      ts.forEachChild(node, (child) => visit(child, bodyContext));
+      // Los DEFAULTS de los parámetros corren en el scope de PARÁMETROS, padre del
+      // body: NO ven los `var` hoisted del body (ES spec). Visitarlos bajo bodyContext
+      // suprimía un read del global homónimo de un `var` del body (`function f(x =
+      // window.x){ var window }` → el default lee el GLOBAL real → ReferenceError en
+      // Edge; deep adversarial bypass). Scope de params = outer + nombres de params
+      // (para `f(a, b=a)`) + el nombre de la fn (named function-expr `function self(x =
+      // self)`, self visible en sus defaults — codex P2) + `arguments`, SIN los var del
+      // body. El body sí usa bodyContext. (Pre-cargar TODOS los params upfront es correcto
+      // y compila-equivalente al modelo incremental: un default que referencia un param
+      // POSTERIOR directamente lo rechaza tsc — TS2373 "cannot reference identifier
+      // declared after it" — así que nunca llega al gate; y el único caso que SÍ compila,
+      // un closure que captura un param posterior `f(x = () => p, p)`, lee el PARAM no el
+      // global → upfront lo trata bien, el modelo incremental FP-earía. codex P1: no-bug.)
+      const paramScope = new Set(context.localBindings);
+      if (
+        (ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
+        node.name
+      ) {
+        paramScope.add(node.name.text);
+      }
+      for (const p of node.parameters) addBindingNamesFromPattern(p.name, paramScope);
+      if (!ts.isArrowFunction(node)) paramScope.add("arguments");
+      const paramContext = { ...bodyContext, localBindings: paramScope };
+      // PARÁMETROS con DEFAULT que aliasa un timer/partial-root (`function run(later = setTimeout)`,
+      // `run(WA = WebAssembly)`): el default corre en el scope de params pero el ALIAS vale en el
+      // BODY. Sin esto el body ve `later`/`WA` como locales OPACOS → bypass (codex P2). Threadea
+      // left-to-right (`f(a = setTimeout, b = a)`), resuelto contra el scope de params (shadow-aware).
+      // El partial-MEMBER de un pattern-param (`run({ compile } = WA)`) lo caza flagPartialDestructure.
+      let bodyCtx = bodyContext;
+      // R8 MEC-D: snapshot L2R por-parámetro para VISITAR su default con los alias de los params 0..i-1
+      // (`f(p = performance, x = p.eventLoopUtilization())`). El threading de `pCtx` abajo ya los acumula;
+      // capturamos el contexto ANTES de procesar cada param (así el default de i ve p, no lo trata como opaco).
+      const paramDefaultCtx = new Map();
+      {
+        let pCtx = paramContext;
+        const tAdds = new Set();
+        const pAdds = new Map();
+        for (const p of node.parameters) {
+          paramDefaultCtx.set(p, pCtx);
+          // NO saltar por `!p.initializer`: un DEFAULT de binding-element dentro del pattern
+          // (`run({ later = setTimeout })`) ejecuta aunque el parámetro no tenga default ENTERO —
+          // collectStructuralAliases recursa esos defaults desde el pattern (codex P2).
+          const lt = new Set();
+          collectStructuralAliases(
+            p.name,
+            p.initializer,
+            pCtx,
+            exprIsTimerValued,
+            (n) => {
+              lt.add(n);
+              tAdds.add(n);
+            },
+          );
+          const lp = new Map();
+          collectStructuralAliases(
+            p.name,
+            p.initializer,
+            pCtx,
+            resolvePartialRootSet,
+            (n, r) => {
+              lp.set(n, r);
+              pAdds.set(n, r);
+            },
+            true,
+          );
+          if (lt.size) {
+            pCtx = {
+              ...pCtx,
+              scopeTimerAliases: new Set([
+                ...(pCtx.scopeTimerAliases ?? []),
+                ...lt,
+              ]),
+            };
+          }
+          if (lp.size) {
+            pCtx = {
+              ...pCtx,
+              scopePartialAliases: new Map([
+                ...(pCtx.scopePartialAliases ?? []),
+                ...lp,
+              ]),
+            };
+          }
+        }
+        if (tAdds.size) {
+          bodyCtx = {
+            ...bodyCtx,
+            scopeTimerAliases: new Set([
+              ...(bodyCtx.scopeTimerAliases ?? []),
+              ...tAdds,
+            ]),
+          };
+        }
+        if (pAdds.size) {
+          bodyCtx = {
+            ...bodyCtx,
+            scopePartialAliases: new Map([
+              ...(bodyCtx.scopePartialAliases ?? []),
+              ...pAdds,
+            ]),
+          };
+        }
+      }
+      const paramNodes = new Set(node.parameters);
+      ts.forEachChild(node, (child) => {
+        if (child === node.body) {
+          visit(child, bodyCtx);
+        } else if (child === node.name && ts.isComputedPropertyName(child)) {
+          // Computed key de método/accessor (`{ [window.x]() {} }`): se EVALÚA al crear
+          // el objeto/clase (render path, scope EXTERNO) → si lee un global FLAGGEA aunque
+          // un param lo sombree (codex P1). EXCEPCIÓN: un miembro de clase SIN cuerpo
+          // (abstract o overload-signature) se BORRA al emit — el build emite solo la
+          // implementación con cuerpo, su key nunca se evalúa. Saltarla evita el FP
+          // (deepest re-hunt #173: abstract/overload computed-key). La implementación
+          // (con cuerpo) SÍ visita la key y flaggea un read real.
+          const memberErased =
+            node.body === undefined &&
+            (ts.isMethodDeclaration(node) ||
+              ts.isGetAccessorDeclaration(node) ||
+              ts.isSetAccessorDeclaration(node));
+          if (!memberErased) visit(child, context);
+        } else if (ts.isDecorator(child)) {
+          // Decoradores de la función/método: se evalúan en la definición (scope externo).
+          visit(child, context);
+        } else if (paramNodes.has(child)) {
+          // Un PARÁMETRO: su DEFAULT corre en el param scope (ve params anteriores), pero
+          // sus DECORADORES corren en la DEFINICIÓN (scope externo, antes de que exista el
+          // param) → un `m(@(window.x) window)` lee el GLOBAL aunque el param se llame
+          // window. Decompón: decoradores→externo, default/tipo/nombre→param (codex P1).
+          ts.forEachChild(child, (pc) =>
+            visit(
+              pc,
+              ts.isDecorator(pc)
+                ? context
+                : (paramDefaultCtx.get(child) ?? paramContext), // R8 MEC-D: default ve params 0..i-1
+            ),
+          );
+        } else {
+          // RETURN TYPE (un type-predicate `x is T` referencia el param → debe verlo;
+          // mover esto al scope externo flaggeaba `r` en `refs.filter((r): r is Ref<T> =>
+          // …)` — regresión real en composeRefs.ts), type-params y nombre: param scope.
+          visit(child, paramContext);
+        }
+      });
+      return;
+    }
+
+    // (b.0-ambient) Una clase AMBIENT (`declare class K {…}`) es type-space pura: se
+    // borra ENTERA al emit (el build no emite nada). NO recursar — su computed-key,
+    // tipos de miembro y heritage no leen nada en runtime. Espejo del guard de
+    // ModuleDeclaration ambient (b.0a-ns). deepest re-hunt #173: declare-class computed-key.
+    if (
+      (ts.isClassDeclaration(node) || ts.isClassExpression(node)) &&
+      isAmbientDeclaration(node)
+    ) {
+      return;
+    }
+
+    // (b.0) Class: el NOMBRE de la clase está en scope DENTRO de su propio cuerpo
+    // — métodos, getters/setters y static blocks corren DESPUÉS de que la clase
+    // se define, así que pueden referenciarla (`class Theme { resolve(){ return
+    // Theme.defaultColor; } }`). Bajo fail-closed, sin pre-cargar el nombre, esa
+    // self-reference se flaggeaba como global bare (FP, re-hunt). El nombre no es
+    // un global → añadirlo solo quita FP; si colisiona con un global, la clase
+    // LO SOMBREA de verdad (runtime). beta.27 BLOCKER-1.
+    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+      // El nombre de la clase (si lo tiene) es un binding en scope dentro de su cuerpo (self-ref). Una class
+      // EXPRESSION anónima (`const K = class { … }`, patrón HOC) no tiene nombre → classCtx = context (P-CLASSEXPR).
+      const classCtx =
+        node.name && ts.isIdentifier(node.name)
+          ? addToScope(context, new Set([node.name.text]))
+          : context;
+      // Field-inits de INSTANCIA corren en `new` (DIFERIDO) → su INICIALIZADOR ve la unión FULL-SCOPE (celda
+      // field-init). La CLAVE COMPUTADA es EAGER (class-eval, como el static-block) → forward (classCtx),
+      // P-KEY-EAGER. Static field-inits / static blocks siguen EAGER. Métodos tienen su propio bodyContext.
+      const du = context.deferredAssignAliases;
+      const deferredClassCtx =
+        du && du.size > 0
+          ? (() => {
+              const m = new Map(classCtx.scopePartialAliases ?? []);
+              for (const [name, roots] of du) {
+                const prev = m.get(name);
+                m.set(name, prev ? new Set([...prev, ...roots]) : roots);
+              }
+              return { ...classCtx, scopePartialAliases: m };
+            })()
+          : classCtx;
+      ts.forEachChild(node, (child) => {
+        const isInstanceFieldInit =
+          ts.isPropertyDeclaration(child) &&
+          child.initializer &&
+          !(ts.getModifiers(child) ?? []).some(
+            (mo) => mo.kind === ts.SyntaxKind.StaticKeyword,
+          );
+        if (isInstanceFieldInit) {
+          // clave computada (`[c.x]`) = EAGER → classCtx; inicializador = DIFERIDO → deferredClassCtx.
+          ts.forEachChild(child, (part) =>
+            visit(
+              part,
+              part === child.initializer ? deferredClassCtx : classCtx,
+            ),
+          );
+        } else {
+          visit(child, classCtx);
+        }
+      });
+      return;
+    }
+
+    // (b.0a) Static block de clase: su cuerpo es un SCOPE de var-hoisting PROPIO
+    // — los `var` declarados dentro son locales al bloque (no se hoistan a la
+    // clase ni a la función externa; por eso collectVarHoistedRecursive PARA en
+    // la clase). Sin pre-cargarlos, leer el propio `var` homónimo de un global
+    // (`static { var window = {…}; window.x }`) se flaggeaba como global bare
+    // (FP, codex P2). Espejo del var-hoist del namespace/función. Soundness: el
+    // acceso al GLOBAL real dentro del bloque (sin local) lo sigue flaggeando,
+    // y el `var` NO se hoista fuera de la clase (la rama de clase corta el leak).
+    if (ts.isClassStaticBlockDeclaration(node) && node.body) {
+      const preloaded = gatherBlockFunctionDeclarations(node.body);
+      ts.forEachChild(node.body, (child) =>
+        collectVarHoistedRecursive(child, preloaded),
+      );
+      visitOrderedStatements(node.body.statements, context, preloaded);
+      return;
+    }
+
+    // (b.0a-ns) Una ModuleDeclaration AMBIENT (`declare global`, `declare namespace`,
+    // `declare module`) es type-space puro: se borra al emit, no hay reads runtime. NO
+    // recursar — un `declare global { class X extends HTMLElement {} }` (augmentación
+    // de custom-elements, idiomática en un DS) flaggeaba `HTMLElement` aunque no emite
+    // nada (deep adversarial FP). El class-extends ahí NO es runtime (a diferencia de un
+    // `namespace NS { class C extends window.Base }` instanciado, que sí emite y flaggea).
+    if (ts.isModuleDeclaration(node) && isAmbientDeclaration(node)) {
+      return;
+    }
+
+    // (b.0b) Namespace/module: el cuerpo es un SCOPE — sus declaraciones locales
+    // (const/let/function/class…) son visibles dentro. Procesarlo como un Block
+    // (scope-tracked) evita un FP sobre reads de sus propios locales (`namespace N
+    // { const SEP = ","; export function f(){ return x.join(SEP); } }`). El NOMBRE
+    // del namespace también es un binding runtime dentro de su cuerpo (la IIFE
+    // emitida) — `N.x` self-reference; se añade al scope. Para `A.B`, A se añade
+    // al entrar A y B al entrar B (la recursión usa el nsCtx con A ya dentro), así
+    // que ambos quedan en scope en el cuerpo de B (codex P2). El acceso EXTERNO a
+    // un namespace elidido lo siguen flaggeando los colectores del shadow-set.
+    if (ts.isModuleDeclaration(node) && node.body) {
+      // El NOMBRE del namespace es un binding runtime DENTRO de su cuerpo SOLO si el
+      // namespace INSTANCIA un local limpio (`namespaceIsInstantiated`, que ya incluye el
+      // guard de colisión ambient-merge). Si NO instancia —colisión `declare var N` hermano
+      // que rolldown elide, o type-only—, el nombre NO es local: un read `N.x` en el cuerpo
+      // (`namespace window { export const z = window.innerWidth }`) filtra al GLOBAL en el
+      // build → debe flaggearse. Mismo criterio de instanciación que el shadow EXTERNO
+      // (consistencia inner/outer). Codex P1 (d007dd6, body-internal del merge). FAIL-CLOSED.
+      const nsCtx =
+        node.name && ts.isIdentifier(node.name) && namespaceIsInstantiated(node)
+          ? addToScope(context, new Set([node.name.text]))
+          : context;
+      if (ts.isModuleBlock(node.body)) {
+        const preloaded = gatherBlockFunctionDeclarations(node.body);
+        // `var` declarations del cuerpo: hoisted al scope de la IIFE del namespace
+        // (`namespace N { var window = {x:1}; … window.x … }` → window es local).
+        // extractPostStatementBindings salta `var`, así que se precargan aquí
+        // (espejo de gatherFunctionVarHoisted para function bodies). codex P2.
+        ts.forEachChild(node.body, (child) =>
+          collectVarHoistedRecursive(child, preloaded),
+        );
+        visitOrderedStatements(node.body.statements, nsCtx, preloaded);
+      } else {
+        // `namespace A.B {}` — el body es otro ModuleDeclaration (la `B`).
+        visit(node.body, nsCtx);
+      }
       return;
     }
 
@@ -1560,24 +9903,185 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // siguientes cases (TDZ-aware). Function declarations pre-cargadas
     // del CaseBlock entero. Codex round 14 P2.2.
     if (ts.isCaseBlock(node)) {
+      // ⚠️ PARIDAD con `visitOrderedStatements` — el CaseBlock es un walker PARALELO que replica su
+      // lógica a mano (deuda estructural; unificar post-freeze). DEBE espejear sus 9 pasos o sale FP/
+      // bypass (2 P2 ya cazados: guard-alias + blockEntryGuards). Auditados step-by-step (codex 8º
+      // genérico) — completos a `2e61d5c`. Si tocas uno de los dos walkers, replica en el otro:
+      //   SETUP: (1) blockEntryGuards = context.activeGuards; (2) purgeGuardAliasShadows(block-lexical);
+      //          (3) gatherNonReactLexicalShadows pre-load.
+      //   PER-STMT: (4) visit; (5) extractPostStatementBindings→addToScope; (6) purgeNonImportReactAliases;
+      //          (7) addReactAliases; (8) extractConstGuardAlias; (9) extractNegativeEarlyReturnGuards.
+      // El CaseBlock usa el MODELO FALL-THROUGH (ver abajo): un solo `clauseCtx` por clause que
+      // acumula los pasos 5-9; al cerrar, propaga TODO al siguiente clause solo con fall-through (no
+      // termina). Entrada directa a un clause posterior empieza desde `entryCtx`. NO hay un `current`
+      // compartido sin fall-through (eso era fail-OPEN: 3 P2 — guard-alias, value-binding, react-alias).
       const blockFns = new Set();
       for (const clause of node.clauses) {
         for (const stmt of clause.statements) {
-          if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+          if (ts.isFunctionDeclaration(stmt) && stmt.name && !isAmbientDeclaration(stmt) && stmt.body !== undefined) {
             blockFns.add(stmt.name.text);
           }
         }
       }
-      let current = addToScope(context, blockFns);
+      // `switch (typeof X) { … }`: X está PRESENTE en los cases que lo implican —
+      // equivalente a `if (typeof X === "<tipo>")`. Sound con fall-through: solo
+      // narrowea un clause si NO se puede entrar por fall-through desde un case
+      // ausente/desconocido (es el primero O el anterior TERMINA), y el `default`
+      // solo si hay un `case "undefined"` que captura el caso ausente. deepest
+      // re-hunt #173 (switch-discriminant). SAFE/NON_ABSENCE_DENIALS excluidos.
+      let typeofName = null;
+      let hasUndefinedCase = false;
+      const sw = node.parent;
+      if (sw && ts.isSwitchStatement(sw)) {
+        let disc = sw.expression;
+        while (disc && isErasedOuterExpr(disc)) disc = disc.expression;
+        if (ts.isTypeOfExpression(disc)) {
+          let op = disc.expression;
+          while (op && isErasedOuterExpr(op)) op = op.expression;
+          if (
+            ts.isIdentifier(op) &&
+            !SAFE_GLOBALS.has(op.text) &&
+            !NON_ABSENCE_DENIALS.has(op.text)
+          ) {
+            typeofName = op.text;
+          }
+        }
+        for (const clause of node.clauses) {
+          if (
+            ts.isCaseClause(clause) &&
+            foldConstString(clause.expression) === "undefined"
+          ) {
+            hasUndefinedCase = true;
+          }
+        }
+      }
+      // `blockEntryGuards: context.activeGuards` — paridad con visitOrderedStatements (codex P2):
+      // un `if (typeof window !== "undefined") switch (x) { case 1: function read(){ window } }`
+      // entra el switch BAJO el guard activo; una función HOISTED en un case resetea a
+      // blockEntryGuards (no a vacío), así que sin este snapshot se trataría como NO-guardada y se
+      // sobre-flaggearía (FP). El CaseBlock es UN scope léxico → hereda los guards de entrada.
+      let current = {
+        ...addToScope(context, blockFns),
+        blockEntryGuards: context.activeGuards,
+      };
+      // El CaseBlock es UN scope léxico compartido por TODAS las clauses → purgar
+      // guardAliases de los nombres block-lexical (const/let/class/function de cualquier
+      // clause) al ENTRAR, igual que visitOrderedStatements. Sin esto, `const has = ...;
+      // switch (x) { case 0: const fn = () => has ? X : 0; const has = true; return fn(); }`
+      // resolvería `has` al guard outer aunque runtime lo liga al binding interno del
+      // CaseBlock = BYPASS (codex P2). var NO entra (function-scoped).
+      const caseLexical = new Set();
+      for (const clause of node.clauses) {
+        for (const n of gatherBlockLexicalNames(clause.statements)) {
+          caseLexical.add(n);
+        }
+      }
+      current = purgeGuardAliasShadows(current, caseLexical);
+      // PARIDAD DIFERIDA (Auditoría B R5 / BLOQUEO 2 CaseBlock): purgar el mapa `deferredAssignAliases` de los
+      // block-lexical del CaseBlock — un `let c` en una clause sombrea el `c→root` heredado (la unión de la
+      // función ya lo threadeó al descender por el switch), así que un cuerpo DIFERIDO dentro de la clause NO
+      // debe heredarlo. Espejo del threading de visitOrderedStatements en este walker paralelo (evita el FP
+      // por-nombre en la vista diferida, la misma clase domada en P-SHADOW-DEF).
+      if (current.deferredAssignAliases && caseLexical.size > 0) {
+        const du = new Map();
+        for (const [n, r] of current.deferredAssignAliases) {
+          if (!caseLexical.has(n)) du.set(n, r);
+        }
+        current = { ...current, deferredAssignAliases: du };
+      }
+      // PRE-CARGA de sombras léxicas no-react (codex P1 round-10) — todo el CaseBlock es
+      // UN scope léxico, así que un `const useEffect = Sync.run` en cualquier clause sombrea
+      // las funciones de cualquier otro.
+      {
+        const caseShadows = new Set();
+        for (const clause of node.clauses) {
+          for (const n of gatherNonReactLexicalShadows(
+            clause.statements,
+            current,
+          )) {
+            caseShadows.add(n);
+          }
+        }
+        if (caseShadows.size > 0) {
+          current = {
+            ...current,
+            nonImportBindings: new Set([...current.nonImportBindings, ...caseShadows]),
+          };
+        }
+      }
+      // MODELO PER-CLAUSE (codex P2 ×3 — guard-alias, value-binding `const window={}`, react-alias).
+      // CADA clause empieza desde `entryCtx` (outer + pre-load de sombras + blockEntryGuards). Un
+      // case/default labeled SIEMPRE puede entrarse DIRECTO (jump al label / no-match para default),
+      // SIN ejecutar los clauses anteriores → sus const/let están en TDZ y sus guards/aliases no
+      // corrieron. El gate debe ser safe en TODOS los paths de entrada → el estado al entrar un clause
+      // es la INTERSECCIÓN = entryCtx (lo único cierto en entrada directa). El fall-through NUNCA es el
+      // ÚNICO path (el siguiente case también es jump target), así que NINGÚN estado clause-local
+      // (bindings/aliases/guards) propaga entre clauses — compartirlo era fail-OPEN (un binding/alias/
+      // guard de un clause suprimía checks en hermanos). Dentro de UN clause sí acumula posicionalmente.
+      // Sustituye el modelo dual current/clauseCtx (cada divergencia salía como P2). El typeof-
+      // discriminant del switch sigue siendo per-clause según el label (con prevTerminates para el
+      // fall-through entrante desde un case ausente).
+      const entryCtx = current;
+      let prevTerminates = true; // antes del 1er clause no hay fall-through entrante
       for (const clause of node.clauses) {
         if (ts.isCaseClause(clause) && clause.expression) {
-          visit(clause.expression, current);
+          visit(clause.expression, entryCtx);
+        }
+        let clauseCtx = entryCtx;
+        if (typeofName) {
+          const present = ts.isCaseClause(clause)
+            ? prevTerminates &&
+              (() => {
+                const lbl = foldConstString(clause.expression);
+                return lbl !== undefined && lbl !== "undefined";
+              })()
+            : prevTerminates && hasUndefinedCase; // default
+          if (present) {
+            clauseCtx = {
+              ...clauseCtx,
+              activeGuards: new Set([...clauseCtx.activeGuards, typeofName]),
+            };
+          }
         }
         for (const stmt of clause.statements) {
-          visit(stmt, current);
-          const additions = extractPostStatementBindings(stmt);
-          current = addToScope(current, additions);
+          visit(stmt, clauseCtx);
+          const { all, nonImport } = extractPostStatementBindings(stmt, clauseCtx);
+          clauseCtx = addToScope(clauseCtx, all, nonImport);
+          // Purga de nonImportBindings los nombres que este stmt redeclara como alias react.
+          clauseCtx = purgeNonImportReactAliases(clauseCtx, stmt);
+          // Aliases react scope-aware declarados por este statement.
+          clauseCtx = addReactAliases(clauseCtx, stmt);
+          // Alias de timer global scope-aware (`const later = setTimeout`) — codex P2.
+          clauseCtx = addTimerAliases(clauseCtx, stmt);
+          // Alias de root parcial-safe (`const WA = WebAssembly`) — codex P2.
+          clauseCtx = addPartialAliases(clauseCtx, stmt);
+          // #7 (D1-b): HOIST de asignaciones a bindings exteriores desde scopes anidados (paridad con
+          // visitOrderedStatements — walker paralelo del CaseBlock).
+          clauseCtx = mergePartialAliases(
+            clauseCtx,
+            hoistNestedAssignmentAliases(stmt, clauseCtx),
+          );
+          // Guard alias `const has = typeof X !== "undefined"` (narrowing — se resuelve contra
+          // clauseCtx.guardAliases; propaga al siguiente clause solo con fall-through).
+          const guardAlias = extractConstGuardAlias(stmt, clauseCtx.guardAliases);
+          if (guardAlias) {
+            clauseCtx = {
+              ...clauseCtx,
+              guardAliases: new Map([...clauseCtx.guardAliases, guardAlias]),
+            };
+          }
+          const negGuards = extractNegativeEarlyReturnGuards(stmt, clauseCtx.guardAliases);
+          if (negGuards.size > 0) {
+            clauseCtx = {
+              ...clauseCtx,
+              activeGuards: new Set([...clauseCtx.activeGuards, ...negGuards]),
+            };
+          }
         }
+        // NO se propaga estado al siguiente clause (per-clause; ver arriba). Solo `prevTerminates`
+        // para el typeof-discriminant (¿puede entrarse el siguiente case por fall-through desde uno
+        // ausente?).
+        prevTerminates = caseClauseTerminates(clause.statements);
       }
       return;
     }
@@ -1590,36 +10094,190 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
         catchBindings,
       );
       if (catchBindings.size > 0) {
-        const bodyContext = addToScope(context, catchBindings);
+        let bodyContext = addToScope(context, catchBindings);
+        // El catch param no tiene init, pero sus binding-element DEFAULTS aliasan un timer/partial-
+        // root cuando el valor capturado omite la prop (`catch ({ later = setTimeout })`) → enrolar
+        // como en el param-loop, paridad con flagPartialDestructure que caza su member-extract (codex P2).
+        const pat = node.variableDeclaration.name;
+        const tAdds = new Set();
+        collectStructuralAliases(pat, undefined, bodyContext, exprIsTimerValued, (n) =>
+          tAdds.add(n),
+        );
+        const pAdds = new Map();
+        collectStructuralAliases(pat, undefined, bodyContext, resolvePartialRootSet, (n, r) =>
+          pAdds.set(n, r), true,
+        );
+        if (tAdds.size > 0) {
+          bodyContext = {
+            ...bodyContext,
+            scopeTimerAliases: new Set([
+              ...(bodyContext.scopeTimerAliases ?? []),
+              ...tAdds,
+            ]),
+          };
+        }
+        if (pAdds.size > 0) {
+          bodyContext = {
+            ...bodyContext,
+            scopePartialAliases: new Map([
+              ...(bodyContext.scopePartialAliases ?? []),
+              ...pAdds,
+            ]),
+          };
+        }
         ts.forEachChild(node, (child) => visit(child, bodyContext));
         return;
       }
     }
 
-    // (b.3) For/ForIn/ForOf con initializer let/const: el binding es
-    // visible en el initializer (condition/incrementor) y el body del
-    // for, no más allá.
+    // (b.3) For/ForIn/ForOf/While: (1) el binding let/const del for-init es visible
+    // en condition/incrementor/body, no más allá. (2) un typeof-guard POSITIVO en la
+    // condición narrowea el BODY — el body solo corre con la condición truthy, que
+    // exige el guard true → el identificador está definido (F3). do-while NO entra:
+    // su body corre ANTES del primer check. Solo POSITIVO (collectConjunctionGuards):
+    // un `||` o un guard negativo en la condición NO garantiza presencia en el body.
     if (
       ts.isForStatement(node) ||
       ts.isForInStatement(node) ||
-      ts.isForOfStatement(node)
+      ts.isForOfStatement(node) ||
+      ts.isWhileStatement(node)
     ) {
-      const init = node.initializer;
-      if (init && ts.isVariableDeclarationList(init)) {
-        const flags = init.flags;
-        const blockScoped =
-          (flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
-        if (blockScoped) {
-          const forBindings = new Set();
-          for (const decl of init.declarations) {
-            addBindingNamesFromPattern(decl.name, forBindings);
-          }
-          if (forBindings.size > 0) {
-            const bodyContext = addToScope(context, forBindings);
-            ts.forEachChild(node, (child) => visit(child, bodyContext));
-            return;
-          }
+      const forBindings = new Set();
+      const init = ts.isWhileStatement(node) ? undefined : node.initializer;
+      if (
+        init &&
+        ts.isVariableDeclarationList(init) &&
+        isBlockScopedDeclList(init.flags)
+      ) {
+        for (const decl of init.declarations) {
+          addBindingNamesFromPattern(decl.name, forBindings);
         }
+      }
+      // Alias de timer/partial del for-init: const/let Y `var` (`for (var later = setTimeout;;)` —
+      // el var-binding lo añade el hoisting, pero el ALIAS no se enrolaba; codex P2). NO gateado por
+      // isBlockScopedDeclList. Se calcula aquí para poder entrar al bloque especial aunque no haya
+      // forBindings (caso var) ni guards.
+      const forTimerAliases =
+        init && ts.isVariableDeclarationList(init)
+          ? timerAliasNamesDeclaredBy(init, context)
+          : new Set();
+      const forPartialAliases =
+        init && ts.isVariableDeclarationList(init)
+          ? partialAliasesDeclaredBy(init, context)
+          : new Map();
+      // R9 Causa 3: for-OF sobre un array-literal INLINE (`for (const p of [performance])`) enlaza el loop-var a
+      // los ELEMENTOS del literal — extracción POSICIONAL decidible en-sitio, como `const [p]=[performance]`. Cubre
+      // declaración (`const/let p of [X]`) y reasignación a binding existente (`p of [X]`). El iterable por VARIABLE
+      // (`const arr=[X]; for(p of arr)`) es data-flow → §141 (no entra). Solo loop-var IDENTIFIER simple.
+      if (ts.isForOfStatement(node)) {
+        let forOfVar = null;
+        if (
+          init &&
+          ts.isVariableDeclarationList(init) &&
+          init.declarations.length === 1 &&
+          ts.isIdentifier(init.declarations[0].name)
+        )
+          forOfVar = init.declarations[0].name.text;
+        else if (init && ts.isIdentifier(init)) forOfVar = init.text;
+        if (forOfVar) {
+          const elemRoots = new Set();
+          for (const arr of arrayLiteralAlternatives(node.expression)) {
+            const elems = [];
+            spreadFlattenedElements(arr.elements, elems);
+            for (const el of elems)
+              for (const r of resolveRoots(el, context)) elemRoots.add(r);
+          }
+          if (elemRoots.size > 0) forPartialAliases.set(forOfVar, elemRoots);
+        }
+      }
+      // for-init que es una EXPRESIÓN (no declaración): assignments embebidas (`for (later =
+      // setTimeout; later(…); )`) ejecutan ANTES de la condición/body → enrolar (codex P2).
+      const forExprInit =
+        init && !ts.isVariableDeclarationList(init) ? init : null;
+      let baseFromExpr = forExprInit
+        ? withEmbeddedAssignmentAliases(context, forExprInit)
+        : context;
+      // for-OF/for-IN con assignment-PATTERN (`for ({ later = setTimeout } of rows)`): los DEFAULTS
+      // de binding-element del pattern ejecutan antes del body → enrolar via collectStructuralAliases
+      // (withEmbeddedAssignmentAliases no los ve: no son `=` embebidos sino un pattern) (codex P2).
+      if (
+        forExprInit &&
+        (ts.isObjectLiteralExpression(forExprInit) ||
+          ts.isArrayLiteralExpression(forExprInit))
+      ) {
+        const tA = new Set();
+        collectStructuralAliases(forExprInit, undefined, context, exprIsTimerValued, (n) =>
+          tA.add(n),
+        );
+        const pA = new Map();
+        collectStructuralAliases(forExprInit, undefined, context, resolvePartialRootSet, (n, r) =>
+          pA.set(n, r), true,
+        );
+        if (tA.size > 0) {
+          baseFromExpr = {
+            ...baseFromExpr,
+            scopeTimerAliases: new Set([
+              ...(baseFromExpr.scopeTimerAliases ?? []),
+              ...tA,
+            ]),
+          };
+        }
+        if (pA.size > 0) {
+          baseFromExpr = {
+            ...baseFromExpr,
+            scopePartialAliases: new Map([
+              ...(baseFromExpr.scopePartialAliases ?? []),
+              ...pA,
+            ]),
+          };
+        }
+      }
+      const hasExprAliases = baseFromExpr !== context;
+      const cond = ts.isWhileStatement(node) ? node.expression : node.condition;
+      const bodyGuards = new Set();
+      if (cond) collectConjunctionGuards(cond, bodyGuards, context.guardAliases);
+      if (
+        forBindings.size > 0 ||
+        bodyGuards.size > 0 ||
+        forTimerAliases.size > 0 ||
+        forPartialAliases.size > 0 ||
+        hasExprAliases
+      ) {
+        let baseCtx =
+          forBindings.size > 0
+            ? addToScope(baseFromExpr, forBindings)
+            : baseFromExpr;
+        if (forTimerAliases.size > 0) {
+          baseCtx = {
+            ...baseCtx,
+            scopeTimerAliases: new Set([
+              ...(baseCtx.scopeTimerAliases ?? []),
+              ...forTimerAliases,
+            ]),
+          };
+        }
+        if (forPartialAliases.size > 0) {
+          baseCtx = {
+            ...baseCtx,
+            scopePartialAliases: new Map([
+              ...(baseCtx.scopePartialAliases ?? []),
+              ...forPartialAliases,
+            ]),
+          };
+        }
+        const bodyCtx =
+          bodyGuards.size > 0
+            ? {
+                ...baseCtx,
+                activeGuards: new Set([...baseCtx.activeGuards, ...bodyGuards]),
+              }
+            : baseCtx;
+        // El body (.statement) hereda los guards; el resto (init/condition/
+        // incrementor/expression) solo el scope del for-init, sin los guards.
+        ts.forEachChild(node, (child) =>
+          visit(child, child === node.statement ? bodyCtx : baseCtx),
+        );
+        return;
       }
     }
 
@@ -1633,12 +10291,36 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
       const expr = node.expression;
       if (ts.isIdentifier(expr)) {
         const api = expr.text;
-        const isClientGlobal = CLIENT_GLOBALS.has(api);
+        const isUnsafeGlobal = !SAFE_GLOBALS.has(api);
         const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
-        if (isClientGlobal || isEvalSink) {
+        if (isUnsafeGlobal || isEvalSink) {
           // Si el binding está shadow-eado por una local (parameter, var,
-          // import, etc.), NO es ref al global — skip.
-          if (!context.localBindings.has(api) && !context.isInDeferredBody) {
+          // import, etc.), NO es ref al global — skip. También skip si el
+          // property-access está en una heritage TYPE-ONLY (`interface X extends
+          // navigator.Foo`) — se borra, no hay read runtime (re-hunt FP).
+          // Exención en body diferido: política única (NON_ABSENCE_DENIALS solo en
+          // client-only; el resto en cualquier deferred). Ver isExemptInDeferredBody.
+          const deferredExempt = isExemptInDeferredBody(api, context);
+          // MIEMBRO SEGURO de una raíz DENEGADA: `process.env` — `process` denegado pero `process.env`
+          // lo expone Vercel Edge. Eximir SOLO el acceso a un miembro seguro (`env`, dot o bracket-
+          // LITERAL, todas las ramas seguras); `process.cwd()`/`process[dynKey]` siguen flaggeando.
+          // Trato uniforme con import.meta.env. codex P2 (review genérico). #190 refina el subset.
+          const safeRootMembers = SAFE_MEMBERS_OF_DENIED_ROOT[api];
+          const memberCands = safeRootMembers ? accessedMemberNames(node) : [];
+          const isSafeMemberOfDeniedRoot =
+            safeRootMembers &&
+            memberCands.length > 0 &&
+            memberCands.every((mm) => safeRootMembers.has(mm));
+          if (
+            !context.localBindings.has(api) &&
+            !deferredExempt &&
+            !isSafeMemberOfDeniedRoot &&
+            // Nombre declarado a nivel de módulo leído DENTRO de una función (call-
+            // time) = local inicializado, no un global — independiente del orden
+            // textual (F4: forward value-read). El espejo JSX (regla 9) ya lo hacía.
+            !(context.isInFunctionBody && moduleDeclaredNames.has(api)) &&
+            !isInTypeOnlyHeritageExpr(node)
+          ) {
             if (!context.activeGuards.has(api)) {
               const start = node.getStart(sourceFile);
               const { line } = sourceFile.getLineAndCharacterOfPosition(start);
@@ -1650,11 +10332,846 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
                 line: line + 1,
                 detail: isEvalSink
                   ? `acceso a \`${api}.*\` (dynamic eval sink — bypassea el AST gate): ${lineText}`
-                  : `acceso bare a \`${api}\` sin guard typeof activo: ${lineText}`,
+                  : `acceso a \`${api}.*\` — \`${api}\` no es global server-safe (ni ES builtin ni global de Node ≥22.12) y no hay guard typeof activo: ${lineText}`,
               });
             }
           }
         }
+      }
+    }
+
+    // (c.1b) MIEMBRO browser-only de un global SAFE en su root (performance.measureUserAgent
+    // SpecificMemory): `performance` existe en Node/edge pero el método falta → la llamada
+    // lanza TypeError en SSR. El typeof-guard del root NO protege (el root existe); solo
+    // exento en client-only deferred (browser, donde el miembro existe). deepest re-hunt #173.
+    if (
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)
+    ) {
+      // El RECEIVER se desenvuelve VALUE-TRANSPARENTE: `(performance as any).x`, `(0,
+      // performance).x` — el cast a `any` es PROBABLE para un método no-estándar (codex P1).
+      // Key con ALTERNATIVAS (`WebAssembly[c ? "compile" : "validate"]`) → enumerar candidatas y
+      // cazar si CUALQUIERA es un miembro denegado, fail-closed (codex P2).
+      const memberCandidates = accessedMemberNames(node);
+      // El receiver resuelve a un root parcial-safe DIRECTO (`performance`/`WebAssembly` no
+      // sombreado) o vía ALIAS scope-aware (`const WA = WebAssembly; WA.compile()` — el root está en
+      // SAFE_GLOBALS, así que el alias era invisible = bypass, codex P2). resolveRoots respeta
+      // shadow/forward value-read; los guards localBindings/moduleDeclared de abajo se pliegan aquí.
+      // Se resuelve SIEMPRE (también con memberCandidates=[]) para cazar el miembro COMPUTADO de abajo.
+      const resolvedPartialRoots = inSiteMemberRoots;
+      // Predicado CENTRAL con dispatch de POLARIDAD: denylist (WebAssembly) → miembro ∈ set; allowlist
+      // (performance/console) → ∉ set; allowlist import.meta (SAFE_IMPORT_META_MEMBERS). import.meta se
+      // maneja AQUÍ tanto DIRECTO (`import.meta.dirname`) como por alias/proyección (`m.dirname`) — Fable
+      // cross-review 3 (#3): UNIFICADO. Se eliminó el bloque dedicado de import.meta + la supresión
+      // `importMetaDirect`, de modo que el safe-probe/optional-chain de abajo aplica también al directo
+      // (`typeof import.meta.dirname`, `import.meta.resolve?.()` → PASA), cerrando el FP por construcción y
+      // eliminando la asimetría de dos implementaciones de la misma policy.
+      // ∃-QUANTIFICACIÓN (Auditoría B FIX-1): un receptor multi-rama (`(b?crypto:WebAssembly).Module`)
+      // resuelve a VARIOS roots; buscar el PRIMER (root,member) denegado sobre TODO el set — no first-match
+      // del root, que enmascaraba un root denegado tras uno wholesale-safe/no-denegante → FN. La asimetría
+      // de orden (reverso→FLAG) era el tell del gap. `resolvedPartialRoot`+`partialMember` = el par que
+      // DECIDE el flag (para el detail).
+      let partialMember = null;
+      let resolvedPartialRoot = null;
+      if (memberCandidates.length > 0) {
+        for (const root of resolvedPartialRoots) {
+          const denied = memberCandidates.find((m) =>
+            partialMemberDenied(root, m),
+          );
+          if (denied) {
+            partialMember = denied;
+            resolvedPartialRoot = root;
+            break;
+          }
+        }
+      }
+      // MIEMBRO COMPUTADO (`performance[m]()`, m variable/expr → memberCandidates=[]) sobre raíz default-
+      // DENY (allowlist parcial ∈ SAFE_PARTIAL_MEMBERS: performance/console): el miembro NO-probado no se
+      // puede demostrar ∈ allowlist → fail-CLOSED, paridad EXACTA con un miembro literal-desconocido (que
+      // ya fail-cierra). Decidible SIN resolver `expr` (NO §141 — no se foldea la variable, solo se detecta
+      // el patrón); mismo principio que el deny de process.env (default-deny + no-probable-seguro = denegar).
+      // Hereda alias-tracking de exprPartialRoot (`const p=performance; p[m]()` flaggea igual que
+      // `p.eventLoopUtilization()`) y la polaridad de probe de `safelyProbed` abajo (`typeof`/`?.[m]?.()` no
+      // ejecutan → PASA; `[m]()`/`?.[m]()` ejecutan → FLAG). FUERA de alcance, NO cubierto aquí: (a) raíces
+      // DENYLIST wholesale (`WebAssembly[m]()` — fail-open HERMANO, su propio P2; verificado que hoy pasa);
+      // (b) destructure de miembro computado (`const {[k]:x}=performance` — §141 data-flow; la rama c.1c
+      // abajo solo caza el destructure LITERAL); (c) raíces WHOLESALE-safe (crypto — sin default-deny de
+      // miembro → `crypto[m]` pasa, correcto). codex P2 + Auditor-B.
+      // ∃ un candidato allowlist-style (∈ SAFE_PARTIAL_MEMBERS) con miembro COMPUTADO → default-deny
+      // (Auditoría B §1: set mixto `(b?crypto:performance)[m]` → performance avisa aunque crypto sea
+      // wholesale-safe). Mismo contrato fail-closed que single-root; no sobre-avisa (la rama puede tomarse
+      // en runtime), salvo la sobre-aproximación documentada de rama-muerta de `||`/`??`.
+      // BLOQUEO-A: la rama default-deny (allowlist) dispara con members VACÍO (key totalmente variable) O con key
+      // INCOMPLETA (ternario `x[c?'safe':dyn]` con rama irresoluble) — el ∃-deny de arriba ya cazó el subset
+      // resoluble; esto decide la rama IRRESOLUBLE según la polaridad del root: allowlist (performance/console) ∈
+      // SAFE_PARTIAL_MEMBERS → fail-closed FLAG; denylist (WebAssembly) NO está aquí → renunciado (adjudicación #2).
+      const keyIncomplete =
+        ts.isElementAccessExpression(node) &&
+        !keyExprComplete(node.argumentExpression);
+      const computedDefaultDenyRoot =
+        memberCandidates.length === 0 || keyIncomplete
+          ? ([...resolvedPartialRoots].find(
+              (root) =>
+                SAFE_PARTIAL_MEMBERS[root] !== undefined ||
+                root === IMPORT_META_ROOT,
+            ) ?? null)
+          : null;
+      const partialRootName = partialMember
+        ? resolvedPartialRoot
+        : computedDefaultDenyRoot;
+      // present-throws sobre CUALQUIER root resuelto que deniega el miembro (∀-lift, U1 + O4): decide si el
+      // hazard vive en la LLAMADA (dynamic codegen). Lo consumen (a) el downgrade de la sonda `?.()` invocante
+      // y (b) el value-fallback `?? fb`/`|| fb` — ninguna de las dos protege un present-throws (el miembro
+      // EXISTE; el `?? fb` no se activa y la llamada compila/lanza). Absence sí lo protegen ambas.
+      const anyPresentThrows = [...resolvedPartialRoots].some(
+        (r) =>
+          PARTIAL_PRESENT_THROWS_ROOTS.has(r) &&
+          memberCandidates.some((m) => partialMemberDenied(r, m)),
+      );
+      // PROBE SEGURO (codex P2): feature-detection que NO crashea — (1) operando de `typeof`
+      // (`typeof performance.x` → "undefined", no lee); (2) short-circuit opcional (`x?.()`,
+      // `x?.foo`, `x?.[i]` → undefined si el miembro falta). Reading el miembro ausente da
+      // undefined; solo CRASHEA si se INVOCA/derefencia sin guardia. (El if-guard a nivel de
+      // miembro `if (typeof X.y === "function") X.y()` queda residual fail-closed — el gate no
+      // trackea guards de member-path.)
+      // Ascenso saltando wrappers RUNTIME-TRANSPARENTES (erased + value-transparent) para hallar
+      // el contexto efectivo del probe: `typeof (performance.x)`, `(performance.x as any)?.()` —
+      // el nodo va envuelto en parens/cast/coma (codex P2). Mismo ascenso que el eval-sink.
+      let probe = node;
+      let p = node.parent;
+      while (
+        p &&
+        (isErasedOuterExpr(p) || valueTransparentChildren(p).includes(probe))
+      ) {
+        probe = p;
+        p = p.parent;
+      }
+      const isTypeofProbe =
+        p && ts.isTypeOfExpression(p) && p.expression === probe;
+      // Optional probe (`x?.()`, `x?.foo`, `x?.[i]`): el resultado es undefined si el miembro
+      // falta. SEGURO salvo que se DEREFERENCIE rompiendo la cadena con PARÉNTESIS — `(x?.()).foo`
+      // ejecuta `undefined.foo` y crashea; SIN paréntesis `x?.().foo` corta la cadena entera =
+      // seguro (codex P2). El paren ROMPE el optional-chain (semántica JS): un deref no-opcional
+      // tras paren = unsafe.
+      let isSafeOptionalProbe =
+        p &&
+        (ts.isCallExpression(p) ||
+          ts.isPropertyAccessExpression(p) ||
+          ts.isElementAccessExpression(p)) &&
+        p.expression === probe &&
+        p.questionDotToken !== undefined;
+      if (isSafeOptionalProbe) {
+        // Solo el PARÉNTESIS rompe la cadena opcional en runtime; `as`/`!`/`satisfies` son
+        // transparentes y NO la rompen (`a?.b!.c` corta entero = seguro). Ascender por TODOS los
+        // erased-wrappers, pero exigir que se haya cruzado ≥1 paréntesis antes del deref.
+        let r = p;
+        let crossedParen = false;
+        // R8 MEC-A + R9-4b: ascender por los wrappers que llevan el RESULTADO de la sonda `?.()` hasta el
+        // paren-deref — erased (paren/as/!) + value-transparent — CON la polaridad correcta de los operadores
+        // lógicos (el bug que R9 cazó: cruzar el izquierdo de `||`/`??` era un FALSO POSITIVO):
+        //  · conjunción `&&`: AMBOS operandos alcanzan el deref (izq = valor FALSY deref'd si la sonda da
+        //    undefined en Edge; der = pasa a deref) → unsafe.
+        //  · disyunción/fusión `||`/`??`: SOLO el operando DERECHO (fallback) alcanza el deref; el IZQUIERDO es la
+        //    RAMA DE RESCATE — si la sonda da undefined, `||`/`??` cae al derecho SEGURO → `(X?.() || o).foo` NO
+        //    rompe en Edge (cae a `o`). Cruzar el izq flaggeaba el consejo del propio gate (`?? fallback`).
+        //  · resto (ternario/coma/asignación/proyección) → valueTransparentChildren. `g(X?.()).foo` sigue §141
+        //    (arg de call no es value-transparent). DOCTRINA: el valor esperado sale del ORÁCULO de runtime.
+        while (r.parent && resultCrossesToConsumer(r.parent, r)) {
+          if (ts.isParenthesizedExpression(r.parent)) crossedParen = true;
+          r = r.parent;
+        }
+        if (crossedParen) {
+          const consumer = r.parent;
+          // El TaggedTemplate guarda el callee en `.tag` (no `.expression`); un tagged-template
+          // nunca es opcional (`a?.\`x\`` es error de sintaxis) → siempre rompe sobre undefined.
+          const consumerRefersToR = consumer
+            ? ts.isTaggedTemplateExpression(consumer)
+              ? consumer.tag === r
+              : consumer.expression === r && consumer.questionDotToken === undefined
+            : false;
+          if (
+            consumer &&
+            (ts.isPropertyAccessExpression(consumer) ||
+              ts.isElementAccessExpression(consumer) ||
+              ts.isCallExpression(consumer) ||
+              ts.isTaggedTemplateExpression(consumer)) &&
+            consumerRefersToR
+          ) {
+            isSafeOptionalProbe = false; // `(x?.()).foo` → undefined deref'd → unsafe
+          }
+        }
+        // R10 PROBE: consumers que CRASHEAN sobre undefined SIN necesitar paréntesis (a diferencia de
+        // `(x?.()).foo`, que sí lo exige): DESTRUCTURING (`const {x}=probe`), array/call-SPREAD (`[...probe]`),
+        // FOR-OF iterable (`for (x of probe)`), y NEW-callee (`new (probe)()`). El resultado de la sonda
+        // (undefined en Edge) aterriza ahí y lanza. `r` es el tope del wrapper value-transparent del resultado.
+        const cons = r.parent;
+        if (
+          cons &&
+          (((ts.isVariableDeclaration(cons) ||
+            ts.isBindingElement(cons) ||
+            ts.isParameter(cons)) &&
+            cons.initializer === r &&
+            (ts.isObjectBindingPattern(cons.name) ||
+              ts.isArrayBindingPattern(cons.name))) ||
+            (ts.isSpreadElement(cons) && cons.expression === r) ||
+            (ts.isForOfStatement(cons) && cons.expression === r) ||
+            (ts.isNewExpression(cons) && cons.expression === r))
+        ) {
+          isSafeOptionalProbe = false;
+        }
+      }
+      // Miembro PRESENTE-pero-throws (WebAssembly.compile): NO es probe seguro si el optional-probe
+      // INVOCA el método (dynamic codegen Edge → lanza):
+      //   - optional-CALL directo `compile?.()` (p = CallExpression)
+      //   - optional-ACCESS a `call`/`apply`/`bind` `compile?.call(null,bytes)` — Function.prototype
+      //     invoca igual → compila → lanza (codex P1). El optional-access a METADATA (`?.name`,
+      //     `?.length`) NO compila → sigue exento. (≠ miembro AUSENTE, donde `?.x` corta a undefined.)
+      // ∀-LIFT (Auditoría B R5 / U1, cierra #1): POLARIDAD DE DECISIÓN suppress=∀. Esta sub-decisión leía el
+      // root FIRST-MATCH (`partialRootName`) → `(perf?WA).compile?.(b)` enmascaraba WebAssembly (present-throws)
+      // tras performance (absent, probe legítimo) → PASS. FIX-1 existencializó QUÉ root deniega, pero no este
+      // punto de decisión hermano. Fix (vía `anyPresentThrows` hoistado): degradar el probe si ∃ ALGÚN candidato
+      // resuelto que deniega el miembro accedido Y es present-throws (el probe invocante NO lo protege).
+      if (isSafeOptionalProbe && p && anyPresentThrows) {
+        if (ts.isCallExpression(p)) {
+          isSafeOptionalProbe = false;
+        } else if (
+          ts.isPropertyAccessExpression(p) ||
+          ts.isElementAccessExpression(p)
+        ) {
+          const mn = accessedMemberName(p);
+          if (mn === "call" || mn === "apply" || mn === "bind") {
+            isSafeOptionalProbe = false;
+          }
+        }
+      }
+      // (3) VALUE-FALLBACK probe (Auditoría B R5 / O4, cierra FP #4): `R.m ?? fb` / `R.m || fb` en posición-
+      // valor — el fallback maneja la AUSENCIA del miembro (undefined → fb, incl. `(R.m ?? fb)(x)` donde fb es
+      // la rama viva en Edge). Tercera forma de la familia de sondas sancionadas {call: `?.()`, bind:
+      // destructuring-default, value: `?? fb`}. Sanciona SOLO hazard=absence (misma ley parametrizada que `?.()`,
+      // vía `!anyPresentThrows`): para present-throws el miembro EXISTE, el `?? fb` no se activa y la llamada
+      // compila/lanza → la ley ya lo cubre. El nodo llega tras wrappers erased (`(R.m as any) ?? fb`).
+      let vfNode = node;
+      let vfParent = node.parent;
+      while (
+        vfParent &&
+        isErasedOuterExpr(vfParent) &&
+        vfParent.expression === vfNode
+      ) {
+        vfNode = vfParent;
+        vfParent = vfParent.parent;
+      }
+      let isValueFallbackProbe =
+        !anyPresentThrows &&
+        vfParent &&
+        ts.isBinaryExpression(vfParent) &&
+        (vfParent.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+          vfParent.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
+        vfParent.left === vfNode;
+      if (isValueFallbackProbe) {
+        // R13 gap#5: la posición `left of ??/||` solo demuestra que la AUSENCIA produce el fallback; no
+        // demuestra que el RESULTADO sea válido para su consumidor. Sigue el resultado por el mismo seam que
+        // optional-probe. Si termina invocado/dereferenciado/desestructurado/spread/new, el fallback debe
+        // probar sintácticamente el contrato requerido (incl. const-alias estable); si no, la exención cae.
+        let result = vfParent;
+        while (
+          result.parent &&
+          resultCrossesToConsumer(result.parent, result)
+        ) {
+          result = result.parent;
+        }
+        isValueFallbackProbe = fallbackProtectsConsumer(
+          vfParent.right,
+          result.parent,
+          result,
+          sourceFile,
+        );
+      }
+      const safelyProbed =
+        isTypeofProbe || isSafeOptionalProbe || isValueFallbackProbe;
+      // shadow/forward value-read ya resueltos en exprPartialRoot (directo) o en la purga del alias.
+      if (
+        partialRootName &&
+        !safelyProbed &&
+        !context.isInClientOnlyDeferredBody
+      ) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail:
+            partialMember === null
+              ? `\`${partialRootName}[<computado>]\` — miembro COMPUTADO de un root default-deny (global host-populated o import.meta; allow: ${[...(SAFE_PARTIAL_MEMBERS[partialRootName] ?? SAFE_IMPORT_META_MEMBERS)].join("/")}); no se puede probar ∈ allowlist → fail-closed (un miembro no portable escaparía por la indirección). Usa el miembro literal o reescribe: ${lineText}`
+              : PARTIAL_PRESENT_THROWS_ROOTS.has(partialRootName)
+                ? `\`${partialRootName}.${partialMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers), como eval/Function → lanza en SSR/render: ${lineText}`
+                : `\`${partialRootName}.${partialMember}\` — miembro BROWSER-ONLY de un global SAFE; falta en el floor Node/edge → la llamada lanza en SSR. Remedia con \`${partialRootName}.${partialMember}?.()\` (safe-probe sancionado; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
+        });
+      }
+    }
+
+    // (c.1c) DESTRUCTURING de un miembro browser-only de un SAFE global: `const {
+    // measureUserAgentSpecificMemory: m } = performance` copia el método (undefined en Node) a
+    // un local → `m()` crashea sin atarse al miembro (escapa al check de property-access). Fail-
+    // closed: flaggear la EXTRACCIÓN del miembro parcial desde un root partial (token-en-su-
+    // sitio: key + root visibles en el patrón). Cubre decl `const {…}=` y assignment `({…}=…)`.
+    // codex P2.
+    {
+      let pattern = null;
+      let initExpr = null;
+      if (
+        (ts.isObjectBindingPattern(node) ||
+          ts.isArrayBindingPattern(node)) &&
+        (ts.isVariableDeclaration(node.parent) ||
+          ts.isParameter(node.parent))
+      ) {
+        // VariableDeclaration `const { compile } = WebAssembly` o PARÁMETRO con DEFAULT
+        // `function run({ compile } = WebAssembly)` — el default es el root destructurado (codex P2).
+        pattern = node;
+        initExpr = node.parent.initializer;
+      } else if (
+        (ts.isObjectLiteralExpression(node) ||
+          ts.isArrayLiteralExpression(node)) &&
+        ts.isBinaryExpression(node.parent) &&
+        node.parent.left === node &&
+        node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        pattern = node;
+        initExpr = node.parent.right;
+      } else if (
+        (ts.isObjectLiteralExpression(node) ||
+          ts.isArrayLiteralExpression(node)) &&
+        (ts.isForOfStatement(node.parent) ||
+          ts.isForInStatement(node.parent)) &&
+        node.parent.initializer === node
+      ) {
+        // for-OF/for-IN assignment-PATTERN (`for ({ x: { compile } = WebAssembly } of rows)`): el
+        // valor viene de la iteración (sin init), pero los binding-element DEFAULTS sí ejecutan →
+        // member-extract via default-scan (init undefined). Paridad con el alias-enroll del for-of (codex P2).
+        pattern = node;
+        initExpr = undefined;
+      }
+      // Correr aunque NO haya init ENTERO: un catch-pattern (`catch ({ x: { compile } = WebAssembly })`)
+      // y un param-pattern sin default nunca tienen init, pero sus binding-element DEFAULTS sí ejecutan
+      // (cuando la key/índice falta) → flagPartialDestructure escanea los defaults con init undefined (codex P2).
+      if (pattern && !context.isInClientOnlyDeferredBody) {
+        // El root resuelve DIRECTO (no sombreado / forward) o vía ALIAS scope-aware (`const WA =
+        // WebAssembly; const { compile } = WA`) — exprPartialRoot lo cubre. Y RECURSE por las mismas
+        // formas estructurales que `collectStructuralAliases` (`const { x: { compile } } = { x:
+        // WebAssembly }`): el init es un object/array literal, no el root directo (codex P2).
+        const isDestructurePattern = (n) =>
+          ts.isObjectBindingPattern(n) ||
+          ts.isObjectLiteralExpression(n) ||
+          ts.isArrayBindingPattern(n) ||
+          ts.isArrayLiteralExpression(n);
+        const flagPartialDestructure = (pat, init) => {
+          const isObjPat =
+            ts.isObjectBindingPattern(pat) ||
+            ts.isObjectLiteralExpression(pat);
+          const elems = ts.isObjectLiteralExpression(pat)
+            ? pat.properties
+            : pat.elements;
+          // init puede ser undefined (catch-pattern / param sin default) → solo el default-scan corre.
+          // ∃-quantifica sobre resolveRoots(init) (Auditoría B FIX-1): un init destructure multi-rama
+          // (`const {compile}=(b?crypto:WebAssembly)`) enmascaraba el root denegado tras uno safe → FN.
+          const partialRoots = init ? resolveRoots(init, context) : new Set();
+          if (partialRoots.size) {
+            // Solo un OBJECT pattern extrae un MIEMBRO por key; un array pattern sobre el root es
+            // iteración (no member-access). init ES el root → sin literal anidado que recursar.
+            if (!isObjPat) return;
+            for (const el of elems) {
+              // Object-REST (`const {...rest}=import.meta`, `({...rest}=import.meta)`) NO es un
+              // member-access literal: la lectura divergente ocurre en la copia y el uso de `rest`
+              // es data-flow → §141 residual (Fable ratificado). Skip; crítico con la polaridad
+              // ALLOWLIST de import.meta (sin skip, `rest` ∉ SAFE_IMPORT_META_MEMBERS → FP).
+              if (
+                (ts.isBindingElement(el) && el.dotDotDotToken) ||
+                ts.isSpreadAssignment(el)
+              ) {
+                continue;
+              }
+              const kn = ts.isBindingElement(el)
+                ? el.propertyName || el.name
+                : ts.isPropertyAssignment(el) ||
+                    ts.isShorthandPropertyAssignment(el)
+                  ? el.name
+                  : null;
+              // Key con ALTERNATIVAS (`[c ? "compile" : "validate"]`) → cualquier rama denegada cuenta,
+              // fail-closed; predicado central con polaridad. Sobre el SET de roots: el primer (root, key)
+              // denegado decide el flag (denyRoot para el detail). codex P2 + root C + Auditoría B.
+              let denyRoot = null;
+              let key = null;
+              for (const cand of structuralKeyTexts(kn)) {
+                denyRoot =
+                  [...partialRoots].find((root) =>
+                    partialMemberDenied(root, cand),
+                  ) ?? null;
+                if (denyRoot) {
+                  key = cand;
+                  break;
+                }
+              }
+              // ¿DEFAULT? `{ measure: m = () => 0 }` (decl), `{ x = d }` / `{ x: y = d }` (assign).
+              // Miembro AUSENTE (performance.measure undefined) → default SE ACTIVA → seguro. Root
+              // PRESENT-throws (WebAssembly.compile EXISTE) → default NO se activa → sigue lanzando.
+              const hasDefault =
+                (ts.isBindingElement(el) && el.initializer !== undefined) ||
+                (ts.isShorthandPropertyAssignment(el) &&
+                  el.objectAssignmentInitializer !== undefined) ||
+                (ts.isPropertyAssignment(el) &&
+                  el.initializer &&
+                  ts.isBinaryExpression(el.initializer) &&
+                  el.initializer.operatorToken.kind ===
+                    ts.SyntaxKind.EqualsToken);
+              // R8 / BLOQUEO-C1: ∃ sobre TODOS los roots, no el first-match `denyRoot`. Con default, el miembro
+              // es seguro SOLO si es AUSENTE en todos (el default se activa); si ALGÚN root lo tiene
+              // present-throws (`WebAssembly.compile` EXISTE → el default NO se activa → sigue lanzando), no es
+              // seguro. First-match paraba en un root de AUSENCIA (`performance`, allowlist, compile ∉ safe →
+              // "denegado") y enmascaraba el hermano present-throws de una rama posterior del receptor multi-rama.
+              // R9-4c: ∃ sobre roots × ALTERNATIVAS DE CLAVE, no la key FIJA. Una clave COMPUTADA
+              // (`{[c?"mark":"compile"]:fn=fb}`) tiene varias candidatas; el first-loop paraba en la 1ª con
+              // denyRoot (`mark` sobre performance = ausencia) y enmascaraba que OTRA candidata (`compile`) es
+              // present-throws sobre otro root (WebAssembly). El present-throws se decide sobre TODAS las claves.
+              const keyCands = structuralKeyTexts(kn);
+              let presentThrowsRoot = null;
+              let presentThrowsKey = null;
+              for (const root of partialRoots) {
+                if (!PARTIAL_PRESENT_THROWS_ROOTS.has(root)) continue;
+                const k = keyCands.find((kc) => partialMemberDenied(root, kc));
+                if (k) {
+                  presentThrowsRoot = root;
+                  presentThrowsKey = k;
+                  break;
+                }
+              }
+              if (key && hasDefault && !presentThrowsRoot) {
+                continue; // miembro ausente (default se activa) en TODOS los roots × claves → seguro
+              }
+              if (presentThrowsRoot) {
+                denyRoot = presentThrowsRoot; // detail: el hazard real, no la ausencia
+                key = presentThrowsKey;
+              }
+              if (key) {
+                const start = el.getStart(sourceFile);
+                const { line } =
+                  sourceFile.getLineAndCharacterOfPosition(start);
+                const lineText =
+                  content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+                violations.push({
+                  file: relPath,
+                  rule: "no-bare-dom-access",
+                  line: line + 1,
+                  detail: PARTIAL_PRESENT_THROWS_ROOTS.has(denyRoot)
+                    ? `destructuring de \`${denyRoot}.${key}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+                    : `destructuring de \`${denyRoot}.${key}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR. Remedia accediendo con \`${denyRoot}.${key}?.()\` (safe-probe; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
+                });
+              }
+            }
+            return; // init ES el root → no hay literal anidado que recursar
+          }
+          // sub-patrón + DEFAULT del elemento (`{ x: { compile } = WebAssembly }`): el default provee
+          // el root cuando la key falta → recursar contra él, paridad con los alias collectors (codex
+          // P2). PropertyAssignment con rename-default (`{ x: t = d }`) = BinaryExpression `=`.
+          const subAndDefault = (el) => {
+            if (ts.isBindingElement(el)) {
+              return { sub: el.name, def: el.initializer ?? null };
+            }
+            if (ts.isPropertyAssignment(el)) {
+              const v = el.initializer;
+              if (
+                v &&
+                ts.isBinaryExpression(v) &&
+                v.operatorToken.kind === ts.SyntaxKind.EqualsToken
+              ) {
+                return { sub: v.left, def: v.right };
+              }
+              return { sub: v ?? null, def: null };
+            }
+            if (
+              ts.isBinaryExpression(el) &&
+              el.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            ) {
+              return { sub: el.left, def: el.right };
+            }
+            return { sub: el, def: null };
+          };
+          // DEFAULTS: se evalúan cuando la key/índice FALTA, INDEPENDIENTE de si el init es un literal
+          // o un source OPACO (`const { x: { compile } = WebAssembly } = props`) → escanear SIEMPRE,
+          // antes del early-return por init no-literal (codex P2).
+          for (const el of elems) {
+            if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) continue;
+            const { sub, def } = subAndDefault(el);
+            if (def && sub && isDestructurePattern(sub)) {
+              flagPartialDestructure(sub, def);
+            }
+          }
+          // RECURSIÓN ESTRUCTURAL por VALOR MATCHEADO: por cada ALTERNATIVA literal de init
+          // (`cond ? { x: WebAssembly } : {…}`) → matchear sub-patrones (por key / por índice) y
+          // bajar. Cubre object, array, mezclas y alternativas — paridad con collectStructuralAliases.
+          for (const lit of init ? literalLeaves(init) : []) {
+            if (isObjPat && ts.isObjectLiteralExpression(lit)) {
+              for (const el of elems) {
+                const kn = ts.isBindingElement(el)
+                  ? el.propertyName || el.name
+                  : ts.isPropertyAssignment(el)
+                    ? el.name
+                    : null;
+                const { sub } = subAndDefault(el);
+                if (
+                  structuralKeyTexts(kn).length === 0 ||
+                  !sub ||
+                  !isDestructurePattern(sub)
+                ) {
+                  continue;
+                }
+                // R11 (gap-5 + F1): SIEMPRE el resolver canónico last-wins, NUNCA el first-match
+                // `lit.properties.find` (con dup-keys `{p:Math, p:WebAssembly}` resolvía al PRIMERO y
+                // perdía el override runtime last-wins → FN). Cubre directo + shorthand + spread; el
+                // spread de VARIABLE queda `blocked` → [] → §141. Unifica con el locus alias.
+                for (const key of structuralKeyTexts(kn)) {
+                  for (const val of objectLiteralMemberValues(lit, key)) {
+                    flagPartialDestructure(sub, val);
+                  }
+                }
+              }
+            } else if (!isObjPat && ts.isArrayLiteralExpression(lit)) {
+              // R10 DESTRUCT: aplanar spreads de LITERAL en-sitio para el match POSICIONAL
+              // (`[{compile}] = [...[WebAssembly]]`); un spread de VARIABLE → null → §141.
+              const posEls = positionalArrayElements(lit);
+              if (posEls) {
+                for (let i = 0; i < elems.length; i++) {
+                  const el = elems[i];
+                  if (ts.isOmittedExpression(el) || ts.isSpreadElement(el)) {
+                    continue;
+                  }
+                  const { sub } = subAndDefault(el);
+                  if (!sub || !isDestructurePattern(sub)) continue;
+                  const initEl = posEls[i];
+                  if (initEl && !ts.isOmittedExpression(initEl)) {
+                    flagPartialDestructure(sub, initEl);
+                  }
+                }
+              }
+            }
+          }
+        };
+        flagPartialDestructure(pattern, initExpr);
+      }
+    }
+
+    // (c.1d) import-equals que aliasa un MIEMBRO partial-denied de un SAFE root: `import compile =
+    // WebAssembly.compile` emite `var compile = WebAssembly.compile`, y `compile(bytes)` invoca el
+    // dynamic codegen — el qualified name NO produce un PropertyAccess que cace (c.1b), y el root SAFE
+    // no flaggea por (d). Flaggear la EXTRACCIÓN (codex P2), análogo al destructuring (c.1c). Root no
+    // sombreado; exento solo en client-only deferred.
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      !node.isTypeOnly &&
+      ts.isQualifiedName(node.moduleReference) &&
+      ts.isIdentifier(node.moduleReference.left) &&
+      ts.isIdentifier(node.moduleReference.right) &&
+      !context.isInClientOnlyDeferredBody
+    ) {
+      // El root resuelve DIRECTO (no sombreado) o vía ALIAS scope-aware (`import WA = WebAssembly;
+      // import compile = WA.compile`) — exprPartialRoots pliega shadow/forward/alias (codex P2). El
+      // moduleReference.left es un Identifier (guard arriba) → set ≤1 root por gramática; ∃-quantify por
+      // uniformidad (Auditoría B FIX-1: cero call-sites del wrapper singular exprPartialRoot).
+      const ieMember = node.moduleReference.right.text;
+      const ieRootName = [...exprPartialRoots(node.moduleReference.left, context)].find((r) =>
+        isDeniedPartialMember(r, ieMember),
+      );
+      if (ieRootName) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-bare-dom-access",
+          line: line + 1,
+          detail: PARTIAL_PRESENT_THROWS_ROOTS.has(ieRootName)
+            ? `import-equals de \`${ieRootName}.${ieMember}\` — dynamic code generation deshabilitada en el baseline Edge (Vercel/Workers) → lanza en render: ${lineText}`
+            : `import-equals de \`${ieRootName}.${ieMember}\` — miembro BROWSER-ONLY de un global SAFE extraído a un local; la llamada lanza en SSR. Remedia con \`${ieRootName}.${ieMember}?.()\` (safe-probe; un guard \`typeof\`/\`in\` NO suprime el flag, ADR D1-P1 nivel-miembro) o disable justificado: ${lineText}`,
+        });
+      }
+    }
+
+    // (c.2) Dynamic eval sink vía Function constructor alcanzable por
+    // `.constructor` SIN nombrar `Function`. El constructor del constructor
+    // de CUALQUIER valor ES `Function` (`[].constructor` → Array;
+    // `Array.constructor` → Function), así que `x.constructor.constructor`
+    // evalúa código desde un string igual que `eval`/`Function` y bypassea el
+    // AST gate. La rama (c) solo lo cazaba cuando la base era un identificador
+    // denegado (`globalThis.constructor.*` colateral); con base literal/SAFE
+    // pasaba. Flaggeamos un member access `constructor` (`x.constructor` o
+    // `x["constructor"]`) cuando está "weaponizado":
+    //   (a) su BASE es OTRO member access `constructor` — la cadena
+    //       `x.constructor.constructor` ES el Function constructor, se llame
+    //       o no (cubre la forma partida `const F = x.constructor.constructor;
+    //       F("code")()` y `.call`/`.apply` sobre él), o
+    //   (b) es el CALLEE de una CallExpression — `f.constructor("code")`
+    //       sobre una base que ya es función.
+    // Los usos legítimos (`err.constructor.name`, `x.constructor === Y`, clon
+    // `new x.constructor()`, `this.constructor.name`) NO cumplen (a) ni (b)
+    // → 0 FP.
+    //
+    // FRONTERA = LEGIBLE vs OFUSCADO (no decidible vs indecidible): el gate
+    // caza lo que un revisor vería leyendo el diff — las formas CONTIGUAS de
+    // `.constructor`. RESIDUALES CONOCIDOS POR DISEÑO (detalle en el ADR
+    // docs/decisions/D1-P1-server-safe-marker.md, "Frontera del eval-sink") —
+    // requieren data-flow / keys computadas / reflexión, y son ofuscación
+    // deliberada que no escribe nadie por accidente:
+    //   1. cadena partida en vars:  const c = x.constructor; c.constructor("x")()
+    //   2. destructuring:           const { constructor: F } = x.constructor; F("x")()
+    //   3. computed key vía variable: const k = "constructor"; x[k][k]("x")()
+    //   4. reflexión por ACCESO indirecto: `Reflect.get(x,"constructor")` (la key es un
+    //      string, no hay nodo `.constructor` a la vista), getter. NOTA: `Reflect.construct/
+    //      apply(x.constructor, …)` —acceso DIRECTO + invocación vía Reflect nombrado— SÍ se
+    //      caza (rama (e) de isWeaponizedConstructorAccess, codex P1); solo el acceso
+    //      indirecto vía Reflect.get queda residual.
+    //   5. `new x.constructor("code")` (colisiona con el clon legítimo — no
+    //      separable sin type-info)
+    // El caso 3 es la CLASE de indirección, no "la forma const-literal": el
+    // mismo ataque tiene infinitas escrituras (let, concat, alias, propiedad de
+    // objeto, Reflect, …) — verificadas pasando. Un "Nivel 1" (constant-fold de
+    // `const k="constructor"`) cazaría UNA y dejaría pasar el resto → FALSA
+    // COMPLETITUD: documentar "manejamos computed-key" sería mentir, y contra un
+    // adversario el catch parcial es teatro (usa la escritura siguiente). Además
+    // todo computed-key peligroso ya se caza por la RAÍZ (`globalThis[k]` flaggea
+    // pase lo que pase). Se EVALUÓ y DESCARTÓ. Ver ADR "Frontera del eval-sink".
+    // Se aceptan porque `@server-safe` es opt-in/first-party, NO una frontera
+    // de seguridad: un bypass solo crashea RUIDOSO en el consumer del propio
+    // contributor (sin activo ni adversario), y lo ofuscado es deliberado →
+    // el no-adversario ya descartado. CADUCIDAD: si `@server-safe` deja de ser
+    // opt-in/first-party (frontera de confianza sobre código no auditado), esta
+    // decisión queda ANULADA.
+    // beta.27 BLOCKER-1 (cruce A+B, FN-hunt + re-review).
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)) &&
+      isConstructorMemberAccess(node) &&
+      // eval-sink: throw en Edge siempre → solo exento en client-only deferred,
+      // NO en timer (queueMicrotask/setTimeout fire en Edge). deep re-hunt.
+      !context.isInClientOnlyDeferredBody &&
+      // (a) doble `x.constructor.constructor`; (b) callee directo
+      // `x.constructor(...)`; (c) `x.constructor.call/.apply/.bind`; (d) tagged
+      // `x.constructor\`code\``. Todas saltando ParenthesizedExpression a ambos
+      // lados (`((x).constructor)()` ≡ `x.constructor()`). El control
+      // `[].slice.bind(...)` NO flaggea: `.slice` no es `.constructor`.
+      isWeaponizedConstructorAccess(node)
+    ) {
+      const start = node.getStart(sourceFile);
+      const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+      const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+      violations.push({
+        file: relPath,
+        rule: "no-dynamic-eval-sink",
+        line: line + 1,
+        detail: `acceso a \`.constructor.constructor\` / invocación de \`.constructor\` (Function constructor alcanzable desde cualquier base — dynamic eval sink que bypassea el AST gate): ${lineText}`,
+      });
+    }
+
+    // (R10 EVAL) `.constructor` INVOCADO a través de una PROYECCIÓN de contenedor literal.
+    // `({...{k: fn.constructor}}).k("code")()`, `[{k: fn.constructor}][0].k("code")` — el
+    // `.constructor` no es el callee A LA VISTA, es el VALOR PROYECTADO de la member-access que
+    // se invoca. La rama (b) de isWeaponizedConstructorAccess sube UNA proyección por ASCENSO
+    // (`[x.constructor][0](…)`); dos proyecciones ENCADENADAS o un spread intermedio la superan y
+    // el `.constructor` se escapaba. Simetría ascenso=descenso (doctrina U): resolver el CALLEE por
+    // valueTransparentLeaves —que YA desciende proyecciones `.k`/`[i]`/`Reflect.get`/`.at` y spreads
+    // de object-literal EN-SITIO (resolveKeyInLiteral)— y flaggear si alguna hoja es un
+    // `.constructor` weaponizable (receiver NO provably-non-function). El guard
+    // `!isWeaponizedConstructorAccess(leaf)` evita DOBLE-REPORTE: solo añade lo que el ascenso NO
+    // alcanza. Token-en-su-sitio: contenedor/índice/key literales decidibles; un spread/índice/key
+    // de VARIABLE queda §141 (valueTransparentLeaves no lo resuelve → no aparece la hoja).
+    if (
+      !context.isInClientOnlyDeferredBody &&
+      (ts.isCallExpression(node) || ts.isTaggedTemplateExpression(node))
+    ) {
+      const invokedCallee = ts.isCallExpression(node) ? node.expression : node.tag;
+      // `.call/.apply` invocan el receiver; un bind-result invocado conserva el target original. Pelar la
+      // cadena SOLO desde el callee de esta invocación evita tratar la mera creación `F.bind(x)` como eval.
+      const projectedCalleeCandidates = ts.isCallExpression(node)
+        ? [invokedCallee, peelReceiverChain(invokedCallee)]
+        : [invokedCallee];
+      const projectedCtor = projectedCalleeCandidates
+        .flatMap((candidate) => valueTransparentLeaves(candidate))
+        .find(
+          (leaf) =>
+            isConstructorMemberAccess(leaf) &&
+            !constructorReceiverIsProvablyNonFunction(leaf.expression) &&
+            !isWeaponizedConstructorAccess(leaf),
+        );
+      if (projectedCtor) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-dynamic-eval-sink",
+          line: line + 1,
+          detail: `invocación de \`.constructor\` (Function constructor) a través de una PROYECCIÓN de contenedor literal (dynamic eval sink que bypassea el AST gate): ${lineText}`,
+        });
+      }
+    }
+
+    // (c.3) STRING-HANDLER timer = eval IMPLÍCITO. `setTimeout("código", …)` /
+    // `setInterval`/`setImmediate` con 1er arg STRING (literal o template): el navegador lo
+    // EVALÚA (lee window etc.); Node NO soporta el string-handler → lanza TypeError SÍNCRONO
+    // en la llamada → crashea en SSR/Edge. El gate caza eval()/Function()/new Function() pero
+    // el string-timer escapaba (el timer está en SAFE_GLOBALS y su 1er-arg no se inspeccionaba).
+    // Token-en-su-sitio (el string a la vista; un string-VARIABLE = data-flow residual). Como
+    // los otros eval-sinks: exento solo en client-only deferred (browser, donde sí evalúa).
+    if (ts.isCallExpression(node) && !context.isInClientOnlyDeferredBody) {
+      // El callee se desenvuelve VALUE-TRANSPARENTE: `(0, setTimeout)("x",0)`, `(setTimeout as
+      // any)("x")` — coma/erased igual que el resto de sinks del gate (codex P2). Cualquier hoja
+      // que sea el timer (identifier o `<global>.setTimeout`) lo reconoce.
+      let timerName = null;
+      for (const leaf of valueTransparentLeaves(node.expression)) {
+        if (ts.isIdentifier(leaf)) {
+          if (
+            (leaf.text === "setTimeout" ||
+              leaf.text === "setInterval" ||
+              leaf.text === "setImmediate") &&
+            // Un binding LOCAL homónimo (import/función/const wrapper) NO es el timer global →
+            // su string-arg no es eval del navegador. Mismo respeto al shadow que la rama (d)
+            // bare-identifier (codex P3). El alias del global real exige leer el global = flaggea
+            // aguas arriba, así que skipear el shadow no abre bypass.
+            !context.localBindings.has(leaf.text)
+          ) {
+            timerName = leaf.text;
+            break;
+          }
+          // Alias SINTÁCTICO de un timer global (`const later = setTimeout; later("código")`): el
+          // read del timer está en SAFE_GLOBALS → invisible aguas arriba (≠ eval, que es sink), así
+          // que sin esto el alias sería fail-open (codex P2). Acumulado SCOPE-AWARE en el walk.
+          if (context.scopeTimerAliases?.has(leaf.text)) {
+            timerName = leaf.text;
+            break;
+          }
+        } else if (
+          ts.isPropertyAccessExpression(leaf) ||
+          ts.isElementAccessExpression(leaf)
+        ) {
+          // Receiver value-transparente: `(0, globalThis).setTimeout(…)`, `(c ? window : self).
+          // setTimeout(…)` — resolver por valueTransparentLeaves, no solo unwrapErased (globalThis/
+          // window/… y setTimeout son SAFE → sin esto no flaggea aguas arriba) (codex P2). Shadow-aware.
+          const receiverIsGlobalObj = valueTransparentLeaves(
+            leaf.expression,
+          ).some(
+            (r) =>
+              ts.isIdentifier(r) &&
+              (r.text === "globalThis" ||
+                r.text === "window" ||
+                r.text === "self" ||
+                r.text === "global") &&
+              !context.localBindings.has(r.text),
+          );
+          if (receiverIsGlobalObj) {
+            const mn = accessedMemberName(leaf);
+            if (
+              mn === "setTimeout" ||
+              mn === "setInterval" ||
+              mn === "setImmediate"
+            ) {
+              timerName = mn;
+              break;
+            }
+          }
+          // Proyección token-local de un timer (`[setTimeout][0]("código")`) — exprIsTimerValued ya
+          // conoce `[X][i]` y respeta el shadow; sin esto el callee array-indexado bypassea (codex
+          // P2). Llamada directa → handler en arg[0].
+          if (timerName === null && exprIsTimerValued(leaf, context)) {
+            timerName = "timer.projection";
+            break;
+          }
+        } else if (ts.isCallExpression(leaf)) {
+          // BIND-only: `setTimeout.bind(null)("código")` — la fn ligada (sin handler bindeado) es un
+          // timer cuyo handler llega en ESTA llamada externa (arg[0]). exprIsTimerValued reconoce
+          // `<timer>.bind(≤1)`. Con handler bindeado el string va en los args de `.bind` (rama .bind).
+          if (exprIsTimerValued(leaf, context)) {
+            timerName = "timer.bind";
+            break;
+          }
+        }
+      }
+      // Posición del arg que debe ser string según la FORMA de invocación, sobre el modelo de
+      // candidatos branch-aware (`expandArgLists`/`candidatesAt`, módulo-level): captura spread
+      // literal/alternativas/longitud-distinta/inner-spread; spread variable = residual. codex P2.
+      //   directo  `<timer>("código", …)`           → arg[0]
+      //   `.call`  `<timer>.call(thisArg, "c", …)`   → arg[1]
+      //   `.apply` `<timer>.apply(thisArg, ["c", …])` → arg[1] es array-literal → su elemento [0]
+      let stringArgCandidates =
+        timerName !== null ? candidatesAt(node.arguments, 0) : [];
+      if (timerName === null) {
+        // `<timer>.call`/`.apply`/`.bind` — Function.prototype sobre el timer. El read del timer es
+        // SAFE → no se flaggea aguas arriba; sin esto `setTimeout.call(null,"c")` bypassea (codex P2).
+        for (const leaf of valueTransparentLeaves(node.expression)) {
+          if (
+            !ts.isPropertyAccessExpression(leaf) &&
+            !ts.isElementAccessExpression(leaf)
+          ) {
+            continue;
+          }
+          const mn = accessedMemberName(leaf);
+          if (
+            (mn === "call" || mn === "apply" || mn === "bind") &&
+            exprIsTimerValued(leaf.expression, context)
+          ) {
+            timerName = `timer.${mn}`;
+            stringArgCandidates =
+              mn === "apply"
+                ? candidatesAt(node.arguments, 1).flatMap(
+                    applyHandlerCandidates,
+                  )
+                : candidatesAt(node.arguments, 1);
+            break;
+          }
+        }
+      }
+      if (timerName === null) {
+        // `Reflect.apply(<timer>, thisArg, ["código"])` — el timer es arg[0], el handler es
+        // arg[2] array-literal → su elemento [0]. Reflect/setTimeout son SAFE → no flaggea aguas
+        // arriba; misma clase que `.apply`. Posiciones por el modelo de candidatos (codex P2).
+        for (const leaf of valueTransparentLeaves(node.expression)) {
+          if (
+            (ts.isPropertyAccessExpression(leaf) ||
+              ts.isElementAccessExpression(leaf)) &&
+            accessedMemberName(leaf) === "apply" &&
+            // Receiver Reflect value-transparente (`(0, Reflect).apply(setTimeout, …)`) → VT, no solo
+            // unwrapErased; paridad con los otros receiver paths (codex P2). Shadow-aware.
+            valueTransparentLeaves(leaf.expression).some(
+              (r) =>
+                ts.isIdentifier(r) &&
+                r.text === "Reflect" &&
+                !context.localBindings.has("Reflect"),
+            ) &&
+            candidatesAt(node.arguments, 0).some((c) =>
+              exprIsTimerValued(c, context),
+            )
+          ) {
+            timerName = "Reflect.apply(timer)";
+            stringArgCandidates = candidatesAt(node.arguments, 2).flatMap(
+              applyHandlerCandidates,
+            );
+            break;
+          }
+        }
+      }
+      const isStringArg = stringArgCandidates.some((c) =>
+        valueTransparentLeaves(c).some(
+          (a) => ts.isStringLiteralLike(a) || ts.isTemplateExpression(a),
+        ),
+      );
+      if (timerName !== null && isStringArg) {
+        const start = node.getStart(sourceFile);
+        const { line } = sourceFile.getLineAndCharacterOfPosition(start);
+        const lineText = content.split("\n")[line]?.trim().slice(0, 80) ?? "";
+        violations.push({
+          file: relPath,
+          rule: "no-dynamic-eval-sink",
+          line: line + 1,
+          detail: `\`${timerName}(<string>, …)\` — el 1er-arg string es eval implícito del navegador; en Node/Edge lanza TypeError (string-handler no soportado) → crash SSR: ${lineText}`,
+        });
       }
     }
 
@@ -1677,14 +11194,37 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
     // ReferenceError igual que property accesses si el binding no existe.
     if (ts.isIdentifier(node)) {
       const api = node.text;
-      const isClientGlobal = CLIENT_GLOBALS.has(api);
+      const isUnsafeGlobal = !SAFE_GLOBALS.has(api);
       const isEvalSink = DYNAMIC_EVAL_SINKS.has(api);
-      if (isClientGlobal || isEvalSink) {
+      // MIEMBRO SEGURO de una raíz DENEGADA a través de WRAPPER: `process` está denegado bare pero
+      // `process.env` lo expone Edge. La rama (c) lo exime cuando `process.env` es DIRECTO (root = Identifier),
+      // pero un wrapper erased/value-transparent (`(process as any).env`, `(process).env`, `(0,process).env`)
+      // rompe esa rama y el `process` interno cae aquí como bare = FP (codex P2). Trato uniforme con
+      // import.meta.env (que resuelve el wrapper por valueSurvivalLeaves): ascender por los wrappers hasta el
+      // member-access y eximir SOLO si el miembro ∈ SAFE_MEMBERS_OF_DENIED_ROOT. `(process as any).cwd` (no
+      // seguro) / `process` bare-sin-miembro siguen flaggeando.
+      const denialSafe = SAFE_MEMBERS_OF_DENIED_ROOT[api];
+      let safeMemberOfDeniedRoot = false;
+      if (denialSafe) {
+        const acc = wrapperEnclosingMemberAccess(node);
+        if (acc) {
+          const mems = accessedMemberNames(acc);
+          safeMemberOfDeniedRoot =
+            mems.length > 0 && mems.every((mm) => denialSafe.has(mm));
+        }
+      }
+      if ((isUnsafeGlobal || isEvalSink) && !safeMemberOfDeniedRoot) {
         if (
           !context.localBindings.has(api) &&
-          !isNonReferencePosition(node)
+          // Forward value-read de un nombre module-declared dentro de una función
+          // (call-time → ya inicializado, es local no global). Ver rama (c)/F4.
+          !(context.isInFunctionBody && moduleDeclaredNames.has(api)) &&
+          !isNonReferencePosition(node, moduleDeclaredNames)
         ) {
-          if (!context.isInDeferredBody && !context.activeGuards.has(api)) {
+          // Exención en body diferido: política única (NON_ABSENCE_DENIALS solo en
+          // client-only; el resto en cualquier deferred). Ver isExemptInDeferredBody.
+          const deferredExempt = isExemptInDeferredBody(api, context);
+          if (!deferredExempt && !context.activeGuards.has(api)) {
             const start = node.getStart(sourceFile);
             const { line } = sourceFile.getLineAndCharacterOfPosition(start);
             const lineText =
@@ -1695,11 +11235,31 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
               line: line + 1,
               detail: isEvalSink
                 ? `referencia a \`${api}\` (dynamic eval sink — bypassea el AST gate): ${lineText}`
-                : `referencia bare al binding \`${api}\` sin guard typeof activo: ${lineText}`,
+                : `referencia bare a \`${api}\` — no es global server-safe (ni ES builtin ni global de Node ≥22.12) y no hay guard typeof activo: ${lineText}`,
             });
           }
         }
       }
+    }
+
+    // Declaradores LEFT-TO-RIGHT: en `const a = {x:1}, b = a.x`, el read de `a` en el 2º declarador
+    // resuelve al 1º (ya inicializado en orden de evaluación). Visitar el statement entero ANTES de
+    // bindear hacía ver `a` como global no-bound = FP (codex P2). Bindea cada declarador antes del
+    // siguiente; el binding queda LOCAL al recorrido (la per-stmt loop sigue añadiéndolos al scope
+    // que se propaga a los statements posteriores).
+    if (ts.isVariableDeclarationList(node)) {
+      let declCtx = context;
+      for (const decl of node.declarations) {
+        visit(decl, declCtx);
+        const declNames = new Set();
+        addBindingNamesFromPattern(decl.name, declNames);
+        if (declNames.size > 0) declCtx = addToScope(declCtx, declNames);
+        // Enrolar el alias del declarador para que el SIGUIENTE initializer del mismo statement lo
+        // reconozca (`const later = setTimeout, id = later("código")`) — codex P2.
+        declCtx = addTimerAliases(declCtx, decl);
+        declCtx = addPartialAliases(declCtx, decl);
+      }
+      return;
     }
 
     ts.forEachChild(node, (child) => visit(child, context));
@@ -1717,11 +11277,148 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
    * (visible solo desde la declaración hacia adelante).
    */
   function visitOrderedStatements(statements, context, preloadedFns) {
-    let current = addToScope(context, preloadedFns);
+    // Los guards activos al ENTRAR el bloque (p.ej. el positivo de un `if (typeof
+    // X !== "undefined") { … }` envolvente) valen para TODO el bloque, incluidas
+    // las function declarations hoisted. Se preservan en `blockEntryGuards` a
+    // través de la acumulación de negative-early-return guards, que son
+    // POSICIONALES (solo valen tras su statement). Un fn-decl resetea a estos, no
+    // a vacío (re-hunt FP5: fn-decl en bloque positive-guard).
+    let current = {
+      ...addToScope(context, preloadedFns),
+      blockEntryGuards: context.activeGuards,
+    };
+    // VISTA DIFERIDA (#7, D1-b rama 2): la unión FULL-SCOPE (insensible al orden) de las asignaciones de ESTE
+    // scope, acumulada con la de los scopes ENCLOSING, se thread-ea en `deferredAssignAliases` para que los
+    // cuerpos de función/arrow declarados aquí (reads call-time) la vean sin importar la posición textual de la
+    // asignación. Las lecturas en posición-de-statement siguen la vista FORWARD (scopePartialAliases threadeado).
+    {
+      // Fix 2 (P-SHADOW-DEF): purga del mapa diferido HEREDADO los nombres que ESTE scope REDECLARA
+      // (block-lexical) → un `let c` local no hereda el `c→root` de un scope exterior (evita en la vista
+      // diferida el mismo FP por-nombre que la forward doma). Los bindings PROPIOS de este scope sí entran.
+      const shadowedHere = gatherBlockLexicalNames(statements);
+      const du = new Map();
+      for (const [name, roots] of context.deferredAssignAliases ?? []) {
+        if (!shadowedHere.has(name)) du.set(name, roots);
+      }
+      // Fix 1 (P-DEF-6 / INV-VIEW): la unión resuelve el RHS contra un contexto ENRIQUECIDO con los alias
+      // const/structural DECLARADOS en el scope (declaraciones = independientes de posición, misma lógica
+      // call-time que F4) → `const A = performance; c = A` taintea `c` en la diferida igual que en la forward.
+      // Las cadenas por let-ASIGNACIÓN (`d = performance; c = d`) siguen §141 (no son declaraciones).
+      let unionCtx = context;
+      const scopeConstAliases = new Map();
+      // SOLO DECLARACIONES (const/let/var-con-init + import-equals) — independientes de posición (el binding se
+      // inicializa una vez, call-time). Las ExpressionStatement ASIGNACIONES (`d = performance`) NO se enriquecen:
+      // la cadena `d = performance; c = d` es value-flow ORDEN-dependiente (§141).
+      // R7-B: PUNTO FIJO — resolver cada RHS contra `context ⊕ scopeConstAliases-hasta-ahora` hasta estabilizar,
+      // para encadenar `const p = performance; const q = p` (q → performance TRANSITIVO) en la vista diferida
+      // igual que la forward. El predecesor era one-pass contra `context` → `const q = p` no veía el `p` del
+      // mismo scope (R7-B). Termina por monotonicidad (dominio finito de roots, ≤ #decls pasadas).
+      const declStmts = statements.filter(
+        (s) => ts.isVariableStatement(s) || ts.isImportEqualsDeclaration(s),
+      );
+      // R7-B / BLOQUEO-B: PUNTO FIJO while-stable con update por UNIÓN (no reemplazo). Terminación POR
+      // CONSTRUCCIÓN: cada pasada que cambia UNE ≥1 par (nombre,root); el dominio (nombres × roots del scope) es
+      // finito y el acumulado crece ESTRICTAMENTE → termina en ≤ |nombres×roots| pasadas. NUNCA cota-por-#stmts:
+      // una cadena intra-statement por comas (`const p=perf, q=p, r=q`) excede #statements — el mismo cap falso de
+      // BLOQUEO-1 (3ª aparición del patrón; el kit lo prohíbe: resolver-contra-contexto = while-stable o rationale).
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const ctx = scopeConstAliases.size
+          ? mergePartialAliases(context, scopeConstAliases)
+          : context;
+        for (const stmt of declStmts) {
+          for (const [name, roots] of partialAliasesDeclaredBy(stmt, ctx)) {
+            const prev = scopeConstAliases.get(name);
+            const merged = prev ? new Set([...prev, ...roots]) : new Set(roots);
+            if (!prev || merged.size !== prev.size) {
+              scopeConstAliases.set(name, merged);
+              changed = true;
+            }
+          }
+        }
+      }
+      if (scopeConstAliases.size > 0) {
+        unionCtx = mergePartialAliases(context, scopeConstAliases);
+      }
+      // H2 (Auditoría B R6): SEMBRAR las declaraciones-alias de ESTE scope en `du` — un cuerpo diferido que LEE
+      // el binding declarado (`const p = performance; … p.eventLoopUtilization()`) debe verlo, no solo cuando es
+      // RHS de otra asignación (antes `scopeConstAliases` solo alimentaba `unionCtx`, nunca `du` → SILENT). SIN
+      // filtrar por `shadowedHere`: son los bindings PROPIOS de este nivel (el filtro shadowedHere es para el
+      // mapa HEREDADO — un homónimo local lo sombrea; filtrar aquí saltaría JUSTO lo que hay que sembrar = el
+      // fix auto-anulado que cazó Fable). Orden: purge-heredado (arriba) → SEED-local (aquí) → unión-asignaciones
+      // (abajo). El shadow hacia scopes anidados lo maneja descendCtx. Cubre const/let-init (var ya vía var-hoist).
+      for (const [name, roots] of scopeConstAliases) {
+        const prev = du.get(name);
+        du.set(name, prev ? new Set([...prev, ...roots]) : roots);
+      }
+      for (const [name, roots] of scopeAssignmentUnion(statements, unionCtx)) {
+        const prev = du.get(name);
+        du.set(name, prev ? new Set([...prev, ...roots]) : roots);
+      }
+      current = { ...current, deferredAssignAliases: du };
+    }
+    // TDZ / lexical scope: un `const`/`let`/`class`/`function` block-scoped con el nombre
+    // de un guard-alias OUTER lo SOMBREA para TODO el bloque (no solo tras su declaración).
+    // La purga posicional de addToScope no cubre los usos ANTERIORES a la declaración
+    // (un closure `const f = () => has ? X : 0; const has = true; f()` resuelve `has` al
+    // guard outer aunque runtime lo liga al binding interno → BYPASS, codex P2). Purgamos
+    // esos nombres al ENTRAR el bloque; el alias propio se re-añade posicionalmente tras
+    // su `const X = <guard>`.
+    current = purgeGuardAliasShadows(current, gatherBlockLexicalNames(statements));
+    // PRE-CARGA de sombras léxicas no-react en nonImportBindings: una función visitada
+    // ANTES de un `const useEffect = Sync.run` posterior debe ver el shadow para que el
+    // deferred-hook shadow-guard dispare (codex P1 round-10, scope-aware no posicional).
+    // Solo nonImportBindings (no localBindings, para no tocar el shadow-de-global/TDZ).
+    {
+      const lexShadows = gatherNonReactLexicalShadows(statements, current);
+      if (lexShadows.size > 0) {
+        current = {
+          ...current,
+          nonImportBindings: new Set([...current.nonImportBindings, ...lexShadows]),
+        };
+      }
+    }
     for (const stmt of statements) {
       visit(stmt, current);
-      const additions = extractPostStatementBindings(stmt);
-      current = addToScope(current, additions);
+      const { all, nonImport } = extractPostStatementBindings(stmt, current);
+      current = addToScope(current, all, nonImport);
+      // Purga de nonImportBindings los nombres que este stmt redeclara como alias react
+      // (sombra léxica de un sync homónimo del scope externo) → no se flaggean como shadow.
+      current = purgeNonImportReactAliases(current, stmt);
+      // Aliases react SCOPE-AWARE declarados por este statement (`const { useEffect } =
+      // React`, `import R = React`, …). Acumulados en el context del scope actual — no
+      // filtran a hermanos. DESPUÉS de addToScope para que el shadow check use el
+      // nonImportBindings ya actualizado. Resuelve los NESTED [6]/[9]/[10] sin reabrir
+      // el bypass file-global de codex P1.
+      current = addReactAliases(current, stmt);
+      // Alias de timer global SCOPE-AWARE (`const later = setTimeout`) → los statements
+      // POSTERIORES reconocen `later("código")` como string-timer eval-sink (codex P2).
+      current = addTimerAliases(current, stmt);
+      // Alias de root parcial-safe (`const WA = WebAssembly`) → reconocer `WA.compile()` (codex P2).
+      current = addPartialAliases(current, stmt);
+      // #7 (D1-b): HOIST de asignaciones a bindings EXTERIORES desde scopes anidados de `stmt` (block/función)
+      // → los statements POSTERIORES del scope actual las ven (`let c; { c=performance; } c.elu()`). Por-binding.
+      current = mergePartialAliases(current, hoistNestedAssignmentAliases(stmt, current));
+      // Alias booleano de guard: `const has = typeof X !== "undefined"` → los statements
+      // POSTERIORES pueden usar `has` como el guard (`has ? X : …`). Solo const; el map
+      // se copia (no se muta) para no filtrar a scopes hermanos. deepest re-hunt #173.
+      const alias = extractConstGuardAlias(stmt, current.guardAliases);
+      if (alias) {
+        current = {
+          ...current,
+          guardAliases: new Map([...current.guardAliases, alias]),
+        };
+      }
+      // Narrowing por early-return: tras `if (typeof X === "undefined") return;`
+      // X existe en los statements posteriores del bloque → guard activo.
+      const negGuards = extractNegativeEarlyReturnGuards(stmt, current.guardAliases);
+      if (negGuards.size > 0) {
+        current = {
+          ...current,
+          activeGuards: new Set([...current.activeGuards, ...negGuards]),
+        };
+      }
     }
   }
 
@@ -1733,13 +11430,41 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
   const { all: moduleAll, nonImports: moduleNonImports } =
     gatherModulePreloadedBindings(sourceFile);
   const sourceFileFns = gatherSourceFileFunctionDeclarations(sourceFile);
-  const reactImports = gatherReactImports(sourceFile);
+  // Taint de namespace react por MEMBER-WRITE (codex P1 b35a87c + #4). Un default import es el
+  // objeto export MUTABLE (no el Module Namespace read-only) → `React.useEffect = sync` lo vuelve
+  // síncrono = BYPASS. El objeto es COMPARTIDO entre todos sus aliases (`const A = React`), así que
+  // un write a CUALQUIER miembro de la familia contamina a TODA (codex P1 #4: taint debe propagar
+  // por aliases, no solo el root sintáctico del write). Si la familia está mutada, se taintea
+  // entera; sin write, no se taintea nada (0-FP del caso común `React.useEffect(cb)`).
+  const memberWriteRoots = gatherMutatedNamespaceRoots(sourceFile);
+  const reactNsFamily = gatherReactNamespaceFamily(sourceFile);
+  const familyMutated = [...reactNsFamily].some((n) => memberWriteRoots.has(n));
+  const mutatedNamespaceRoots = familyMutated ? reactNsFamily : new Set();
+  const reactImports = gatherReactImports(sourceFile, mutatedNamespaceRoots);
   const baseContext = {
     activeGuards: new Set(),
-    isInDeferredBody: false,
+    blockEntryGuards: new Set(),
+    guardAliases: new Map(),
+    isInClientOnlyDeferredBody: false,
+    isInFunctionBody: false,
     localBindings: moduleAll,
     nonImportBindings: moduleNonImports,
     reactImports,
+    // Aliases react SCOPE-AWARE acumulados posicionalmente durante el walk
+    // (NO file-global): `const { useEffect } = React`, `const ue = React.useEffect`,
+    // `const useEffect = reactUseEffect`, `import R = React`. Viven solo en el scope
+    // donde se declaran (function/namespace body) — un alias nested NO filtra a scopes
+    // hermanos, evitando el bypass file-global que codex P1 rechazó. Complementan
+    // `reactImports` (top-level file-global) para reconocer destructure/alias NESTED.
+    scopeReactNs: new Set(),
+    scopeReactNamed: new Map(),
+    mutatedNamespaceRoots,
+    // Alias de timer global acumulados SCOPE-AWARE durante el walk (no file-level) — codex P2.
+    scopeTimerAliases: new Set(),
+    // Alias de root parcial-safe (`const WA = WebAssembly`) → rootName, scope-aware — codex P2.
+    scopePartialAliases: new Map(),
+    // Para los helpers de alias (exprPartialRoot): forward value-read module-level.
+    moduleDeclaredNames,
   };
   visitOrderedStatements(sourceFile.statements, baseContext, sourceFileFns);
   return violations;
@@ -1747,10 +11472,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
 
 // ─── Exports (para tests) ──────────────────────────────────────
 //
-// `checkSourceFile`, `CLIENT_GLOBALS` y `DYNAMIC_EVAL_SINKS` se exportan
-// para que `src/_audit/server-safe-gate.test.ts` pueda validar que cada
-// bypass conocido (eval, Function, Reflect.construct, etc.) realmente lo
-// caza el gate sobre fixtures inline.
+// `checkSourceFile`, `SAFE_GLOBALS`, `INTENTIONAL_DENY` y
+// `DYNAMIC_EVAL_SINKS` se exportan para que
+// `src/_audit/server-safe-gate.test.ts` y
+// `src/__tests__/server-safe-catalog-vs-node.test.ts` puedan validar el
+// modelo fail-closed (whitelist) y que cada bypass conocido (eval,
+// Function, Reflect.construct, etc.) realmente lo caza el gate.
 //
 // `checkFileWithImports`, `resolveImportPath`, `extractModuleReferences`
 // añadidos en beta.26 HIGH-2 para validar el cierre de smuggling cross-
@@ -1763,7 +11490,12 @@ function checkSourceFile(content, relPath, preparsedSourceFile) {
 // `checkSourceFile` directamente) para que el smuggling cross-módulo se
 // chequee también en CI.
 export {
-  CLIENT_GLOBALS,
+  SAFE_GLOBALS,
+  INTENTIONAL_DENY,
+  EDGE_MISSING_GLOBALS,
+  SAFE_PARTIAL_MEMBERS,
+  PARTIAL_SAFE_GLOBAL_MEMBERS,
+  CONSTRUCTION_DENIED_MEMBERS,
   DYNAMIC_EVAL_SINKS,
   checkSourceFile,
   checkFileWithImports,
@@ -1782,6 +11514,248 @@ export {
 const isCliEntry =
   process.argv[1] !== undefined &&
   pathToFileURL(process.argv[1]).href === import.meta.url;
+
+// Enumera TODOS los rangos de comentario del fichero (línea + ambos estilos de bloque), ROBUSTO a templates
+// (Auditoría B R7 / R7-D). El scanner crudo (`ts.createScanner`) se DESINCRONIZA en un template con sustitución
+// (sin `reScanTemplateToken` trata la llave-cierre + backtick como CloseBrace + template-head nuevo) → pierde
+// los comentarios POSTERIORES → un marker tras un template moría en SILENCIO (blast-radius de fichero). Las
+// posiciones del AST (`getFullStart`/`getEnd`) son parser-correctas y `getLeadingCommentRanges`/
+// `getTrailingCommentRanges` solo escanean la trivia en esos puntos → inmunes al desync. Rangos deduplicados
+// por pos, ordenados.
+function allCommentRanges(sourceFile) {
+  const text = sourceFile.text;
+  const seen = new Set();
+  const out = [];
+  const collect = (ranges) => {
+    if (!ranges) return;
+    for (const r of ranges) {
+      if (
+        (r.kind === ts.SyntaxKind.MultiLineCommentTrivia ||
+          r.kind === ts.SyntaxKind.SingleLineCommentTrivia) &&
+        !seen.has(r.pos)
+      ) {
+        seen.add(r.pos);
+        out.push({ pos: r.pos, end: r.end, kind: r.kind });
+      }
+    }
+  };
+  // R7-D / BLOQUEO-D: recorre TODOS los TOKENS (`getChildren` incluye la puntuación — `{`, `;`, keywords —, no
+  // solo los nodos de `forEachChild`) y recoge sus comment-ranges leading/trailing. Es PARSER-CORRECTO en las
+  // posiciones → robusto a REGEX literals, JSX-text braces y TEMPLATES (donde el scanner crudo se desincroniza
+  // por falta de contexto: `/x}\`/`, `<div>}`, `}\`` — enseñarle esa gramática al scanner es emular el parser,
+  // pozo sin fondo) Y a los comentarios de MIEMBRO-DE-CLASE (que `forEachChild`-por-nodo NO ve —
+  // `getLeadingCommentRanges(method.pos)`=∅— pero el TOKEN `m`/`{` SÍ; medido). Cierra la intersección de los
+  // dos puntos ciegos (scanner ∩ AST-por-nodo) sin la unión de dos enumeradores. `endOfFileToken` es hijo de
+  // `sourceFile` → el EOF-orphan entra por la misma vía.
+  const walk = (node) => {
+    collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
+    collect(ts.getTrailingCommentRanges(text, node.getEnd()));
+    for (const child of node.getChildren(sourceFile)) walk(child);
+  };
+  walk(sourceFile);
+  out.sort((a, b) => a.pos - b.pos);
+  return out;
+}
+
+/**
+ * Recorre el AST COMPLETO buscando el tag JSDoc `@server-safe` y:
+ *   - devuelve `true` si hay un marker en posición CANÓNICA (JSDoc de un
+ *     statement top-level del módulo),
+ *   - FALLA RUIDOSAMENTE (throw) si encuentra el marker en posición
+ *     ANIDADA (función interna, método, bloque…).
+ *
+ * beta.27 BLOCKER-1 (cruce A+B claudegate6): el predecesor solo iteraba
+ * `sourceFile.statements` (top-level). Un `@server-safe` en un JSDoc
+ * anidado pasaba INADVERTIDO → el archivo no se trataba como marcado →
+ * no se auditaba → fail-open silencioso (el dev cree que el invariante se
+ * enforça y no es así). Fail-loud (no detección permisiva) fuerza la forma
+ * canónica: un marker mal colocado es un ERROR del gate, no comportamiento
+ * no especificado que luego se congela.
+ *
+ * CRÍTICO — usamos `node.jsDoc` (los bloques JSDoc attachados a ESTE nodo
+ * host), NO `ts.getJSDocTags(node)`. Dos razones:
+ *   1. `getJSDocTags` devuelve solo el ÚLTIMO de varios bloques JSDoc
+ *      consecutivos — un `@server-safe` en un bloque previo pasaría
+ *      inadvertido (fail-open silencioso: el archivo no se auditaría). Cruce
+ *      A+B beta.27.
+ *   2. `getJSDocTags` hereda el tag a varios nodos (statement +
+ *      declaration + identifier + initializer), forzando un filtro
+ *      `tag.parent.parent === node`. `node.jsDoc` solo está en el host real,
+ *      así que cada bloque se cuenta UNA vez sin filtro.
+ *
+ * @param {import("typescript").SourceFile} sourceFile
+ * @param {string} relPath
+ * @returns {boolean} true si hay `@server-safe` en un statement top-level.
+ * @throws {Error} si hay `@server-safe` en posición anidada (no soportada).
+ */
+function detectServerSafeMarker(sourceFile, relPath) {
+  const topLevel = new Set(sourceFile.statements);
+  let marked = false;
+  const misplacedLines = [];
+  const proseLines = [];
+  const misspacedLines = []; // tag hermano PEGADO sin whitespace (`@internal@server-safe`) — O2, higiene
+
+  const visit = (node) => {
+    // `node.jsDoc`: array de bloques JSDoc attachados a este host (no se
+    // hereda a hijos). Iteramos TODOS los bloques (no solo el último) para no
+    // perder un marker en un bloque previo.
+    const jsDocBlocks = node.jsDoc;
+    if (Array.isArray(jsDocBlocks)) {
+      for (const block of jsDocBlocks) {
+        for (const tag of block.tags ?? []) {
+          if (tag.tagName.text !== "server-safe") continue;
+          // INVARIANTE FAIL-LOUD (Fable cross-review rc.1): un `@server-safe`
+          // que TS PARSEA como tag DEBE marcar o fallar-ruidoso — nunca ser un
+          // no-op silencioso (fail-open: el archivo dejaría de auditarse). El
+          // predecesor hacía `continue` sobre CUALQUIER prefijo no-blank,
+          // silenciando tanto prosa como el tag-tras-tag legítimo → hueco:
+          // `/** @internal @server-safe */` se saltaba y el archivo quedaba sin
+          // auditar. Ahora se clasifica el prefijo (limpio → marca; prosa →
+          // fail-loud). beta.27 BLOCKER-1.
+          const tagPos = tag.getStart(sourceFile);
+          const { line, character } =
+            sourceFile.getLineAndCharacterOfPosition(tagPos);
+          // Normalizamos quitando caracteres invisibles de ancho cero (ZWSP
+          // U+200B, ZWNJ, ZWJ, BOM) del prefijo antes del check: un zero-width
+          // colado por copy-paste justo antes del `@` no debe SILENCIAR el
+          // marker (el archivo dejaría de auditarse sin que nadie lo vea —
+          // fail-open accidental, mismo eje que el marker anidado). beta.27
+          // BLOCKER-1 (cruce A+B, re-review).
+          const linePrefix = sourceFile.text
+            .slice(tagPos - character, tagPos)
+            .replace(/[\u200B-\u200D\uFEFF]/g, "");
+          // Prefijo LIMPIO = solo decoración JSDoc (`/**`, ` * `, whitespace) y
+          // tags hermanos COMPLETOS (`@internal`, `@packageDocumentation`, …),
+          // REGLA LINE-START (M2, ratificada 2026-07-04): el marker cuenta SOLO si en su línea hay ÚNICAMENTE
+          // decoración JSDoc (`/**`, ` * `, whitespace) antes del `@server-safe`. Un tag hermano en la MISMA
+          // línea (`@internal @server-safe`) o prosa antes NO marca → diagnóstico de higiene (fail-loud, NUNCA
+          // silencioso: un des-marcado invisible sería fail-open — la razón de BLOCKER-1). `@server-safe` con
+          // prosa/otro tag DESPUÉS en la línea sí marca (es la descripción del propio tag). Los 39 markers del
+          // DS son line-start → cero des-marcados. Δ2: medido contra el detector PROPIO, no getJSDocTags.
+          const cleanPrefix = /^[\s*/]*$/.test(linePrefix);
+          if (cleanPrefix) {
+            // SOLO decoración antes → posición válida de marker (line-start).
+            if (topLevel.has(node)) {
+              marked = true;
+            } else {
+              misplacedLines.push(line + 1);
+            }
+          } else if (/^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix)) {
+            // Uno o más tags hermanos ANTES en la misma línea (`@internal @server-safe`, `@internal@server-safe`
+            // glued, `@a @b @server-safe`) → M2: el marker debe ir en LÍNEA PROPIA. Higiene fail-loud, NO
+            // des-marca en silencio. Subsume el O2 glued (misma clase: no-line-start por tag hermano).
+            misspacedLines.push(line + 1);
+          } else if (/@[A-Za-z]/.test(linePrefix)) {
+            // Prosa + tag antes (`@internal foo @server-safe`, `@param x the @server-safe`) → embebido en prosa.
+            proseLines.push(line + 1);
+          } else {
+            // Prosa PURA sin tag previo (`todavía no es @server-safe del todo`):
+            // el token es incidental en documentación. Tolerado — decisión
+            // RATIFICADA y fixtureada (tests "prosa @server-safe mid-sentence NO
+            // marca ni lanza" / "en JSDoc anidado NO lanza fail-loud FALSO"). Un
+            // archivo sin marker simplemente no se audita → no es fail-open. Es
+            // la rama EXPLÍCITA de prosa-pura, no un `continue` ciego del parser.
+            continue;
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  for (const stmt of sourceFile.statements) visit(stmt);
+  // EOF-orphan (Auditoría B R6 / H5): TS adjunta un JSDoc TRAILING (tras el último statement) al
+  // `endOfFileToken`, no a un statement. Sin visitarlo, un `@server-safe` ahí es un no-op SILENCIOSO — viola
+  // el invariante fail-loud (BLOCKER-1: un tag TS-parseado nunca skipea en silencio). `topLevel` nunca contiene
+  // el EOF token → se clasifica como misplaced → lanza el error "posición no soportada" existente, coherente
+  // con el path nested.
+  visit(sourceFile.endOfFileToken);
+
+  // Opción 2 (Auditoría B R6.1): ENUMERACIÓN de rangos de comentario para markers double-star NO anclados a un
+  // statement top-level. Medido (P-ORACLE-SPLIT, TS 6.0.3 del repo): un `/** @server-safe */` en posición NESTED
+  // (método, función interna, bloque) no se adjunta como jsDoc a NINGÚN nodo — `node.jsDoc` Y `getJSDocTags`
+  // vacíos → el traversal jsDoc no lo ve → moría en SILENCIO, mientras el single-star nested SÍ disparaba el
+  // near-miss (asimetría insostenible: la sintaxis equivocada avisa, la correcta calla). Este scan reutiliza el
+  // clasificador LINE-START de M2 (position-agnostic, ratificado) sobre TODOS los rangos double-star; un marker
+  // BIEN-FORMADO cuyo comentario NO ancla un statement top-level → misplaced fail-loud. NO cambia de oráculo
+  // (Δ2 intacto: `getJSDocTags` — solo-último-bloque + herencia — sigue sin usarse). Una mención en PROSA cae en
+  // el bucket tolerado del mismo clasificador, en cualquier posición (P-M2-PROSE, position-agnostic).
+  {
+    const validAnchors = new Set();
+    for (const stmt of sourceFile.statements) {
+      for (const r of ts.getLeadingCommentRanges(
+        sourceFile.text,
+        stmt.getFullStart(),
+      ) ?? []) {
+        validAnchors.add(r.pos);
+      }
+    }
+    // R7-D: enumeración por AST (robusta a templates), no scanner crudo (se desincronizaba con `${...}`).
+    for (const r of allCommentRanges(sourceFile)) {
+      const pos = r.pos;
+      const raw = sourceFile.text.slice(r.pos, r.end);
+      if (raw.startsWith("/**") && !validAnchors.has(pos)) {
+        const norm = normalizeMarkerText(raw);
+        // codex P2 (rc.1): un JSDoc SIN node.jsDoc host (p.ej. suelto entre elementos de un
+        // array) que el bloque AST `visit` no recupera puede llevar VARIAS menciones — una en
+        // PROSA (tolerada) ANTES del marker real line-start. `.exec` (single-match) veía solo la
+        // primera y el line-start quedaba SILENT (fail-open del invariante fail-loud). Iteramos
+        // TODAS las ocurrencias hasta la primera line-start/sibling (una basta → break).
+        const markerRe = /(?<![\w-])@server-safe(?![\w-])/g;
+        let m;
+        while ((m = markerRe.exec(norm)) !== null) {
+          const before = norm.slice(0, m.index);
+          const linePrefix = before.slice(before.lastIndexOf("\n") + 1);
+          // clean (line-start) o sibling-tag → intención de marcar bien-formada → misplaced; prosa → sigue buscando.
+          const clean = /^[\s*/]*$/.test(linePrefix);
+          const sibling = /^[\s*/]*(@[A-Za-z][\w-]*\s*)+$/.test(linePrefix);
+          if (clean || sibling) {
+            const { line } = sourceFile.getLineAndCharacterOfPosition(pos);
+            if (!misplacedLines.includes(line + 1)) {
+              misplacedLines.push(line + 1);
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (misplacedLines.length > 0) {
+    const plural = misplacedLines.length > 1;
+    throw new Error(
+      `[server-safe gate] marker \`@server-safe\` en posición no soportada ` +
+        `en ${relPath} (línea${plural ? "s" : ""} ${misplacedLines.join(", ")}). ` +
+        `\`@server-safe\` es un marcador PER-FICHERO, no per-declaración como \`@internal\`/\`@deprecated\` — ` +
+        `un marker anidado (método, función interna, bloque, o tras el último statement) no marca el fichero ` +
+        `y pasaría inadvertido (fail-open silencioso). Muévelo a la CABECERA del módulo, en su propia línea ` +
+        `del JSDoc del primer export/declaración top-level.`,
+    );
+  }
+  if (misspacedLines.length > 0) {
+    const plural = misspacedLines.length > 1;
+    throw new Error(
+      `[server-safe gate] marker \`@server-safe\` NO está en línea propia ` +
+        `en ${relPath} (línea${plural ? "s" : ""} ${misspacedLines.join(", ")}). ` +
+        `Hay un tag hermano antes en su línea (\`@internal @server-safe\` o pegado \`@internal@server-safe\`); ` +
+        `TS lo parsea como tag pero el marcador debe ir en LÍNEA PROPIA (solo \`/**\`/\` * \`/espacios antes). ` +
+        `Muévelo a su propia línea del JSDoc. (M2, higiene de marcador — line-start.)`,
+    );
+  }
+  if (proseLines.length > 0) {
+    const plural = proseLines.length > 1;
+    throw new Error(
+      `[server-safe gate] marker \`@server-safe\` embebido en prosa ` +
+        `en ${relPath} (línea${plural ? "s" : ""} ${proseLines.join(", ")}). ` +
+        `TS lo parsea como tag pero hay texto no-tag antes de \`@server-safe\` en ` +
+        `su línea; un tag parseado que ni marca ni falla sería un fail-open ` +
+        `silencioso (el archivo dejaría de auditarse). Mueve \`@server-safe\` a su ` +
+        `propia línea del JSDoc (o quita el \`@\` si de verdad es prosa). Un tag ` +
+        `hermano en la MISMA línea (\`@internal @server-safe\`) tampoco vale: cada ` +
+        `tag va en su propia línea (higiene M2).`,
+    );
+  }
+  return marked;
+}
 
 /**
  * Detección AST del marker `@server-safe` (#158, beta.27).
@@ -1804,30 +11778,130 @@ const isCliEntry =
  * @returns {boolean} true si algún statement top-level tiene
  *   `@server-safe` en su JSDoc.
  */
+// Normaliza caracteres invisibles/format-control que ROMPEN el scanner JSDoc de TS: un char no-trivia
+// entre `/**` y `@server-safe` hace que el tag no se emita → archivo sin auditar (fail-open silencioso,
+// medido: U+200C, U+2028). Cf→"" (zero-width/BOM/soft-hyphen); M/variation-selectors→"" (combining
+// marks pegados al `@`, incl. emoji VS15/VS16); Zl/Zp→"\n" (line/paragraph separator
+// U+2028/U+2029); Zs→" " (space separators, incl. nbsp/ideographic). Categorías Unicode (auto-actualizan
+// con las tablas del runtime), no allowlist puntual — la lección del round aplicada. Fable cross-review 3 (#5).
+// Cc que rompen la detección del gate→"": los 60 controles C0/C1/DEL EXCEPTO TAB/LF/VT/FF/CR (los 5 ws
+// estructurales de JS que el detector SÍ trata como trivia glued — borrarlos fusionaría líneas). Fold-set
+// determinado EMPÍRICAMENTE contra el detector REAL del gate (no por categoría whitespace — lección V9 de
+// Fable: whitespace-ness NO es el oráculo). DIVERGENCIA vs V7 (59): NEL U+0085 lo reconoce ts.getJSDocTags
+// pero NO el detector comment-range del gate → se INCLUYE en el fold (gate ⊇ TS, 60 chars). El char corregido
+// de #4: NEL no era el ejemplo; el gap real son los Cc pegados al `@` (V8). El OR-de-dos-parses = monótono.
+function normalizeMarkerText(text) {
+  return text
+    // NFKC cierra sustituciones compatibility-equivalent (`＠` U+FF20 → `@`). NFKC deja U+2011 como
+    // otro dash U+2010; plegar TODA la categoría Pd a `-` cierra esa familia sin introducir un subsistema
+    // UTS#39 de homóglifos (p.ej. la `е` cirílica continúa siendo un typo, deliberadamente fuera).
+    .normalize("NFKC")
+    .replace(/\p{Pd}/gu, "-")
+    .replace(/\p{Cf}/gu, "")
+    // R13 gap#2: TypeScript deja de emitir el JSDoc tag si un mark Unicode queda entre `@` y
+    // `server-safe`. Variation Selectors son Mn hoy, pero se enumeran también por rango para que la
+    // intención siga visible y no dependa de una reclasificación futura de las tablas Unicode.
+    .replace(/[\p{M}\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu, "")
+    .replace(/\p{Cc}/gu, (c) => {
+      // Mantener los 5 ws estructurales que el detector SI trata como trivia glued (TAB 9/LF 10/VT 11/FF
+      // 12/CR 13); foldear el resto de Cc (los 60: C0 no-ws + DEL + C1 incl. NEL). Predicado por code-point
+      // (no literal de control en el source -> sin no-control-regex ni eslint-disable).
+      const cp = c.codePointAt(0);
+      return cp === 9 || cp === 10 || cp === 11 || cp === 12 || cp === 13
+        ? c
+        : "";
+    })
+    .replace(/[\p{Zl}\p{Zp}]/gu, "\n")
+    .replace(/\p{Zs}/gu, " ");
+}
+
+// Detección de marker ROBUSTA = OR de dos parses (Fable cross-review 3): `detect(original) ||
+// detect(normalizado)`. MONÓTONO por construcción — el parse ORIGINAL nunca se pierde, así que normalizar
+// solo AÑADE detección, jamás la quita. (Borrar-y-reparsear NO es monótono: `//<U+2028>/** @server-safe */`
+// perdería el marker porque el `//` se tragaría el JSDoc — medido.) Sobre-normalizar es gratis: peor caso,
+// un archivo se audita de más (FP). El parse original va PRIMERO (preserva el fail-loud de marker mal-colocado).
+function detectMarkerRobust(sourceFile, content, relPath) {
+  if (detectServerSafeMarker(sourceFile, relPath)) return true;
+  const normalized = normalizeMarkerText(content);
+  if (normalized === content) return false; // perf: 2º parse solo si cambió
+  const normSF = ts.createSourceFile(
+    relPath,
+    normalized,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindForPath(relPath),
+  );
+  return detectServerSafeMarker(normSF, relPath);
+}
+
+// ¿el marker de este archivo SOLO se detecta tras normalizar invisibles? (Auditoría B FIX-4, política de
+// higiene): entonces el source tiene un char invisible (Cc/Cf/M/VS/Zs/Zl/Zp) entre `/**` y `@server-safe` que
+// rompe el scanner JSDoc de TS. El gate lo audita igual (fail-safe, vía detectMarkerRobust), pero OTRO tooling
+// basado en `ts.getJSDocTags` NO vería el tag → divergencia permanente. Diagnóstico fail-loud para que el
+// contributor elimine el char (domina al fold silencioso, que dejaría basura invisible permanente).
+function markerNeedsHygiene(sourceFile, content, relPath) {
+  if (detectServerSafeMarker(sourceFile, relPath)) return false; // el parse original ya lo ve → limpio
+  const normalized = normalizeMarkerText(content);
+  if (normalized === content) return false;
+  const normSF = ts.createSourceFile(
+    relPath,
+    normalized,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindForPath(relPath),
+  );
+  return detectServerSafeMarker(normSF, relPath);
+}
+
+/**
+ * NEAR-MISS del marker (Auditoría B R5 / M1 + R13/R14): (a) `@server-safe` en comentario NO-JSDoc
+ * (block de una estrella o `//`),
+ * o (b) JSDoc doble-star cuyo token se convierte en `@server-safe` al retirar un code-point no-ASCII desconocido
+ * que el normalizador aún no clasifica. En ambos TS no emite el tag y el fichero se SALTA silenciosamente.
+ * Devuelve líneas para que el CLI falle loud; la rama (b) invierte el default de categorías Unicode futuras:
+ * unknown cerca del marker = near-miss, nunca des-auditar en silencio.
+ */
+export function markerNearMissLines(sourceFile) {
+  const out = [];
+  // R7-D: enumeración por AST (robusta a templates), no scanner crudo (se desincronizaba con `${...}` → un
+  // single-star tras un template no disparaba el near-miss).
+  for (const r of allCommentRanges(sourceFile)) {
+    // Auditoría B R6 / H4: normalizar invisibles con el MISMO normalizador que FIX-4 (una definición de
+    // "invisible", dos consumidores) → un ZWSP pegado al token no rompe el borde. Y borde SIMÉTRICO
+    // `(?<![\w-])…(?![\w-])`: el predecesor `(?:\s|\*|$)` solo cubría el lado TRAILING → puntuación LEADING
+    // (`note:@server-safe`, `(@server-safe)`) y trailing (`@server-safe:`) se colaban en silencio. La forma
+    // simétrica cierra las 5 celdas medidas y mantiene los negativos (`@server-safefoo`, `@server-safe-foo`).
+    const raw = sourceFile.text.slice(r.pos, r.end);
+    const c = normalizeMarkerText(raw);
+    const token = /(?<![\w-])@server-safe(?![\w-])/;
+    const singleStar = !c.startsWith("/**") && token.test(c);
+    const unknownUnicodeInJSDoc =
+      c.startsWith("/**") &&
+      !token.test(c) &&
+      token.test(c.replace(/\P{ASCII}/gu, ""));
+    if (singleStar || unknownUnicodeInJSDoc) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(r.pos);
+      out.push(line + 1);
+    }
+  }
+  return out;
+}
+
 export function isContentServerSafeMarked(content, relPath) {
   const sourceFile = ts.createSourceFile(
     relPath,
     content,
     ts.ScriptTarget.Latest,
     /* setParentNodes */ true,
-    relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    scriptKindForPath(relPath),
   );
-  for (const stmt of sourceFile.statements) {
-    const tags = ts.getJSDocTags(stmt);
-    for (const tag of tags) {
-      if (tag.tagName.text === "server-safe") {
-        return true;
-      }
-    }
-  }
-  return false;
+  return detectMarkerRobust(sourceFile, content, relPath);
 }
 
 if (isCliEntry) {
-  const allFiles = [
-    ...listSourceFiles(COMPONENTS_DIR),
-    ...listSourceFiles(HOOKS_DIR),
-  ];
+  // R14: el marker es per-fichero en TODO `src`. Acotar a components/hooks dejaba markers y near-misses de
+  // utils/theme/barrels completamente fuera del driver (silent-skip aunque el detector individual fuese robusto).
+  const allFiles = discoverServerSafeSourceFiles();
 
   // Cache compartida cross-entries: un util importado por N componentes
   // se parsea y analiza UNA vez. Sin esto, el coste pasa de O(N+M) a
@@ -1847,20 +11921,14 @@ if (isCliEntry) {
         content,
         ts.ScriptTarget.Latest,
         /* setParentNodes */ true,
-        relPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+        scriptKindForPath(relPath),
       );
       cached = { sourceFile, content };
       parseCache.set(filePath, cached);
     }
-    for (const stmt of cached.sourceFile.statements) {
-      const tags = ts.getJSDocTags(stmt);
-      for (const tag of tags) {
-        if (tag.tagName.text === "server-safe") {
-          return true;
-        }
-      }
-    }
-    return false;
+    const relRaw = relative(repoRoot, filePath);
+    const relPath = relRaw.split(pathSep).join("/");
+    return detectMarkerRobust(cached.sourceFile, cached.content, relPath);
   }
 
   const markedFiles = allFiles.filter((f) => isFileServerSafeMarked(f));
@@ -1869,7 +11937,51 @@ if (isCliEntry) {
   // reporting de la cadena correcta (cada entry necesita ver el path
   // completo desde sí mismo). Lo que SÍ se comparte es el parseCache.
   const allViolations = [];
+  // M1 (Auditoría B R5): NEAR-MISS del marker en ficheros NO marcados — `@server-safe` en un `/* */` (una
+  // estrella, no-JSDoc) → TS lo ignora → el fichero se salta silenciosamente sin auditar. Fail-loud para que el
+  // maintainer corrija `/*`/`//`→`/**` (blast-radius de fichero completo, más probable que un Cc). Solo auditables.
+  {
+    const markedSet = new Set(markedFiles);
+    for (const file of allFiles) {
+      if (markedSet.has(file) || !isAuditableExt(file)) continue;
+      const cached = parseCache.get(file);
+      if (!cached) continue;
+      const nmLines = markerNearMissLines(cached.sourceFile);
+      if (nmLines.length > 0) {
+        const relPath = relative(repoRoot, file).split(pathSep).join("/");
+        const plural = nmLines.length > 1;
+        allViolations.push({
+          rule: "server-safe-marker",
+          file: relPath,
+          detail: `near-miss no parseable de \`@server-safe\` en la línea${plural ? "s" : ""} ${nmLines.join(", ")} — comentario no-JSDoc (\`//\` o bloque de una estrella) o token JSDoc corrompido por un carácter Unicode desconocido; TypeScript no emite el tag y este fichero se saltaría SIN auditar. Usa exactamente \`/** @server-safe */\` o quita el token si no era un marker. M1/R13/R14.`,
+        });
+      }
+    }
+  }
   for (const file of markedFiles) {
+    const relPath = relative(repoRoot, file).split(pathSep).join("/");
+    if (!isAuditableExt(file)) {
+      // @server-safe en un archivo JS no auditable → fail-loud (el gate solo audita .ts/.tsx).
+      // codex P2: antes el discovery ni lo veía; ahora se descubre y se reporta en vez de ignorar.
+      allViolations.push({
+        rule: "server-safe-marker",
+        file: relPath,
+        detail: `marca @server-safe en un archivo NO auditable: el gate solo audita .ts/.tsx con runtime (un .d.ts es type-only sin runtime; JS-family no se modela: require()/CJS y parser JS). Marca la implementación .ts/.tsx.`,
+      });
+      continue;
+    }
+    const cachedMark = parseCache.get(file);
+    if (
+      cachedMark &&
+      markerNeedsHygiene(cachedMark.sourceFile, cachedMark.content, relPath)
+    ) {
+      // Auditoría B FIX-4: el marker se rescató por normalización de invisibles → char basura en el source.
+      allViolations.push({
+        rule: "server-safe-marker",
+        file: relPath,
+        detail: `el marker @server-safe contiene un carácter invisible (control C0/C1, format, combining-mark/variation-selector o space no estándar) entre \`/**\` y \`@server-safe\` que rompe el scanner JSDoc de TypeScript. El gate lo audita igual (fail-safe), pero otro tooling basado en ts.getJSDocTags NO vería el tag → divergencia. Elimina el carácter invisible del comentario.`,
+      });
+    }
     const visited = new Set();
     allViolations.push(
       ...checkFileWithImports(file, { parseCache, visited }),
