@@ -49,15 +49,16 @@ const css =
 const cssClasses = new Set([...css.matchAll(/\.(ig-[a-z0-9-]+)/g)].map((m) => m[1]));
 
 const seed = new Set();
-for (const m of doc.matchAll(/ig-[a-z0-9-]+-\{([^}]+)\}/g)) {
+for (const m of doc.matchAll(/ig-[a-z0-9-]+-\{([^}]+)\}([a-z0-9-]*)/g)) {
   const full = m[0];
   const prefix = full.slice(0, full.indexOf("-{"));
   const content = m[1].trim();
+  const suffix = m[2]; // texto TRAS `}` (p.ej. `-filled` en `.ig-card-{variant}-filled`); "" si no hay (codex P1)
   let members;
   if (content === "variant") members = roles6;
   else if (content.includes(",")) members = content.split(",").map((s) => s.trim());
   else members = [content];
-  for (const mem of members) seed.add(`${prefix}-${mem}`);
+  for (const mem of members) seed.add(`${prefix}-${mem}${suffix}`);
 }
 for (const m of doc.matchAll(/ig-[a-z0-9-]+/g)) seed.add(m[0]);
 
