@@ -322,6 +322,11 @@ async function assertPairsDeltaE(
       `Si measured >= warn_threshold (${warnThreshold.toFixed(2)}): la excepción murió — retira la entrada del allowlist.`;
     await expect(measured, driftMsg).toBeGreaterThanOrEqual(lower);
     await expect(measured, driftMsg).toBeLessThanOrEqual(upper);
+    // codex P2: para un par ratificado cerca de warn_threshold, `upper = ratified/tol`
+    // EXCEDE el umbral (p.ej. kobalium-vitreus 0.0962 → upper 0.10126), dejando pasar
+    // la ventana [warn, upper] donde la excepción YA murió. El `< warn` estricto la cierra
+    // (borde de drift inclusivo arriba; umbral de muerte exclusivo).
+    await expect(measured, driftMsg).toBeLessThan(warnThreshold);
   }
 }
 
