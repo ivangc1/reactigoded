@@ -54,18 +54,24 @@ const css =
   rd("dist/styles/igoded-base.css") + "\n" +
   rd("dist/styles/igoded-design.css");
 const cssClasses = new Set([...css.matchAll(/\.(ig-[a-z0-9-]+)/g)].map((m) => m[1]));
+// Solo DECLARACIONES (`--ig-x:`), NO referencias `var(--ig-x)`: si un token
+// congelado se borra pero otro token aún lo referencia, su nombre sigue
+// apareciendo en el CSS — el gate debe cazar el borrado igual (codex P1).
 const tokens = new Set(
-  [...rd("dist/styles/igoded-tokens.css").matchAll(/(--ig-[a-z0-9-]+)/g)].map((m) => m[1]),
+  [...rd("dist/styles/igoded-tokens.css").matchAll(/(--ig-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
 );
-const bundles = ["dist/index.js", "dist/server-safe.js"]
+const bundlesText = ["dist/index.js", "dist/server-safe.js"]
   .filter(has)
   .map(rd)
   .join("\n");
+// Nombres EXACTOS, no substring: `data-state` renombrado a `data-stateful` no
+// debe pasar por ser prefijo del nuevo nombre emitido (codex P2).
+const bundleAttrs = new Set([...bundlesText.matchAll(/data-[a-z0-9-]+/g)].map((m) => m[0]));
 
 const missing = [];
 for (const c of json.classes) if (!cssClasses.has(c)) missing.push(`class  .${c}`);
 for (const t of json.tokensTier2) if (!tokens.has(t)) missing.push(`token  ${t}`);
-for (const a of json.dataAttributes) if (!bundles.includes(a)) missing.push(`data-attr  ${a}`);
+for (const a of json.dataAttributes) if (!bundleAttrs.has(a)) missing.push(`data-attr  ${a}`);
 
 if (missing.length > 0) {
   console.error(
