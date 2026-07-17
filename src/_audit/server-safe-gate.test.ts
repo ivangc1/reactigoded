@@ -6358,7 +6358,7 @@ describe("server-safe gate — #7 (D1-b): hoist monotónico de asignaciones a bi
     it.each([
       ["member-LHS obj.p=performance", `export function f(){ const o:any={}; { o.p = performance; } return o.p.eventLoopUtilization(); }`, true],
       ["call-flow c=g() (RHS retorno de fn)", `function g():any{ return performance; }\nexport function f(){ let c:any; { c = g(); } return c.eventLoopUtilization(); }`, true],
-      ["copia-como-RHS c={...performance}", `export function f(){ let c:any; { c = {...performance}; } return c.eventLoopUtilization(); }`, true],
+      ["copia-como-RHS c={...performance} no copia el proto", `export function f(){ let c:any; { c = {...performance}; } return c.eventLoopUtilization(); }`, true],
       ["A same-scope (preexistente, pin)", `export function f(){ let c:any; c = performance; return c.eventLoopUtilization(); }`, false],
       ["E assign+use en la misma fn (preexistente, pin)", `export function f(){ let c:any; function g(){ c = performance; return c.eventLoopUtilization(); } return g(); }`, false],
       ["F pattern-assign [c]=[performance] (preexistente, pin: FLAG, no renunciado)", `export function f(){ let c:any; [c] = [performance]; return c.eventLoopUtilization(); }`, false],
@@ -7277,10 +7277,9 @@ describe("server-safe gate — R8 custodios (recognizer bajo invariantes)", () =
     ])("%s", (_n, code, exp) => {
       expect(flagged(code)).toBe(exp);
     });
-    // over-aproximación fail-closed DOCUMENTADA: own-copy de miembro heredado/non-enum → undefined en runtime,
-    // pero el gate FLAG (conservador, jamás sub-flag). Ratificado como política (ADR §R8), no bug.
-    it("over-aprox documentada: {...performance}.elu() → FLAG (elu heredado, undefined en runtime; fail-closed)", () => {
-      expect(flagged(`export const x = ({...performance}).eventLoopUtilization();`)).toBe(true);
+    // R16: own-copy de performance no fabrica miembros heredados/non-enumerable.
+    it("{...performance}.elu() → SILENT (elu heredado, undefined en la copia)", () => {
+      expect(flagged(`export const x = ({...performance}).eventLoopUtilization();`)).toBe(false);
     });
   });
 
@@ -7359,9 +7358,8 @@ describe("server-safe gate — R9 custodios", () => {
       ["proto __proto__", `export const x = Reflect.get({__proto__: performance}, "eventLoopUtilization");`, true],
       ["compose getPrototypeOf∘create", `export const x = Reflect.get(Object.getPrototypeOf(Object.create(performance)), "eventLoopUtilization");`, true],
       ["denylist WA freeze", `export const x = Reflect.get(Object.freeze(WebAssembly), "compile");`, true],
-      // OWN-COPY de un ROOT directo (`{...performance}`) = over-aproximación fail-closed DOCUMENTADA (R8) →
-      // FLAG, UNIFORME con el member-read directo `({...performance}).elu` (consistencia del resolver compartido).
-      ["own-copy Reflect.get({...perf}) → FLAG (over-aprox uniforme)", `export const x = Reflect.get({...performance}, "eventLoopUtilization");`, true],
+      // R16: performance no aporta own-enumerable string members; Reflect.get observa undefined.
+      ["own-copy Reflect.get({...perf}) → SILENT", `export const x = Reflect.get({...performance}, "eventLoopUtilization");`, false],
       // OOM real (own-copy sobre PROTO-CARRIER = sin own props = undefined runtime) → SILENT-correcto, NO tocar
       ["OOM Reflect.get(assign({},create(R))) → SILENT", `export const x = Reflect.get(Object.assign({}, Object.create(performance)), "eventLoopUtilization");`, false],
       // §141 pineado: DENYLIST (WebAssembly) + key variable → renunciado (asimetría read/construct #2)
@@ -7378,11 +7376,9 @@ describe("server-safe gate — R9 custodios", () => {
       ["Reflect.get({p:X},'p') member-read", `export const x = Reflect.get({p:performance},"p").eventLoopUtilization();`, true],
       ["[X].at(0) member-read", `export const x = [performance].at(0).eventLoopUtilization();`, true],
       ["[WA].at(0) codegen-member read", `export const x = [WebAssembly].at(0).compile;`, true],
-      // Δ2 (over-aprox DOCUMENTADA, Fable): `.at(i)` hace ∃-DESCENSO TOTAL del array-literal (soporta índices
-      // NEGATIVOS = desde el final → no se mapea a posición fija sin sobre-aprox), mientras el gemelo `[X][i]` es
-      // preciso: `[perf,0].at(1)` → FLAG (over-aprox fail-closed) vs `[perf,0][1]` → SILENT. Divergencia entre
-      // formas que INV-PARITY declara gemelas, pineada como sobre-aprox (§373, dirección segura). No es hallazgo.
-      ["Δ2 [X,safe].at(1) ∃-total → FLAG (over-aprox; gemelo [X,safe][1] preciso SILENT)", `export const x = [performance, 0].at(1).valueOf();`, true],
+      // R16: `.at(i)` comparte precisión posicional con `[i]` para enteros literales (también negativos).
+      // Solo un índice variable/float conserva el descenso ∃ fail-closed.
+      ["[X,safe].at(1) preciso → SILENT", `export const x = [performance, 0].at(1).valueOf();`, false],
       ["Δ2 gemelo preciso [X,safe][1] → SILENT", `export const x = [performance, 0][1].valueOf();`, false],
       ["import(Reflect.get(['node:fs'],'0'))", `export const x = import(Reflect.get(["node:fs"],"0"));`, true],
       ["new ([WA].at(0)).Module() construct", `export const x = new ([WebAssembly].at(0)).Module();`, true],
@@ -8213,5 +8209,202 @@ describe("server-safe gate — R15 custodios (carrier-completo por construcción
     ["Map.get", `export const x=setTimeout(new Map([["k","code"]]).get("k"),0);`],
   ])("control positivo sigue FLAG: %s", (_name, code) => {
     expect(flagged(code)).toBe(true);
+  });
+});
+
+// ============================================================================
+// R16 — robustez del driver + precisión en seams ya adjudicados.
+// MIXED-KEY permanece deliberadamente en §141: el informe lo deja como frontera
+// discutible y no se amplía el mandato sin una decisión explícita.
+// ============================================================================
+describe("server-safe gate — R16 custodios (robustez + precisión)", () => {
+  const flagged = (code: string) =>
+    checkSourceFile(`/** @server-safe */\n${code}`, "r16.fixture.tsx").length > 0;
+
+  describe("Tier-1: marker por sustitución Unicode", () => {
+    it.each<[string, string]>([
+      ["guion U+2011", "/** @server\u2011safe */\nexport const x=1;"],
+      ["arroba fullwidth U+FF20", "/** \uFF20server-safe */\nexport const x=1;"],
+    ])("reconoce %s", (_name, code) => {
+      expect(isContentServerSafeMarked(code, "r16-marker.fixture.ts")).toBe(true);
+    });
+
+    it("no inventa el marker con el homoglifo cirílico excluido", () => {
+      const code = "/** @s\u0435rver-safe */\nexport const x=1;";
+      const source = ts.createSourceFile(
+        "r16-marker-control.fixture.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      expect(isContentServerSafeMarked(code, source.fileName)).toBe(false);
+      expect(markerNearMissLines(source)).toEqual([]);
+    });
+  });
+
+  describe("Tier-1: shadow de alias diferido cruza closures correctamente", () => {
+    it.each<[string, string]>([
+      [
+        "parámetro simple",
+        `const p=performance; function g(p:any){ const h=()=>p.eventLoopUtilization(); return h; } export {g};`,
+      ],
+      [
+        "parámetro destructurado",
+        `const WA=WebAssembly; function g({WA}:{WA:any}){ function h(){ return WA.compile(new Uint8Array()); } return h; } export {g};`,
+      ],
+      [
+        "local var hoisted",
+        `const p=performance; function g(){ function h(){ return p.eventLoopUtilization(); } var p:any; return h; } export {g};`,
+      ],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
+
+    it("el alias enclosing no sombreado sigue FLAG", () => {
+      expect(
+        flagged(
+          `const p=performance; function g(){ const h=()=>p.eventLoopUtilization(); return h; } export {g};`,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("elige el alias tsconfig más específico aunque se declare después", () => {
+    const exists = (p: string) =>
+      p === "/repo/src/clean/feature/mod.ts" ||
+      p === "/repo/src/dirty/mod.ts";
+    const roots = { repoRoot: "/repo", srcRoot: "/repo/src" };
+    const broadFirst = [
+      { prefix: "@/", targetPrefix: "src/clean/" },
+      { prefix: "@/feature/", targetPrefix: "src/dirty/" },
+    ];
+    const specificFirst = [...broadFirst].reverse();
+
+    expect(
+      resolveImportPath(
+        "@/feature/mod",
+        "/repo/src/entry.ts",
+        broadFirst,
+        exists,
+        roots,
+      ),
+    ).toMatchObject({ kind: "internal", absPath: "/repo/src/dirty/mod.ts" });
+    expect(
+      resolveImportPath(
+        "@/feature/mod",
+        "/repo/src/entry.ts",
+        specificFirst,
+        exists,
+        roots,
+      ),
+    ).toMatchObject({ kind: "internal", absPath: "/repo/src/dirty/mod.ts" });
+  });
+
+  describe("Tier-1: carrier ancho no explota y el driver falla loud", () => {
+    it("completa una cadena 8-wide de doce sort sin blowup", () => {
+      const wide = `["code",0,1,2,3,4,5,6]${".sort()".repeat(12)}`;
+      expect(flagged(`export const x=setTimeout(${wide}[0],0);`)).toBe(true);
+    });
+
+    it("convierte una excepción por fichero en violation y sigue el driver", () => {
+      const content = `/** @server-safe */\nexport const x=window;`;
+      const files = vfs({ "/repo/src/entry.ts": content });
+      const sourceFile = ts.createSourceFile(
+        "src/entry.ts",
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      sourceFile.getLineAndCharacterOfPosition = () => {
+        throw new RangeError("R16 synthetic analyzer failure");
+      };
+      const violations = checkFileWithImports("/repo/src/entry.ts", {
+        repoRoot: "/repo",
+        srcRoot: "/repo/src",
+        tsconfigPaths: [],
+        readFile: (p: string) => files.get(p)!.content,
+        fileExists: (p: string) => files.has(p),
+        parseCache: new Map([["/repo/src/entry.ts", { sourceFile, content }]]),
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.file).toBe("src/entry.ts");
+      expect(violations[0]?.rule).toBe("server-safe-analysis-error");
+      expect(violations[0]?.detail).toContain("R16 synthetic analyzer failure");
+    });
+  });
+
+  describe("Tier-1: own-copy de globals respeta miembros de prototipo", () => {
+    it.each<[string, string]>([
+      ["spread + destructuring", `const {eventLoopUtilization}={...performance}; void eventLoopUtilization;`],
+      ["Object.assign source", `const {eventLoopUtilization}=Object.assign({},performance); void eventLoopUtilization;`],
+      ["Reflect.get del spread", `export const x=Reflect.get({...performance},"eventLoopUtilization");`],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
+
+    it.each<[string, string]>([
+      ["read directo", `export const x=performance.eventLoopUtilization();`],
+      ["performance como target identity", `export const x=Object.assign(performance,{}).eventLoopUtilization();`],
+      ["own de WebAssembly", `export const x=({...WebAssembly}).compile(new Uint8Array());`],
+      ["own de console", `export const x=({...console}).table([]);`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+  });
+
+  describe("Tier-2 batch: own-source usa los resolvers de carrier", () => {
+    it.each<[string, string]>([
+      ["spread de Object.assign", `export const x=({...Object.assign({m:performance})}).m.eventLoopUtilization();`],
+      ["descriptor defineProperty vía assign", `export const x=Object.defineProperty({},"m",Object.assign({},{value:performance})).m.eventLoopUtilization();`],
+      ["descriptor create vía assign", `export const x=Object.create(null,Object.assign({},{m:{value:performance}})).m.eventLoopUtilization();`],
+      ["target array vía slice", `export const x=Object.setPrototypeOf([performance].slice(),{})[0].eventLoopUtilization();`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+  });
+
+  describe("Tier-2 batch: Array.at selecciona el índice literal exacto", () => {
+    it.each<[string, string]>([
+      ["índice seguro", `export const x=setTimeout(["code",0].at(1),0);`],
+      ["fuera de rango", `export const x=setTimeout(["code"].at(4),0);`],
+    ])("SILENT: %s", (_name, code) => {
+      expect(flagged(code)).toBe(false);
+    });
+
+    it.each<[string, string]>([
+      ["índice cero", `export const x=setTimeout(["code",0].at(0),0);`],
+      ["índice negativo", `export const x=setTimeout([0,"code"].at(-1),0);`],
+      ["índice variable = unión fail-closed", `export const x=(i:number)=>setTimeout(["code",0].at(i),0);`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+  });
+
+  describe("Tier-2 batch: Map.get pela receptores estructurales", () => {
+    it.each<[string, string]>([
+      ["array projection", `export const x=setTimeout([new Map([["k","code"]])][0].get("k"),0);`],
+      ["object projection", `export const x=setTimeout(({m:new Map([["k","code"]])}).m.get("k"),0);`],
+      ["Map dentro de Map", `export const x=setTimeout(new Map([["outer",new Map([["inner","code"]])]]).get("outer").get("inner"),0);`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    it("receiver variable conserva §141", () => {
+      expect(flagged(`const m=new Map([["k","code"]]); export const x=setTimeout(m.get("k"),0);`)).toBe(false);
+    });
+  });
+
+  describe("Tier-2 batch: Function proyectada vía call/apply/bind", () => {
+    it.each<[string, string]>([
+      ["call", `const g=()=>{}; export const x=new Map([["k",g.constructor]]).get("k").call(null,"return 1")();`],
+      ["apply", `const g=()=>{}; export const x=new Map([["k",g.constructor]]).get("k").apply(null,["return 1"])();`],
+      ["bind", `const g=()=>{}; export const x=new Map([["k",g.constructor]]).get("k").bind(null)("return 1")();`],
+    ])("FLAG: %s", (_name, code) => {
+      expect(flagged(code)).toBe(true);
+    });
+
+    it("constructor benigno proyectado no se convierte en Function", () => {
+      expect(flagged(`export const x=new Map([["k",Object]]).get("k").call(null,"safe");`)).toBe(false);
+    });
   });
 });
