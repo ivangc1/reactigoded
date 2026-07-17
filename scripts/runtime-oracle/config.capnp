@@ -7,5 +7,6 @@ const config :Workerd.Config = (
 
 const mainWorker :Workerd.Worker = (
   modules = [ (name = "worker.js", esModule = embed "worker.js") ],
-  compatibilityDate = "2026-07-01",
+  # Mantener en sync con COMPAT_DATE en run.mjs (parte de la premisa pineada). codex P2.
+  compatibilityDate = "2026-07-17",
 );
