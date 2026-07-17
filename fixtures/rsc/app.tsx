@@ -45,7 +45,7 @@ import {
   InputGroup,
   Label,
   NavbarActions,
-  NavbarBrand,
+  NavbarLogo,
   NavbarLink,
   NavbarMenuButton,
   Progress,
@@ -88,7 +88,7 @@ export function ServerPage(): React.ReactElement {
       <InputGroup>
         <InputAddon>@</InputAddon>
       </InputGroup>
-      <NavbarBrand>App</NavbarBrand>
+      <NavbarLogo>App</NavbarLogo>
       <NavbarLink href="/about">About</NavbarLink>
       <NavbarMenuButton aria-label="menu" />
       <NavbarActions>
