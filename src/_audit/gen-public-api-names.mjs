@@ -64,6 +64,23 @@ for (const m of doc.matchAll(/ig-[a-z0-9-]+/g)) seed.add(m[0]);
 
 const classes = [...seed].filter((c) => cssClasses.has(c) && !c.endsWith("-")).sort();
 
+// classHooks: clases PÚBLICAS que el DS EMITE por JS pero NO estiliza — existen
+// SOLO para que el consumer las apunte (`[class^="ig-tooltip-place-"]`). El `∩ CSS`
+// no las ve (sin regla), así que se curan a MANO: no son derivables ("prefijo en
+// JS" congelaría fantasmas como ig-btn-md; solo la union de tipos del interpolado
+// discrimina = parsear TS = board). Ratificados nombre a nombre.
+//   - dynamic: `ig-tooltip-place-${placement}` — construidas; solo el PREFIJO está
+//     en JS. El gate verifica el prefijo; los 4 miembros los guardan la union de
+//     tipos `Placement` + el review (§141: indirección ensamblada, no automatizable).
+//   - literal: `ig-step-interactive` — emitida literal; el gate la verifica entera.
+const classHooks = {
+  literal: ["ig-step-interactive"],
+  dynamic: [
+    "ig-tooltip-place-top", "ig-tooltip-place-right",
+    "ig-tooltip-place-bottom", "ig-tooltip-place-left",
+  ],
+};
+
 // data-attrs de ESTADO/tema que el DS emite como superficie observable
 // (patrón Radix [data-state]/[data-side]/...). Verificado en dist/*.js.
 // EXCLUIDOS: data-mode (valor del prop `attribute` de ThemeToggle, no un
@@ -103,7 +120,8 @@ if (t2seedMinusDist.length > 0) console.log("tokens seed\\dist (bug doc):", t2se
 
 const out = {
   _doc:
-    "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, data-attributes, tokens Tier-2 semánticos). " +
+    "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, classHooks, data-attributes, tokens Tier-2 semánticos). " +
+    "classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 4 ig-tooltip-place-* de Tooltip. LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO se emita; los 4 miembros SON contrato, pero los guardan la union de tipos Placement + el review del PR, no la automatización. " +
     "POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. " +
     "ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). " +
     "El contrato estable es EXACTAMENTE lo aquí listado. " +
@@ -113,6 +131,7 @@ const out = {
     "por DECLARACIÓN explícita (CSSAPI.mdx + DesignTokens.mdx), no por silencio. Procedencia: clases raspadas de la PROSA de CSSAPI.mdx (menos code-blocks, prefijos de estado, menciones de token y 'Notas finales'); tokens Tier-2 derivados de las reglas de DesignTokens.mdx; todo ∩ dist; curado y RATIFICADO nombre a nombre.",
   version: 1,
   classes,
+  classHooks,
   dataAttributes,
   tokensTier2,
 };

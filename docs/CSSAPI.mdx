@@ -540,13 +540,14 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-stepper` · `.ig-stepper-labeled` (con label debajo) |
-| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` |
+| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` · `.ig-step-interactive` (hook de keyboard-nav: emitido por JS, sin regla CSS propia) |
 | Slots | `.ig-step-item` · `.ig-step-label` |
 | Connector | `.ig-step-line` · `.ig-step-line-complete` |
 
 > **Modo interactive**: cuando el componente recibe `onValueChange`,
-> cada `.ig-step` se vuelve focuseable vía el prop `interactive` de `<Step>`
-> (`role="button"` + roving tabIndex; no hay clase CSS para esto). Soporta ArrowLeft/Right/Up/Down
+> cada `.ig-step` añade `.ig-step-interactive` y se vuelve focuseable
+> (`role="button"` + roving tabIndex). `.ig-step-interactive` es un **hook**:
+> el DS lo emite pero no lo estiliza — existe para que lo apuntes desde tu CSS. Soporta ArrowLeft/Right/Up/Down
 > + Home/End + Enter/Space. Sin `onValueChange` el Stepper es
 > presentational (no focus, no keyboard).
 

@@ -28,9 +28,9 @@
  * • Entorno: `dist/styles/*.css` + `dist/*.js` (build previo).
  * • Fallback: ERROR (exit 1) si falta cualquier nombre. Sin allowlist.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const rd = (p) => readFileSync(resolve(root, p), "utf8");
@@ -60,10 +60,19 @@ const cssClasses = new Set([...css.matchAll(/\.(ig-[a-z0-9-]+)/g)].map((m) => m[
 const tokens = new Set(
   [...rd("dist/styles/igoded-tokens.css").matchAll(/(--ig-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
 );
-const bundlesText = ["dist/index.js", "dist/server-safe.js"]
-  .filter(has)
-  .map(rd)
-  .join("\n");
+// Escanear TODOS los chunks JS de dist (recursivo), no solo los 2 facades: el
+// build multi-entry emite código compartido a chunks (p.ej. Toast-XXX.js), y un
+// data-attr que caiga solo en un chunk compartido daría falso "missing" (codex P1).
+function allJsChunks(dir) {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...allJsChunks(p));
+    else if (e.name.endsWith(".js")) out.push(p);
+  }
+  return out;
+}
+const bundlesText = allJsChunks(resolve(root, "dist")).map((p) => readFileSync(p, "utf8")).join("\n");
 // Nombres EXACTOS, no substring: `data-state` renombrado a `data-stateful` no
 // debe pasar por ser prefijo del nuevo nombre emitido (codex P2).
 const bundleAttrs = new Set([...bundlesText.matchAll(/data-[a-z0-9-]+/g)].map((m) => m[0]));
@@ -72,6 +81,17 @@ const missing = [];
 for (const c of json.classes) if (!cssClasses.has(c)) missing.push(`class  .${c}`);
 for (const t of json.tokensTier2) if (!tokens.has(t)) missing.push(`token  ${t}`);
 for (const a of json.dataAttributes) if (!bundleAttrs.has(a)) missing.push(`data-attr  ${a}`);
+// classHooks: clases emitidas por JS SIN regla CSS (existen para targeting).
+// literal → verifica el nombre entero; dynamic → solo el PREFIJO (ig-tooltip-place-*
+// se ensambla en runtime, §141; los miembros los guardan la union Placement + review).
+const hooks = json.classHooks ?? { literal: [], dynamic: [] };
+for (const h of hooks.literal ?? []) {
+  if (!bundlesText.includes(h)) missing.push(`hook  .${h} (literal, no emitido en JS)`);
+}
+for (const h of hooks.dynamic ?? []) {
+  const hookPrefix = h.slice(0, h.lastIndexOf("-") + 1);
+  if (!bundlesText.includes(hookPrefix)) missing.push(`hook  ${hookPrefix}* (prefijo no emitido, por .${h})`);
+}
 
 if (missing.length > 0) {
   console.error(
@@ -89,8 +109,9 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+const hookCount = (hooks.literal?.length ?? 0) + (hooks.dynamic?.length ?? 0);
 console.log(
-  `✓ public-api-names: ${String(json.classes.length)} clases + ` +
+  `✓ public-api-names: ${String(json.classes.length)} clases + ${String(hookCount)} hooks + ` +
     `${String(json.tokensTier2.length)} tokens + ` +
     `${String(json.dataAttributes.length)} data-attrs — todos presentes en dist.`,
 );
