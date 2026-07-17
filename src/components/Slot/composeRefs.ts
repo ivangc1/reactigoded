@@ -1,6 +1,23 @@
 import type { Ref, RefObject } from "react";
 
 /**
+ * Asigna `node` a un ref (function u object). Para una function ref de React 19
+ * devuelve su cleanup si lo produce; para un object ref escribe `.current` y no
+ * hay cleanup (`undefined`).
+ */
+function setRef<T>(ref: Ref<T>, node: T | null): (() => void) | undefined {
+  if (typeof ref === "function") {
+    const cleanup = ref(node);
+    return typeof cleanup === "function" ? cleanup : undefined;
+  }
+  // React 19: `RefObject<T>` admite `.current` writable (legacy `MutableRefObject`
+  // deprecated). Cast localizado a RefObject<T | null> porque el union `Ref<T>`
+  // también incluye function refs.
+  (ref as RefObject<T | null>).current = node;
+  return undefined;
+}
+
+/**
  * Compose multiple React refs into a single callback ref. Each ref
  * (function or object) recibe el DOM node — ninguno se pierde.
  *
@@ -9,9 +26,13 @@ import type { Ref, RefObject } from "react";
  * pueden tener cada uno su propio ref; ambos deben apuntar al mismo
  * DOM node tras el cloneElement.
  *
- * React 19: `ref` es prop normal (no `forwardRef`). Esta utility maneja
- * ambos tipos: function refs `(node) => {...}` y object refs
- * `{ current: T | null }`.
+ * React 19: `ref` es prop normal (no `forwardRef`), y una **function ref puede
+ * devolver un cleanup** `(node) => () => {…}`. Esta utility maneja ambos tipos
+ * (function refs y object refs `{ current }`) Y propaga el cleanup: si algún ref
+ * devolvió uno, el ref compuesto devuelve un cleanup agregado que invoca cada
+ * cleanup en unmount (y hace teardown `null` de los refs que no lo devolvieron),
+ * en vez del teardown legacy `ref(null)` que perdería el cleanup del consumer y
+ * le pasaría un `null` inesperado. Paridad con `@radix-ui/react-compose-refs`.
  *
  * @example
  * ```tsx
@@ -19,9 +40,9 @@ import type { Ref, RefObject } from "react";
  * cloneElement(child, { ref: merged });
  * ```
  *
- * @returns Callback ref que distribuye el node a todos los refs no-null.
- *   Devuelve `null` si todos los refs son null/undefined (evita render-loops
- *   innecesarios cuando ningún ref necesita el node).
+ * @returns Callback ref que distribuye el node a todos los refs no-null y, si
+ *   alguno de ellos devuelve un cleanup (React 19), un cleanup agregado. Devuelve
+ *   `null` si todos los refs son null/undefined (evita render-loops innecesarios).
  *
  * @internal Solo usado por `<Slot>` y components del DS internamente.
  *   No exportado al consumer; el flow consumer normal pasa por
@@ -31,20 +52,26 @@ import type { Ref, RefObject } from "react";
  */
 export function composeRefs<T>(
   ...refs: Array<Ref<T> | undefined | null>
-): ((node: T | null) => void) | null {
+): ((node: T | null) => (() => void) | undefined) | null {
   const cleaned = refs.filter((r): r is Ref<T> => r != null);
   if (cleaned.length === 0) return null;
   return (node: T | null) => {
-    for (const ref of cleaned) {
-      if (typeof ref === "function") {
-        ref(node);
-      } else {
-        // React 19: `RefObject<T>` ya admite `.current` writable
-        // (legacy `MutableRefObject` deprecated). Cast localizado a
-        // RefObject<T | null> porque el union `Ref<T>` también incluye
-        // function refs.
-        (ref as RefObject<T | null>).current = node;
-      }
+    // Emparejamos cada ref con su cleanup (React 19) para el teardown.
+    const applied = cleaned.map((ref) => ({ ref, cleanup: setRef(ref, node) }));
+    // Solo devolvemos un cleanup agregado si ALGÚN ref produjo uno (React 19).
+    // Sin cleanups → undefined: React usa su teardown legacy (`ref(null)`).
+    if (applied.some((a) => typeof a.cleanup === "function")) {
+      return () => {
+        for (const { ref, cleanup } of applied) {
+          if (typeof cleanup === "function") {
+            cleanup();
+          } else {
+            // Ref sin cleanup propio → teardown legacy explícito.
+            setRef(ref, null);
+          }
+        }
+      };
     }
+    return undefined;
   };
 }
