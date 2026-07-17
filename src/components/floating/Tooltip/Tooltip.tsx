@@ -319,7 +319,7 @@ export interface TooltipProps {
  *
  * **Migración desde CSS-only (pre-1.0.0-rc.1)**: la API pública
  * (props text/placement/variant) NO cambia. Las clases
- * `ig-tooltip-place-*` y `ig-tooltip-color-*` ahora se aplican al
+ * `ig-tooltip-place-*` y `ig-tooltip-*` ahora se aplican al
  * elemento del portal en lugar del wrapper. Si tenías reglas CSS
  * dirigidas al wrapper `.ig-tooltip-wrapper` o ref / className en el
  * `<Tooltip>`, ese wrapper ya no existe: aplica los estilos directo
@@ -709,7 +709,7 @@ export function Tooltip({
         className={cn(
           "ig-tooltip",
           `ig-tooltip-place-${placement}`,
-          variant && `ig-tooltip-color-${variant}`,
+          variant && `ig-tooltip-${variant}`,
         )}
         inert
         {...(typeof text === "string"

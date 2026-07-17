@@ -6183,8 +6183,8 @@ COMPONENTES:
 - ig-error: mensaje de error
 
 ESTADOS:
-- ig-input-error: borde rojo para errores
-- ig-input-success: borde verde para validación correcta
+- ig-input-invalid: borde rojo para errores
+- ig-input-valid: borde verde para validación correcta
 - :disabled: campo deshabilitado
 
 TAMAÑOS:
@@ -6200,7 +6200,7 @@ CÓMO USAR:
 <input type="email" class="ig-input" placeholder="tu@email.com" />
 <p class="ig-helper">Nunca compartiremos tu email</p>
 
-<input class="ig-input ig-input-error" />
+<input class="ig-input ig-input-invalid" />
 <p class="ig-error">Este campo es obligatorio</p>
 */
 
@@ -6236,22 +6236,22 @@ CÓMO USAR:
 }
 
 /* Estados de validación */
-.ig-input-error,
+.ig-input-invalid,
 .ig-input.error {
   border-color: var(--ig-input-border-invalid);
 }
 
-.ig-input-error:focus,
+.ig-input-invalid:focus,
 .ig-input.error:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-malum) 30%, transparent);
 }
 
-.ig-input-success,
+.ig-input-valid,
 .ig-input.success {
   border-color: var(--ig-input-border-valid);
 }
 
-.ig-input-success:focus,
+.ig-input-valid:focus,
 .ig-input.success:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-laurus) 30%, transparent);
 }
@@ -6380,33 +6380,33 @@ SOPORTE: Chrome 123+, Edge 123+, Firefox 125+, Safari 17.4+
   box-shadow: var(--ig-input-ring);
 }
 
-/* Estados de validación para textarea/select: las reglas .ig-input-error
-   y .ig-input-success están definidas ANTES de .ig-textarea, .ig-textarea-auto
+/* Estados de validación para textarea/select: las reglas .ig-input-invalid
+   y .ig-input-valid están definidas ANTES de .ig-textarea, .ig-textarea-auto
    y .ig-native-select, así que el border de cada uno (mismo specificity 0,1,0)
    las sobrescribía por orden. Reglas con doble clase (0,2,0) para que
    ganen sin depender del orden de declaración. */
-.ig-textarea.ig-input-error,
-.ig-textarea-auto.ig-input-error,
-.ig-native-select.ig-input-error {
+.ig-textarea.ig-input-invalid,
+.ig-textarea-auto.ig-input-invalid,
+.ig-native-select.ig-input-invalid {
   border-color: var(--ig-input-border-invalid);
 }
 
-.ig-textarea.ig-input-error:focus,
-.ig-textarea-auto.ig-input-error:focus,
-.ig-native-select.ig-input-error:focus {
+.ig-textarea.ig-input-invalid:focus,
+.ig-textarea-auto.ig-input-invalid:focus,
+.ig-native-select.ig-input-invalid:focus {
   border-color: var(--ig-input-border-invalid);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-malum) 30%, transparent);
 }
 
-.ig-textarea.ig-input-success,
-.ig-textarea-auto.ig-input-success,
-.ig-native-select.ig-input-success {
+.ig-textarea.ig-input-valid,
+.ig-textarea-auto.ig-input-valid,
+.ig-native-select.ig-input-valid {
   border-color: var(--ig-input-border-valid);
 }
 
-.ig-textarea.ig-input-success:focus,
-.ig-textarea-auto.ig-input-success:focus,
-.ig-native-select.ig-input-success:focus {
+.ig-textarea.ig-input-valid:focus,
+.ig-textarea-auto.ig-input-valid:focus,
+.ig-native-select.ig-input-valid:focus {
   border-color: var(--ig-input-border-valid);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ig-laurus) 30%, transparent);
 }
@@ -7901,7 +7901,7 @@ emite (Slot pattern, sin wrapper):
   <button aria-describedby="...">×</button>
   <span id="..." role="tooltip" class="ig-sr-only" inert>Eliminar</span>
   <!-- en portal cuando isOpen -->
-  <span class="ig-tooltip ig-tooltip-place-top ig-tooltip-color-brand" inert>
+  <span class="ig-tooltip ig-tooltip-place-top ig-tooltip-brand" inert>
     Eliminar
   </span>
 
@@ -7917,7 +7917,7 @@ POSICIONES (preferida; Floating UI puede flipear si no cabe):
 - ig-tooltip-place-right
 
 VARIANTES:
-- ig-tooltip-color-{brand,secondary,success,warning,danger,info}
+- ig-tooltip-{brand,secondary,success,warning,danger,info}
 
 NOTA: Floating UI controla position/top/left vía `style` inline.
 Las clases `.ig-tooltip-place-*` quedan como hook informativo;
@@ -7960,12 +7960,12 @@ transform-origin por dirección, se usan estas clases.
 }
 
 /* Variantes de color — solo el bg cambia. */
-.ig-tooltip-color-brand     { background-color: var(--ig-vitreus); }
-.ig-tooltip-color-secondary { background-color: var(--ig-axis); }
-.ig-tooltip-color-success   { background-color: var(--ig-laurus); }
-.ig-tooltip-color-warning   { background-color: var(--ig-rutilus); }
-.ig-tooltip-color-danger    { background-color: var(--ig-malum); }
-.ig-tooltip-color-info      { background-color: var(--ig-kobalium); }
+.ig-tooltip-brand     { background-color: var(--ig-vitreus); }
+.ig-tooltip-secondary { background-color: var(--ig-axis); }
+.ig-tooltip-success   { background-color: var(--ig-laurus); }
+.ig-tooltip-warning   { background-color: var(--ig-rutilus); }
+.ig-tooltip-danger    { background-color: var(--ig-malum); }
+.ig-tooltip-info      { background-color: var(--ig-kobalium); }
 
 /* Las clases .ig-tooltip-place-* quedan vacías en CSS (Floating UI
    maneja la posición vía style inline). Se mantienen como hook
@@ -9628,7 +9628,7 @@ Contiene logo, navegación principal y acciones globales.
 
 ESTRUCTURA:
 <header class="ig-navbar">
-  <div class="ig-navbar-brand">
+  <div class="ig-navbar-logo">
     <img src="logo.svg" alt="Logo" />
     <span>App Name</span>
   </div>
@@ -9645,7 +9645,7 @@ ESTRUCTURA:
 
 CÓMO USAR:
 1. Header con clase ig-navbar
-2. ig-navbar-brand con logo y nombre
+2. ig-navbar-logo con logo y nombre
 3. ig-navbar-nav con links de navegación
 4. ig-navbar-actions con botones/acciones
 5. Variantes: ig-navbar-sticky, ig-navbar-glass
@@ -9687,7 +9687,7 @@ CUÁNDO USAR:
   border-bottom: 1px solid var(--ig-glass-border);
 }
 
-.ig-navbar-brand {
+.ig-navbar-logo {
   display: flex;
   align-items: center;
   gap: var(--ig-space-3);
@@ -9696,7 +9696,7 @@ CUÁNDO USAR:
   text-decoration: none;
 }
 
-.ig-navbar-brand img {
+.ig-navbar-logo img {
   height: 32px;
   width: auto;
 }

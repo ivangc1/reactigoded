@@ -138,7 +138,7 @@ Hugo, templates server-side, otros frameworks).
 | Outline | `.ig-btn-outline-{variant}` |
 | Ghost | `.ig-btn-ghost-{variant}` |
 | Link | `.ig-btn-link` (sin variant) |
-| Sizes | `.ig-btn-{xs,sm,md,lg,xl}` |
+| Sizes | `.ig-btn-{xs,sm,lg,xl}` (sin modificador = tamaño `md` por defecto) |
 | Modifiers | `.ig-btn-block` · `.ig-btn-icon` · `.ig-btn-loading` |
 
 ```html
@@ -269,14 +269,14 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 | Categoría | Clases |
 |---|---|
 | Input | `.ig-input` |
-| States | `.ig-input-error` · `.ig-input-success` |
+| States | `.ig-input-invalid` · `.ig-input-valid` |
 | Sizes | `.ig-input-{sm,lg}` |
 | Helpers | `.ig-label` · `.ig-label-required` · `.ig-helper` · `.ig-error` |
 | Group | `.ig-input-group` · `.ig-input-addon` |
 
 ```html
 <label class="ig-label ig-label-required" for="email">Email</label>
-<input id="email" class="ig-input ig-input-error" type="email" aria-invalid="true" />
+<input id="email" class="ig-input ig-input-invalid" type="email" aria-invalid="true" />
 <p class="ig-error">Formato inválido.</p>
 
 <div class="ig-input-group">
@@ -321,12 +321,12 @@ Estados se manejan en el `<input type="checkbox">` nativo (`checked`, `disabled`
 | Wrapper | `.ig-navbar` (sobre `<header>`) |
 | Position | `.ig-navbar-sticky` · `.ig-navbar-fixed` |
 | Modifier | `.ig-navbar-glass` |
-| Slots | `.ig-navbar-brand` · `.ig-navbar-nav` · `.ig-navbar-actions` · `.ig-navbar-menu-btn` |
+| Slots | `.ig-navbar-logo` · `.ig-navbar-nav` · `.ig-navbar-actions` · `.ig-navbar-menu-btn` |
 | Link | `.ig-navbar-link` · `.ig-navbar-link-active` |
 
 ```html
 <header class="ig-navbar ig-navbar-sticky">
-  <a class="ig-navbar-brand" href="/">Mi App</a>
+  <a class="ig-navbar-logo" href="/">Mi App</a>
   <nav class="ig-navbar-nav" aria-label="Principal">
     <a class="ig-navbar-link ig-navbar-link-active" href="/" aria-current="page">Inicio</a>
     <a class="ig-navbar-link" href="/precios">Precios</a>
@@ -445,7 +445,7 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-native-select` (sobre `<select>`) |
-| States | `.ig-input-error` · `.ig-input-success` |
+| States | `.ig-input-invalid` · `.ig-input-valid` |
 
 ```html
 <select class="ig-native-select">
@@ -453,7 +453,7 @@ Usa el contrato del `Input` para estados:
   <option value="es">España</option>
   <option value="mx">México</option>
 </select>
-<select class="ig-native-select ig-input-error" aria-invalid="true">…</select>
+<select class="ig-native-select ig-input-invalid" aria-invalid="true">…</select>
 ```
 
 ---
@@ -540,13 +540,13 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-stepper` · `.ig-stepper-labeled` (con label debajo) |
-| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` · `.ig-step-interactive` (modo keyboard nav) |
+| Step | `.ig-step` · `.ig-step-active` · `.ig-step-complete` |
 | Slots | `.ig-step-item` · `.ig-step-label` |
 | Connector | `.ig-step-line` · `.ig-step-line-complete` |
 
 > **Modo interactive**: cuando el componente recibe `onValueChange`,
-> cada `.ig-step` añade `.ig-step-interactive` y se vuelve focuseable
-> (`role="button"` + roving tabIndex). Soporta ArrowLeft/Right/Up/Down
+> cada `.ig-step` se vuelve focuseable vía el prop `interactive` de `<Step>`
+> (`role="button"` + roving tabIndex; no hay clase CSS para esto). Soporta ArrowLeft/Right/Up/Down
 > + Home/End + Enter/Space. Sin `onValueChange` el Stepper es
 > presentational (no focus, no keyboard).
 
@@ -639,13 +639,13 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-textarea` (sobre `<textarea>`) |
-| States | `.ig-input-error` · `.ig-input-success` |
+| States | `.ig-input-invalid` · `.ig-input-valid` |
 | Modifier | `.ig-textarea-auto` (auto-grow con `field-sizing` nativo) |
 
 ```html
 <textarea class="ig-textarea" rows="3"></textarea>
 <textarea class="ig-textarea ig-textarea-auto"></textarea>
-<textarea class="ig-textarea ig-input-error" aria-invalid="true"></textarea>
+<textarea class="ig-textarea ig-input-invalid" aria-invalid="true"></textarea>
 ```
 
 ---
@@ -672,7 +672,7 @@ tema vive en `data-theme="light|dark"` aplicado a `<html>`.
 |---|---|
 | Wrapper | `.ig-timeline` |
 | Item | `.ig-timeline-item` |
-| Marker | `.ig-timeline-dot` · `.ig-timeline-dot-{brand,secondary,success,warning,danger,info,default}` |
+| Marker | `.ig-timeline-dot` (sin modificador = default) · `.ig-timeline-dot-{brand,secondary,success,warning,danger,info}` |
 | Slots | `.ig-timeline-content` · `.ig-timeline-title` · `.ig-timeline-description` · `.ig-timeline-date` |
 
 ```html
@@ -720,14 +720,14 @@ tema vive en `data-theme="light|dark"` aplicado a `<html>`.
 |---|---|
 | Wrapper | `.ig-tooltip` |
 | Placement | `.ig-tooltip-place-{top,right,bottom,left}` |
-| Variants | `.ig-tooltip-color-{brand,secondary,success,warning,danger,info}` |
+| Variants | `.ig-tooltip-{brand,secondary,success,warning,danger,info}` |
 | Atributo | `data-tooltip="..."` (el texto va aquí, lo lee el `::before` CSS) |
 | SR | `<span class="ig-sr-only" role="tooltip">…</span>` para lectores de pantalla |
 
-> **Migración pre-1.0.0**: las clases pasaron de `ig-tooltip-{placement}` y `ig-tooltip-{variant}` a prefijos únicos `ig-tooltip-place-*` y `ig-tooltip-color-*` para evitar colisión semántica.
+> **Migración pre-1.0.0**: las clases pasaron de `ig-tooltip-{placement}` y `ig-tooltip-{variant}` a prefijos únicos `ig-tooltip-place-*` y `ig-tooltip-*` para evitar colisión semántica.
 
 ```html
-<span class="ig-tooltip ig-tooltip-place-top ig-tooltip-color-brand" data-tooltip="Eliminar">
+<span class="ig-tooltip ig-tooltip-place-top ig-tooltip-brand" data-tooltip="Eliminar">
   <button aria-describedby="tt-1" aria-label="Eliminar">×</button>
   <span id="tt-1" role="tooltip" class="ig-sr-only">Eliminar</span>
 </span>
@@ -802,6 +802,7 @@ Para `Progress` con porcentaje dinámico, usa `formatLabel` (recibe el porcentaj
 - Los slots compound (`-header`, `-body`, `-footer`, etc.) están pensados para reflejar la jerarquía semántica nativa del HTML; no son obligatorios si construyes un layout custom encima.
 - Los componentes con múltiples sub-clases (Sidebar, Card, Dialog, Menu, Tabs, Navbar, Stepper, Toast, Timeline, Input compound, Table) requieren la composición completa para funcionar visualmente — usar solo la clase wrapper sin los slots produce resultados parciales.
 - Estados del navegador (`:hover`, `:focus-visible`, `:disabled`) los aplica el navegador automáticamente cuando los elementos son interactivos. La librería utility-pseudo (`state.css`, opt-in) permite forzar estados desde HTML estático sin depender del estado real del DOM.
+- **Estabilidad del vocabulario utility (1.0):** las clases utility atómicas (`ig-bg-*`, `ig-text-*`, `ig-border-*`, `ig-font-*`, `ig-flex`, `ig-gap-*`, spacing, `ig-gradient-*`, `ig-glow-*`, `ig-ring-*`, `ig-fill-*`, `ig-stroke-*`, `ig-filter-*` …) y sus variantes de estado (`hover:ig-*`, `focus:ig-*`, … de `state.css`) son **opt-in y experimentales**. Su vocabulario **puede evolucionar sin bump major hasta que se declare estable en el CHANGELOG**. El contrato congelado de 1.0 es **exactamente** lo que lista `src/_audit/public-api-names.json` (clases de componente, data-attributes de estado, tokens Tier-2); las utilities quedan fuera de ese freeze **por declaración explícita**, no por omisión. Aplica al nombre de la clase con y sin prefijo de estado.
 
 ---
 

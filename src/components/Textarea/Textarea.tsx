@@ -10,7 +10,7 @@ import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
-export type TextareaState = "default" | "error" | "success";
+export type TextareaState = "default" | "invalid" | "valid";
 
 export interface TextareaProps
   extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -59,7 +59,7 @@ export interface TextareaProps
  *
  * @example
  * <Textarea placeholder="Cuéntanos…" rows={4} />
- * <Textarea state="error" describedBy={errorId} />
+ * <Textarea state="invalid" describedBy={errorId} />
  * <Textarea auto value={text} onChange={(e) => setText(e.target.value)} />
  */
 export function Textarea({
@@ -90,11 +90,11 @@ export function Textarea({
       ref={setRefs}
       className={cn(
         auto ? "ig-textarea-auto" : "ig-textarea",
-        state === "error" && "ig-input-error",
-        state === "success" && "ig-input-success",
+        state === "invalid" && "ig-input-invalid",
+        state === "valid" && "ig-input-valid",
         className,
       )}
-      aria-invalid={state === "error" ? true : undefined}
+      aria-invalid={state === "invalid" ? true : undefined}
       aria-describedby={describedByValue}
     />
   );

@@ -18,12 +18,12 @@ describe("NativeSelect", () => {
 
   it("state=error aplica clase y aria-invalid", () => {
     render(
-      <NativeSelect aria-label="plan" state="error">
+      <NativeSelect aria-label="plan" state="invalid">
         <option>A</option>
       </NativeSelect>,
     );
     const sel = screen.getByLabelText("plan");
-    expect(sel).toHaveClass("ig-input-error");
+    expect(sel).toHaveClass("ig-input-invalid");
     expect(sel).toHaveAttribute("aria-invalid", "true");
   });
 

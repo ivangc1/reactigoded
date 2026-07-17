@@ -30,7 +30,7 @@ export interface NavbarProps extends HTMLAttributes<HTMLElement> {
 /**
  * Navbar — barra de navegación horizontal superior (`<header>`).
  *
- * Compón con `NavbarBrand`, `NavbarNav`, `NavbarLink` y `NavbarActions`.
+ * Compón con `NavbarLogo`, `NavbarNav`, `NavbarLink` y `NavbarActions`.
  * `position` controla el comportamiento sticky/fixed; `glass` se puede
  * combinar con cualquier `position`.
  *
@@ -44,7 +44,7 @@ export interface NavbarProps extends HTMLAttributes<HTMLElement> {
  *
  * @example
  * <Navbar position="sticky">
- *   <NavbarBrand href="/">Mi App</NavbarBrand>
+ *   <NavbarLogo href="/">Mi App</NavbarLogo>
  *   <NavbarNav>
  *     <NavbarLink href="/" active>Inicio</NavbarLink>
  *     <NavbarLink href="/precios">Precios</NavbarLink>

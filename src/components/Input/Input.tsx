@@ -11,7 +11,7 @@ import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
 export type InputSize = "sm" | "md" | "lg";
-export type InputState = "default" | "error" | "success";
+export type InputState = "default" | "invalid" | "valid";
 
 export interface InputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
@@ -78,11 +78,11 @@ export function Input({
       className={cn(
         "ig-input",
         size !== "md" && `ig-input-${size}`,
-        state === "error" && "ig-input-error",
-        state === "success" && "ig-input-success",
+        state === "invalid" && "ig-input-invalid",
+        state === "valid" && "ig-input-valid",
         className,
       )}
-      aria-invalid={state === "error" ? true : undefined}
+      aria-invalid={state === "invalid" ? true : undefined}
       aria-describedby={describedByValue}
     />
   );

@@ -154,7 +154,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
     ["danger"],
     ["info"],
   ] as const)("variant=%s", (v) => {
-    it(`portal aplica clase ig-tooltip-color-${v} al abrir`, async () => {
+    it(`portal aplica clase ig-tooltip-${v} al abrir`, async () => {
       const user = userEvent.setup();
       render(
         <Tooltip text="x" variant={v}>
@@ -163,7 +163,7 @@ describe("Tooltip — Floating UI (post-RC1)", () => {
       );
       await user.hover(screen.getByRole("button"));
       expect(
-        document.querySelector(`.ig-tooltip-color-${v}`),
+        document.querySelector(`.ig-tooltip-${v}`),
       ).not.toBeNull();
     });
   });

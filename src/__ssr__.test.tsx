@@ -65,7 +65,7 @@ import {
   DialogHeader,
   Navbar,
   NavbarActions,
-  NavbarBrand,
+  NavbarLogo,
   NavbarLink,
   NavbarMenuButton,
   NavbarNav,
@@ -257,7 +257,7 @@ const cases: SsrCase[] = [
     name: "Navbar (compound)",
     jsx: () => (
       <Navbar>
-        <NavbarBrand>Brand</NavbarBrand>
+        <NavbarLogo>Brand</NavbarLogo>
         <NavbarNav>
           <NavbarLink href="/">Inicio</NavbarLink>
         </NavbarNav>

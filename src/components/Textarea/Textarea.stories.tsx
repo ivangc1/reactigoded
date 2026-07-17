@@ -15,7 +15,7 @@ const meta = {
   },
   argTypes: {
     auto: { control: "boolean" },
-    state: { control: "select", options: ["default", "error", "success"] },
+    state: { control: "select", options: ["default", "invalid", "valid"] },
     disabled: { control: "boolean" },
     rows: { control: "number" },
   },
@@ -41,13 +41,13 @@ export const Estados: Story = {
       <Textarea aria-label="Default" placeholder="Default" rows={3} />
       <Textarea
         aria-label="Success"
-        state="success"
+        state="valid"
         defaultValue="Texto válido"
         rows={3}
       />
       <Textarea
         aria-label="Error"
-        state="error"
+        state="invalid"
         defaultValue="Texto con errores"
         rows={3}
       />
@@ -82,12 +82,12 @@ export const AllStates: Story = {
       <Textarea
         aria-label="Textarea error"
         placeholder="error state"
-        state="error"
+        state="invalid"
       />
       <Textarea
         aria-label="Textarea success"
         placeholder="success state"
-        state="success"
+        state="valid"
       />
       <Textarea
         aria-label="Textarea disabled"

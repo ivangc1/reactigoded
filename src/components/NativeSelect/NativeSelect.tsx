@@ -10,7 +10,7 @@ import { cn } from "@/utils/cn";
 import { mergeDescribedBy } from "@/utils/mergeDescribedBy";
 import { useA11yWarnInput } from "@/utils/useA11yWarnInput";
 
-export type NativeSelectState = "default" | "error" | "success";
+export type NativeSelectState = "default" | "invalid" | "valid";
 
 export interface NativeSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   /** Estado de validación visual. */
@@ -47,7 +47,7 @@ export interface NativeSelectProps extends SelectHTMLAttributes<HTMLSelectElemen
  *   <option value="mx">México</option>
  *   <option value="ar">Argentina</option>
  * </NativeSelect>
- * <NativeSelect state="error" describedBy={errorId}>
+ * <NativeSelect state="invalid" describedBy={errorId}>
  *   <option value="">Selecciona…</option>
  * </NativeSelect>
  */
@@ -79,11 +79,11 @@ export function NativeSelect({
       ref={setRefs}
       className={cn(
         "ig-native-select",
-        state === "error" && "ig-input-error",
-        state === "success" && "ig-input-success",
+        state === "invalid" && "ig-input-invalid",
+        state === "valid" && "ig-input-valid",
         className,
       )}
-      aria-invalid={state === "error" ? true : undefined}
+      aria-invalid={state === "invalid" ? true : undefined}
       aria-describedby={describedByValue}
     >
       {children}
