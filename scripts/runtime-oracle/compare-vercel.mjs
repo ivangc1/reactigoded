@@ -128,15 +128,23 @@ for (const [k, ok] of Object.entries(EXPECTED)) {
 // gate los usa como PRUEBA de rama client-only y entonces DEJA DE AUDITARLA; si
 // uno existe en Edge, esa rama corre en producción sin auditar.
 const browserOnly = data.browserOnly ?? {};
-const boProbed = Object.keys(browserOnly).length;
+// Anti-stale POR NOMBRE (no por "el bloque existe"): si el probe desplegado es
+// anterior a una ampliación de BROWSER_ONLY_GUARD_GLOBALS, el bloque viejo sigue
+// trayendo entradas y ninguna presente → verde ENGAÑOSO, con el guard nuevo sin
+// probar y su rama client-only sin auditar. Mismo predicado que el `notProbed` de
+// `presence`; aquí faltaba. (codex P2)
+const boMissing = [...BROWSER_ONLY_GUARD_GLOBALS].filter(
+  (n) => !(n in browserOnly),
+);
 const boPresent = Object.entries(browserOnly).filter(
   ([, v]) => v !== "undefined",
 );
-if (boProbed === 0) {
+if (boMissing.length) {
   hardDrift.push(
-    "probe sin bloque 'browserOnly' (regenera con gen-probe.mjs + redeploy)",
+    `probe DESINCRONIZADO en 'browserOnly': ${boMissing.length}/${BROWSER_ONLY_GUARD_GLOBALS.size} guards SIN PROBAR → la comprobación de fail-open NO cubre el set actual (regenera con gen-probe.mjs + redeploy): ${boMissing.slice(0, 12).join(", ")}${boMissing.length > 12 ? "…" : ""}`,
   );
-} else if (boPresent.length) {
+}
+if (boPresent.length) {
   hardDrift.push(
     `FAIL-OPEN: BROWSER_ONLY_GUARD_GLOBALS PRESENTES en Vercel Edge real — el gate los acepta como prueba de rama client-only y deja de auditarla, así que esa rama CORRE sin auditar: ${boPresent.map(([k, v]) => `${k}=${v}`).join(", ")}`,
   );
@@ -184,7 +192,7 @@ console.log(
 );
 console.log(`  premisas: ${Object.keys(EXPECTED).length} chequeadas`);
 console.log(
-  `  BROWSER_ONLY (fail-open): ${BROWSER_ONLY_GUARD_GLOBALS.size} pineados, ${boProbed} probados, ${boPresent.length} presentes`,
+  `  BROWSER_ONLY (fail-open): ${BROWSER_ONLY_GUARD_GLOBALS.size} pineados, ${BROWSER_ONLY_GUARD_GLOBALS.size - boMissing.length} probados, ${boPresent.length} presentes`,
 );
 
 if (memberExtras.length) {
