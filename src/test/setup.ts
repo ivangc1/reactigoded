@@ -28,16 +28,19 @@ const CONSOLE_ALLOWLIST: RegExp[] = [
   // Dev-warnings de contrato del propio DS (intencionales en ciertos tests).
   /^\[reactigoded\]/,
   /^\[useControllableState\]/,
-  // Ruido de React testing-env, environment/timing-dependent: aparece bajo
-  // el `--isolate --pool=forks` de CI (`test:unit:ci`) pero NO bajo el pool
-  // threads local (`test:unit`), y es benigno — artefactos del runner, no
-  // bugs del DS. La policy sigue cazando lo importante (props DOM inválidas,
-  // errores de hooks, console.error accidental de app):
-  //   - act(): updates async no envueltos, o SSR sin IS_REACT_ACT_ENVIRONMENT.
-  //   - controlled↔uncontrolled: tests que ejercen transiciones de input.
+  // act(): ÚNICA clase de React allowlisted, a propósito. Es ruido inherente
+  // de tests con updates async — floating-ui (Menu/Tooltip async positioning)
+  // y matchMedia (useTheme) — que aparece bajo el `--isolate --pool=forks` de
+  // CI (`test:unit:ci`) pero no bajo threads local; envolverlo suite-wide sería
+  // un refactor grande y flaky. La policy NO pretende cazar act(); sí TODO lo
+  // demás. Lo que NO se allowlista globalmente y la policy SÍ caza:
+  // controlled↔uncontrolled, props DOM inválidas, errores de hooks, key
+  // warnings, console.error accidental de app. Los tests que disparan uno a
+  // propósito (Slot data-format-fn, Switch/Slider transiciones) lo suprimen
+  // LOCAL con vi.spyOn — y la policy demostró valor cazando las transiciones de
+  // Slider que filtraban sin suprimir (P2 codex #140).
   /An update to .* inside a test was not wrapped in act/,
   /not configured to support act/,
-  /A component is changing an? (un)?controlled input/,
 ];
 let leakedConsole: string[] = [];
 
