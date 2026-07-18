@@ -8,14 +8,13 @@
  * runtime-oracle mide workerd + Deno fielmente, pero Vercel Edge PRODUCCIÓN
  * es su propio runtime — este probe es el único oráculo fiel para él.
  *
- * Devuelve:
- *   - `globalThisNames`: los nombres ALCANZABLES en `globalThis` (own +
- *     cadena de prototipos) en el Edge real → se compara contra `SAFE_GLOBALS`
- *     (deben ESTAR) y `EDGE_MISSING_GLOBALS` (deben FALTAR) con
- *     `scripts/runtime-oracle/compare-vercel.mjs`.
- *   - `premises`: las mismas sondas que `worker.js` (typeof + call/await-if-throws)
- *     → confirma que las premisas pineadas (createObjectURL THROWS, WASM.compile
- *     THROWS, new Function THROWS, elu absent…) valen también en Vercel Edge.
+ * PRESENCE via POST: la ENUMERACIÓN de globals NO es fiable en Vercel Edge —
+ * el objeto-global es exótico y los WinterCG (URL/Blob/fetch/setTimeout…) NO
+ * aparecen en `getOwnPropertyNames` NI en la cadena de prototipos, aunque
+ * `new URL()` funcione (`ownGlobalThisNames == globalThisNames == 59`). El único
+ * test fiable de "presente" es `name in globalThis`. El caller
+ * (compare-vercel.mjs, dueño del catálogo) manda los nombres via POST {names}
+ * y aquí se prueban con `in` en el runtime real.
  *
  * DEPLOY: ver `scripts/runtime-oracle/vercel/README.md`. `vercel dev` NO sirve
  * (usa `@edge-runtime/vm`, el 95%); hace falta un deploy de PRODUCCIÓN.
@@ -35,10 +34,8 @@ function tryCall(fn: () => void): string {
   }
 }
 
-// WASM.compile / instantiate son ASÍNCRONOS: devuelven una Promise que RECHAZA
-// (no lanzan síncronamente). Hay que AWAITearla — el probe anterior las metía en
-// un `tryCall` síncrono y veía un "OK" falso. `worker.js` (workerd) sí las
-// awaitea → THROWS. Este helper replica esa semántica en el Edge real.
+// WASM.compile es ASÍNCRONO (Promise que RECHAZA, no lanza síncronamente): hay
+// que AWAITearla. worker.js (workerd) sí la awaitea → THROWS.
 async function tryAwait(fn: () => Promise<unknown>): Promise<string> {
   try {
     await fn();
@@ -49,15 +46,8 @@ async function tryAwait(fn: () => Promise<unknown>): Promise<string> {
   }
 }
 
-// `Object.getOwnPropertyNames(globalThis)` NO enumera los globals que el Edge
-// instala en el PROTOTIPO (ServiceWorkerGlobalScope.prototype →
-// WorkerGlobalScope.prototype → EventTarget.prototype → …): `URL`, `Blob`,
-// `fetch`, `TextEncoder`, `setTimeout`, `AbortController`, e incluso built-ins
-// ES como `undefined`/`NaN` viven ahí, no como `own` del wrapper JSG. Caminar la
-// cadena de prototipos hasta `Object.prototype` da el set REAL de nombres
-// alcanzables — equivale exactamente a `name in globalThis`, que es la semántica
-// de "presente" que el gate necesita. (own-names daba 59 y omitía URL/Blob/fetch,
-// contradiciendo las propias premisas que sí los ejecutan.)
+// Se conserva para EVIDENCIAR el gap de enumeración: en Vercel Edge sale idéntico
+// a `ownGlobalThisNames` (URL/Blob/fetch ausentes) aunque existan y funcionen.
 function reachableGlobalNames(g: object): string[] {
   const names = new Set<string>();
   let o: object | null = g;
@@ -68,11 +58,25 @@ function reachableGlobalNames(g: object): string[] {
   return [...names].sort();
 }
 
-export default async function handler(): Promise<Response> {
+export default async function handler(req: Request): Promise<Response> {
   const g = globalThis as Any;
 
+  // PRESENCE (POST {names:[...]}) — `name in globalThis` en el Edge real, el único
+  // test fiable dado el objeto-global exótico (ver cabecera).
+  let presence: Record<string, boolean> | null = null;
+  if (req.method === "POST") {
+    try {
+      const body = (await req.json()) as { names?: unknown };
+      const names = Array.isArray(body.names) ? (body.names as unknown[]) : [];
+      presence = {};
+      for (const n of names) if (typeof n === "string") presence[n] = n in g;
+    } catch {
+      presence = null;
+    }
+  }
+
   const premises: Record<string, string> = {
-    // typeof (presence)
+    // typeof por globalThis (presence property-side)
     performance: typeof g.performance,
     eventLoopUtilization: typeof g.performance?.eventLoopUtilization,
     createObjectURL: typeof g.URL?.createObjectURL,
@@ -84,14 +88,23 @@ export default async function handler(): Promise<Response> {
     process: typeof g.process,
     Buffer: typeof g.Buffer,
     setImmediate: typeof g.setImmediate,
-    // call-if-throws (present-but-throws hazards, síncronos)
+    // typeof BARE (identificador real, NO globalThis[x]) — desambigua
+    // lexical-vs-property: si `in` dice ausente pero el bare dice present → global
+    // léxico usable (gate OK); si AMBOS ausentes → hueco real de Vercel Edge.
+    // (typeof de un identificador no declarado devuelve "undefined" sin lanzar.)
+    barePerformance: typeof performance,
+    bareURL: typeof URL,
+    bareFetch: typeof fetch,
+    bareSetTimeout: typeof setTimeout,
+    bareQueueMicrotask: typeof queueMicrotask,
+    bareStructuredClone: typeof structuredClone,
+    bareTextEncoder: typeof TextEncoder,
+    // call/await-if-throws (present-but-throws hazards)
     newURL: tryCall(() => void new g.URL("https://a.b/c")),
     createObjectURLCall: tryCall(() =>
       void g.URL.createObjectURL(new g.Blob(["x"])),
     ),
     revokeCall: tryCall(() => g.URL.revokeObjectURL("blob:x")),
-    // await-if-throws (WASM.compile es async — ver tryAwait). codegen disallowed
-    // en Edge estricto → CompileError esperado (igual que workerd).
     waCompileCall: await tryAwait(() =>
       g.WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])),
     ),
@@ -102,12 +115,12 @@ export default async function handler(): Promise<Response> {
 
   const out = {
     runtime: "vercel-edge",
-    // Vercel expone la región y la versión del runtime en headers/env; los
-    // capturamos si están para pinear la medición.
     vercelRegion: g.process?.env?.VERCEL_REGION ?? null,
-    // own-names para referencia + diagnóstico del delta prototipo.
+    // Enumeración (evidencia del gap): en Vercel Edge ambos salen idénticos y
+    // omiten URL/Blob/fetch. Por eso `presence` (vía `in`) es la fuente real.
     ownGlobalThisNames: Object.getOwnPropertyNames(g).sort(),
     globalThisNames: reachableGlobalNames(g),
+    presence,
     premises,
   };
 

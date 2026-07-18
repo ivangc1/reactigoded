@@ -22,14 +22,15 @@ npm i -g vercel
 cd scripts/runtime-oracle/vercel
 vercel deploy --prod --yes        # primera vez: te pide login + link a un proyecto
 
-# 3. Medir el Edge real (usa la URL que imprime el deploy)
-curl -s https://<tu-deploy>.vercel.app/api/probe > /tmp/edge.json
-
-# 4. Comparar contra el catálogo del gate (fail-loud si hay drift)
+# 3. Comparar contra el catálogo del gate (fail-loud si hay drift). `compare`
+#    hace POST con el catálogo → el probe prueba `name in globalThis` en el Edge
+#    real. La ENUMERACIÓN no es fiable (objeto-global exótico: URL/Blob/fetch no
+#    salen en getOwnPropertyNames ni en el prototype-walk aunque existan).
 cd -                              # volver al repo root
-node scripts/runtime-oracle/compare-vercel.mjs /tmp/edge.json
+node scripts/runtime-oracle/compare-vercel.mjs https://<tu-deploy>.vercel.app/api/probe
+# (inspección manual: curl GET https://<tu-deploy>.vercel.app/api/probe → dump)
 
-# 5. Borrar el deploy efímero cuando termines
+# 4. Borrar el deploy efímero cuando termines
 vercel rm <nombre-del-proyecto> --yes
 ```
 
