@@ -207,7 +207,9 @@ try {
   // Flags:
   //   --ignore-scripts: defensive frente a postinstall de transitive deps.
   //   --no-audit / --no-fund: silencia ruido irrelevante.
-  //   --legacy-peer-deps: replica el flag usado en CI principal (verify.yml).
+  //   (npm install PLANO — sin --legacy-peer-deps: el sandbox instala solo
+  //   el tarball + peers de runtime; el conflicto devDep del repo no viaja,
+  //   así que replica fielmente lo que hace un consumer real.)
   //
   // NO usamos --no-package-lock: queremos que npm reconcile el lockfile
   // copiado del repo + el package.json del sandbox. Los transitivos
@@ -215,7 +217,7 @@ try {
   // se añade fresh.
   console.log("\n[consumer-pack 3/5] npm install en sandbox");
   run(
-    "npm install --ignore-scripts --no-audit --no-fund --legacy-peer-deps",
+    "npm install --ignore-scripts --no-audit --no-fund",
     { cwd: sandbox },
   );
 
