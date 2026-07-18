@@ -598,6 +598,14 @@ const PARTIAL_SAFE_GLOBAL_MEMBERS = {
   //   incertidumbre real (¿el arg es un buffer o un Module importado?) es PROVENANCE = data-flow, que
   //   el gate renuncia por diseño (§141): `instantiate(bufferSource)` queda RESIDUAL de data-flow,
   //   junto al resto de renuncias de provenance, NO un bypass.
+  //   MEDIDO contra el deploy Vercel Edge REAL (#18, lhr1 2026-07-18): `instantiate`
+  //   existe (`typeof === "function"`) e `instantiate(bytes)` lanza
+  //   `CompileError: WebAssembly.instantiate(): Wasm code generation disallowed by
+  //   embedder` — misma traza que `compile` y `new Module(bytes)`. Confirma el
+  //   "confirmado" de arriba con evidencia de producción y RATIFICA el ALLOW: el
+  //   hazard es el ARGUMENTO (bytes vs Module), no el miembro, y eso es data-flow.
+  //   `validate` se midió OK (no compila) → control de que la denylist es
+  //   "vías de codegen", no "todo WebAssembly".
   // SAFE — `Memory`/`Table`/`Global`/`Instance`/`validate` no compilan.
   // `Module` NO va aquí (member-read ban): `WebAssembly.Module` como VALOR no compila — `wasm
   // instanceof WebAssembly.Module`, `WebAssembly.Module.imports(m)`/`.exports(m)` (inspección de un

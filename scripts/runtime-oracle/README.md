@@ -67,6 +67,21 @@ da `undefined` pero `typeof performance` bare da `"object"`). Resultado:
 
 Reproducir: `vercel --prod` desde `vercel/` → `node compare-vercel.mjs <url>` (ver `vercel/README.md`).
 
+### Hunt FP/FN sobre la superficie restante (2026-07-18, lhr1) — 0 hallazgos reales
+
+Con el oráculo ya fiel se barrió lo que seguía asumido o derivado del VM. **Ningún FP/FN real**; el valor es
+que estos ejes pasan de *asumidos* a *medidos*. Las 3 sospechas se retiraron, cada una con su razón:
+
+| Eje | Medido | Veredicto |
+|---|---|---|
+| `BROWSER_ONLY_GUARD_GLOBALS` (22) | **0 presentes** (`navigator`/`window`/`document` → `undefined`) | ✅ Sin fail-open. El gate los usa como prueba de rama client-only y **deja de auditarla**; si alguno existiera, esa rama correría sin auditar. No ocurre. |
+| `SAFE_PARTIAL_MEMBERS.performance` | Edge real = `{now, timeOrigin}` (+`constructor`) | ✅ Allowlist **exacto**. El caveat "VM contaminado" era inocuo → cierra medido lo que #190 difería |
+| `SAFE_PARTIAL_MEMBERS.console` | Edge real 13 vs allowlist 12 → extra `clear` | ⏸ Candidato a FP **bloqueado en #190**: `console.clear` nunca se midió en workerd; añadirlo con solo el dato de Edge sería asumir la unión desde un runtime (el error que trajo `@edge-runtime/vm`) |
+| `compileStreaming` / `instantiateStreaming` | **AUSENTES** en Edge real | ✅ La clasificación *present-but-throws* sigue siendo correcta: es un modelo de **UNIÓN** y en workerd están presentes y lanzan (tabla pineada arriba) → `?.()` no protegería allí |
+| `WebAssembly.instantiate` | `function`, y `instantiate(bytes)` → **THROWS CompileError** | ✅ **Residual §141 documentado**, no un FN. Denegarlo entero sería FP sobre `instantiate(Module)` —el único Wasm soportado en Edge—; separar ambos exige provenance/data-flow que el gate renuncia por diseño. Esta medición **confirma con traza real** el "confirmado" del comentario de `PARTIAL_SAFE_GLOBAL_MEMBERS` |
+| `WebAssembly.validate` | `function`, llamada → **OK** | ✅ Control: la denylist no es "todo WebAssembly" sino las vías de codegen |
+| `INTENTIONAL_DENY` (11) | `Buffer`/`Function`/`eval`/`globalThis`/`process` existen; `global`/`localStorage`/`sessionStorage`/`navigator`/`setImmediate`/`clearImmediate` no | ℹ Informativo — la denegación es intencional en ambos casos |
+
 ### Deferred with line
 - **CI wiring**: install workerd on the CI runner so `npm run oracle` runs there — infra, not code.
 - **Cross-check workerd/Deno de los 3 `EDGE_MISSING_REAL`** + la intersección sistemática

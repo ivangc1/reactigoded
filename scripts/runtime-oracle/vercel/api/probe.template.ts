@@ -83,6 +83,30 @@ export default async function handler(): Promise<Response> {
         : "no-WA",
     waModule:
       typeof WebAssembly !== "undefined" ? typeof (WebAssembly as Any).Module : "no-WA",
+    // HUNT: `WebAssembly.instantiate` está PRESENTE en Edge real y NO figura en
+    // PARTIAL_SAFE_GLOBAL_MEMBERS ni en CONSTRUCTION_DENIED_MEMBERS → hoy el gate
+    // lo PERMITE. Es una vía de codegen igual que compile/Module: si lanza, es un
+    // FN (módulo server-safe que pasa el gate y crashea en producción). Async →
+    // await. `validate` NO compila (solo valida bytes) → control esperado OK.
+    waInstantiate:
+      typeof WebAssembly !== "undefined"
+        ? typeof (WebAssembly as Any).instantiate
+        : "no-WA",
+    waInstantiateCall: await tryAwait(() =>
+      (WebAssembly as Any).instantiate(
+        new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+      ),
+    ),
+    waValidate:
+      typeof WebAssembly !== "undefined"
+        ? typeof (WebAssembly as Any).validate
+        : "no-WA",
+    waValidateCall: tryCall(
+      () =>
+        void (WebAssembly as Any).validate(
+          new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+        ),
+    ),
     waModuleNew: tryCall(
       () =>
         void new (WebAssembly as Any).Module(
