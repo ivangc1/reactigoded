@@ -82,6 +82,28 @@ que estos ejes pasan de *asumidos* a *medidos*. Las 3 sospechas se retiraron, ca
 | `WebAssembly.validate` | `function`, llamada → **OK** | ✅ Control: la denylist no es "todo WebAssembly" sino las vías de codegen |
 | `INTENTIONAL_DENY` (11) | `Buffer`/`Function`/`eval`/`globalThis`/`process` existen; `global`/`localStorage`/`sessionStorage`/`navigator`/`setImmediate`/`clearImmediate` no | ℹ Informativo — la denegación es intencional en ambos casos |
 
+### Barrido de superficie COMPLETA (2026-07-18, lhr1) — 0 FN confirmados
+
+Segunda pasada, ya sin limitarse al catálogo del gate:
+
+- **Presencia de los 1314 nombres** del universo `globals` (builtin ∪ nodeBuiltin ∪ browser ∪ worker ∪
+  serviceworker ∪ es2025) → **129 presentes** en Vercel Edge real. Es el **mapa definitivo** del runtime, y
+  habilita re-derivar `EDGE_MISSING_GLOBALS` desde producción en vez de desde `@edge-runtime/vm` (la fuga de
+  Node de ese VM es el ORIGEN de `EDGE_MISSING_REAL`; atacarla en la raíz es trabajo de #190).
+- **Miembros de los 10 roots volcados**; 6 sin modelo bucket-1/2. **4 coinciden EXACTOS** con el floor →
+  valida el tratamiento *wholesale*, incluida la afirmación (VM-derivada) de que `crypto` es idéntico en los
+  3 runtimes. Los otros 2 (`Atomics.pause`, `Math.f16round`) son **artefacto de baseline, NO un FN**:
+  `compare` calcula el lado Node contra el Node que lo ejecuta (v24), pero el gate ancla al **floor
+  `>=22.12`**; ambos son adiciones ES2025/TC39 posteriores al floor — misma familia que `Float16Array`, que
+  el gate ya trata como `GLOBALS_OVERCLAIM`. La clase "miembro ausente en el floor" **ya está modelada**
+  (bucket-2) y su cobertura parcial **ya está registrada en #190**.
+
+**Limitación estructural del método** (no es pereza, es el runtime): solo se puede medir **presencia de
+nombres horneados** en el source. El objeto-global miente por enumeración y Edge bloquea `eval`, así que un
+global que no esté ni en `globals` ni en los ~59 *own* permanece invisible. Y el **comportamiento** (llamar)
+sigue siendo curado — llamar 1314 APIs no es seguro ni significativo. `compare` ahora imprime el Node con el
+que corre y advierte del baseline, para que el diff de miembros no se lea como floor-verificado.
+
 ### Deferred with line
 - **CI wiring**: install workerd on the CI runner so `npm run oracle` runs there — infra, not code.
 - **Cross-check workerd/Deno de los 3 `EDGE_MISSING_REAL`** + la intersección sistemática

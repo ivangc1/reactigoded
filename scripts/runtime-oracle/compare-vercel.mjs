@@ -190,6 +190,11 @@ function dumpMembersLocal(o) {
   }
   return [...s].sort();
 }
+// El gate ancla al FLOOR declarado en package.json, no al Node del dev. El diff
+// de miembros de abajo se calcula contra ESTE Node, así que hay que decirlo.
+const FLOOR =
+  JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"))
+    .engines?.node ?? "?";
 const rootMembers = data.rootMembers ?? {};
 const MODELED_ROOTS = new Set([
   ...Object.keys(SAFE_PARTIAL_MEMBERS),
@@ -262,7 +267,10 @@ console.log(
 
 if (wholesaleGaps.length) {
   console.log(
-    `\n⚠ CANDIDATOS a FN NO MODELADO — roots SAFE tratados WHOLESALE con miembros que están en el floor Node pero NO en Edge real (el gate permite \`root.member()\` y lanzaría en producción):`,
+    `\n⚠ CANDIDATOS (NO confirmados) — roots SAFE wholesale con miembros presentes en el Node que corre este script (${process.version}) pero AUSENTES en Edge real.`,
+  );
+  console.log(
+    `  OJO con el baseline: el gate ancla al FLOOR (${FLOOR}), no a este Node. Un miembro añadido DESPUÉS del floor aparece aquí sin ser FN — el gate nunca lo prometió (misma razón por la que \`Float16Array\` ya está en GLOBALS_OVERCLAIMS). Para confirmar hay que correr este diff en la celda ${FLOOR} de la matriz CI. La clase "miembro ausente en el floor" YA está modelada (bucket-2) y su cobertura parcial YA está registrada en #190.`,
   );
   for (const [root, missing] of wholesaleGaps)
     console.log(
