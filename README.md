@@ -514,8 +514,10 @@ scripts/
 - **Sin transpilación CSS** — el CSS publicado usa `color-mix()`,
   `backdrop-filter`, `@container`, `field-sizing`. Targets modernos
   (browserslist arriba).
-- **Sourcemaps de JS desactivados en publish** — los `.d.ts.map` sí se
-  publican (útiles para "go-to-definition" desde consumer).
+- **Sourcemaps desactivados en publish** — ni sourcemaps de JS ni
+  `.d.ts.map` se publican. El go-to-definition del consumer cae en los
+  `.d.ts` (tipos); el source `.ts` no se shippea (`files`), así que un
+  `.d.ts.map` colgaría apuntando a `src` ausente (#23).
 - **`sideEffects: ["**/*.css"]`** — bundlers tree-shake JS pero conservan
   CSS imports.
 - **`console.error` legítimos de `tabbable`** — `tabbable` es dep
