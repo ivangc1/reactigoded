@@ -21,7 +21,7 @@
  * Si un componente nuevo se añade al DS, añadirlo aquí garantiza
  * SSR-safety en CI antes del merge.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { act } from "react";
@@ -566,6 +566,22 @@ const HYDRATE_CASES: { name: string; jsx: () => ReactElement }[] = [
 ];
 
 describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
+  // `act` de "react" (crudo, no el wrapper de RTL) exige
+  // IS_REACT_ACT_ENVIRONMENT=true para no avisar "not configured to support
+  // act". Lo activamos para este bloque de hidratación y lo restauramos en
+  // afterAll (evita leak a otros ficheros con isolate:false). Cierra los
+  // act() que veía la policy de stderr #28.
+  let prevActEnv: boolean | undefined;
+  beforeAll(() => {
+    const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    prevActEnv = g.IS_REACT_ACT_ENVIRONMENT;
+    g.IS_REACT_ACT_ENVIRONMENT = true;
+  });
+  afterAll(() => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean | undefined }
+    ).IS_REACT_ACT_ENVIRONMENT = prevActEnv;
+  });
   for (const c of HYDRATE_CASES) {
     it(`${c.name}: hidrata sin mismatch ni DOM mutation`, async () => {
       // 1. Server render → HTML estático.
