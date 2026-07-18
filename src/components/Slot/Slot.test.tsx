@@ -532,6 +532,51 @@ describe("composeRefs unit", () => {
     render(<Probe outerRef={outer} />);
     expect(outer.current).toBe(screen.getByTestId("probe"));
   });
+
+  // React 19: una function ref puede devolver un cleanup. asChild + callback-ref-
+  // con-cleanup debe PROPAGAR el cleanup, no perderlo (paridad @radix-ui/react-compose-refs).
+  it("propagates React 19 cleanup: aggregated teardown invokes each ref's cleanup", () => {
+    const cleanupA = vi.fn();
+    const cleanupB = vi.fn();
+    const fnRefA = vi.fn(() => cleanupA);
+    const fnRefB = vi.fn(() => cleanupB);
+    const composed = composeRefs<HTMLElement>(fnRefA, fnRefB);
+    const node = document.createElement("div");
+    const teardown = composed?.(node);
+    expect(fnRefA).toHaveBeenCalledWith(node);
+    expect(fnRefB).toHaveBeenCalledWith(node);
+    expect(typeof teardown).toBe("function");
+    (teardown as () => void)();
+    expect(cleanupA).toHaveBeenCalledTimes(1);
+    expect(cleanupB).toHaveBeenCalledTimes(1);
+    // el cleanup del consumer se invoca SIN un `ref(null)` inesperado
+    expect(fnRefA).toHaveBeenCalledTimes(1);
+    expect(fnRefB).toHaveBeenCalledTimes(1);
+  });
+
+  it("mixed refs: cleanup ref uses its cleanup, others get null teardown", () => {
+    const cleanup = vi.fn();
+    const withCleanup = vi.fn(() => cleanup);
+    const noCleanup = vi.fn();
+    const objRef = createRef<HTMLElement>();
+    const composed = composeRefs<HTMLElement>(withCleanup, noCleanup, objRef);
+    const node = document.createElement("div");
+    const teardown = composed?.(node);
+    expect(objRef.current).toBe(node);
+    expect(typeof teardown).toBe("function");
+    (teardown as () => void)();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(noCleanup).toHaveBeenLastCalledWith(null);
+    expect(objRef.current).toBeNull();
+  });
+
+  it("no aggregated cleanup when no ref returns one (legacy teardown)", () => {
+    const fnRef = vi.fn();
+    const objRef = createRef<HTMLElement>();
+    const composed = composeRefs<HTMLElement>(fnRef, objRef);
+    const teardown = composed?.(document.createElement("div"));
+    expect(teardown).toBeUndefined();
+  });
 });
 
 describe("composeEventHandlers unit", () => {
