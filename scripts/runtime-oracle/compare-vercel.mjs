@@ -1,24 +1,21 @@
 #!/usr/bin/env node
 /**
- * Compara Vercel Edge REAL (`vercel/api/probe.ts`) contra las premisas del gate
- * `@server-safe` (#18). Cierra el ~5% que `@edge-runtime/vm` no puede validar.
+ * Compara Vercel Edge REAL (`vercel/api/probe.ts`, generado por gen-probe.mjs)
+ * contra las premisas del gate `@server-safe` (#18). Cierra el ~5% que
+ * `@edge-runtime/vm` no puede validar.
  *
- * PRESENCE via POST: la enumeración de globals NO es fiable en Vercel Edge (el
- * objeto-global es exótico — URL/Blob/fetch NO salen en getOwnPropertyNames ni
- * en el prototype-walk, aunque existan). Por eso mandamos los nombres del
- * catálogo (SAFE_GLOBALS ∪ EDGE_MISSING_GLOBALS) al probe via POST y él
- * responde `name in globalThis` en el runtime real — la semántica de "presente"
- * correcta.
+ * El probe hornea un `typeof <bare>` por nombre del catálogo (único test fiel en
+ * Vercel Edge — enumeración / `in` / `globalThis[x]` divergen del identificador
+ * bare). Aquí solo se lee ese `presence` y se valida contra el catálogo + las
+ * premisas pineadas.
  *
- * Uso (dos modos):
+ * Uso:
  *   node scripts/runtime-oracle/compare-vercel.mjs https://<deploy>.vercel.app/api/probe
- *       → POST: manda el catálogo, mide en el Edge real (necesita red).
- *   node scripts/runtime-oracle/compare-vercel.mjs probe-output.json
- *       → fichero de una respuesta POST guardada (debe traer `presence`).
+ *   node scripts/runtime-oracle/compare-vercel.mjs probe-output.json   # curl GET guardado
  *
  * FAIL-LOUD: exit 1 si hay drift (SAFE_GLOBAL ausente = falso negativo del gate;
  * EDGE_MISSING presente = sobre-estricto; premisa que no vale = catálogo mal
- * pineado).
+ * pineado; o el probe está desincronizado del catálogo → regenerar).
  */
 import { readFileSync } from "node:fs";
 import {
@@ -38,11 +35,7 @@ const CATALOG_NAMES = [...new Set([...SAFE_GLOBALS, ...EDGE_MISSING_GLOBALS])];
 
 let data;
 if (/^https?:\/\//.test(target)) {
-  const res = await fetch(target, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ names: CATALOG_NAMES }),
-  });
+  const res = await fetch(target);
   if (!res.ok) {
     console.error(`✗ el probe respondió ${res.status} ${res.statusText}`);
     process.exit(1);
@@ -57,7 +50,18 @@ const premises = data.premises ?? {};
 
 if (!presence || typeof presence !== "object") {
   console.error(
-    "✗ el output no trae 'presence'. Pasa la URL del probe (modo POST) para que compare mande el catálogo, o un JSON de una respuesta POST.",
+    "✗ el output no trae 'presence' (¿probe viejo sin regenerar?). Corre gen-probe.mjs + redeploy.",
+  );
+  process.exit(1);
+}
+
+// Anti-stale: el probe horneado debe cubrir TODO el catálogo actual. Si el
+// catálogo creció y no se regeneró/redeployó el probe, esto lo caza (no un
+// falso verde por nombres que el probe nunca probó).
+const notProbed = CATALOG_NAMES.filter((n) => !(n in presence));
+if (notProbed.length) {
+  console.error(
+    `✗ probe DESINCRONIZADO del catálogo: ${notProbed.length} nombres sin probar (regenera con gen-probe.mjs + redeploy): ${notProbed.slice(0, 12).join(", ")}${notProbed.length > 12 ? "…" : ""}`,
   );
   process.exit(1);
 }
@@ -74,7 +78,7 @@ const EXPECTED = {
 
 const drift = [];
 
-// 1. SAFE_GLOBALS deben ESTAR (name in globalThis) en el Edge real.
+// 1. SAFE_GLOBALS deben ESTAR (typeof bare != undefined) en el Edge real.
 const safeMissing = [...SAFE_GLOBALS].filter((n) => !presence[n]);
 if (safeMissing.length)
   drift.push(
@@ -101,7 +105,7 @@ for (const [k, ok] of Object.entries(EXPECTED)) {
 
 // Report
 console.log(
-  `Vercel Edge probe — región: ${data.vercelRegion ?? "?"} · presence de ${CATALOG_NAMES.length} nombres del catálogo`,
+  `Vercel Edge probe — región: ${data.vercelRegion ?? "?"} · presence (typeof bare) de ${CATALOG_NAMES.length} nombres`,
 );
 console.log(
   `  SAFE_GLOBALS: ${SAFE_GLOBALS.size} pineados, ${safeMissing.length} ausentes`,
@@ -110,14 +114,6 @@ console.log(
   `  EDGE_MISSING_GLOBALS: ${EDGE_MISSING_GLOBALS.size} pineados, ${edgePresent.length} presentes`,
 );
 console.log(`  premisas: ${Object.keys(EXPECTED).length} chequeadas`);
-// Desambiguación lexical-vs-property (typeof bare) para los ausentes vía `in`:
-// si un ausente sale con bare != "undefined" → es global léxico usable (gate OK).
-if (safeMissing.length) {
-  const bare = Object.fromEntries(
-    Object.entries(premises).filter(([k]) => k.startsWith("bare")),
-  );
-  console.log(`  typeof bare (desambiguación): ${JSON.stringify(bare)}`);
-}
 
 if (drift.length) {
   console.error(`\n✗ DRIFT vs Vercel Edge real (${drift.length}):`);

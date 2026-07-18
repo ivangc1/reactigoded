@@ -1,23 +1,17 @@
-/**
- * Oráculo de runtime — probe de Vercel Edge REAL (#18, cierra el ~5% que
- * `@edge-runtime/vm` no puede validar).
+/** GENERADO por scripts/runtime-oracle/gen-probe.mjs desde el catálogo del gate
+ * (SAFE_GLOBALS ∪ EDGE_MISSING_GLOBALS). NO editar probe.ts a mano — editar ESTA
+ * plantilla (probe.template.ts) y regenerar con `node ../../gen-probe.mjs`.
  *
- * `@edge-runtime/vm` es un sandbox sobre Node: filtra globals Node-shared
- * (`performance.eventLoopUtilization`, `URL.createObjectURL`,
- * `WebAssembly.Module`…) que en el Vercel Edge REAL no existen o lanzan. El
- * runtime-oracle mide workerd + Deno fielmente, pero Vercel Edge PRODUCCIÓN
- * es su propio runtime — este probe es el único oráculo fiel para él.
+ * PRESENCE via `typeof <identificador-bare>` — el ÚNICO test fiel en Vercel Edge.
+ * El objeto-global es exótico y MIENTE por toda vía indirecta (medido, lhr1):
+ *   - getOwnPropertyNames / prototype-walk: 59 nombres, omite URL/Blob/fetch.
+ *   - `name in globalThis` (has): false para URL/Blob/fetch/performance…
+ *   - `globalThis[name]` (get): resuelve URL/Blob pero NO performance (undefined).
+ *   - `typeof <bare>`: performance→object, URL→function… = como resuelve el código.
+ * Como el bare exige el identificador LITERAL en el source y Edge bloquea eval, se
+ * codegenera un `typeof` por nombre del catálogo (drift-proof).
  *
- * PRESENCE via POST: la ENUMERACIÓN de globals NO es fiable en Vercel Edge —
- * el objeto-global es exótico y los WinterCG (URL/Blob/fetch/setTimeout…) NO
- * aparecen en `getOwnPropertyNames` NI en la cadena de prototipos, aunque
- * `new URL()` funcione (`ownGlobalThisNames == globalThisNames == 59`). El único
- * test fiable de "presente" es `name in globalThis`. El caller
- * (compare-vercel.mjs, dueño del catálogo) manda los nombres via POST {names}
- * y aquí se prueban con `in` en el runtime real.
- *
- * DEPLOY: ver `scripts/runtime-oracle/vercel/README.md`. `vercel dev` NO sirve
- * (usa `@edge-runtime/vm`, el 95%); hace falta un deploy de PRODUCCIÓN.
+ * DEPLOY: ver ../README.md. `vercel dev` NO sirve (usa @edge-runtime/vm, el 95%).
  */
 export const config = { runtime: "edge" };
 
@@ -34,8 +28,7 @@ function tryCall(fn: () => void): string {
   }
 }
 
-// WASM.compile es ASÍNCRONO (Promise que RECHAZA, no lanza síncronamente): hay
-// que AWAITearla. worker.js (workerd) sí la awaitea → THROWS.
+// WASM.compile es ASYNC (Promise que RECHAZA, no lanza síncronamente): AWAIT.
 async function tryAwait(fn: () => Promise<unknown>): Promise<string> {
   try {
     await fn();
@@ -46,80 +39,165 @@ async function tryAwait(fn: () => Promise<unknown>): Promise<string> {
   }
 }
 
-// Se conserva para EVIDENCIAR el gap de enumeración: en Vercel Edge sale idéntico
-// a `ownGlobalThisNames` (URL/Blob/fetch ausentes) aunque existan y funcionen.
-function reachableGlobalNames(g: object): string[] {
-  const names = new Set<string>();
-  let o: object | null = g;
-  while (o && o !== Object.prototype) {
-    for (const n of Object.getOwnPropertyNames(o)) names.add(n);
-    o = Object.getPrototypeOf(o) as object | null;
-  }
-  return [...names].sort();
-}
-
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(): Promise<Response> {
   const g = globalThis as Any;
 
-  // PRESENCE (POST {names:[...]}) — `name in globalThis` en el Edge real, el único
-  // test fiable dado el objeto-global exótico (ver cabecera).
-  let presence: Record<string, boolean> | null = null;
-  if (req.method === "POST") {
-    try {
-      const body = (await req.json()) as { names?: unknown };
-      const names = Array.isArray(body.names) ? (body.names as unknown[]) : [];
-      presence = {};
-      for (const n of names) if (typeof n === "string") presence[n] = n in g;
-    } catch {
-      presence = null;
-    }
-  }
+  // PRESENCE — un `typeof <bare>` por nombre del catálogo (generado). El caso
+  // `undefined` se fija a true: es primitivo del lenguaje (siempre disponible),
+  // pero `typeof undefined === "undefined"` rompería la heurística.
+  const presence: Record<string, boolean> = {
+    "AbortController": typeof AbortController !== "undefined",
+    "AbortSignal": typeof AbortSignal !== "undefined",
+    "AggregateError": typeof AggregateError !== "undefined",
+    "Array": typeof Array !== "undefined",
+    "ArrayBuffer": typeof ArrayBuffer !== "undefined",
+    "Atomics": typeof Atomics !== "undefined",
+    "BigInt": typeof BigInt !== "undefined",
+    "BigInt64Array": typeof BigInt64Array !== "undefined",
+    "BigUint64Array": typeof BigUint64Array !== "undefined",
+    "Blob": typeof Blob !== "undefined",
+    "Boolean": typeof Boolean !== "undefined",
+    "BroadcastChannel": typeof BroadcastChannel !== "undefined",
+    "ByteLengthQueuingStrategy": typeof ByteLengthQueuingStrategy !== "undefined",
+    "CompressionStream": typeof CompressionStream !== "undefined",
+    "CountQueuingStrategy": typeof CountQueuingStrategy !== "undefined",
+    "Crypto": typeof Crypto !== "undefined",
+    "CryptoKey": typeof CryptoKey !== "undefined",
+    "CustomEvent": typeof CustomEvent !== "undefined",
+    "DOMException": typeof DOMException !== "undefined",
+    "DataView": typeof DataView !== "undefined",
+    "Date": typeof Date !== "undefined",
+    "DecompressionStream": typeof DecompressionStream !== "undefined",
+    "Error": typeof Error !== "undefined",
+    "EvalError": typeof EvalError !== "undefined",
+    "Event": typeof Event !== "undefined",
+    "EventTarget": typeof EventTarget !== "undefined",
+    "File": typeof File !== "undefined",
+    "FinalizationRegistry": typeof FinalizationRegistry !== "undefined",
+    "Float32Array": typeof Float32Array !== "undefined",
+    "Float64Array": typeof Float64Array !== "undefined",
+    "FormData": typeof FormData !== "undefined",
+    "Headers": typeof Headers !== "undefined",
+    "Infinity": typeof Infinity !== "undefined",
+    "Int16Array": typeof Int16Array !== "undefined",
+    "Int32Array": typeof Int32Array !== "undefined",
+    "Int8Array": typeof Int8Array !== "undefined",
+    "Intl": typeof Intl !== "undefined",
+    "Iterator": typeof Iterator !== "undefined",
+    "JSON": typeof JSON !== "undefined",
+    "Map": typeof Map !== "undefined",
+    "Math": typeof Math !== "undefined",
+    "MessageChannel": typeof MessageChannel !== "undefined",
+    "MessageEvent": typeof MessageEvent !== "undefined",
+    "MessagePort": typeof MessagePort !== "undefined",
+    "NaN": typeof NaN !== "undefined",
+    "Navigator": typeof Navigator !== "undefined",
+    "Number": typeof Number !== "undefined",
+    "Object": typeof Object !== "undefined",
+    "Performance": typeof Performance !== "undefined",
+    "PerformanceEntry": typeof PerformanceEntry !== "undefined",
+    "PerformanceMark": typeof PerformanceMark !== "undefined",
+    "PerformanceMeasure": typeof PerformanceMeasure !== "undefined",
+    "PerformanceObserver": typeof PerformanceObserver !== "undefined",
+    "PerformanceObserverEntryList": typeof PerformanceObserverEntryList !== "undefined",
+    "PerformanceResourceTiming": typeof PerformanceResourceTiming !== "undefined",
+    "Promise": typeof Promise !== "undefined",
+    "Proxy": typeof Proxy !== "undefined",
+    "RangeError": typeof RangeError !== "undefined",
+    "ReadableByteStreamController": typeof ReadableByteStreamController !== "undefined",
+    "ReadableStream": typeof ReadableStream !== "undefined",
+    "ReadableStreamBYOBReader": typeof ReadableStreamBYOBReader !== "undefined",
+    "ReadableStreamBYOBRequest": typeof ReadableStreamBYOBRequest !== "undefined",
+    "ReadableStreamDefaultController": typeof ReadableStreamDefaultController !== "undefined",
+    "ReadableStreamDefaultReader": typeof ReadableStreamDefaultReader !== "undefined",
+    "ReferenceError": typeof ReferenceError !== "undefined",
+    "Reflect": typeof Reflect !== "undefined",
+    "RegExp": typeof RegExp !== "undefined",
+    "Request": typeof Request !== "undefined",
+    "Response": typeof Response !== "undefined",
+    "Set": typeof Set !== "undefined",
+    "String": typeof String !== "undefined",
+    "SubtleCrypto": typeof SubtleCrypto !== "undefined",
+    "Symbol": typeof Symbol !== "undefined",
+    "SyntaxError": typeof SyntaxError !== "undefined",
+    "TextDecoder": typeof TextDecoder !== "undefined",
+    "TextDecoderStream": typeof TextDecoderStream !== "undefined",
+    "TextEncoder": typeof TextEncoder !== "undefined",
+    "TextEncoderStream": typeof TextEncoderStream !== "undefined",
+    "TransformStream": typeof TransformStream !== "undefined",
+    "TransformStreamDefaultController": typeof TransformStreamDefaultController !== "undefined",
+    "TypeError": typeof TypeError !== "undefined",
+    "URIError": typeof URIError !== "undefined",
+    "URL": typeof URL !== "undefined",
+    "URLSearchParams": typeof URLSearchParams !== "undefined",
+    "Uint16Array": typeof Uint16Array !== "undefined",
+    "Uint32Array": typeof Uint32Array !== "undefined",
+    "Uint8Array": typeof Uint8Array !== "undefined",
+    "Uint8ClampedArray": typeof Uint8ClampedArray !== "undefined",
+    "WeakMap": typeof WeakMap !== "undefined",
+    "WeakRef": typeof WeakRef !== "undefined",
+    "WeakSet": typeof WeakSet !== "undefined",
+    "WebAssembly": typeof WebAssembly !== "undefined",
+    "WebSocket": typeof WebSocket !== "undefined",
+    "WritableStream": typeof WritableStream !== "undefined",
+    "WritableStreamDefaultController": typeof WritableStreamDefaultController !== "undefined",
+    "WritableStreamDefaultWriter": typeof WritableStreamDefaultWriter !== "undefined",
+    "atob": typeof atob !== "undefined",
+    "btoa": typeof btoa !== "undefined",
+    "clearInterval": typeof clearInterval !== "undefined",
+    "clearTimeout": typeof clearTimeout !== "undefined",
+    "console": typeof console !== "undefined",
+    "crypto": typeof crypto !== "undefined",
+    "decodeURI": typeof decodeURI !== "undefined",
+    "decodeURIComponent": typeof decodeURIComponent !== "undefined",
+    "encodeURI": typeof encodeURI !== "undefined",
+    "encodeURIComponent": typeof encodeURIComponent !== "undefined",
+    "escape": typeof escape !== "undefined",
+    "fetch": typeof fetch !== "undefined",
+    "isFinite": typeof isFinite !== "undefined",
+    "isNaN": typeof isNaN !== "undefined",
+    "parseFloat": typeof parseFloat !== "undefined",
+    "parseInt": typeof parseInt !== "undefined",
+    "performance": typeof performance !== "undefined",
+    "queueMicrotask": typeof queueMicrotask !== "undefined",
+    "setInterval": typeof setInterval !== "undefined",
+    "setTimeout": typeof setTimeout !== "undefined",
+    "structuredClone": typeof structuredClone !== "undefined",
+    "undefined": true, // primitivo del lenguaje; siempre presente (typeof undefined==="undefined")
+    "unescape": typeof unescape !== "undefined",
+  };
 
+  // Premisas (hazards) medidas con identificadores BARE — como el código real,
+  // no vía globalThis[x] (que en Edge diverge, p.ej. globalThis.performance).
   const premises: Record<string, string> = {
-    // typeof por globalThis (presence property-side)
-    performance: typeof g.performance,
-    eventLoopUtilization: typeof g.performance?.eventLoopUtilization,
-    createObjectURL: typeof g.URL?.createObjectURL,
-    canParse: typeof g.URL?.canParse,
-    Blob: typeof g.Blob,
-    consoleTable: typeof g.console?.table,
-    WebAssembly: typeof g.WebAssembly,
-    waCompile: typeof g.WebAssembly?.compile,
-    process: typeof g.process,
-    Buffer: typeof g.Buffer,
-    setImmediate: typeof g.setImmediate,
-    // typeof BARE (identificador real, NO globalThis[x]) — desambigua
-    // lexical-vs-property: si `in` dice ausente pero el bare dice present → global
-    // léxico usable (gate OK); si AMBOS ausentes → hueco real de Vercel Edge.
-    // (typeof de un identificador no declarado devuelve "undefined" sin lanzar.)
-    barePerformance: typeof performance,
-    bareURL: typeof URL,
-    bareFetch: typeof fetch,
-    bareSetTimeout: typeof setTimeout,
-    bareQueueMicrotask: typeof queueMicrotask,
-    bareStructuredClone: typeof structuredClone,
-    bareTextEncoder: typeof TextEncoder,
-    // call/await-if-throws (present-but-throws hazards)
-    newURL: tryCall(() => void new g.URL("https://a.b/c")),
+    performance: typeof performance,
+    eventLoopUtilization:
+      typeof performance !== "undefined"
+        ? typeof (performance as Any).eventLoopUtilization
+        : "no-performance",
+    createObjectURL:
+      typeof URL !== "undefined" ? typeof URL.createObjectURL : "no-URL",
+    consoleTable:
+      typeof console !== "undefined" ? typeof (console as Any).table : "no-console",
+    waCompile:
+      typeof WebAssembly !== "undefined" ? typeof WebAssembly.compile : "no-WA",
+    newURL: tryCall(() => void new URL("https://a.b/c")),
     createObjectURLCall: tryCall(() =>
-      void g.URL.createObjectURL(new g.Blob(["x"])),
+      void (URL as Any).createObjectURL(new Blob(["x"])),
     ),
-    revokeCall: tryCall(() => g.URL.revokeObjectURL("blob:x")),
+    revokeCall: tryCall(() => (URL as Any).revokeObjectURL("blob:x")),
     waCompileCall: await tryAwait(() =>
-      g.WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])),
+      WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])),
     ),
     fnCtor: tryCall(() => void new Function("return 1")),
-    consoleTableCall: tryCall(() => g.console.table([{ a: 1 }])),
-    setImmediateCall: tryCall(() => g.setImmediate(() => {})),
+    consoleTableCall: tryCall(() => (console as Any).table([{ a: 1 }])),
   };
 
   const out = {
     runtime: "vercel-edge",
     vercelRegion: g.process?.env?.VERCEL_REGION ?? null,
-    // Enumeración (evidencia del gap): en Vercel Edge ambos salen idénticos y
-    // omiten URL/Blob/fetch. Por eso `presence` (vía `in`) es la fuente real.
+    // Evidencia del objeto-global exótico: enumeración da ~59 y omite URL/Blob/fetch.
     ownGlobalThisNames: Object.getOwnPropertyNames(g).sort(),
-    globalThisNames: reachableGlobalNames(g),
     presence,
     premises,
   };
