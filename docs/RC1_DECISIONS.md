@@ -72,6 +72,56 @@ externo lo justifique".
 
 ---
 
+### Reactivación 2026-07-18: publicado `1.0.0-beta.26`
+
+**Qué se publicó**: `reactigoded@1.0.0-beta.26`, con `npm publish --tag beta`.
+Estado resultante en el registro:
+
+```
+dist-tags = { beta: '1.0.0-beta.26', latest: '1.0.0-beta.26' }
+time.created = 2026-07-18T22:09:23Z
+```
+
+**Qué motivó levantar la pausa** — una razón que la decisión de mayo **no
+ponía en la balanza**: el nombre `reactigoded` seguía **sin reservar** en npm
+(`npm view` → 404). Con el freeze de API pública ya cerrado (§5.13: 323
+clases, 37 tokens Tier-2, 6 data-attrs), 27 tags git, el CHANGELOG y
+`igoded.es` apuntando todos a ese nombre, perderlo habría forzado un rename
+de blast-radius total **justo después de congelar**. Probabilidad baja
+(nombre acuñado), coste altísimo, mitigación de un comando: asimetría clara.
+
+**El `latest` NO fue intencionado, y no se puede quitar.** El plan era
+publicar solo bajo `beta` para reservar el nombre sin que
+`npm install reactigoded` resolviera. Pero npm asigna `latest` en el
+**primer** publish de un paquete pase lo que pase con `--tag` (un paquete no
+puede existir sin `latest`), y `npm dist-tag rm reactigoded latest` responde
+**400**: el registro protege ese tag. Verificado, no asumido.
+
+**Consecuencia real, sin adornos**: esto es una publicación normal, no una
+"reserva silenciosa". `npm install reactigoded` funciona. La distinción
+`beta`-vs-`latest` resultó ser cosmética para lo que preocupaba: el paquete
+es público, indexado e instalable en ambos casos; `@beta` era una pulsación
+de teclas, no una barrera.
+
+**Qué pasa con las razones de la pausa**:
+- *"Iván es el único consumer previsible"* → sigue siendo cierto. Sin difusión
+  ni promoción, los consumers reales son ~0.
+- *"Publicar implica compromiso de mantenimiento sostenido"* → asumido. El
+  coste escala con consumers reales; hoy es teórico.
+- *"Sin urgencia de DS público, mejor esperar"* → **superado**: la urgencia no
+  era publicar, era **no perder el nombre**.
+
+**Implicaciones aplicadas**:
+- `README.md`: la nota "aún no está publicado a npm" + instalación por
+  clone/`npm link` era **falsa** desde el publish → sustituida por
+  `npm install` con el aviso de pre-release; el clone/`npm link` se conserva
+  como vía de desarrollo sobre la librería.
+
+**Lo que NO cambia**: el tag `rc.1` sigue pendiente y la API congelada manda.
+Publicar una beta no adelanta el release ni relaja el freeze.
+
+---
+
 ## B2 — Skeleton API: ¿breaking ahora o nunca?
 
 **Default inicial**: **(a) breaking ahora — split `Skeleton` (decorativo)

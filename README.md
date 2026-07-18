@@ -18,9 +18,16 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 
 ## Instalación
 
-> **Nota**: el paquete aún no está publicado a npm. La instalación
-> se hace vía clone + `npm link` mientras tanto. La publicación al
-> registro está prevista pero sin fecha confirmada.
+> **Estado**: publicado en npm como **`1.0.0-beta.26`**.
+> **Es una pre-release**: la API pública ya está congelada
+> (`docs/` §5.13, gate anti-rename) pero el tag `rc.1` todavía no ha
+> salido — puede haber cambios antes de `1.0.0`.
+
+```bash
+npm install reactigoded react react-dom @floating-ui/react clsx
+```
+
+Para trabajar **sobre** la librería (o probar cambios sin publicar):
 
 ```bash
 git clone https://github.com/ivangc1/reactigoded.git
