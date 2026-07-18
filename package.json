@@ -212,6 +212,7 @@
       "gzip": true
     }
   ],
+  "_comment_overrides": "eslint-plugin-jest-dom (peer eslint <=^9) y eslint-plugin-jsx-a11y (peer <=^9) aun no publican version con peer ^10: jest-dom PR #416 esta merged en main pero SIN release (latest 5.5.0), jsx-a11y issue #1075 sigue abierto. El override quirurgico $eslint referencia el spec del eslint raiz (auto-sync al bumpear) y satisface SOLO ese edge del peer, sin el --legacy-peer-deps global. BORRAR el override de cada plugin cuando publique un release con peer ^10 (check vivo: npm view <plugin>@latest peerDependencies.eslint).",
   "overrides": {
     "eslint-plugin-jest-dom": {
       "eslint": "$eslint"
