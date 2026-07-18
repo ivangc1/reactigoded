@@ -373,7 +373,7 @@ describe("Slot — Fragment child (D14 edge case #1)", () => {
 });
 
 describe("Slot — multiple children (D14 edge case #2)", () => {
-  it("logs dev error and renders first valid element", () => {
+  it("logs dev error and renders null (no silent-drop of the rest)", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     render(
       <Slot data-slot-marker="yes">
@@ -385,10 +385,8 @@ describe("Slot — multiple children (D14 edge case #2)", () => {
         </button>
       </Slot>,
     );
-    expect(screen.getByTestId("first")).toHaveAttribute(
-      "data-slot-marker",
-      "yes",
-    );
+    // NO renderiza el primero (eso borraría el resto en silencio en prod) — null.
+    expect(screen.queryByTestId("first")).not.toBeInTheDocument();
     expect(screen.queryByTestId("second")).not.toBeInTheDocument();
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy.mock.calls[0]?.[0]).toContain(

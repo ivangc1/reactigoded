@@ -144,10 +144,12 @@ export function Slot({
           "Wrap multiple children in a single parent element (e.g., <div>).",
       );
     }
-    const arr = Children.toArray(children);
-    const firstValid = arr.find(isValidElement);
-    if (!firstValid) return null;
-    return mergeAndClone(firstValid, slotProps);
+    // >1 child es mal uso de asChild: NO renderizamos el primero — eso borraría
+    // el resto en SILENCIO en prod (HIGH del audit A+B: CTAs / nodos accesibles
+    // desaparecidos sin aviso). null, consistente con los demás errores del Slot;
+    // el dev ve el console.error y el consumer nota que falta TODO (fallo
+    // observable), no un render parcial que aparenta funcionar.
+    return null;
   }
 
   // Caso normal: single valid element.
