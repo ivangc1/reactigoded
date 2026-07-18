@@ -75,12 +75,22 @@ if (notProbed.length) {
 }
 
 // Premisas pineadas (idénticas a las medidas en workerd 2026-07-17).
+// codex P2: cada premisa PRESENT-but-throws se asserta en DOS ejes — que la API
+// EXISTE (`typeof === "function"`) y que llamarla LANZA. Con solo `/THROWS/`, un
+// runtime donde la API DESAPARECIERA también pasaría (la llamada sin guard daría
+// `TypeError: ... is not a function`), y el oráculo iría verde aunque la
+// remediación cambiara de "`?.()` NO protege" (present-but-throws → denylist) a
+// "la ausencia SÍ protege" (absence → `?.()` basta). Esa distinción ES la
+// clasificación del hazard, así que el par existe+lanza es obligatorio.
 const EXPECTED = {
   eventLoopUtilization: (v) => v === "undefined", // elu absent (Node-only)
-  createObjectURLCall: (v) => /THROWS/.test(v), // present-but-throws
-  revokeCall: (v) => /THROWS/.test(v), // present-but-throws
-  waCompileCall: (v) => /THROWS/.test(v), // CompileError (codegen disallowed)
-  fnCtor: (v) => /THROWS/.test(v), // EvalError (eval-sink)
+  createObjectURL: (v) => v === "function", // existe (par de createObjectURLCall)
+  createObjectURLCall: (v) => /THROWS/.test(v), // …y lanza → present-but-throws
+  revokeObjectURL: (v) => v === "function", // existe (par de revokeCall)
+  revokeCall: (v) => /THROWS/.test(v), // …y lanza → present-but-throws
+  waCompile: (v) => v === "function", // existe (par de waCompileCall)
+  waCompileCall: (v) => /THROWS/.test(v), // …y lanza → CompileError (codegen)
+  fnCtor: (v) => /THROWS/.test(v), // EvalError (eval-sink; Function es builtin)
   newURL: (v) => v === "OK", // URL construible (sanity)
 };
 

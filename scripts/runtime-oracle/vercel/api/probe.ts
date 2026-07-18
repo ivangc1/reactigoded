@@ -175,8 +175,15 @@ export default async function handler(): Promise<Response> {
       typeof performance !== "undefined"
         ? typeof (performance as Any).eventLoopUtilization
         : "no-performance",
+    // codex P2: las premisas present-but-throws necesitan su `typeof` COMPAÑERO.
+    // Sin él, `/THROWS/` a secas también pasa cuando la API está AUSENTE (la
+    // llamada sin guard daría `TypeError: ... is not a function`) → el oráculo se
+    // pondría verde aunque la semántica cambiara de "?.() NO protege" a "la
+    // ausencia SÍ protege", que es de lo que depende la clasificación del hazard.
     createObjectURL:
       typeof URL !== "undefined" ? typeof URL.createObjectURL : "no-URL",
+    revokeObjectURL:
+      typeof URL !== "undefined" ? typeof URL.revokeObjectURL : "no-URL",
     consoleTable:
       typeof console !== "undefined" ? typeof (console as Any).table : "no-console",
     waCompile:
