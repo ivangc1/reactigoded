@@ -393,21 +393,26 @@ paquete). Su propio PR aislado.
 
 ---
 
-## LOW / higiene diferida — coverage `?import` (#15)
+## LOW #15 (coverage `?import`) — VERIFICADO NO-ISSUE, sin acción
 
-**De dónde sale**: informe consolidado A+B, sección "🔵 LOW / Higiene".
-De los 5 LOW: #13 (ERESOLVE)=#27, #16 (stderr)=#28, #14 (verify≠CI) y #17
-(build-storybook warnings) se cerraron. Queda solo **#15**, diferido — muy
-bajo freeze-impact, no toca `dist` ni consumers.
+**De dónde sale**: informe consolidado A+B, "🔵 LOW / Higiene". De los 5
+LOW: #13 (ERESOLVE)=#27, #16 (stderr)=#28, #14 (verify≠CI) y #17
+(build-storybook) cerrados. #15 se investigó y resulta **no-issue**.
 
-**#15 — Coverage no mide `scripts/perceptual-allowlist.json?import`.**
-V8/Rolldown lo excluye por parse error del import con query `?import` → la
-métrica de coverage aparenta más de lo que mide. **Medición-only**, no
-afecta corrección ni artefacto, y coverage NO es un gate (no está en
-`verify:unit` ni en CI; `test:coverage` es manual). Matiz: el excluido es
-un fichero JSON de DATOS, no código — excluirlo del coverage de código es
-arguablemente correcto, no un inflado real. Acción si se aborda: reevaluar
-el parse error con vite 8 / vitest 4; si molesta, excluir el fichero del
-denominador explícitamente (que el número no mienta).
+**#15 — Coverage "no mide" `scripts/perceptual-allowlist.json?import`.** El
+informe lo marcó "la métrica aparenta más de lo que mide". **Verificado
+(coverage corrido, vite 8 / vitest 4)**: el parse error persiste
+(`Failed to parse perceptual-allowlist.json?import. Excluding it from
+coverage`) PERO el excluido es un **fichero JSON de DATOS, no código** — V8
+lo excluye correctamente; no infla el coverage de código (90.19% real, no
+inflado por esto). Y coverage **NO es un gate** (no en `verify:unit` ni CI;
+`test:coverage` es manual). El framing "métrica que miente" no aplica.
+
+**Por qué no se toca**: para hacer la exclusión "explícita" habría que
+setear `coverage.exclude` en vitest.config, pero en vitest 4
+`coverageConfigDefaults.exclude` viene vacío → setearlo arriesga borrar los
+excludes built-in y DEFLACTAR el número. Pelear con los internals de
+coverage por un mensaje benigno de V8 en una métrica no-gate = falso
+arreglo. Si algún día `test:coverage` pasa a gate, revisar entonces.
 
 ---
