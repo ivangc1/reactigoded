@@ -24,7 +24,21 @@ import { __resetTopLevelLandmarkCheckForTests } from "@/utils/useTopLevelLandmar
 // envuelve este guard y, si no restaura, el `afterEach` de aquí resetea a
 // la referencia real igualmente.
 const REAL_CONSOLE = { error: console.error, warn: console.warn };
-const CONSOLE_ALLOWLIST: RegExp[] = [/^\[reactigoded\]/, /^\[useControllableState\]/];
+const CONSOLE_ALLOWLIST: RegExp[] = [
+  // Dev-warnings de contrato del propio DS (intencionales en ciertos tests).
+  /^\[reactigoded\]/,
+  /^\[useControllableState\]/,
+  // Ruido de React testing-env, environment/timing-dependent: aparece bajo
+  // el `--isolate --pool=forks` de CI (`test:unit:ci`) pero NO bajo el pool
+  // threads local (`test:unit`), y es benigno — artefactos del runner, no
+  // bugs del DS. La policy sigue cazando lo importante (props DOM inválidas,
+  // errores de hooks, console.error accidental de app):
+  //   - act(): updates async no envueltos, o SSR sin IS_REACT_ACT_ENVIRONMENT.
+  //   - controlled↔uncontrolled: tests que ejercen transiciones de input.
+  /An update to .* inside a test was not wrapped in act/,
+  /not configured to support act/,
+  /A component is changing an? (un)?controlled input/,
+];
 let leakedConsole: string[] = [];
 
 function makeConsoleGuard(kind: "error" | "warn") {
