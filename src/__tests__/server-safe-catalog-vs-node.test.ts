@@ -143,8 +143,10 @@ const GLOBALS_OVERCLAIMS = [
   "DisposableStack",
   "ErrorEvent",
   "Float16Array",
+  "QuotaExceededError", // globals@17.7: DOM-only, ausente en Node (Test A lo cazó)
   "Storage",
   "SuppressedError",
+  "Temporal", // globals@17.7: TC39 experimental flag-gated, ausente en Node (Test A)
   "URLPattern",
 ];
 

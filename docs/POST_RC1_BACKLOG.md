@@ -302,3 +302,47 @@ en el futuro se vuelven a crear localmente.
 dispersos en cwd).
 
 ---
+
+## `typescript@7` (port nativo) — diferido: ecosistema no listo
+
+**De dónde sale**: sesión `chore/bump-deps` (bump de todas las
+librerías, minor + major). TypeScript 6→7 es el único major que NO se
+pudo adoptar. Los otros 3 (`@types/node` 25→26, `chromatic` 17→18,
+`esbuild` 0.27→0.28) sí se aplicaron.
+
+**Por qué no se arregla ahora** — dos bloqueos independientes, ambos
+medidos (no asumidos):
+
+1. **`typescript-eslint@8.64` no soporta TS7**. Su peer es
+   `typescript ">=4.8.4 <6.1.0"` (no llega ni a 6.1). Con TS7
+   instalado, `npm run lint` crashea con
+   `TypeError: Cannot read properties of undefined (reading 'Cjs')`
+   — `@typescript-eslint/typescript-estree` lee una API interna que
+   el port nativo cambió. **El lint queda roto.**
+
+2. **Los gates AST propios del DS usan la Compiler API que el port
+   nativo no expone**. `npm run typecheck` con TS7 falla:
+   `error TS2339: Property 'createSourceFile' does not exist` en
+   `src/_audit/server-safe-gate.test.ts:54`. El gate server-safe
+   (`check-server-safe-markers.mjs`) y sus tests están construidos
+   sobre `ts.createSourceFile` + walk del AST (decisión de diseño,
+   ver ADR gates-AST). El paquete `typescript@7` (native/tsgo) no
+   entrega esa API programática en su entry → los gates habría que
+   reescribirlos.
+
+**Conclusión**: adoptar TS7 no es un bump, es un proyecto de
+migración de toolchain (esperar a `typescript-eslint` con soporte
+TS7) **más** reescritura de los gates AST sobre la nueva API. Fuera
+del scope de rc.1 (y de un "bump de librerías").
+
+**Acción concreta cuando se procese**:
+- Esperar a `typescript-eslint` con peer que incluya `^7`.
+- Reevaluar si el port nativo expone (o hay shim para) la Compiler
+  API que consumen los gates; si no, portar los gates.
+- Bump `typescript@7.x` + re-verificar `lint` / `typecheck` /
+  `build` (tsc + tsc-alias + vite-plugin-dts) / `test:server-safe-markers`.
+
+**Estado**: TS pineado en `6.0.3` (exact). El resto del bump aplicado
+y verificado (verify-cold + build + gate + `npm ci` limpio).
+
+---
