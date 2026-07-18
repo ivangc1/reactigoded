@@ -171,6 +171,28 @@ export default async function handler(): Promise<Response> {
     }
     return [...s].sort();
   }
+  // TIER 2 — superficie COMPLETA: presencia de todo el universo de `globals`
+  // (builtin ∪ nodeBuiltin ∪ browser ∪ worker ∪ serviceworker ∪ es2025). Permite
+  // regenerar EDGE_MISSING_GLOBALS desde el Edge REAL en vez de desde
+  // @edge-runtime/vm (cuya fuga de Node es el origen de EDGE_MISSING_REAL).
+  const fullSurface: Record<string, boolean> = {
+    /*__FULL_SURFACE__*/
+  };
+
+  // TIER 1 — superficie de FN real: miembros de CADA root SAFE object-valued. El
+  // gate solo modela miembros de 4 roots; el resto los trata WHOLESALE, así que un
+  // miembro presente en el floor Node pero AUSENTE en Edge sería un FN no modelado
+  // (`root.member()` pasa el gate y lanza en producción). `compare` calcula el lado
+  // Node localmente y hace el diff.
+  const rootMembers: Record<string, string[]> = {};
+  function addRoot(name: string, v: Any): void {
+    // Solo namespaces/instancias (typeof "object") + URL, que es función con
+    // estáticos que sí importan. Los constructores ES no divergen y solo harían ruido.
+    if (v === null || v === undefined) return;
+    if (typeof v === "object" || name === "URL") rootMembers[name] = dumpMembers(v);
+  }
+  /*__ROOTS__*/
+
   const memberDump: Record<string, string[] | null> = {
     performance:
       typeof performance !== "undefined" ? dumpMembers(performance) : null,
@@ -186,6 +208,8 @@ export default async function handler(): Promise<Response> {
     browserOnly,
     denied,
     memberDump,
+    fullSurface,
+    rootMembers,
     // Evidencia del objeto-global exótico: enumeración da ~59 y omite URL/Blob/fetch.
     ownGlobalThisNames: Object.getOwnPropertyNames(g).sort(),
     presence,

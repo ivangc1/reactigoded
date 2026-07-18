@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import globalsPkg from "globals";
 import {
   SAFE_GLOBALS,
   EDGE_MISSING_GLOBALS,
@@ -65,12 +66,46 @@ const browserOnlyLines = typeofBlock(
 );
 const deniedLines = typeofBlock(INTENTIONAL_DENY, "INTENTIONAL_DENY");
 
+// TIER 2 — universo COMPLETO de `globals` (builtin ∪ nodeBuiltin ∪ browser ∪
+// worker ∪ serviceworker ∪ es2025). Presencia de TODO lo nombrable, para poder
+// regenerar EDGE_MISSING desde el Edge real en vez de desde @edge-runtime/vm.
+const UNIVERSE_SETS = [
+  "builtin",
+  "nodeBuiltin",
+  "browser",
+  "worker",
+  "serviceworker",
+  "es2025",
+];
+const universe = new Set();
+for (const k of UNIVERSE_SETS)
+  if (globalsPkg[k]) for (const n of Object.keys(globalsPkg[k])) universe.add(n);
+const UNIVERSE = [...universe].filter((n) => ID.test(n)).sort();
+const fullSurfaceLines = UNIVERSE.map(
+  (n) =>
+    n === "undefined"
+      ? `    "undefined": true, // primitivo del lenguaje`
+      : `    ${JSON.stringify(n)}: typeof ${n} !== "undefined",`,
+).join("\n");
+
+// TIER 1 — un addRoot por global SAFE; el probe solo volcará los object-valued
+// (namespaces/instancias) + URL. Los constructores ES no divergen → solo ruido.
+const rootLines = [...SAFE_GLOBALS]
+  .sort()
+  .map(
+    (n) =>
+      `  addRoot(${JSON.stringify(n)}, typeof ${n} !== "undefined" ? ${n} : null);`,
+  )
+  .join("\n");
+
 const tplPath = join(here, "vercel/api/probe.template.ts");
 const tpl = readFileSync(tplPath, "utf8");
 const SLOTS = [
   ["    /*__PRESENCE__*/", lines],
   ["    /*__BROWSER_ONLY__*/", browserOnlyLines],
   ["    /*__DENIED__*/", deniedLines],
+  ["    /*__FULL_SURFACE__*/", fullSurfaceLines],
+  ["  /*__ROOTS__*/", rootLines],
 ];
 let outTs = tpl;
 for (const [slot, body] of SLOTS) {
@@ -82,5 +117,5 @@ for (const [slot, body] of SLOTS) {
 }
 writeFileSync(join(here, "vercel/api/probe.ts"), outTs);
 console.log(
-  `✓ probe.ts generado: ${CATALOG.length} catálogo · ${BROWSER_ONLY_GUARD_GLOBALS.size} browser-only · ${INTENTIONAL_DENY.size} denied · presence via typeof bare.`,
+  `✓ probe.ts generado: ${CATALOG.length} catálogo · ${BROWSER_ONLY_GUARD_GLOBALS.size} browser-only · ${INTENTIONAL_DENY.size} denied · ${UNIVERSE.length} superficie completa · ${SAFE_GLOBALS.size} roots — todo via typeof bare.`,
 );

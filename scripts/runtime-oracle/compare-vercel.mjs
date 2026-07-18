@@ -25,12 +25,14 @@
  * catálogo (regenerar con gen-probe.mjs + redeploy).
  */
 import { readFileSync } from "node:fs";
+import globalsPkg from "globals";
 import {
   SAFE_GLOBALS,
   EDGE_MISSING_GLOBALS,
   EDGE_MISSING_REAL,
   BROWSER_ONLY_GUARD_GLOBALS,
   SAFE_PARTIAL_MEMBERS,
+  PARTIAL_SAFE_GLOBAL_MEMBERS,
 } from "../check-server-safe-markers.mjs";
 
 const target = process.argv[2];
@@ -174,6 +176,61 @@ for (const [root, allowed] of Object.entries(SAFE_PARTIAL_MEMBERS)) {
   if (extra.length) memberExtras.push([root, allowed.size, extra]);
 }
 
+// TIER 1 — FN NO MODELADO: los roots SAFE que el gate trata WHOLESALE (sin
+// modelo de miembros) asumen "todos sus miembros existen en todo el mandato". Un
+// miembro presente en el floor Node pero AUSENTE en Edge rompe esa asunción:
+// `root.member()` pasa el gate y lanza en producción. El lado Node se calcula
+// AQUÍ (compare corre en Node), el lado Edge viene del probe.
+function dumpMembersLocal(o) {
+  const s = new Set();
+  let c = o;
+  while (c && c !== Object.prototype) {
+    for (const n of Object.getOwnPropertyNames(c)) s.add(n);
+    c = Object.getPrototypeOf(c);
+  }
+  return [...s].sort();
+}
+const rootMembers = data.rootMembers ?? {};
+const MODELED_ROOTS = new Set([
+  ...Object.keys(SAFE_PARTIAL_MEMBERS),
+  ...Object.keys(PARTIAL_SAFE_GLOBAL_MEMBERS),
+]);
+const wholesaleGaps = [];
+for (const [root, edgeMembers] of Object.entries(rootMembers)) {
+  if (MODELED_ROOTS.has(root)) continue; // ya tiene modelo bucket-1/2
+  const local = globalThis[root];
+  if (local === undefined || local === null) continue; // no está en Node → nada que comparar
+  const missingInEdge = dumpMembersLocal(local).filter(
+    (m) => !edgeMembers.includes(m) && !m.startsWith("_"),
+  );
+  if (missingInEdge.length) wholesaleGaps.push([root, missingInEdge]);
+}
+
+// TIER 2 — superficie completa (provenance): permite re-derivar EDGE_MISSING
+// desde el Edge REAL en vez de desde @edge-runtime/vm.
+// Anti-stale POR NOMBRE, igual que `presence` y `browserOnly`: sin esto, un probe
+// anterior a la expansión deja los bloques vacíos, los checks tier 1/2 no corren
+// y el compare da VERDE sin haber medido nada de esto (promesa-sin-gate).
+const fullSurface = data.fullSurface ?? {};
+const UNIVERSE = [
+  ...new Set(
+    ["builtin", "nodeBuiltin", "browser", "worker", "serviceworker", "es2025"]
+      .filter((k) => globalsPkg[k])
+      .flatMap((k) => Object.keys(globalsPkg[k])),
+  ),
+].filter((n) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(n));
+const fsMissing = UNIVERSE.filter((n) => !(n in fullSurface));
+if (fsMissing.length)
+  hardDrift.push(
+    `probe DESINCRONIZADO en 'fullSurface': ${fsMissing.length}/${UNIVERSE.length} nombres SIN PROBAR → el barrido de superficie completa NO cubre el universo actual (regenera con gen-probe.mjs + redeploy)`,
+  );
+if (!Object.keys(rootMembers).length)
+  hardDrift.push(
+    "probe sin bloque 'rootMembers' → el chequeo de FN no-modelado (Node vs Edge por root) NO se ejecutó (regenera con gen-probe.mjs + redeploy)",
+  );
+const fsTotal = Object.keys(fullSurface).length;
+const fsPresent = Object.values(fullSurface).filter(Boolean).length;
+
 // BLANDO: EDGE_MISSING (vm-derivado) presentes = sobre-estrictez segura → #190.
 const edgeMissingPresent = [...EDGE_MISSING_GLOBALS].filter((n) => presence[n]);
 
@@ -194,6 +251,24 @@ console.log(`  premisas: ${Object.keys(EXPECTED).length} chequeadas`);
 console.log(
   `  BROWSER_ONLY (fail-open): ${BROWSER_ONLY_GUARD_GLOBALS.size} pineados, ${BROWSER_ONLY_GUARD_GLOBALS.size - boMissing.length} probados, ${boPresent.length} presentes`,
 );
+
+if (fsTotal)
+  console.log(
+    `  superficie completa (globals): ${fsTotal} probados, ${fsPresent} presentes en Edge real`,
+  );
+console.log(
+  `  roots volcados (miembros): ${Object.keys(rootMembers).length} · sin modelo bucket-1/2: ${Object.keys(rootMembers).filter((r) => !MODELED_ROOTS.has(r)).length}`,
+);
+
+if (wholesaleGaps.length) {
+  console.log(
+    `\n⚠ CANDIDATOS a FN NO MODELADO — roots SAFE tratados WHOLESALE con miembros que están en el floor Node pero NO en Edge real (el gate permite \`root.member()\` y lanzaría en producción):`,
+  );
+  for (const [root, missing] of wholesaleGaps)
+    console.log(
+      `  ${root} (${missing.length}): ${missing.slice(0, 20).join(", ")}${missing.length > 20 ? " …" : ""}`,
+    );
+}
 
 if (memberExtras.length) {
   console.log(
