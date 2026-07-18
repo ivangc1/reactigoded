@@ -25,7 +25,7 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 ```bash
 git clone https://github.com/ivangc1/reactigoded.git
 cd reactigoded
-npm ci --legacy-peer-deps
+npm ci
 npm run build
 npm link
 
@@ -41,8 +41,13 @@ internamente `Tooltip` (y futuros `Popover`, `HoverCard`, etc.).
 Instálalo **siempre** junto a la librería:
 
 ```bash
-npm install reactigoded react react-dom @floating-ui/react
+npm install reactigoded react react-dom @floating-ui/react clsx
 ```
+
+**`clsx` (^2.1) también es peer-dep requerido** — lo usa el helper `cn`
+(y el export `reactigoded/cn`). Sin él, `reactigoded/cn` revienta con
+`ERR_MODULE_NOT_FOUND`. Se externaliza como peer (D1-P2, beta.24) para
+no duplicar `clsx` en consumers que ya lo traen vía Tailwind/shadcn.
 
 Aunque el tree-shaking elimina `Tooltip` + `@floating-ui/react`
 del bundle final si no los importas, el peer-dep no satisfecho
@@ -523,21 +528,20 @@ scripts/
 
 ## Desarrollo
 
-Para trabajar sobre el repo (no como consumidor del paquete) usar
-`--legacy-peer-deps` al instalar:
+Para trabajar sobre el repo (no como consumidor del paquete):
 
 ```bash
 git clone https://github.com/ivangc1/reactigoded.git
 cd reactigoded
-npm ci --legacy-peer-deps
+npm ci
 ```
 
-Causa del flag: conflicto peer-dep entre `@storybook/addon-vitest`
-(que pin-ea una versión de `@vitest/browser` que no coincide con el
-mismo paquete declarado en nuestras `devDependencies` para usar la
-API de tests directamente). El instalador moderno de npm marca esto
-como bloqueante por defecto desde npm 7. El flag baja el conflicto a
-warning y procede.
+`npm ci` plano resuelve limpio: el ERESOLVE de devDeps (eslint 10 vs
+`eslint-plugin-jest-dom`/`jsx-a11y` con peer `^9`) se cierra con
+`overrides` en package.json (#138), y el bump de toolchain
+(storybook 10.5 / vitest 4) alineó el peer de `@vitest/browser`. Ya no
+hace falta `--legacy-peer-deps` (verificado: `npm ci` plano instala 532
+paquetes sin ERESOLVE).
 
 **No afecta a los consumidores del paquete**: cuando alguien instala
 `reactigoded` como dep, solo se resuelven `peerDependencies` (`react`,

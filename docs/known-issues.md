@@ -5,7 +5,29 @@ postergación + link al upstream cuando aplica + condición de re-evaluación.
 
 ## `@arethetypeswrong/cli` (attw) — diferido en D1-P3
 
-**Estado**: diferido a follow-up post-beta.24.
+**Estado**: ✅ crash **RESUELTO upstream** (verificado 2026-07-18 en Node
+ARM64 / Debian 13 WSL2). `npx @arethetypeswrong/cli@latest --pack .` ya
+corre completo, sin el `Cannot read properties of undefined (reading
+'filename')`. El diagnóstico histórico del crash se conserva abajo.
+
+**Resultado actual de attw** (perfil esperado de un paquete ESM-only —
+NO defectos del `dist`):
+- Entrypoints JS (`reactigoded`, `/server-safe`, `/cn`): `node16 (from
+  ESM)` 🟢 + `bundler` 🟢 → los consumers modernos resuelven bien.
+- `node16 (from CJS)`: ⚠️ ESM dynamic-import-only — inherente a
+  `"type":"module"` (un `require` CJS debe pasar a `import()` dinámico).
+- `node10`: 💀 — resolución legacy sin soporte de `exports`; irrelevante
+  (engine floor `>=22.12`).
+- Entrypoints `styles/*.css`: 💀 — **falso positivo** de attw (no entiende
+  exports CSS sin tipos; los bundlers los resuelven sin problema).
+
+**Follow-up (no bloquea rc.1)**: promover attw a gate CI con
+`--ignore-rules cjs-resolves-to-esm no-resolution` (cubre la matriz de
+resolución node_modules cjs/esm/types que publint no valida). publint
+sigue siendo el gate primario.
+
+**Estado histórico**: diferido a follow-up post-beta.24 (por el crash de
+abajo, ya resuelto).
 
 **Síntoma**: `attw --pack .` y `attw --from-npm <cualquier-paquete>`
 fallan con `Cannot read properties of undefined (reading 'filename')` en
