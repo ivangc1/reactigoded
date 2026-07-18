@@ -58,8 +58,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  console.error = REAL_CONSOLE.error;
-  console.warn = REAL_CONSOLE.warn;
+  // cleanup() corre con el guard AÚN instalado: así los warnings de unmount
+  // (console.* desde un effect cleanup, o avisos de React al desmontar el
+  // árbol) también pasan por la policy en vez de escaparse a stderr. El
+  // console real se restaura DESPUÉS, tras cleanup + resets (P2 codex #140).
   cleanup();
   // M-07 (beta.24): los registries module-level de landmarks acumulan
   // estado entre tests del mismo módulo si no se resetean. Cada test
@@ -69,6 +71,8 @@ afterEach(() => {
   // archivos.
   __resetLandmarkRegistryForTests();
   __resetTopLevelLandmarkCheckForTests();
+  console.error = REAL_CONSOLE.error;
+  console.warn = REAL_CONSOLE.warn;
   if (leakedConsole.length > 0) {
     const captured = leakedConsole;
     leakedConsole = [];
