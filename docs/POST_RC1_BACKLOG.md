@@ -335,14 +335,34 @@ migración de toolchain (esperar a `typescript-eslint` con soporte
 TS7) **más** reescritura de los gates AST sobre la nueva API. Fuera
 del scope de rc.1 (y de un "bump de librerías").
 
-**Acción concreta cuando se procese**:
-- Esperar a `typescript-eslint` con peer que incluya `^7`.
-- Reevaluar si el port nativo expone (o hay shim para) la Compiler
-  API que consumen los gates; si no, portar los gates.
-- Bump `typescript@7.x` + re-verificar `lint` / `typecheck` /
+**Intermedia ADOPTADA (branch `chore/ts7-native-typecheck`)** — typecheck
+nativo veloz SIN promover TS7 a autoritativo:
+- `typescript` se queda en `6.0.3` (bin `tsc`): AUTORITATIVO para build,
+  gates AST, eslint, dist y `verify:unit`/CI. Compiler API JS intacta.
+- Añadido `@typescript/native-preview` (bin `tsgo`, pin exacto
+  `7.0.0-dev.20260707.2`) → script `typecheck:native` = `tsgo --noEmit`.
+- `verify:fast` (loop local, NO autoritativo) usa `typecheck:native`.
+  Medido: **3.9s vs 14.3s** de tsc (~3.7x), 0 errores, COINCIDE con tsc
+  (incl. los tests que usan `ts.createSourceFile` — los tipos los da
+  `typescript@6.0.3`, no el nativo).
+- Corrección a la receta dual-alias de Nx: su `@typescript/native` es un
+  alias LOCAL (`npm:typescript@7`), no un paquete publicado; el binario
+  nativo side-by-side real es `@typescript/native-preview` (bin `tsgo`).
+  El puente TS6-con-API sería `@typescript/typescript6` (bin `tsc6`), aquí
+  innecesario porque `typescript@6.0.3` ya expone la API.
+
+**Para PROMOVER a autoritativo (dropear el split)** cuando el ecosistema
+alcance:
+- `typescript-eslint` con peer que incluya `^7` (tracking #10940; #12518
+  cerrado not-planned — bloqueado en que exista la API de TS7).
+- La Compiler API vuelve en **TS 7.1** (dev builds ya en `npm@next`:
+  `7.1.0-dev.*`). Entonces reevaluar si los gates AST corren sobre la API
+  nativa o siguen en el puente TS6.
+- Bump `typescript@7.x` autoritativo + re-verificar `lint` / `typecheck` /
   `build` (tsc + tsc-alias + vite-plugin-dts) / `test:server-safe-markers`.
 
-**Estado**: TS pineado en `6.0.3` (exact). El resto del bump aplicado
-y verificado (verify-cold + build + gate + `npm ci` limpio).
+**Estado**: bump aplicado y verificado (verify completo: unit 2952 +
+storybook 239 + size-limit + `npm ci` limpio). Full TS7 (nativo como
+autoritativo) diferido; intermedia de velocidad adoptada en rama aparte.
 
 ---
