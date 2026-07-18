@@ -91,9 +91,24 @@ const SANDBOX_PREFIX = "reactigoded-consumer-pack-";
  * proceso hijo. Si el comando falla, `execSync` lanza y el catch del
  * caller convierte el error en exit 1 con mensaje claro.
  */
+// `npm publish --dry-run` exporta `npm_config_dry_run=true` y npm lo PROPAGA a
+// todo comando npm anidado. Este gate corre DENTRO de `prepublishOnly`, así que
+// bajo un dry-run el `npm pack` de abajo ANUNCIABA el tarball sin escribirlo
+// ("npm notice reactigoded-x.y.z.tgz") y el gate moría con "esperaba 1 tarball,
+// encontré 0" — siendo todo correcto. El `npm install` del sandbox habría caído
+// igual. Este gate mide el ARTEFACTO REAL, así que la herencia se neutraliza:
+// sin esto, `npm publish --dry-run` (el ensayo previo a una publicación
+// IRREVERSIBLE) es inusable. Misma familia que #21.
+const CHILD_ENV = { ...process.env };
+delete CHILD_ENV.npm_config_dry_run;
+
 function run(cmd, opts = {}) {
   console.log(`$ ${cmd}`);
-  execSync(cmd, { stdio: "inherit", ...opts });
+  execSync(cmd, {
+    stdio: "inherit",
+    ...opts,
+    env: { ...CHILD_ENV, ...opts.env },
+  });
 }
 
 let sandbox;
