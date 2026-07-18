@@ -23,6 +23,12 @@ export default defineConfig([
     // con customConditions: ["react-server"] + paths a dist/). ESLint
     // del root no debe parsearlo bajo el tsconfig.json principal.
     "fixtures",
+    // scripts/runtime-oracle/vercel/ es un proyecto Vercel Edge AISLADO y
+    // efímero (su propio package.json/vercel.json + api/probe.ts con tipos del
+    // Edge runtime, `new Function` para la sonda eval-sink, etc.). No está en
+    // el tsconfig del root → ESLint no debe parsearlo aquí. Se deploya, se mide
+    // y se borra (ver su README). #18.
+    "scripts/runtime-oracle/vercel",
   ]),
 
   // Base JS (config files)

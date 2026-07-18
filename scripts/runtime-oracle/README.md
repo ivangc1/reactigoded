@@ -49,8 +49,11 @@ The three mandate runtimes were measured with the same 13 probes:
 
 ### Deferred with line
 - **CI wiring**: install workerd on the CI runner so `npm run oracle` runs there — infra, not code.
-- **Edge-VM faithful-complete**: `@edge-runtime/vm` cannot validate premises that depend on Node-shared globals;
-  a real Vercel deploy is the only faithful oracle for those.
+- **Edge-VM faithful-complete (#18)**: `@edge-runtime/vm` cannot validate premises that depend on Node-shared
+  globals; a real Vercel deploy is the only faithful oracle for those. **Infra lista** en
+  [`vercel/`](./vercel/README.md): probe de Edge (`vercel/api/probe.ts`, replica las 13 sondas + dump de
+  `globalThis`) + `compare-vercel.mjs` (fail-loud contra `SAFE_GLOBALS`/`EDGE_MISSING_GLOBALS`/premisas).
+  Pendiente **solo** del deploy de producción (cuenta Vercel) — ver `vercel/README.md`.
 
 Independently, the premises are pinned in the gate's own fixtures (`server-safe-gate.test.ts`, describe
 "Auditoría B R5") and in `docs/AUDITORIA-B-REHUNT5.md` §2.1 — so drift is caught even before CI wiring lands.
