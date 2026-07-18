@@ -117,6 +117,10 @@ describe("Switch", () => {
   });
 
   it("transición controlled → uncontrolled: el wrapper React→DOM mantiene el input nativo", () => {
+    // La transición controlled↔uncontrolled dispara el warning de React
+    // "changing a controlled input to be uncontrolled" — es el escenario que
+    // este test EJERCE a propósito. Silenciado para la policy de stderr (#28).
+    vi.spyOn(console, "error").mockImplementation(() => {});
     // Smoke test del wrapping React→DOM. Antes este test verificaba el
     // warning de React vía `console.error` mock, pero React deduplica
     // ese warning por worker y vitest corre con `isolate: false` —
@@ -138,6 +142,9 @@ describe("Switch", () => {
   });
 
   it("transición uncontrolled → controlled: el wrapper React→DOM respeta checked externo", () => {
+    // Ídem: dispara "changing an uncontrolled input to be controlled" a
+    // propósito. Silenciado para la policy de stderr (#28).
+    vi.spyOn(console, "error").mockImplementation(() => {});
     // Smoke test del wrapping React→DOM en input[type=checkbox]. El
     // contrato abstracto del hook lo cubre useControllableState.test.ts;
     // aquí verificamos que Switch refleja el checked externo tras el

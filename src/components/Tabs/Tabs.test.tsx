@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -20,6 +21,11 @@ function basicTabs(props?: Partial<React.ComponentProps<typeof Tabs>>) {
     </Tabs>
   );
 }
+
+// #28 cat 3 — dev-warning de useControllableState (controlled sin onChange),
+// incidental aquí (contrato en useControllableState.test.ts) → suprimimos SOLO
+// ese patrón; cualquier otro console.error sigue fallando.
+allowIncidentalConsoleError(/^\[useControllableState\]/);
 
 describe("Tabs", () => {
   it("renderiza tablist con role correcto y orientación", () => {

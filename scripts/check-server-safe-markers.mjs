@@ -257,6 +257,17 @@ function toPosix(p) {
 function crossOsResolve(base, ...segments) {
   const posixBase = toPosix(base);
   const posixSegments = segments.map(toPosix);
+  // UNC (Windows network share): `\\host\share\...` → `//host/share/...`.
+  // `pathPosix.resolve` colapsa el `//` inicial y pierde el share root
+  // (`//server/share/repo/x` → `/server/share/repo/x`), rompiendo la
+  // resolución igual que el drive letter. Fix simétrico: extraer
+  // `//host/share` como raíz, resolver el resto POSIX-puro, re-prepender.
+  const uncMatch = /^(\/\/[^/]+\/[^/]+)(\/.*)?$/.exec(posixBase);
+  if (uncMatch) {
+    const root = uncMatch[1];
+    const rest = uncMatch[2] ?? "/";
+    return root + pathPosix.resolve(rest, ...posixSegments);
+  }
   const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(posixBase);
   if (driveMatch) {
     const drive = driveMatch[1];
@@ -277,6 +288,17 @@ function crossOsResolve(base, ...segments) {
 function crossOsRelative(from, to) {
   const posixFrom = toPosix(from);
   const posixTo = toPosix(to);
+  // UNC: relativizar dentro del mismo share root `//host/share` (mismo
+  // motivo que en crossOsResolve — POSIX colapsa el `//`). Si los shares
+  // difieren, cae al fallback plano (path imposible → `inSrc` lo rechaza).
+  const fromUnc = /^(\/\/[^/]+\/[^/]+)/.exec(posixFrom)?.[1];
+  const toUnc = /^(\/\/[^/]+\/[^/]+)/.exec(posixTo)?.[1];
+  if (fromUnc && toUnc && fromUnc.toLowerCase() === toUnc.toLowerCase()) {
+    return pathPosix.relative(
+      posixFrom.slice(fromUnc.length) || "/",
+      posixTo.slice(toUnc.length) || "/",
+    );
+  }
   const fromDrive = /^([A-Za-z]:)/.exec(posixFrom)?.[1];
   const toDrive = /^([A-Za-z]:)/.exec(posixTo)?.[1];
   if (
@@ -11504,6 +11526,10 @@ export {
   resolveImportPath,
   extractModuleReferences,
   getTsconfigPaths,
+  toPosix,
+  crossOsResolve,
+  crossOsRelative,
+  crossOsDirname,
 };
 
 // ─── Main (solo si se invoca como CLI) ─────────────────────────

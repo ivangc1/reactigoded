@@ -48,9 +48,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        # `--legacy-peer-deps` mientras tengamos peer-deps en conflicto;
-        # el README documenta el porqué.
-        run: npm ci --legacy-peer-deps
+        # ERESOLVE de devDeps (eslint 10 vs plugins peer ^9) resuelto por
+        # `overrides` en package.json (#138) → `npm ci` plano ya pasa.
+        run: npm ci
 
       - name: Lint
         run: npm run lint
@@ -195,7 +195,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Install Playwright Chromium
         # vitest-browser usa playwright internamente; sin esto los

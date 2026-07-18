@@ -8,10 +8,16 @@
  *   - `tsconfig.bundler.json`: consumer típico (vite/webpack).
  *   - `tsconfig.nodenext.json`: consumer ESM estricto (NodeNext).
  *
- * Cobertura representativa, no exhaustiva:
+ * Cobertura:
  *   - Root barrel: 5 componentes + 3 types (cubre primitives + compound
  *     surface + hook + cn utility).
- *   - Subpath `/server-safe`: subset RSC-safe.
+ *   - Subpath `/server-safe`: **superficie COMPLETA** — los 44 value-exports
+ *     importados POR NOMBRE desde el tarball (era 2/44). Un re-export caído,
+ *     un exports-map a un `.d.ts` incompleto, o un `.d.ts` per-componente
+ *     irresoluble (import relativo/`@/` roto, contradicción `stripInternal`)
+ *     → TS2305/TS2339 aquí, bajo bundler Y NodeNext. Cierra #24 (P2 codex:
+ *     la enumeración es lo que garantiza presencia; un `satisfies
+ *     Record<string,unknown>` lo pasa cualquier namespace).
  *   - Subpath `/cn`: cn helper individual.
  *
  * Si una regresión rompe el `exports` field, los `.d.ts` resueltos via
@@ -36,8 +42,74 @@ import {
   type ButtonProps,
   type TooltipProps,
 } from "reactigoded";
-import { Button as ServerButton, Toast } from "reactigoded/server-safe";
+// #24 — FREEZE de la superficie server-safe: los 44 value-exports que
+// `./server-safe` publica se importan POR NOMBRE desde el tarball. Si el
+// barrel cae un re-export, el exports-map apunta a un `.d.ts` incompleto, o
+// un `.d.ts` per-componente no resuelve → error de tipos AQUÍ (TS2305/TS2339),
+// bajo bundler Y NodeNext. Enumerar es lo que da la garantía: un
+// `import * as X` + `X satisfies Record<string, unknown>` NO bastaba —
+// cualquier namespace lo satisface, aun con solo Button+Toast (P2 codex #140).
+import {
+  AvatarGroup,
+  Badge,
+  BreadcrumbItem,
+  Button as ServerButton,
+  CardBody,
+  CardDivider,
+  CardFooter,
+  CardHeader,
+  CardImage,
+  Chip,
+  DialogBody,
+  DialogFooter,
+  Divider,
+  ErrorText,
+  Helper,
+  IconButton,
+  InputAddon,
+  InputGroup,
+  Label,
+  NavbarActions,
+  NavbarLink,
+  NavbarLogo,
+  NavbarMenuButton,
+  Progress,
+  Radio,
+  SidebarDivider,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarSection,
+  Skeleton,
+  SkeletonContainer,
+  Spinner,
+  Step,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFoot,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+  Timeline,
+  TimelineItem,
+  Toast,
+} from "reactigoded/server-safe";
 import { cn as cnSubpath } from "reactigoded/cn";
+
+// Referencia a los 44 → fuerza a tsc a resolver el nombre de cada uno. Si
+// alguno falta en el subpath publicado, el gate FALLA (a diferencia del
+// namespace+satisfies, que pasaba con la API incompleta).
+const _serverSafeFrozen = [
+  AvatarGroup, Badge, BreadcrumbItem, ServerButton, CardBody, CardDivider,
+  CardFooter, CardHeader, CardImage, Chip, DialogBody, DialogFooter, Divider,
+  ErrorText, Helper, IconButton, InputAddon, InputGroup, Label, NavbarActions,
+  NavbarLink, NavbarLogo, NavbarMenuButton, Progress, Radio, SidebarDivider,
+  SidebarFooter, SidebarHeader, SidebarSection, Skeleton, SkeletonContainer,
+  Spinner, Step, Table, TableBody, TableCaption, TableCell, TableFoot,
+  TableHead, TableHeaderCell, TableRow, Timeline, TimelineItem, Toast,
+];
+void _serverSafeFrozen;
 
 const buttonProps: ButtonProps = {
   children: "Guardar",

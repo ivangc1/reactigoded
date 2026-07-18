@@ -203,3 +203,16 @@ export declare function discoverServerSafeSourceFiles(root?: string): string[];
  * de una estrella) → TS no lo reconoce como tag → el fichero se salta sin auditar. Vacío si no hay near-miss.
  */
 export declare function markerNearMissLines(sourceFile: ts.SourceFile): number[];
+
+/**
+ * Helpers de path cross-OS (drive letter Windows + UNC). Trabajan en forma
+ * POSIX (`/`); manejan `D:\...` y `\\host\share\...` sin depender del `path`
+ * nativo de la plataforma. Exportados para `src/__tests__/cross-os-paths.test.ts`.
+ */
+export declare function toPosix(p: string): string;
+export declare function crossOsResolve(
+  base: string,
+  ...segments: string[]
+): string;
+export declare function crossOsRelative(from: string, to: string): string;
+export declare function crossOsDirname(p: string): string;

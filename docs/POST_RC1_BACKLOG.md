@@ -366,3 +366,29 @@ storybook 239 + size-limit + `npm ci` limpio). Full TS7 (nativo como
 autoritativo) diferido; intermedia de velocidad adoptada en rama aparte.
 
 ---
+
+## Go-to-definition al source del consumer — shippear `src` + `.d.ts.map`
+
+**De dónde sale**: PR #140, P3 de codex sobre `#23`. #23 apagó
+`declarationMap` (`declarationMap:false`) porque los `.d.ts.map` colgaban
+apuntando a `src` que `files` no publica → el go-to-def del consumer
+rompía. **Esa decisión de #23 es FINAL: maps OFF**, el go-to-def cae en
+los `.d.ts` (tipos). Esta entrada NO la reabre.
+
+**Qué queda diferido (decisión NUEVA, no un fix)**: recuperar el
+go-to-definition al `.ts` ORIGINAL del consumer (no solo al `.d.ts`). La
+vía coherente es shippear las DOS cosas — `src` (los `.ts`) **+**
+`.d.ts.map` (con `declarationMap:true` otra vez) — nunca una sin la otra
+(una sola es justo el estado colgante que #23 cerró).
+
+**Trade-offs cuando se aborde**:
+- **Pro**: DX real — go-to-def aterriza en el source comentado del DS.
+- **Contra**: engorda el tarball con toda la fuente `.ts` (~doble de
+  ficheros) + los maps.
+- **Requisito**: `declarationMap:true` + `"src"` en `files` + verificar
+  que attw/publint siguen limpios con el source publicado + medir tamaño.
+
+**Ventana**: post-1.0.0 (aditivo, no breaking — solo añade contenido al
+paquete). Su propio PR aislado.
+
+---

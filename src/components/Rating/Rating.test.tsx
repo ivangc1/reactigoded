@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Rating } from "./Rating";
+
+// #28 cat 3 — dev-warning de useControllableState (controlled sin onChange) que
+// estos tests disparan como setup; su CONTRATO se testea en
+// useControllableState.test.ts, aquí es incidental → suprimimos SOLO ese
+// patrón; cualquier otro console.error sigue fallando.
+allowIncidentalConsoleError(/^\[useControllableState\]/);
 
 describe("Rating", () => {
   it("renderiza N estrellas como radio buttons", () => {

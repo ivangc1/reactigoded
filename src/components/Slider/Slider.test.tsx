@@ -71,6 +71,10 @@ describe("Slider", () => {
   });
 
   it("transición uncontrolled → controlled: el wrapper React→DOM respeta value externo", () => {
+    // Dispara "changing an uncontrolled input to be controlled" a propósito.
+    // Silenciado local para la policy de stderr (#28) — controlled/uncontrolled
+    // NO está allowlisted globalmente (se caza salvo donde es intencional).
+    vi.spyOn(console, "error").mockImplementation(() => {});
     // Smoke test del wrapping React→DOM. Antes este test verificaba el
     // warning de React vía `console.error` mock, pero React deduplica
     // ese warning por worker y vitest corre con `isolate: false` —
@@ -88,6 +92,9 @@ describe("Slider", () => {
   });
 
   it("transición controlled → uncontrolled: el wrapper React→DOM mantiene el input nativo", () => {
+    // Dispara "changing a controlled input to be uncontrolled" a propósito.
+    // Silenciado local para la policy de stderr (#28).
+    vi.spyOn(console, "error").mockImplementation(() => {});
     // Smoke test del wrapping React→DOM en input[type=range]. El
     // contrato abstracto del hook lo cubre useControllableState.test.ts;
     // aquí solo verificamos que el componente sigue vivo y rendereando

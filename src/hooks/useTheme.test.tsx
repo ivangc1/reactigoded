@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useTheme } from "./useTheme";
@@ -30,6 +31,15 @@ function ThemeProbe() {
     </div>
   );
 }
+
+// #28 cat 3 — el MutationObserver/matchMedia dispara un rerender en microtask
+// fuera del act() que `waitFor` no alcanza. Las aserciones son ROBUSTAS
+// (await waitFor / await act sobre el valor, no una carrera sincrónica), así
+// que el residual de act es incidental, no un test roto → suprimimos SOLO ese
+// patrón; cualquier otro console.error sigue fallando.
+allowIncidentalConsoleError(
+  /An update to .* inside a test was not wrapped in act/,
+);
 
 describe("useTheme", () => {
   beforeEach(() => {

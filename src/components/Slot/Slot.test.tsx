@@ -279,6 +279,11 @@ describe("Slot — event handler chain (D14 edge case #4)", () => {
   });
 
   it("non-event-shape functions in slotProps do NOT compose", () => {
+    // React avisa "Invalid value for prop `data-format-fn`" al poner una
+    // función como atributo DOM — efecto que este test PROVOCA a propósito
+    // (verifica que Slot NO compone funciones no-evento). Silenciado para la
+    // policy de stderr (#28).
+    vi.spyOn(console, "error").mockImplementation(() => {});
     // Functions whose name doesn't match /^on[A-Z]/ should follow the
     // "default: child wins" branch, not the chain logic.
     const slotFormatter = vi.fn(() => "slot");
