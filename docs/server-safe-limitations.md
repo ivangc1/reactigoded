@@ -120,6 +120,30 @@ subsystem the gate renounces. Never hides anything executable.
   Vercel-Edge-missing set, with `SharedArrayBuffer` additionally removed (Cloudflare disables it — Spectre).
   A fully systematic `{workerd ∩ Deno ∩ Vercel-Edge}` intersection (and the `Atomics` / high-resolution-timer
   questions) is pending a real-runtime globalThis dump.
+  - **The Vercel-Edge leg is DONE (#18, 2026-07-18).** A production Edge deploy measured **1314 names** (the
+    whole `globals` universe) with bare `typeof` — the only faithful test, since Edge's global object is
+    exotic and lies via enumeration / `in` / `globalThis[x]` — plus per-root member dumps. **Cross-region
+    validated**: `lhr1` vs `iad1`, **0 differences across 1489 points**, so the result is a property of the
+    *runtime*, not of a region. Artifact + reproduction: `scripts/runtime-oracle/vercel/`.
+  - **Still blocking:** the **workerd** and **Deno** legs need equivalent dumps. `workerd` is measured today
+    only through the 13 pinned premises (`worker.js`), not a full surface sweep, and Deno only through
+    cross-corroboration. Until both exist, the intersection cannot be derived — and *assuming* it from the
+    Edge leg alone is precisely the error that `@edge-runtime/vm` introduced (see the next item).
+  - **Inherited from #18 — three concrete, already-measured entries:**
+    1. **Re-derive `EDGE_MISSING_GLOBALS` from real Edge, retiring the `@edge-runtime/vm` recipe.** The set is
+       currently derived from that VM, a Node-based sandbox that **leaks Node globals** — which is exactly how
+       `WeakRef` / `FinalizationRegistry` / `DOMException` slipped into `SAFE_GLOBALS` and had to be subtracted
+       as `EDGE_MISSING_REAL`. The 1314-name real-Edge map makes the root fix possible: derive from production
+       instead of patching the leak downstream.
+    2. **10 `EDGE_MISSING_GLOBALS` measured PRESENT in real Edge** — `ByteLengthQueuingStrategy`,
+       `CompressionStream`, `CountQueuingStrategy`, `CustomEvent`, `DecompressionStream`,
+       `ReadableByteStreamController`, `ReadableStreamBYOBRequest`, `ReadableStreamDefaultController`,
+       `TransformStreamDefaultController`, `WritableStreamDefaultController`. Keeping them is **fail-closed and
+       safe** (over-strict never yields an FN); relaxing them requires the workerd/Deno legs.
+    3. **`console.clear`** — present in real Edge (13 members) but outside the bucket-1 allowlist (12), so the
+       gate flags a call that works: an **FP candidate**. Not actionable yet: `worker.js` only probes
+       `console.table`, so `clear` was never measured in workerd. Adding it from the Edge datapoint alone would
+       be assuming the union from one runtime — the same mistake as (1).
 - **Marker must be on its own line (M2 — resolved 2026-07-04, line-start rule).** `@server-safe` counts only
   when its line has nothing but JSDoc decoration (`/**`, ` * `, whitespace) before it. A sibling tag on the
   *same* line (`/** @internal @server-safe */`) or prose before it (`/** @param x the @server-safe flag */`)

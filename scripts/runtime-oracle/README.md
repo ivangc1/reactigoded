@@ -47,10 +47,87 @@ The three mandate runtimes were measured with the same 13 probes:
   (`console.table` absent) which the gate covers; the rest leaks Node globals (`elu`, `createObjectURL`,
   `WebAssembly.Module` all falsely "work") so it is **not** faithful beyond Vercel's explicit removals.
 
+### Vercel Edge faithful — #18 DONE (deploy real medido 2026-07-18, lhr1)
+
+El probe de [`vercel/`](./vercel/README.md) se deployó a producción y midió los **119** nombres del catálogo
+(`SAFE_GLOBALS ∪ EDGE_MISSING_GLOBALS ∪ EDGE_MISSING_REAL`) con **`typeof <bare>`** — el único test fiel: el
+objeto-global de Vercel Edge es **exótico** y miente por enumeración / `in globalThis` / `globalThis[x]` (medido:
+`getOwnPropertyNames` da 59 nombres y omite `URL`/`Blob`/`fetch`, que sí funcionan; `globalThis.performance`
+da `undefined` pero `typeof performance` bare da `"object"`). Resultado:
+
+- **Premisas: 6/6 PASS** en el Edge real (elu absent, `createObjectURL`/`revoke` THROW, `WebAssembly.compile`
+  THROWS `CompileError`, `new Function` THROWS `EvalError`, `new URL` OK).
+- **3 falsos negativos cazados** → nuevo set **`EDGE_MISSING_REAL`** (`DOMException`, `FinalizationRegistry`,
+  `WeakRef`): `@edge-runtime/vm` los filtraba de Node (falso-presente) y se colaban a `SAFE_GLOBALS`; el Edge
+  real NO los expone. Restados de SAFE (0 módulos los usan → FN latente cerrado). Es el payload exacto de #18.
+- **10 candidatos a relajar → #190** (`CompressionStream`, `CustomEvent`, stream controllers…): en
+  `EDGE_MISSING_GLOBALS` (derivado de `@edge-runtime/vm`) pero PRESENTES en el Edge real. Sobre-estrictez
+  **fail-closed = SEGURA** (el gate nunca da un FN por esto); relajarlos exige la intersección
+  `{workerd ∩ Deno ∩ Edge}` = #190. `compare-vercel.mjs` los reporta como WARNING, no falla.
+
+Reproducir: `vercel --prod` desde `vercel/` → `node compare-vercel.mjs <url>` (ver `vercel/README.md`).
+
+### Hunt FP/FN sobre la superficie restante (2026-07-18, lhr1) — 0 hallazgos reales
+
+Con el oráculo ya fiel se barrió lo que seguía asumido o derivado del VM. **Ningún FP/FN real**; el valor es
+que estos ejes pasan de *asumidos* a *medidos*. Las 3 sospechas se retiraron, cada una con su razón:
+
+| Eje | Medido | Veredicto |
+|---|---|---|
+| `BROWSER_ONLY_GUARD_GLOBALS` (22) | **0 presentes** (`navigator`/`window`/`document` → `undefined`) | ✅ Sin fail-open. El gate los usa como prueba de rama client-only y **deja de auditarla**; si alguno existiera, esa rama correría sin auditar. No ocurre. |
+| `SAFE_PARTIAL_MEMBERS.performance` | Edge real = `{now, timeOrigin}` (+`constructor`) | ✅ Allowlist **exacto**. El caveat "VM contaminado" era inocuo → cierra medido lo que #190 difería |
+| `SAFE_PARTIAL_MEMBERS.console` | Edge real 13 vs allowlist 12 → extra `clear` | ⏸ Candidato a FP **bloqueado en #190**: `console.clear` nunca se midió en workerd; añadirlo con solo el dato de Edge sería asumir la unión desde un runtime (el error que trajo `@edge-runtime/vm`) |
+| `compileStreaming` / `instantiateStreaming` | **AUSENTES** en Edge real | ✅ La clasificación *present-but-throws* sigue siendo correcta: es un modelo de **UNIÓN** y en workerd están presentes y lanzan (tabla pineada arriba) → `?.()` no protegería allí |
+| `WebAssembly.instantiate` | `function`, y `instantiate(bytes)` → **THROWS CompileError** | ✅ **Residual §141 documentado**, no un FN. Denegarlo entero sería FP sobre `instantiate(Module)` —el único Wasm soportado en Edge—; separar ambos exige provenance/data-flow que el gate renuncia por diseño. Esta medición **confirma con traza real** el "confirmado" del comentario de `PARTIAL_SAFE_GLOBAL_MEMBERS` |
+| `WebAssembly.validate` | `function`, llamada → **OK** | ✅ Control: la denylist no es "todo WebAssembly" sino las vías de codegen |
+| `INTENTIONAL_DENY` (11) | `Buffer`/`Function`/`eval`/`globalThis`/`process` existen; `global`/`localStorage`/`sessionStorage`/`navigator`/`setImmediate`/`clearImmediate` no | ℹ Informativo — la denegación es intencional en ambos casos |
+
+### Barrido de superficie COMPLETA (2026-07-18, lhr1) — 0 FN confirmados
+
+Segunda pasada, ya sin limitarse al catálogo del gate:
+
+- **Presencia de los 1314 nombres** del universo `globals` (builtin ∪ nodeBuiltin ∪ browser ∪ worker ∪
+  serviceworker ∪ es2025) → **129 presentes** en Vercel Edge real. Es el **mapa definitivo** del runtime, y
+  habilita re-derivar `EDGE_MISSING_GLOBALS` desde producción en vez de desde `@edge-runtime/vm` (la fuga de
+  Node de ese VM es el ORIGEN de `EDGE_MISSING_REAL`; atacarla en la raíz es trabajo de #190).
+- **Miembros de los 10 roots volcados**; 6 sin modelo bucket-1/2. **4 coinciden EXACTOS** con el floor →
+  valida el tratamiento *wholesale*, incluida la afirmación (VM-derivada) de que `crypto` es idéntico en los
+  3 runtimes. Los otros 2 (`Atomics.pause`, `Math.f16round`) son **artefacto de baseline, NO un FN**:
+  `compare` calcula el lado Node contra el Node que lo ejecuta (v24), pero el gate ancla al **floor
+  `>=22.12`**; ambos son adiciones ES2025/TC39 posteriores al floor — misma familia que `Float16Array`, que
+  el gate ya trata como `GLOBALS_OVERCLAIM`. La clase "miembro ausente en el floor" **ya está modelada**
+  (bucket-2) y su cobertura parcial **ya está registrada en #190**.
+
+### Validación cross-región (2026-07-18) — `lhr1` vs `iad1`: **0 diferencias en 1489 puntos**
+
+Todas las mediciones anteriores salían de `lhr1` (la región más cercana al request). Como Vercel despliega el
+runtime **por regiones**, un solo punto no distingue "propiedad de Vercel Edge" de "propiedad de Londres" —
+y eso importa para un freeze. Se repitió el barrido completo fijando `regions: ["iad1"]` en el `config` del
+probe y se diffeó contra el pin:
+
+| Dimensión | Puntos | Resultado |
+|---|---|---|
+| `fullSurface` (universo `globals`) | 1314 | idéntico |
+| `presence` (catálogo) | 119 | idéntico |
+| `premises` (hazards) | 29 | idéntico |
+| `browserOnly` (fail-open) | 22 | idéntico |
+| `denied` | 11 | idéntico |
+| miembros por root (`memberDump` + `rootMembers`) | 14 sets | idéntico |
+
+→ Lo pineado es **propiedad del runtime**, no de una región. `regions` está revertido a por defecto; para
+repetir el contraste, volver a fijarlo en `probe.template.ts` y regenerar.
+
+**Limitación estructural del método** (no es pereza, es el runtime): solo se puede medir **presencia de
+nombres horneados** en el source. El objeto-global miente por enumeración y Edge bloquea `eval`, así que un
+global que no esté ni en `globals` ni en los ~59 *own* permanece invisible. Y el **comportamiento** (llamar)
+sigue siendo curado — llamar 1314 APIs no es seguro ni significativo. `compare` ahora imprime el Node con el
+que corre y advierte del baseline, para que el diff de miembros no se lea como floor-verificado.
+
 ### Deferred with line
 - **CI wiring**: install workerd on the CI runner so `npm run oracle` runs there — infra, not code.
-- **Edge-VM faithful-complete**: `@edge-runtime/vm` cannot validate premises that depend on Node-shared globals;
-  a real Vercel deploy is the only faithful oracle for those.
+- **Cross-check workerd/Deno de los 3 `EDGE_MISSING_REAL`** + la intersección sistemática
+  `{workerd ∩ Deno ∩ Edge}` de los 10 candidatos → **#190** (la ausencia en Vercel Edge real ya basta para el FN;
+  el ancla del gate es Edge).
 
 Independently, the premises are pinned in the gate's own fixtures (`server-safe-gate.test.ts`, describe
 "Auditoría B R5") and in `docs/AUDITORIA-B-REHUNT5.md` §2.1 — so drift is caught even before CI wiring lands.

@@ -84,12 +84,19 @@ const config: StorybookConfig = {
       },
     },
   },
-  viteFinal: (config) => {
-    // El storybook-static es un artefacto de docs (dev tool cargado por
-    // desarrolladores, no shippeado a usuarios finales): el tamaño de chunk no
-    // es perf-crítico como en la lib publicada. Los chunks grandes son
-    // inherentes a los bundles de stories + los docs blocks, no un problema
-    // aquí — subimos el umbral del aviso para no ensuciar el build (#17).
+  viteFinal: (config, { configType }) => {
+    // SOLO en build. `viteFinal` corre en los TRES contextos (dev, test-browser y
+    // build), así que mutar el config sin acotar cambia también el de
+    // vitest-browser → Vite detecta "config changed" y RE-OPTIMIZA dependencias.
+    // Si esa re-optimización cae a mitad de un run, invalida módulos en vuelo:
+    // se ve como `Failed to fetch dynamically imported module` en una story y
+    // `Cannot connect to the iframe` en otra — dos fallos que NO son de las
+    // stories. Pasó al introducir esto en #17 (falso positivo, verde al re-correr
+    // con caché caliente). El umbral solo importa al generar `storybook-static`,
+    // que es artefacto de docs (dev tool, no shippeado): ahí los chunks grandes
+    // son inherentes a los bundles de stories + docs blocks y no son
+    // perf-críticos como en la lib publicada.
+    if (configType !== "PRODUCTION") return config;
     config.build = { ...config.build, chunkSizeWarningLimit: 2000 };
     return config;
   },

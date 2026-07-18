@@ -486,6 +486,39 @@ const EDGE_MISSING_GLOBALS = new Set([
 // presencia) → nota en #190. La derivación sistemática por intersección {workerd ∩ Deno ∩ Edge} es #190.
 const WORKERS_MISSING_GLOBALS = new Set(["SharedArrayBuffer"]);
 
+// EDGE-MISSING-REAL (#18, deploy Vercel Edge PRODUCCIÓN — lhr1, 2026-07-18): la
+// CARA OPUESTA de EDGE_MISSING_GLOBALS. Aquél se deriva de `@edge-runtime/vm`,
+// que es un sandbox sobre Node y FILTRA globals Node-shared: los muestra
+// "presentes" aunque el Edge REAL no los exponga. Su enumeración
+// (`getOwnPropertyNames`) subcuenta y su leak sobrecuenta — el ~5% que #18
+// existía para cerrar. El probe de deploy real (scripts/runtime-oracle/vercel/)
+// midió los 119 nombres del catálogo con `typeof <bare>` (el ÚNICO test fiel: el
+// objeto-global de Vercel Edge es exótico y miente por enumeración / `in` /
+// `globalThis[x]`) y confirmó que estos 3 —que `@edge-runtime/vm` filtró de Node,
+// colándolos a SAFE— NO existen en el Edge real: un read bare lanza
+// ReferenceError ahí. DOS modos de fallo distintos, medidos por separado (bare /
+// globalThis[x] / construcción bare):
+//   - `WeakRef` y `FinalizationRegistry`: identificador INEXISTENTE →
+//     `ReferenceError: X is not defined`. Son GC-observables; los runtimes-isolate
+//     los deshabilitan.
+//   - `DOMException`: el binding EXISTE pero su valor es `undefined` →
+//     `new DOMException()` da `TypeError: DOMException is not a constructor` (no
+//     ReferenceError), y `typeof DOMException === "undefined"`. OJO: la doc de
+//     Vercel lo lista como Web Standard API soportada (codex P2) — y no se
+//     contradice con esto: el NOMBRE está declarado, pero no hay objeto detrás en
+//     el runtime medido. Para el gate da igual el matiz: usarlo LANZA en
+//     producción, así que fail-closed fuera de SAFE. Si un re-run futuro mide
+//     `domExceptionNewBare === "OK"`, esta entrada sale (ver premisas del probe).
+// Restar SOLO añade strictness (fail-closed): 0 módulos server-safe los usan hoy
+// (grep), así que cierra un FN LATENTE sin romper ninguno. Provenance del probe
+// pineada en scripts/runtime-oracle/vercel/README.md. Cross-check workerd/Deno +
+// {workerd ∩ Deno ∩ Edge} sistemático → #190.
+const EDGE_MISSING_REAL = new Set([
+  "DOMException",
+  "FinalizationRegistry",
+  "WeakRef",
+]);
+
 // BROWSER-ONLY: globals presentes SOLO en el browser (AUSENTES en Node Y en Edge — DOM/BOM, sin habitante
 // server). Un `typeof X !== "undefined"` sobre uno de éstos prueba que la rama corre SOLO client-side →
 // CLIENT-ONLY (justifica suprimir el follow de import()/glob). ALLOWLIST POSITIVO + fail-CLOSED: el gate solo
@@ -536,7 +569,8 @@ const SAFE_GLOBALS = new Set(
       !INTENTIONAL_DENY.has(name) &&
       !GLOBALS_OVERCLAIMS.has(name) &&
       !EDGE_MISSING_GLOBALS.has(name) &&
-      !WORKERS_MISSING_GLOBALS.has(name),
+      !WORKERS_MISSING_GLOBALS.has(name) &&
+      !EDGE_MISSING_REAL.has(name),
   ),
 );
 
@@ -564,6 +598,14 @@ const PARTIAL_SAFE_GLOBAL_MEMBERS = {
   //   incertidumbre real (¿el arg es un buffer o un Module importado?) es PROVENANCE = data-flow, que
   //   el gate renuncia por diseño (§141): `instantiate(bufferSource)` queda RESIDUAL de data-flow,
   //   junto al resto de renuncias de provenance, NO un bypass.
+  //   MEDIDO contra el deploy Vercel Edge REAL (#18, lhr1 2026-07-18): `instantiate`
+  //   existe (`typeof === "function"`) e `instantiate(bytes)` lanza
+  //   `CompileError: WebAssembly.instantiate(): Wasm code generation disallowed by
+  //   embedder` — misma traza que `compile` y `new Module(bytes)`. Confirma el
+  //   "confirmado" de arriba con evidencia de producción y RATIFICA el ALLOW: el
+  //   hazard es el ARGUMENTO (bytes vs Module), no el miembro, y eso es data-flow.
+  //   `validate` se midió OK (no compila) → control de que la denylist es
+  //   "vías de codegen", no "todo WebAssembly".
   // SAFE — `Memory`/`Table`/`Global`/`Instance`/`validate` no compilan.
   // `Module` NO va aquí (member-read ban): `WebAssembly.Module` como VALOR no compila — `wasm
   // instanceof WebAssembly.Module`, `WebAssembly.Module.imports(m)`/`.exports(m)` (inspección de un
@@ -11517,6 +11559,8 @@ export {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
   EDGE_MISSING_GLOBALS,
+  EDGE_MISSING_REAL,
+  BROWSER_ONLY_GUARD_GLOBALS,
   SAFE_PARTIAL_MEMBERS,
   PARTIAL_SAFE_GLOBAL_MEMBERS,
   CONSTRUCTION_DENIED_MEMBERS,

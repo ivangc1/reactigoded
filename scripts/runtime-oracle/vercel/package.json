@@ -1,0 +1,6 @@
+{
+  "name": "reactigoded-edge-oracle-probe",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Probe efímero: mide el runtime de Vercel Edge REAL vs el catálogo del gate @server-safe (#18). NO es parte del paquete publicado ni del build del DS — es un proyecto Vercel aislado que se deploya, se mide y se borra."
+}
