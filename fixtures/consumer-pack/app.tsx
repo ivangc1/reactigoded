@@ -8,10 +8,15 @@
  *   - `tsconfig.bundler.json`: consumer típico (vite/webpack).
  *   - `tsconfig.nodenext.json`: consumer ESM estricto (NodeNext).
  *
- * Cobertura representativa, no exhaustiva:
+ * Cobertura:
  *   - Root barrel: 5 componentes + 3 types (cubre primitives + compound
  *     surface + hook + cn utility).
- *   - Subpath `/server-safe`: subset RSC-safe.
+ *   - Subpath `/server-safe`: **superficie COMPLETA** (los 36 re-exports)
+ *     vía namespace import + `satisfies` — fuerza a tsc a resolver y
+ *     materializar el `.d.ts` de cada uno desde el tarball, no solo un
+ *     sample. Cierra #24 (era 2/36). Caza una regresión de `.d.ts`
+ *     per-componente (import relativo/`@/` roto, contradicción
+ *     `stripInternal`) en cualquiera de los 36, invisible con el sample.
  *   - Subpath `/cn`: cn helper individual.
  *
  * Si una regresión rompe el `exports` field, los `.d.ts` resueltos via
@@ -37,7 +42,18 @@ import {
   type TooltipProps,
 } from "reactigoded";
 import { Button as ServerButton, Toast } from "reactigoded/server-safe";
+import * as ServerSafe from "reactigoded/server-safe";
 import { cn as cnSubpath } from "reactigoded/cn";
+
+// #24 — cobertura EXHAUSTIVA del subpath `./server-safe` desde el tarball.
+// El namespace import + `satisfies` obliga a tsc a resolver el `.d.ts` de
+// TODOS los re-exports (los 36 componentes server-safe), no solo el sample
+// Button/Toast de abajo. Un `.d.ts` per-componente que no resuelva (import
+// roto tras el build) o cuya superficie no materialice rompe aquí, bajo
+// bundler Y NodeNext. `Record<string, unknown>` es permisivo: no impone
+// forma, solo fuerza la materialización completa del namespace.
+const _serverSafeSurface = ServerSafe satisfies Record<string, unknown>;
+void _serverSafeSurface;
 
 const buttonProps: ButtonProps = {
   children: "Guardar",
