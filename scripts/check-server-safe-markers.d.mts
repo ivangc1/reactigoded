@@ -164,6 +164,13 @@ export declare const EDGE_MISSING_GLOBALS: ReadonlySet<string>;
  * ReferenceError en Edge real.
  */
 export declare const EDGE_MISSING_REAL: ReadonlySet<string>;
+/**
+ * Globals presentes SOLO en el browser (ausentes en Node Y en Edge). Un
+ * `typeof X !== "undefined"` sobre uno de éstos PRUEBA que la rama es
+ * client-only → el gate deja de auditarla. Si alguno existiera en Edge real,
+ * sería un FAIL-OPEN (la rama corre sin auditar) — medido en #18.
+ */
+export declare const BROWSER_ONLY_GUARD_GLOBALS: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
 
 /**

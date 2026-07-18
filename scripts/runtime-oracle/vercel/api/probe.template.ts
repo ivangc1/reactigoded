@@ -70,6 +70,25 @@ export default async function handler(): Promise<Response> {
       typeof console !== "undefined" ? typeof (console as Any).table : "no-console",
     waCompile:
       typeof WebAssembly !== "undefined" ? typeof WebAssembly.compile : "no-WA",
+    // bucket-2 restantes (#18 hunt): compileStreaming / instantiateStreaming y la
+    // construcción de WebAssembly.Module (CONSTRUCTION_DENIED_MEMBERS) nunca se
+    // habían medido contra el Edge real.
+    waCompileStreaming:
+      typeof WebAssembly !== "undefined"
+        ? typeof (WebAssembly as Any).compileStreaming
+        : "no-WA",
+    waInstantiateStreaming:
+      typeof WebAssembly !== "undefined"
+        ? typeof (WebAssembly as Any).instantiateStreaming
+        : "no-WA",
+    waModule:
+      typeof WebAssembly !== "undefined" ? typeof (WebAssembly as Any).Module : "no-WA",
+    waModuleNew: tryCall(
+      () =>
+        void new (WebAssembly as Any).Module(
+          new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+        ),
+    ),
     // #18 / codex P2: la doc de Vercel lista `DOMException` como Web Standard API,
     // pero el probe lo midió AUSENTE bare. En ESTE runtime las 3 vías DIVERGEN
     // (medido: `globalThis.performance` es undefined pero bare `performance` da
@@ -100,9 +119,49 @@ export default async function handler(): Promise<Response> {
     consoleTableCall: tryCall(() => (console as Any).table([{ a: 1 }])),
   };
 
+  // FAIL-OPEN hunt (#18): los BROWSER_ONLY_GUARD_GLOBALS deben estar AUSENTES en
+  // Edge. El gate los usa como PRUEBA de que una rama es client-only y entonces
+  // DEJA DE AUDITARLA — si uno existe aquí, esa rama corre en producción Edge sin
+  // auditar: fail-open. `navigator` es el sospechoso (WinterCG lo expone).
+  const browserOnly: Record<string, string> = {
+    /*__BROWSER_ONLY__*/
+  };
+
+  // INTENTIONAL_DENY (informativo): denegados por diseño. Medir sólo documenta si
+  // la denegación es "existe pero lo prohibimos" o "ni siquiera existe".
+  const denied: Record<string, string> = {
+    /*__DENIED__*/
+  };
+
+  // Miembros REALES de los roots parcial-safe (bucket-1 allowlist / bucket-2
+  // denylist). El snapshot vigente se derivó de `@edge-runtime/vm` —contaminado
+  // para `performance`, por eso sólo convergían {now,timeOrigin}—; esto lo mide
+  // contra el Edge REAL y cierra el barrido que #190 tenía diferido "porque
+  // requería @edge-runtime/vm como devDep".
+  function dumpMembers(o: Any): string[] {
+    const s = new Set<string>();
+    let c: Any = o;
+    while (c && c !== Object.prototype) {
+      for (const n of Object.getOwnPropertyNames(c)) s.add(n);
+      c = Object.getPrototypeOf(c);
+    }
+    return [...s].sort();
+  }
+  const memberDump: Record<string, string[] | null> = {
+    performance:
+      typeof performance !== "undefined" ? dumpMembers(performance) : null,
+    console: typeof console !== "undefined" ? dumpMembers(console) : null,
+    WebAssembly:
+      typeof WebAssembly !== "undefined" ? dumpMembers(WebAssembly) : null,
+    URL: typeof URL !== "undefined" ? dumpMembers(URL) : null,
+  };
+
   const out = {
     runtime: "vercel-edge",
     vercelRegion: g.process?.env?.VERCEL_REGION ?? null,
+    browserOnly,
+    denied,
+    memberDump,
     // Evidencia del objeto-global exótico: enumeración da ~59 y omite URL/Blob/fetch.
     ownGlobalThisNames: Object.getOwnPropertyNames(g).sort(),
     presence,

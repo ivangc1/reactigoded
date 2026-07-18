@@ -29,6 +29,8 @@ import {
   SAFE_GLOBALS,
   EDGE_MISSING_GLOBALS,
   EDGE_MISSING_REAL,
+  BROWSER_ONLY_GUARD_GLOBALS,
+  SAFE_PARTIAL_MEMBERS,
 } from "../check-server-safe-markers.mjs";
 
 const target = process.argv[2];
@@ -122,6 +124,48 @@ for (const [k, ok] of Object.entries(EXPECTED)) {
   }
 }
 
+// DURO 4 (FAIL-OPEN): los BROWSER_ONLY_GUARD_GLOBALS deben estar AUSENTES. El
+// gate los usa como PRUEBA de rama client-only y entonces DEJA DE AUDITARLA; si
+// uno existe en Edge, esa rama corre en producción sin auditar.
+const browserOnly = data.browserOnly ?? {};
+const boProbed = Object.keys(browserOnly).length;
+const boPresent = Object.entries(browserOnly).filter(
+  ([, v]) => v !== "undefined",
+);
+if (boProbed === 0) {
+  hardDrift.push(
+    "probe sin bloque 'browserOnly' (regenera con gen-probe.mjs + redeploy)",
+  );
+} else if (boPresent.length) {
+  hardDrift.push(
+    `FAIL-OPEN: BROWSER_ONLY_GUARD_GLOBALS PRESENTES en Vercel Edge real — el gate los acepta como prueba de rama client-only y deja de auditarla, así que esa rama CORRE sin auditar: ${boPresent.map(([k, v]) => `${k}=${v}`).join(", ")}`,
+  );
+}
+
+// DURO 5: los miembros del allowlist bucket-1 deben EXISTIR en Edge real (si uno
+// falta, un módulo server-safe que lo use lanza → FN). El snapshot vigente venía
+// de @edge-runtime/vm; esto lo contrasta contra el runtime real.
+const memberDump = data.memberDump ?? {};
+const memberExtras = [];
+for (const [root, allowed] of Object.entries(SAFE_PARTIAL_MEMBERS)) {
+  const real = memberDump[root];
+  if (!Array.isArray(real)) {
+    hardDrift.push(
+      `memberDump['${root}'] ausente en el probe (regenera con gen-probe.mjs + redeploy)`,
+    );
+    continue;
+  }
+  const missing = [...allowed].filter((m) => !real.includes(m));
+  if (missing.length)
+    hardDrift.push(
+      `bucket-1 allowlist con miembros AUSENTES en Edge real (FN: usarlos lanza): ${root}.{${missing.join(", ")}}`,
+    );
+  const extra = real.filter(
+    (m) => !allowed.has(m) && !m.startsWith("_") && m !== "constructor",
+  );
+  if (extra.length) memberExtras.push([root, allowed.size, extra]);
+}
+
 // BLANDO: EDGE_MISSING (vm-derivado) presentes = sobre-estrictez segura → #190.
 const edgeMissingPresent = [...EDGE_MISSING_GLOBALS].filter((n) => presence[n]);
 
@@ -139,6 +183,19 @@ console.log(
   `  EDGE_MISSING (vm-derivado): ${EDGE_MISSING_GLOBALS.size} pineados, ${edgeMissingPresent.length} presentes`,
 );
 console.log(`  premisas: ${Object.keys(EXPECTED).length} chequeadas`);
+console.log(
+  `  BROWSER_ONLY (fail-open): ${BROWSER_ONLY_GUARD_GLOBALS.size} pineados, ${boProbed} probados, ${boPresent.length} presentes`,
+);
+
+if (memberExtras.length) {
+  console.log(
+    `\n⚠ miembros PRESENTES en Edge real fuera del allowlist bucket-1 (candidatos a FP corregible → #190; el gate hoy los flaggea):`,
+  );
+  for (const [root, allowedN, extra] of memberExtras)
+    console.log(
+      `  ${root}: allowlist ${allowedN} · en Edge real ${allowedN + extra.length} → extra (${extra.length}): ${extra.join(", ")}`,
+    );
+}
 
 if (edgeMissingPresent.length) {
   console.log(
