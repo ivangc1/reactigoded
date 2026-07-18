@@ -16,6 +16,7 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Garantía `@server-safe` validada contra Vercel Edge REAL (#18)**: el catálogo de globals permitidos se medía contra `@edge-runtime/vm` (sandbox sobre Node que filtra globals Node-shared, ~95% fiel). Un probe de deploy real a Vercel Edge producción (`scripts/runtime-oracle/vercel/`, `typeof <bare>` — el único test fiel dado que el objeto-global de Edge es exótico) cerró ese ~5%: **3 globals que `@edge-runtime/vm` reportaba presentes por fuga de Node (`WeakRef`, `FinalizationRegistry`, `DOMException`) NO existen en Vercel Edge real** → restados de `SAFE_GLOBALS` (nuevo set `EDGE_MISSING_REAL`). Cierra un falso-negativo latente (0 módulos los usaban) que habría dejado pasar un `new WeakRef(...)` bare que crashea en producción Edge. Premisas del catálogo (createObjectURL/WASM/eval/elu) confirmadas 6/6 en el Edge real.
 - **Freeze de API pública (§5.13)**: la superficie estable de 1.0 (clases de componente, data-attributes de estado, tokens Tier-2) se congela en `src/_audit/public-api-names.json`, protegida por el gate `scripts/check-public-api-names.mjs` (`⊆ dist`, encadenado en `verify:unit`). Editar el freeze exige bump MAJOR. La capa utility (`state.css`) y los tokens Tier-1/Tier-3 quedan fuera del freeze **por declaración explícita** (ver CSSAPI.mdx + DesignTokens.mdx).
 
 ## [1.0.0-beta.26] — 2026-05-29 (bloque claudegate5 / beta.27 cerrado)

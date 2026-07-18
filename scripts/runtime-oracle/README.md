@@ -47,13 +47,31 @@ The three mandate runtimes were measured with the same 13 probes:
   (`console.table` absent) which the gate covers; the rest leaks Node globals (`elu`, `createObjectURL`,
   `WebAssembly.Module` all falsely "work") so it is **not** faithful beyond Vercel's explicit removals.
 
+### Vercel Edge faithful — #18 DONE (deploy real medido 2026-07-18, lhr1)
+
+El probe de [`vercel/`](./vercel/README.md) se deployó a producción y midió los **119** nombres del catálogo
+(`SAFE_GLOBALS ∪ EDGE_MISSING_GLOBALS ∪ EDGE_MISSING_REAL`) con **`typeof <bare>`** — el único test fiel: el
+objeto-global de Vercel Edge es **exótico** y miente por enumeración / `in globalThis` / `globalThis[x]` (medido:
+`getOwnPropertyNames` da 59 nombres y omite `URL`/`Blob`/`fetch`, que sí funcionan; `globalThis.performance`
+da `undefined` pero `typeof performance` bare da `"object"`). Resultado:
+
+- **Premisas: 6/6 PASS** en el Edge real (elu absent, `createObjectURL`/`revoke` THROW, `WebAssembly.compile`
+  THROWS `CompileError`, `new Function` THROWS `EvalError`, `new URL` OK).
+- **3 falsos negativos cazados** → nuevo set **`EDGE_MISSING_REAL`** (`DOMException`, `FinalizationRegistry`,
+  `WeakRef`): `@edge-runtime/vm` los filtraba de Node (falso-presente) y se colaban a `SAFE_GLOBALS`; el Edge
+  real NO los expone. Restados de SAFE (0 módulos los usan → FN latente cerrado). Es el payload exacto de #18.
+- **10 candidatos a relajar → #190** (`CompressionStream`, `CustomEvent`, stream controllers…): en
+  `EDGE_MISSING_GLOBALS` (derivado de `@edge-runtime/vm`) pero PRESENTES en el Edge real. Sobre-estrictez
+  **fail-closed = SEGURA** (el gate nunca da un FN por esto); relajarlos exige la intersección
+  `{workerd ∩ Deno ∩ Edge}` = #190. `compare-vercel.mjs` los reporta como WARNING, no falla.
+
+Reproducir: `vercel --prod` desde `vercel/` → `node compare-vercel.mjs <url>` (ver `vercel/README.md`).
+
 ### Deferred with line
 - **CI wiring**: install workerd on the CI runner so `npm run oracle` runs there — infra, not code.
-- **Edge-VM faithful-complete (#18)**: `@edge-runtime/vm` cannot validate premises that depend on Node-shared
-  globals; a real Vercel deploy is the only faithful oracle for those. **Infra lista** en
-  [`vercel/`](./vercel/README.md): probe de Edge (`vercel/api/probe.ts`, replica las 13 sondas + dump de
-  `globalThis`) + `compare-vercel.mjs` (fail-loud contra `SAFE_GLOBALS`/`EDGE_MISSING_GLOBALS`/premisas).
-  Pendiente **solo** del deploy de producción (cuenta Vercel) — ver `vercel/README.md`.
+- **Cross-check workerd/Deno de los 3 `EDGE_MISSING_REAL`** + la intersección sistemática
+  `{workerd ∩ Deno ∩ Edge}` de los 10 candidatos → **#190** (la ausencia en Vercel Edge real ya basta para el FN;
+  el ancla del gate es Edge).
 
 Independently, the premises are pinned in the gate's own fixtures (`server-safe-gate.test.ts`, describe
 "Auditoría B R5") and in `docs/AUDITORIA-B-REHUNT5.md` §2.1 — so drift is caught even before CI wiring lands.

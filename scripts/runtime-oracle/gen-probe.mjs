@@ -18,10 +18,13 @@ import { dirname, join } from "node:path";
 import {
   SAFE_GLOBALS,
   EDGE_MISSING_GLOBALS,
+  EDGE_MISSING_REAL,
 } from "../check-server-safe-markers.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CATALOG = [...new Set([...SAFE_GLOBALS, ...EDGE_MISSING_GLOBALS])].sort();
+const CATALOG = [
+  ...new Set([...SAFE_GLOBALS, ...EDGE_MISSING_GLOBALS, ...EDGE_MISSING_REAL]),
+].sort();
 
 // Todos deben ser identificadores JS válidos para probarse bare.
 const ID = /^[A-Za-z_$][A-Za-z0-9_$]*$/;

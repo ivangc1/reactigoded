@@ -8208,12 +8208,23 @@ describe("server-safe gate — R15 custodios (carrier-completo por construcción
     ["pop vacío", `export const x=setTimeout([].pop(),0);`],
     ["shift vacío", `export const x=setTimeout([].shift(),0);`],
     ["structuredClone Function", `const g=()=>{}; export const x=structuredClone([g])[0]();`],
-    ["WeakRef primitive", `export const x=new WeakRef("code" as any).deref();`],
     ["fromEntries ∘ entries renunciado", `export const x=Object.fromEntries(Object.entries({k:performance})).k.eventLoopUtilization();`],
     ["Object.values renunciado", `export const x=Object.values({k:performance})[0].eventLoopUtilization();`],
     ["defineProperty override-safe", `export const x=Object.defineProperty({m:performance},"m",{value:Math}).m.eventLoopUtilization();`],
   ])("frontera SILENT: %s", (_name, code) => {
     expect(flagged(code)).toBe(false);
+  });
+
+  // #18: `WeakRef` salió de SAFE_GLOBALS (ausente en Vercel Edge real →
+  // EDGE_MISSING_REAL). Antes `new WeakRef("code").deref()` era "frontera SILENT"
+  // (target primitivo = NO eval-sink), pero ahora la ref bare a `WeakRef` se
+  // flagea como global no-server-safe — correcto: `new WeakRef(...)` lanza
+  // ReferenceError en Vercel Edge. El eje eval-sink (isStaticGlobalNew) sigue
+  // intacto; solo que el flag global-unsafe domina el caso primitivo.
+  it("WeakRef bare FLAG (edge-missing, #18)", () => {
+    expect(
+      flagged(`export const x=new WeakRef("code" as any).deref();`),
+    ).toBe(true);
   });
 
   it.each<[string, string]>([

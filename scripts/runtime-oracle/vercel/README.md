@@ -34,27 +34,39 @@ node scripts/runtime-oracle/compare-vercel.mjs https://<tu-deploy>.vercel.app/ap
 vercel rm <nombre-del-proyecto> --yes
 ```
 
-## Interpretación
+## Medición pineada (#18) — 2026-07-18, región `lhr1`
 
-- **✓ verde**: el Vercel Edge real coincide con el catálogo → fidelidad
-  confirmada (95→98%). Pega el output aquí / a Claude para pinear la medición
-  en este README (fecha + región) como se hizo con workerd `2026-07-17`.
-- **✗ drift**: uno de tres casos, cada uno accionable:
-  - **`SAFE_GLOBAL` ausente** en Edge real → **falso negativo del gate**: un
-    módulo `@server-safe` que lo use bare crashearía en producción. Sacarlo de
-    `SAFE_GLOBALS` (restarlo).
-  - **`EDGE_MISSING_GLOBAL` presente** en Edge real → gate **sobre-estricto**
-    (FP corregible, no crash): quitarlo de `EDGE_MISSING_GLOBALS`.
-  - **premisa que no coincide** (p.ej. `createObjectURL` no lanza) →
-    re-clasificar el hazard en el catálogo.
+Deploy real medido. `compare-vercel.mjs` → **✓ verde** (0 falsos negativos,
+premisas 6/6). Resultado, para detectar drift futuro (bump del Edge runtime):
+
+- **Premisas 6/6 PASS**: `elu` absent · `createObjectURL`/`revoke` THROW ·
+  `WebAssembly.compile` THROWS `CompileError` · `new Function` THROWS `EvalError` ·
+  `new URL` OK.
+- **3 FN cazados → `EDGE_MISSING_REAL`** (`DOMException`, `FinalizationRegistry`,
+  `WeakRef`): `@edge-runtime/vm` los filtraba de Node; el Edge real no los expone.
+  Restados de `SAFE_GLOBALS`.
+- **10 `EDGE_MISSING` presentes** (over-strict SEGURO → #190): `CompressionStream`,
+  `CustomEvent`, `ByteLengthQueuingStrategy`, `CountQueuingStrategy`,
+  `DecompressionStream`, `ReadableByteStreamController`, `ReadableStreamBYOBRequest`,
+  `ReadableStreamDefaultController`, `TransformStreamDefaultController`,
+  `WritableStreamDefaultController`.
+
+## Interpretación (si un re-run diverge del pin)
+
+- **`SAFE_GLOBAL` ausente** (typeof bare `undefined`) → **falso negativo**: un
+  módulo `@server-safe` que lo use bare crashea en producción → restarlo de SAFE
+  (a `EDGE_MISSING_REAL` con provenance).
+- **`EDGE_MISSING_REAL` presente** → se restó de más: revisar.
+- **`EDGE_MISSING` (vm-derivado) presente** → over-strict SEGURO (fail-closed);
+  relajar es #190 (`{workerd ∩ Deno ∩ Edge}`). `compare` lo marca WARNING, no falla.
+- **premisa que no coincide** → re-clasificar el hazard en el catálogo.
 
 ## Notas
 
-- Es un proyecto Vercel **aislado y efímero** (`package.json`/`vercel.json`
-  propios): NO forma parte del paquete npm ni del build del DS. Se deploya, se
-  mide y se borra.
-- El probe (`api/probe.ts`) replica las 13 sondas de `../worker.js` (el probe de
-  workerd) + añade el dump de `Object.getOwnPropertyNames(globalThis)`.
-- Pinear la medición: cuando pase verde, anota aquí `fecha + región + versión`
-  igual que las premisas pineadas del `../README.md`, para que el drift futuro
-  (bump del Edge runtime de Vercel) se detecte.
+- Proyecto Vercel **aislado y efímero** (`package.json`/`vercel.json` propios): NO
+  forma parte del paquete npm ni del build del DS. Se deploya, se mide y se borra.
+- **`api/probe.ts` es GENERADO** por `../../gen-probe.mjs` desde el catálogo del
+  gate (un `typeof <bare>` por nombre — el único test fiel dado el objeto-global
+  exótico de Edge). NO editar a mano: editar `api/probe.template.ts` + regenerar.
+  Las premisas (hazards) replican las sondas de `../worker.js` (workerd) con
+  identificadores bare.

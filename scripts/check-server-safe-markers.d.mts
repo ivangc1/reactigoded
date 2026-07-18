@@ -157,6 +157,13 @@ export declare const INTENTIONAL_DENY: ReadonlySet<string>;
  * globalThis real (@edge-runtime/vm). Excluidos de `SAFE_GLOBALS`. #190.
  */
 export declare const EDGE_MISSING_GLOBALS: ReadonlySet<string>;
+/**
+ * Cara OPUESTA de `EDGE_MISSING_GLOBALS`: globals que `@edge-runtime/vm` FILTRA
+ * de Node (falso-presente) pero el deploy Vercel Edge REAL no expone (#18, probe
+ * typeof-bare, lhr1 2026-07-18). Excluidos de `SAFE_GLOBALS` — un read bare lanza
+ * ReferenceError en Edge real.
+ */
+export declare const EDGE_MISSING_REAL: ReadonlySet<string>;
 export declare const DYNAMIC_EVAL_SINKS: ReadonlySet<string>;
 
 /**

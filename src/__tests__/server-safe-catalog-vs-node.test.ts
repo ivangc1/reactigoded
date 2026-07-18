@@ -50,6 +50,7 @@ import {
   SAFE_GLOBALS,
   INTENTIONAL_DENY,
   EDGE_MISSING_GLOBALS,
+  EDGE_MISSING_REAL,
   SAFE_PARTIAL_MEMBERS,
   PARTIAL_SAFE_GLOBAL_MEMBERS,
   CONSTRUCTION_DENIED_MEMBERS,
@@ -104,7 +105,7 @@ const MUST_STAY_FLAGGED = [
 ];
 
 /**
- * Contenido EXACTO esperado de `SAFE_GLOBALS` (98 nombres, ordenados). Es
+ * Contenido EXACTO esperado de `SAFE_GLOBALS` (94 nombres, ordenados). Es
  * un PIN del contrato: cualquier cambio en el set (bump de `globals`,
  * denegación nueva, overclaim) debe actualizar esta lista CONSCIENTEMENTE.
  * Sin el pin, un minor bump de `globals` (`^17.6.0`) podría añadir un nombre
@@ -115,8 +116,8 @@ const MUST_STAY_FLAGGED = [
 const SAFE_GLOBALS_PIN = [
   "AbortController", "AbortSignal", "AggregateError", "Array", "ArrayBuffer", "Atomics",
   "BigInt", "BigInt64Array", "BigUint64Array", "Blob", "Boolean", "Crypto",
-  "CryptoKey", "DOMException", "DataView", "Date", "Error", "EvalError",
-  "Event", "EventTarget", "File", "FinalizationRegistry", "Float32Array", "Float64Array",
+  "CryptoKey", "DataView", "Date", "Error", "EvalError",
+  "Event", "EventTarget", "File", "Float32Array", "Float64Array",
   "FormData", "Headers", "Infinity", "Int16Array", "Int32Array", "Int8Array",
   "Intl", "Iterator", "JSON", "Map", "Math", "NaN",
   "Number", "Object", "Promise", "Proxy", "RangeError", "ReadableStream",
@@ -124,7 +125,7 @@ const SAFE_GLOBALS_PIN = [
   "Response", "Set", "String", "SubtleCrypto", "Symbol",
   "SyntaxError", "TextDecoder", "TextDecoderStream", "TextEncoder", "TextEncoderStream", "TransformStream",
   "TypeError", "URIError", "URL", "URLSearchParams", "Uint16Array", "Uint32Array",
-  "Uint8Array", "Uint8ClampedArray", "WeakMap", "WeakRef", "WeakSet", "WebAssembly",
+  "Uint8Array", "Uint8ClampedArray", "WeakMap", "WeakSet", "WebAssembly",
   "WebSocket", "WritableStream", "WritableStreamDefaultWriter", "atob", "btoa", "clearInterval",
   "clearTimeout", "console", "crypto", "decodeURI", "decodeURIComponent", "encodeURI",
   "encodeURIComponent", "escape", "fetch", "isFinite", "isNaN", "parseFloat",
@@ -225,6 +226,27 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     expect(notInNode).toEqual([]);
     //   (3) ancla concreta del codex P1 — BroadcastChannel cazado.
     expect(EDGE_MISSING_GLOBALS.has("BroadcastChannel")).toBe(true);
+  });
+
+  it("F2. EDGE_MISSING_REAL (#18): fuera de SAFE; en Node; ausente en Vercel Edge real", () => {
+    // #18 (deploy Vercel Edge PRODUCCIÓN, lhr1 2026-07-18): la cara OPUESTA de
+    // EDGE_MISSING. `@edge-runtime/vm` FILTRA estos 3 de Node (falso-presente),
+    // así que se colaban a SAFE; el probe de deploy real (typeof-bare, único
+    // test fiel dado el objeto-global exótico de Edge) confirmó que NO existen
+    // ahí → un read bare lanzaría ReferenceError. Invariantes:
+    //   (1) ninguno está en SAFE (si no, FN — crash en Vercel Edge real);
+    const leaked = [...EDGE_MISSING_REAL].filter((n) => SAFE_GLOBALS.has(n));
+    expect(leaked).toEqual([]);
+    //   (2) todos existen en Node (la cara "Node-tiene" — por eso el VM los
+    //       filtró; si uno sale de Node, sale de esta lista).
+    const notInNode = [...EDGE_MISSING_REAL].filter((n) => !isRuntimeGlobal(n));
+    expect(notInNode).toEqual([]);
+    //   (3) contenido exacto pineado (provenance del deploy real, #18).
+    expect([...EDGE_MISSING_REAL].sort()).toEqual([
+      "DOMException",
+      "FinalizationRegistry",
+      "WeakRef",
+    ]);
   });
 
   it("F. los GLOBALS_OVERCLAIMS están restados de SAFE_GLOBALS", () => {
