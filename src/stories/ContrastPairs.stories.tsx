@@ -63,6 +63,7 @@ interface AllowlistEntry {
 
 const allowlist = allowlistJson.allowlist as AllowlistEntry[];
 const driftTolerance = allowlistJson.drift_tolerance;
+const warnThreshold = allowlistJson.warn_threshold;
 
 const meta: Meta = {
   title: "Fundamentos/ContrastPairs",
@@ -262,6 +263,18 @@ async function assertPairsDeltaE(
     const [a, b] = entry.pair.split("-");
     if (!a || !b) continue;
     const pairKey = entry.pair;
+    // Cobertura fail-loud: todo cardinal del allowlist DEBE tener variant en
+    // CARDINAL_TO_VARIANT. Si falta (p.ej. `cinis`, text-body sin Badge), el
+    // `<Badge variant={undefined}>` renderiza el DEFAULT y el story mediría el
+    // color equivocado SIN fallar. Mismo eje fail-closed que SAFE_GLOBALS.
+    await expect(
+      CARDINAL_TO_VARIANT[a],
+      `Cardinal "${a}" (par ${pairKey}) sin variant en CARDINAL_TO_VARIANT — el Badge usaría el DEFAULT y el story mediría el color equivocado. Añádelo al mapa, o retira el par del allowlist si "${a}" no es UI-active.`,
+    ).toBeDefined();
+    await expect(
+      CARDINAL_TO_VARIANT[b],
+      `Cardinal "${b}" (par ${pairKey}) sin variant en CARDINAL_TO_VARIANT — el Badge usaría el DEFAULT y el story mediría el color equivocado. Añádelo al mapa, o retira el par del allowlist si "${b}" no es UI-active.`,
+    ).toBeDefined();
     const elA = canvasElement.querySelector<HTMLElement>(
       `[data-testid="pair-${pairKey}-${entry.theme}-a"]`,
     );
@@ -293,13 +306,27 @@ async function assertPairsDeltaE(
     if (!okA || !okB) continue;
 
     const measured = deltaE(okA, okB);
-    const expected = entry.deltaE_at_decision;
-    const driftLowerBound = expected * driftTolerance;
-    const driftToleranceStr = driftTolerance.toFixed(2);
-    await expect(
-      measured,
-      `${pairKey}-${entry.theme}: ΔE measured (${measured.toFixed(4)}) debe ser >= drift_lower_bound (${driftLowerBound.toFixed(4)}, derivado de ref ${expected.toFixed(4)} * ${driftToleranceStr})`,
-    ).toBeGreaterThanOrEqual(driftLowerBound);
+    const ratified = entry.deltaE_at_decision;
+    // Banda SIMÉTRICA sobre el valor ratificado: el mismo `drift_tolerance` define
+    // el suelo (se acercan → peor contraste) y el techo (se alejan → excepción
+    // muerta o mismapeo de variant, que tiende al alza). El techo es el INVERSO
+    // exacto del suelo, no un segundo mando. Auditor-B §4/E2.
+    const lower = ratified * driftTolerance;
+    const upper = ratified / driftTolerance;
+    const tolStr = driftTolerance.toFixed(2);
+    const driftMsg =
+      `${pairKey}-${entry.theme}: ΔE measured (${measured.toFixed(4)}) fuera de banda ` +
+      `[${lower.toFixed(4)}, ${upper.toFixed(4)}] sobre el valor ratificado ${ratified.toFixed(4)} ` +
+      `(${entry.decision_date}, tol ±${tolStr}). Si el cambio es intencionado: re-mide y ` +
+      `actualiza deltaE_at_decision + decision_date + justification en perceptual-allowlist.json. ` +
+      `Si measured >= warn_threshold (${warnThreshold.toFixed(2)}): la excepción murió — retira la entrada del allowlist.`;
+    await expect(measured, driftMsg).toBeGreaterThanOrEqual(lower);
+    await expect(measured, driftMsg).toBeLessThanOrEqual(upper);
+    // codex P2: para un par ratificado cerca de warn_threshold, `upper = ratified/tol`
+    // EXCEDE el umbral (p.ej. kobalium-vitreus 0.0962 → upper 0.10126), dejando pasar
+    // la ventana [warn, upper] donde la excepción YA murió. El `< warn` estricto la cierra
+    // (borde de drift inclusivo arriba; umbral de muerte exclusivo).
+    await expect(measured, driftMsg).toBeLessThan(warnThreshold);
   }
 }
 
