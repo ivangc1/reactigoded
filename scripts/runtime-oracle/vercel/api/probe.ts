@@ -13,7 +13,12 @@
  *
  * DEPLOY: ver ../README.md. `vercel dev` NO sirve (usa @edge-runtime/vm, el 95%).
  */
-export const config = { runtime: "edge" };
+// CROSS-REGIÓN (#18): todas las mediciones pineadas salieron de `lhr1` (la región
+// más cercana al request). Vercel despliega el runtime por regiones, así que un
+// solo punto no distingue "propiedad de Vercel Edge" de "propiedad de Londres".
+// Fijar `regions` fuerza el isolate en otra región para contrastar el pin. Para
+// volver al comportamiento por defecto (región más cercana), borrar `regions`.
+export const config = { runtime: "edge", regions: ["iad1"] };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
