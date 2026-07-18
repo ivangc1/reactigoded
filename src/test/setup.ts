@@ -58,10 +58,16 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // cleanup() corre con el guard AÚN instalado: así los warnings de unmount
-  // (console.* desde un effect cleanup, o avisos de React al desmontar el
-  // árbol) también pasan por la policy en vez de escaparse a stderr. El
-  // console real se restaura DESPUÉS, tras cleanup + resets (P2 codex #140).
+  // REINSTALAR el guard antes de cleanup(): un test pudo reemplazar console.*
+  // con `vi.spyOn(console,…).mockImplementation()` y NO restaurarlo (los casos
+  // Slot/Switch lo hacen), dejando el mock no-op del test como console.*. Sin
+  // reinstalar, cleanup() correría bajo ese no-op y los warnings de unmount se
+  // tragarían. Reinstalado, cleanup() + resets corren bajo el guard → los
+  // warnings de unmount (console.* desde un effect cleanup, avisos de React al
+  // desmontar) pasan por la policy igual que los de render. El console real se
+  // restaura DESPUÉS (P2 codex #140).
+  console.error = makeConsoleGuard("error");
+  console.warn = makeConsoleGuard("warn");
   cleanup();
   // M-07 (beta.24): los registries module-level de landmarks acumulan
   // estado entre tests del mismo módulo si no se resetean. Cada test
