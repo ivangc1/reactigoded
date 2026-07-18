@@ -393,26 +393,21 @@ paquete). Su propio PR aislado.
 
 ---
 
-## LOW / higiene diferida — coverage `?import` + build-storybook warnings
+## LOW / higiene diferida — coverage `?import` (#15)
 
-**De dónde sale**: informe consolidado A+B, sección "🔵 LOW / Higiene"
-(#15 y #17). El #13 (ERESOLVE) y #16 (stderr) se cerraron; el #14
-(verify≠CI) se cerró aparte (`test:no-dev-warns` añadido a `verify:unit`).
-Estos dos quedan diferidos — muy bajo freeze-impact, no tocan `dist` ni
-consumers.
+**De dónde sale**: informe consolidado A+B, sección "🔵 LOW / Higiene".
+De los 5 LOW: #13 (ERESOLVE)=#27, #16 (stderr)=#28, #14 (verify≠CI) y #17
+(build-storybook warnings) se cerraron. Queda solo **#15**, diferido — muy
+bajo freeze-impact, no toca `dist` ni consumers.
 
 **#15 — Coverage no mide `scripts/perceptual-allowlist.json?import`.**
 V8/Rolldown lo excluye por parse error del import con query `?import` → la
 métrica de coverage aparenta más de lo que mide. **Medición-only**, no
-afecta corrección ni artefacto. Acción cuando se aborde: reevaluar si el
-parse error sigue con vite 8 / vitest 4; si sí, importar el JSON sin la
-query `?import` o excluir el fichero del denominador de coverage
-explícitamente (que el número no mienta).
-
-**#17 — `build-storybook` pasa con warnings.** Chunks >500KB, docgen
-saltando `.storybook/preview.tsx`, patrón MDX vacío. Higiene del
-**artefacto de docs** (storybook-static deployado a igoded.es), NO del
-paquete npm. Acción: manual-chunks / lazy en la config de storybook +
-arreglar el glob del docgen. No bloquea nada del release.
+afecta corrección ni artefacto, y coverage NO es un gate (no está en
+`verify:unit` ni en CI; `test:coverage` es manual). Matiz: el excluido es
+un fichero JSON de DATOS, no código — excluirlo del coverage de código es
+arguablemente correcto, no un inflado real. Acción si se aborda: reevaluar
+el parse error con vite 8 / vitest 4; si molesta, excluir el fichero del
+denominador explícitamente (que el número no mienta).
 
 ---
