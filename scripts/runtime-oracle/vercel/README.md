@@ -42,10 +42,21 @@ node scripts/runtime-oracle/compare-vercel.mjs https://<tu-deploy>.vercel.app/ap
 vercel rm <nombre-del-proyecto> --yes
 ```
 
-## Medición pineada (#18) — 2026-07-18, región `lhr1`
+## Medición pineada (#18) — 2026-07-18 · **cross-región validada** (`lhr1` + `iad1`)
 
-Deploy real medido. `compare-vercel.mjs` → **✓ verde** (0 falsos negativos,
-premisas 6/6). Resultado, para detectar drift futuro (bump del Edge runtime):
+Deploy real medido. `compare-vercel.mjs` → **✓ verde** (0 falsos negativos) en
+**ambas regiones**.
+
+> **Cross-región: 0 diferencias en 1489 puntos.** El pin se midió en `lhr1` y se
+> contrastó en `iad1` (fijando `regions` en el `config` del probe): 1314 de
+> superficie + 119 de catálogo + 29 premisas + 22 browser-only + 11 denied + 14
+> sets de miembros por root — **idénticos**. Vercel despliega el runtime por
+> regiones, así que un solo punto no habría distinguido "propiedad de Vercel Edge"
+> de "propiedad de Londres". Con dos puntos independientes, lo pineado es
+> propiedad del **runtime**. Para repetir el contraste: volver a fijar `regions`
+> en `probe.template.ts` y regenerar.
+
+Resultado, para detectar drift futuro (bump del Edge runtime):
 
 - **Premisas 6/6 PASS**: `elu` absent · `createObjectURL`/`revoke` THROW ·
   `WebAssembly.compile` THROWS `CompileError` · `new Function` THROWS `EvalError` ·

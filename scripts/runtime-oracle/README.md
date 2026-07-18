@@ -98,6 +98,25 @@ Segunda pasada, ya sin limitarse al catálogo del gate:
   el gate ya trata como `GLOBALS_OVERCLAIM`. La clase "miembro ausente en el floor" **ya está modelada**
   (bucket-2) y su cobertura parcial **ya está registrada en #190**.
 
+### Validación cross-región (2026-07-18) — `lhr1` vs `iad1`: **0 diferencias en 1489 puntos**
+
+Todas las mediciones anteriores salían de `lhr1` (la región más cercana al request). Como Vercel despliega el
+runtime **por regiones**, un solo punto no distingue "propiedad de Vercel Edge" de "propiedad de Londres" —
+y eso importa para un freeze. Se repitió el barrido completo fijando `regions: ["iad1"]` en el `config` del
+probe y se diffeó contra el pin:
+
+| Dimensión | Puntos | Resultado |
+|---|---|---|
+| `fullSurface` (universo `globals`) | 1314 | idéntico |
+| `presence` (catálogo) | 119 | idéntico |
+| `premises` (hazards) | 29 | idéntico |
+| `browserOnly` (fail-open) | 22 | idéntico |
+| `denied` | 11 | idéntico |
+| miembros por root (`memberDump` + `rootMembers`) | 14 sets | idéntico |
+
+→ Lo pineado es **propiedad del runtime**, no de una región. `regions` está revertido a por defecto; para
+repetir el contraste, volver a fijarlo en `probe.template.ts` y regenerar.
+
 **Limitación estructural del método** (no es pereza, es el runtime): solo se puede medir **presencia de
 nombres horneados** en el source. El objeto-global miente por enumeración y Edge bloquea `eval`, así que un
 global que no esté ni en `globals` ni en los ~59 *own* permanece invisible. Y el **comportamiento** (llamar)
