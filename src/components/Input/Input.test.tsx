@@ -24,16 +24,16 @@ describe("Input", () => {
   });
 
   it("state=error aplica clase y aria-invalid", () => {
-    render(<Input state="error" placeholder="x" />);
+    render(<Input state="invalid" placeholder="x" />);
     const el = screen.getByPlaceholderText("x");
-    expect(el).toHaveClass("ig-input-error");
+    expect(el).toHaveClass("ig-input-invalid");
     expect(el).toHaveAttribute("aria-invalid", "true");
   });
 
   it("state=success aplica clase y no añade aria-invalid", () => {
-    render(<Input state="success" placeholder="x" />);
+    render(<Input state="valid" placeholder="x" />);
     const el = screen.getByPlaceholderText("x");
-    expect(el).toHaveClass("ig-input-success");
+    expect(el).toHaveClass("ig-input-valid");
     expect(el).not.toHaveAttribute("aria-invalid");
   });
 
@@ -45,11 +45,11 @@ describe("Input", () => {
   });
 
   it("className merge: la clase del consumer se añade sin pisar ig-input", () => {
-    render(<Input placeholder="x" size="lg" state="error" className="my-input extra" />);
+    render(<Input placeholder="x" size="lg" state="invalid" className="my-input extra" />);
     const el = screen.getByPlaceholderText("x");
     expect(el).toHaveClass("ig-input");
     expect(el).toHaveClass("ig-input-lg");
-    expect(el).toHaveClass("ig-input-error");
+    expect(el).toHaveClass("ig-input-invalid");
     expect(el).toHaveClass("my-input");
     expect(el).toHaveClass("extra");
   });
@@ -164,8 +164,8 @@ describe("Input — AllStates regression", () => {
     const stories = await import("./Input.stories");
     const Story = composeStory(stories.AllStates, stories.default);
     const { container } = render(<Story />);
-    expect(container.querySelector(".ig-input-error")).not.toBeNull();
-    expect(container.querySelector(".ig-input-success")).not.toBeNull();
+    expect(container.querySelector(".ig-input-invalid")).not.toBeNull();
+    expect(container.querySelector(".ig-input-valid")).not.toBeNull();
     expect(container.querySelector(".ig-input-sm")).not.toBeNull();
     expect(container.querySelector(".ig-input-lg")).not.toBeNull();
     expect(container.querySelectorAll(".ig-input").length).toBeGreaterThan(10);

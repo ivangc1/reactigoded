@@ -14,7 +14,7 @@ const meta = {
     },
   },
   argTypes: {
-    state: { control: "select", options: ["default", "error", "success"] },
+    state: { control: "select", options: ["default", "invalid", "valid"] },
     disabled: { control: "boolean" },
     onChange: { action: "change" },
   },
@@ -38,9 +38,9 @@ type Story = StoryObj<typeof meta>;
 
 export const PorDefecto: Story = {};
 
-export const Error: Story = { args: { state: "error" } };
+export const Error: Story = { args: { state: "invalid" } };
 
-export const Success: Story = { args: { state: "success", defaultValue: "pro" } };
+export const Success: Story = { args: { state: "valid", defaultValue: "pro" } };
 
 export const Deshabilitado: Story = { args: { disabled: true } };
 
@@ -86,11 +86,11 @@ export const AllStates: Story = {
         <option value="b">B preselect</option>
         <option value="c">C</option>
       </NativeSelect>
-      <NativeSelect aria-label="NativeSelect error" state="error">
+      <NativeSelect aria-label="NativeSelect error" state="invalid">
         <option value="">Error state</option>
         <option value="a">A</option>
       </NativeSelect>
-      <NativeSelect aria-label="NativeSelect success" state="success" defaultValue="ok">
+      <NativeSelect aria-label="NativeSelect success" state="valid" defaultValue="ok">
         <option value="ok">Success</option>
       </NativeSelect>
       <NativeSelect aria-label="NativeSelect disabled" disabled>

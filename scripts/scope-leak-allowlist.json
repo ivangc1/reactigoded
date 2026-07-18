@@ -27,8 +27,8 @@
       "reason": "Style modifier (border-style: dashed). 3 líneas en Divider.tsx corresponden a las 3 variantes de orientación del componente (horizontal sin texto, horizontal con texto, vertical) que aplican la clase de manera consistente — todas en branches mutuamente excluyentes."
     },
     {
-      "class": "ig-navbar-brand",
-      "file": "src/components/Navbar/NavbarBrand.tsx",
+      "class": "ig-navbar-logo",
+      "file": "src/components/Navbar/NavbarLogo.tsx",
       "reason": "Falso positivo del filtro de modificadores: `-brand` se interpreta como variant semántica (rojo brand color) pero aquí es slot del logo del Navbar. Las 2 ocurrencias son por modes link/no-link del componente."
     }
   ]

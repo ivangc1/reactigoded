@@ -22,7 +22,7 @@
  *   Pre-widening fallan TODAS bajo EOPT; post-widening pasan.
  *
  * - **`href` discriminator (control de regresión, NO se widening)**: el
- *   `?: undefined` literal de MenuItem, SidebarItem y NavbarBrand debe
+ *   `?: undefined` literal de MenuItem, SidebarItem y NavbarLogo debe
  *   permitir tanto `<X href={undefined}>` (resuelve a button/div branch)
  *   como `<X href="x">` (resuelve a anchor branch). Pre-widening y
  *   post-widening PASAN — son el control. Si fallan, hay un bug en el
@@ -59,7 +59,7 @@ import {
   TabsTrigger,
   TabsContent,
   ThemeToggle,
-  NavbarBrand,
+  NavbarLogo,
   type Theme,
 } from "reactigoded";
 
@@ -275,14 +275,14 @@ export const HrefControl_SidebarItemString = (
   </Sidebar>
 );
 
-// NavbarBrand href={undefined} → AsDiv branch (third discriminator
+// NavbarLogo href={undefined} → AsDiv branch (third discriminator
 // type con literal `?: undefined`; cubre la tercera componente de la
 // familia para blindar la regresión a tres frentes).
-export const HrefControl_NavbarBrandUndef = (
-  <NavbarBrand href={undefined}>Marca</NavbarBrand>
+export const HrefControl_NavbarLogoUndef = (
+  <NavbarLogo href={undefined}>Marca</NavbarLogo>
 );
 
-// NavbarBrand href="..." → AsAnchor branch.
-export const HrefControl_NavbarBrandString = (
-  <NavbarBrand href="/">Marca</NavbarBrand>
+// NavbarLogo href="..." → AsAnchor branch.
+export const HrefControl_NavbarLogoString = (
+  <NavbarLogo href="/">Marca</NavbarLogo>
 );

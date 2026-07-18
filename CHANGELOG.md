@@ -7,6 +7,17 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Cambiado — BREAKING (última ventana antes de 1.0)
+
+- Renombres de API pública para eliminar colisiones de nombre antes de congelar 1.0:
+  - Clases `.ig-tooltip-color-*` → `.ig-tooltip-*` (el infijo `-color-` era dialecto local; la doc ya prometía la forma sin él).
+  - Clase `.ig-navbar-brand` → `.ig-navbar-logo` y componente `NavbarBrand` → `NavbarLogo` (`brand` colisionaba con el eje de rol de color; el slot es el logo).
+  - Clases `.ig-input-error`/`.ig-input-success` → `.ig-input-invalid`/`.ig-input-valid` y valores del prop `state` (`"invalid"`/`"valid"`), alineados con `aria-invalid`.
+
+### Añadido
+
+- **Freeze de API pública (§5.13)**: la superficie estable de 1.0 (clases de componente, data-attributes de estado, tokens Tier-2) se congela en `src/_audit/public-api-names.json`, protegida por el gate `scripts/check-public-api-names.mjs` (`⊆ dist`, encadenado en `verify:unit`). Editar el freeze exige bump MAJOR. La capa utility (`state.css`) y los tokens Tier-1/Tier-3 quedan fuera del freeze **por declaración explícita** (ver CSSAPI.mdx + DesignTokens.mdx).
+
 ## [1.0.0-beta.26] — 2026-05-29 (bloque claudegate5 / beta.27 cerrado)
 
 Cierra el bloque **claudegate5 / beta.27** (25 PRs entre #105 y

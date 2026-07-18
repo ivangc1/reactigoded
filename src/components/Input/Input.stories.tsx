@@ -21,7 +21,7 @@ const meta = {
   },
   argTypes: {
     size: { control: "select", options: ["sm", "md", "lg"] },
-    state: { control: "select", options: ["default", "error", "success"] },
+    state: { control: "select", options: ["default", "invalid", "valid"] },
     type: {
       control: "select",
       options: ["text", "email", "password", "number", "search", "tel", "url"],
@@ -50,8 +50,8 @@ export const Estados: Story = {
   render: () => (
     <div className="ig-story-stack ig-story-stack--md">
       <Input placeholder="Default" />
-      <Input state="success" placeholder="Success" defaultValue="Email válido" />
-      <Input state="error" placeholder="Error" defaultValue="usuario@malformado" />
+      <Input state="valid" placeholder="Success" defaultValue="Email válido" />
+      <Input state="invalid" placeholder="Error" defaultValue="usuario@malformado" />
     </div>
   ),
 };
@@ -102,7 +102,7 @@ export const FormularioCompleto: Story = {
         <Input
           id="pwd"
           type="password"
-          state="error"
+          state="invalid"
           aria-describedby="pwd-error"
         />
         <ErrorText id="pwd-error">Mínimo 8 caracteres.</ErrorText>
@@ -135,7 +135,7 @@ export const ConDescribedBy: Story = {
               type="email"
               placeholder="tu@email.com"
               describedBy={[helperId, errorId]}
-              state="error"
+              state="invalid"
               defaultValue="bad@email"
             />
             <Helper id={helperId}>
@@ -192,13 +192,13 @@ export const AllStates: Story = {
           />
           <Input
             size={size}
-            state="error"
+            state="invalid"
             placeholder="error state"
             aria-label={`Input ${size} error`}
           />
           <Input
             size={size}
-            state="success"
+            state="valid"
             placeholder="success state"
             aria-label={`Input ${size} success`}
           />

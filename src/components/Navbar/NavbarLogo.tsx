@@ -22,26 +22,26 @@ type AsDiv = CommonProps &
     ref?: Ref<HTMLDivElement> | undefined;
   };
 
-export type NavbarBrandProps = AsAnchor | AsDiv;
+export type NavbarLogoProps = AsAnchor | AsDiv;
 
 /**
- * NavbarBrand — área del logo y nombre. Por defecto es `<div>`; si se pasa
+ * NavbarLogo — área del logo y nombre. Por defecto es `<div>`; si se pasa
  * `href` se renderiza como `<a>` (clicable).
   *
  * @server-safe
  */
-export function NavbarBrand(props: NavbarBrandProps) {
+export function NavbarLogo(props: NavbarLogoProps) {
   if (props.href !== undefined) {
     const { className, ref, children, ...rest } = props;
     return (
-      <a ref={ref} className={cn("ig-navbar-brand", className)} {...rest}>
+      <a ref={ref} className={cn("ig-navbar-logo", className)} {...rest}>
         {children}
       </a>
     );
   }
   const { className, ref, children, ...rest } = props;
   return (
-    <div ref={ref} className={cn("ig-navbar-brand", className)} {...rest}>
+    <div ref={ref} className={cn("ig-navbar-logo", className)} {...rest}>
       {children}
     </div>
   );

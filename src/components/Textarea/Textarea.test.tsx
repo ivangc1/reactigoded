@@ -19,9 +19,9 @@ describe("Textarea", () => {
   });
 
   it("state=error aplica clase y aria-invalid", () => {
-    render(<Textarea state="error" aria-label="bio" />);
+    render(<Textarea state="invalid" aria-label="bio" />);
     const el = screen.getByLabelText("bio");
-    expect(el).toHaveClass("ig-input-error");
+    expect(el).toHaveClass("ig-input-invalid");
     expect(el).toHaveAttribute("aria-invalid", "true");
   });
 

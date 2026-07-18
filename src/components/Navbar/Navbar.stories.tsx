@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import {
   Navbar,
-  NavbarBrand,
+  NavbarLogo,
   NavbarNav,
   NavbarLink,
   NavbarActions,
@@ -18,7 +18,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "`<header class=\"ig-navbar\">` con subcomponentes: `NavbarBrand`, `NavbarNav` (`<nav aria-label>`), `NavbarLink` (con prop `active` que aplica `aria-current=\"page\"`), `NavbarActions` y `NavbarMenuButton` (botón hamburguesa visible vía CSS sólo en mobile). Variantes: `position=\"sticky\"`/`\"fixed\"`, `glass`.",
+          "`<header class=\"ig-navbar\">` con subcomponentes: `NavbarLogo`, `NavbarNav` (`<nav aria-label>`), `NavbarLink` (con prop `active` que aplica `aria-current=\"page\"`), `NavbarActions` y `NavbarMenuButton` (botón hamburguesa visible vía CSS sólo en mobile). Variantes: `position=\"sticky\"`/`\"fixed\"`, `glass`.",
       },
     },
   },
@@ -37,9 +37,9 @@ type Story = StoryObj<typeof meta>;
 export const PorDefecto: Story = {
   render: (args) => (
     <Navbar {...args}>
-      <NavbarBrand href="#">
+      <NavbarLogo href="#">
         <span style={{ fontWeight: 600 }}>reactigoded</span>
-      </NavbarBrand>
+      </NavbarLogo>
       <NavbarNav>
         <NavbarLink href="#" active>
           Inicio
@@ -60,7 +60,7 @@ export const Sticky: Story = {
   render: (args) => (
     <div style={{ minHeight: "200vh" }}>
       <Navbar {...args}>
-        <NavbarBrand>reactigoded</NavbarBrand>
+        <NavbarLogo>reactigoded</NavbarLogo>
         <NavbarNav>
           <NavbarLink href="#" active>
             Inicio
@@ -94,7 +94,7 @@ export const Glass: Story = {
       }}
     >
       <Navbar {...args}>
-        <NavbarBrand>Brand</NavbarBrand>
+        <NavbarLogo>Brand</NavbarLogo>
         <NavbarNav>
           <NavbarLink href="#" active>
             Inicio
@@ -112,7 +112,7 @@ export const Glass: Story = {
 export const ConMenuMobile: Story = {
   render: () => (
     <Navbar>
-      <NavbarBrand>App</NavbarBrand>
+      <NavbarLogo>App</NavbarLogo>
       <NavbarNav>
         <NavbarLink href="#" active>
           Inicio
@@ -146,9 +146,9 @@ export const AllStates: Story = {
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <section aria-label="Demo Navbar default">
         <Navbar aria-label="Navbar default">
-          <NavbarBrand href="#">
+          <NavbarLogo href="#">
             <span style={{ fontWeight: 600 }}>Default</span>
-          </NavbarBrand>
+          </NavbarLogo>
           <NavbarNav aria-label="Navegación default">
             <NavbarLink href="#" active>
               Inicio
@@ -164,9 +164,9 @@ export const AllStates: Story = {
       </section>
       <section aria-label="Demo Navbar sticky">
         <Navbar aria-label="Navbar sticky" position="sticky">
-          <NavbarBrand href="#">
+          <NavbarLogo href="#">
             <span style={{ fontWeight: 600 }}>Sticky</span>
-          </NavbarBrand>
+          </NavbarLogo>
           <NavbarNav aria-label="Navegación sticky">
             <NavbarLink href="#" active>
               Inicio
@@ -177,9 +177,9 @@ export const AllStates: Story = {
       </section>
       <section aria-label="Demo Navbar glass">
         <Navbar aria-label="Navbar glass + sticky" glass position="sticky">
-          <NavbarBrand>
+          <NavbarLogo>
             <span style={{ fontWeight: 600 }}>Glass</span>
-          </NavbarBrand>
+          </NavbarLogo>
           <NavbarNav aria-label="Navegación glass">
             <NavbarLink href="#">Solo brand</NavbarLink>
           </NavbarNav>
@@ -187,7 +187,7 @@ export const AllStates: Story = {
       </section>
       <section aria-label="Demo Navbar mobile">
         <Navbar aria-label="Navbar mobile menu">
-          <NavbarBrand>App</NavbarBrand>
+          <NavbarLogo>App</NavbarLogo>
           <NavbarNav aria-label="Navegación mobile">
             <NavbarLink href="#" active>
               Inicio

@@ -1,7 +1,7 @@
 export { Navbar } from "./Navbar";
 export type { NavbarProps } from "./Navbar";
-export { NavbarBrand } from "./NavbarBrand";
-export type { NavbarBrandProps } from "./NavbarBrand";
+export { NavbarLogo } from "./NavbarLogo";
+export type { NavbarLogoProps } from "./NavbarLogo";
 export { NavbarNav } from "./NavbarNav";
 export type { NavbarNavProps } from "./NavbarNav";
 export { NavbarLink } from "./NavbarLink";

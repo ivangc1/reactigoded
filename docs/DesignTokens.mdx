@@ -91,9 +91,11 @@ Los tokens del DS se organizan en tres tiers explícitos:
   en componentes** — son detalle de implementación de la paleta dual.
 - **Tier 2 — Semánticos**: `--ig-{cardinal}` (alias adaptativo según tema),
   `--ig-{role}` (`brand`, `secondary`, `success`, `warning`, `danger`, `info`),
-  `--ig-text-on-{cardinal}`, `--ig-bg-{base|surface|sunken|elevated|muted}`,
+  `--ig-text-on-{cardinal|role}` (cada cardinal o rol usado como **fondo** tiene su texto legible encima; `cinis` no lleva — es color de texto, no fondo), `--ig-bg-{base|surface|sunken|elevated|muted}`,
   `--ig-text-{heading|body|muted|disabled}`, `--ig-border-{subtle|default|strong}`.
   Esto es lo que usan los componentes y lo que se debe usar en aplicaciones.
+
+**Freeze de API pública 1.0 (§5.13):** los tokens **Tier-2** de esta lista están congelados en `src/_audit/public-api-names.json` — renombrarlos exige bump **MAJOR** + entrada en CHANGELOG. **Tier-1** (primitivos `-lux`/`-nox`) y **Tier-3** (escalas: `-alpha-*`, `-glow`, `--ig-neutral-*`, tamaños de texto) quedan **fuera del freeze por declaración**, no por silencio: una escala conserva la libertad de perder o añadir un escalón sin major, y se estabiliza con un minor cuando se declare en el CHANGELOG. Los tokens de **componente** (`--ig-card-*`, `--ig-input-*`, …) son una capa aparte, aún sin clasificar — tampoco congelados.
 - **Tier 3 — Escalas**: `--ig-neutral-{50..950}` (universal, **no adaptativa**
   al tema), `--ig-{cardinal}-alpha-{10|20|30|50|70}`, `--ig-{cardinal}-glow`,
   `--ig-glass-*`. Para uso ad-hoc por consumers que necesiten opacidades o

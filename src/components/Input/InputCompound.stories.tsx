@@ -63,7 +63,7 @@ export const AllStates: Story = {
           <Input
             id={id2}
             type="password"
-            state="error"
+            state="invalid"
             describedBy={err2}
           />
           <ErrorText id={err2}>

@@ -241,7 +241,7 @@ function Page() {
 | **Display** | `Avatar`, `AvatarGroup`, `Badge`, `Card` (+`CardHeader`/`Body`/`Footer`/`Image`/`Divider`), `Divider`, `Skeleton`, `Spinner`, `Timeline`+`TimelineItem` |
 | **Feedback** | `Alert`, `AlertDialog`+`AlertDialogTrigger`+`AlertDialogContent`+`AlertDialogHeader`+`AlertDialogBody`+`AlertDialogFooter`+`AlertDialogClose`, `Dialog`+`DialogTrigger`+`DialogContent`+`DialogHeader`+`DialogBody`+`DialogFooter`+`DialogClose`, `Progress`, `Toast`+`ToastProvider`+`useToast`, `Tooltip`, `FloatingTreeRoot` |
 | **Formularios** | `Checkbox`, `Input` (+`Label`/`Helper`/`ErrorText`/`InputGroup`/`InputAddon`), `Radio`, `Rating`, `NativeSelect`, `Slider`, `Switch`, `Textarea`, `ThemeToggle` |
-| **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `Menu`+`MenuTrigger`+`MenuContent`+`MenuItem`+`MenuSeparator`+`MenuLabel`, `Navbar`+`NavbarBrand`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabsList`+`TabsTrigger`+`TabsContent` |
+| **Navegación** | `Accordion`+`AccordionItem`+`AccordionHeader`+`AccordionContent`, `Breadcrumb`+`BreadcrumbItem`, `Menu`+`MenuTrigger`+`MenuContent`+`MenuItem`+`MenuSeparator`+`MenuLabel`, `Navbar`+`NavbarLogo`+`NavbarNav`+`NavbarLink`+`NavbarActions`+`NavbarMenuButton`, `Sidebar`+`SidebarHeader`+`SidebarNav`+`SidebarItem`+`SidebarFooter`+`SidebarToggle`+`SidebarDivider`+`SidebarSection`, `Stepper`+`Step`, `Table` (+`TableHead`/`Body`/`Foot`/`Row`/`HeaderCell`/`Cell`/`Caption`), `Tabs`+`TabsList`+`TabsTrigger`+`TabsContent` |
 
 Hooks públicos: `useTheme`, `useToast`, `useControllableState` + el componente helper `FloatingTreeRoot` (anidación de floats). Detalle completo en la sección [Hooks públicos del DS](#hooks-públicos-del-ds) (D11 beta.24).
 
@@ -254,7 +254,7 @@ Hooks públicos: `useTheme`, `useToast`, `useControllableState` + el componente 
 
 ## API CSS pública
 
-Las clases `.ig-*` que usan los componentes son **API pública del paquete**
+Las clases `.ig-*` **documentadas en esta sección** (las tablas por componente) son **API pública del paquete**
 y se pueden aplicar directamente sobre HTML estático sin montar React (útil
 para emails, PDFs, demos rápidas, fragmentos server-rendered). El convenio
 es uniforme: **clase base + modifiers de variant / size / shape / state**,
@@ -278,9 +278,9 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 | `Chip`                  | `.ig-chip`                | variants color, `-close`                                                                |
 | `Divider`               | `.ig-divider`             | variants color, `-vertical`, `-dashed`, `-with-text`                                    |
 | `Menu`                  | `.ig-menu`                | `-trigger`, `-content`, `-item`, `-separator`, `-label` *(portal real via Floating UI, D2/D7 beta.24)* |
-| `Input` / `Textarea` / `NativeSelect` | `.ig-input` · `.ig-textarea` · `.ig-native-select` | `-error`, `-success`, `-addon`, `-group`, `-textarea-auto`, `-select-auto` |
+| `Input` / `Textarea` / `NativeSelect` | `.ig-input` · `.ig-textarea` · `.ig-native-select` | `-invalid`, `-valid`, `-addon`, `-group`, `-textarea-auto`, `-select-auto` |
 | `Dialog` / `AlertDialog` | `.ig-dialog` *(<dialog> nativo)* | `-header`, `-body`, `-footer`, `-close`, sizes `-sm`…`-xl`/`-full`, `-backdrop-blur`/`-dark`/`-light`/`-no-backdrop`, `-loading`. `AlertDialog` aplica `role="alertdialog"` + `closeOnBackdrop=false` default (D8 beta.24) |
-| `Navbar`                | `.ig-navbar`              | `-brand`, `-nav`, `-actions`, `-link`, `-menu-button`, `-sticky`/`-fixed`               |
+| `Navbar`                | `.ig-navbar`              | `-logo`, `-nav`, `-actions`, `-link`, `-menu-button`, `-sticky`/`-fixed`               |
 | `Pagination`            | `.ig-pagination`          | variants color, `-active`                                                               |
 | `Progress`              | `.ig-progress`            | `-bar`, variants color, sizes                                                           |
 | `Radio`                 | `.ig-radio`               | variants color, sizes                                                                   |
@@ -295,7 +295,7 @@ tablas detalladas y ejemplos HTML por los 32 componentes](https://igoded.es/?pat
 | `Tabs`                  | `.ig-tabs`                | variants color, `-content`, `-list`, `-tab`, `-panel`                                   |
 | `Timeline`              | `.ig-timeline`            | `-item`, `-content`, `-date`                                                            |
 | `Toast`                 | `.ig-toast`               | placement `-top-left`/`-top-right`/`-bottom-left`/`-bottom-right`/`-bottom-center` …    |
-| `Tooltip`               | `.ig-tooltip`             | placement `-place-top`/`-place-bottom`/`-place-left`/`-place-right`, variants `-color-brand`/`-color-secondary`/… |
+| `Tooltip`               | `.ig-tooltip`             | placement `-place-top`/`-place-bottom`/`-place-left`/`-place-right`, variants `-brand`/`-secondary`/… |
 
 > Los modifiers son aditivos: una variante completa de Button es, p.ej.,
 > `<button class="ig-btn ig-btn-brand ig-btn-lg ig-btn-block">…</button>`.

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import {
   Navbar,
-  NavbarBrand,
+  NavbarLogo,
   NavbarNav,
   NavbarLink,
   NavbarActions,
@@ -28,20 +28,20 @@ describe("Navbar", () => {
     });
   });
 
-  it("NavbarBrand sin href renderiza <div>; con href renderiza <a>", () => {
+  it("NavbarLogo sin href renderiza <div>; con href renderiza <a>", () => {
     const { rerender } = render(
-      <NavbarBrand data-testid="b">App</NavbarBrand>,
+      <NavbarLogo data-testid="b">App</NavbarLogo>,
     );
     expect(screen.getByTestId("b").tagName).toBe("DIV");
     rerender(
-      <NavbarBrand data-testid="b" href="/home">
+      <NavbarLogo data-testid="b" href="/home">
         App
-      </NavbarBrand>,
+      </NavbarLogo>,
     );
     const a = screen.getByTestId("b");
     expect(a.tagName).toBe("A");
     expect(a).toHaveAttribute("href", "/home");
-    expect(a).toHaveClass("ig-navbar-brand");
+    expect(a).toHaveClass("ig-navbar-logo");
   });
 
   it("NavbarNav usa <nav> con aria-label por defecto 'Principal'", () => {

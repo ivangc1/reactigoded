@@ -54,7 +54,7 @@ export * from "@/components/Input/InputAddon";
 export * from "@/components/Input/InputGroup";
 export * from "@/components/Input/Label";
 export * from "@/components/Navbar/NavbarActions";
-export * from "@/components/Navbar/NavbarBrand";
+export * from "@/components/Navbar/NavbarLogo";
 export * from "@/components/Navbar/NavbarLink";
 export * from "@/components/Navbar/NavbarMenuButton";
 export * from "@/components/Progress/Progress";
