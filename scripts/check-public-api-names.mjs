@@ -88,9 +88,10 @@ const hooks = json.classHooks ?? { literal: [], dynamic: [] };
 for (const h of hooks.literal ?? []) {
   if (!bundlesText.includes(h)) missing.push(`hook  .${h} (literal, no emitido en JS)`);
 }
-for (const h of hooks.dynamic ?? []) {
-  const hookPrefix = h.slice(0, h.lastIndexOf("-") + 1);
-  if (!bundlesText.includes(hookPrefix)) missing.push(`hook  ${hookPrefix}* (prefijo no emitido, por .${h})`);
+for (const d of hooks.dynamic ?? []) {
+  if (!bundlesText.includes(d.prefix)) {
+    missing.push(`hook  ${d.prefix}* (prefijo no emitido en JS; cubre ${String((d.members ?? []).length)} miembros)`);
+  }
 }
 
 if (missing.length > 0) {
@@ -109,7 +110,7 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-const hookCount = (hooks.literal?.length ?? 0) + (hooks.dynamic?.length ?? 0);
+const hookCount = (hooks.literal?.length ?? 0) + (hooks.dynamic ?? []).reduce((n, d) => n + (d.members?.length ?? 0), 0);
 console.log(
   `✓ public-api-names: ${String(json.classes.length)} clases + ${String(hookCount)} hooks + ` +
     `${String(json.tokensTier2.length)} tokens + ` +

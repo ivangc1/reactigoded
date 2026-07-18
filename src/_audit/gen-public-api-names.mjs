@@ -75,10 +75,18 @@ const classes = [...seed].filter((c) => cssClasses.has(c) && !c.endsWith("-")).s
 //   - literal: `ig-step-interactive` — emitida literal; el gate la verifica entera.
 const classHooks = {
   literal: ["ig-step-interactive"],
-  dynamic: [
-    "ig-tooltip-place-top", "ig-tooltip-place-right",
-    "ig-tooltip-place-bottom", "ig-tooltip-place-left",
-  ],
+  dynamic: [{
+    // El gate verifica que este PREFIJO común se emita (ig-tooltip-place-${placement});
+    // los 12 miembros de la union TooltipPlacement (4 sides × {base,-start,-end},
+    // asserteados por Tooltip.test) los guardan la union de tipos + el test (§141).
+    prefix: "ig-tooltip-place-",
+    members: [
+      "ig-tooltip-place-top", "ig-tooltip-place-top-start", "ig-tooltip-place-top-end",
+      "ig-tooltip-place-right", "ig-tooltip-place-right-start", "ig-tooltip-place-right-end",
+      "ig-tooltip-place-bottom", "ig-tooltip-place-bottom-start", "ig-tooltip-place-bottom-end",
+      "ig-tooltip-place-left", "ig-tooltip-place-left-start", "ig-tooltip-place-left-end",
+    ],
+  }],
 };
 
 // data-attrs de ESTADO/tema que el DS emite como superficie observable
@@ -121,7 +129,7 @@ if (t2seedMinusDist.length > 0) console.log("tokens seed\\dist (bug doc):", t2se
 const out = {
   _doc:
     "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, classHooks, data-attributes, tokens Tier-2 semánticos). " +
-    "classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 4 ig-tooltip-place-* de Tooltip. LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO se emita; los 4 miembros SON contrato, pero los guardan la union de tipos Placement + el review del PR, no la automatización. " +
+    "classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 12 ig-tooltip-place-* de Tooltip (union TooltipPlacement: 4 sides × {base,-start,-end}). LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO común se emita; los 12 miembros SON contrato, pero los guardan la union de tipos Placement + el test de Tooltip, no la automatización. " +
     "POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. " +
     "ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. LÍMITE data-attrs: el gate verifica PRESENCIA en el bundle, no EMISIÓN (un attr solo mencionado en un querySelector pasaría) — los 6 congelados son load-bearing (borrar su emisión rompe tests de componente: posicionamiento, animaciones, tema, querySelector), así que los tests son el guardián real de la emisión. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). " +
     "El contrato estable es EXACTAMENTE lo aquí listado. " +

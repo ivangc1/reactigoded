@@ -1,5 +1,5 @@
 {
-  "_doc": "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, classHooks, data-attributes, tokens Tier-2 semánticos). classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 4 ig-tooltip-place-* de Tooltip. LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO se emita; los 4 miembros SON contrato, pero los guardan la union de tipos Placement + el review del PR, no la automatización. POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. LÍMITE data-attrs: el gate verifica PRESENCIA en el bundle, no EMISIÓN (un attr solo mencionado en un querySelector pasaría) — los 6 congelados son load-bearing (borrar su emisión rompe tests de componente: posicionamiento, animaciones, tema, querySelector), así que los tests son el guardián real de la emisión. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). El contrato estable es EXACTAMENTE lo aquí listado. FUERA DEL FREEZE: la capa utility (ig-bg-*, ig-text-*, ig-border-*, ig-font-*, ig-flex, ig-gap-*, spacing, ig-gradient-*, ig-glow-*, ig-ring-*, ig-fill-*, ig-stroke-*, ig-filter-* y sus variantes de estado hover:/focus:/... del state.css) es opt-in, shippeada y documentada, pero EXPERIMENTAL: su vocabulario puede evolucionar SIN major hasta que se declare estable en el CHANGELOG. Queda fuera por DECLARACIÓN explícita (CSSAPI.mdx + DesignTokens.mdx), no por silencio. Procedencia: clases raspadas de la PROSA de CSSAPI.mdx (menos code-blocks, prefijos de estado, menciones de token y 'Notas finales'); tokens Tier-2 derivados de las reglas de DesignTokens.mdx; todo ∩ dist; curado y RATIFICADO nombre a nombre.",
+  "_doc": "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, classHooks, data-attributes, tokens Tier-2 semánticos). classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 12 ig-tooltip-place-* de Tooltip (union TooltipPlacement: 4 sides × {base,-start,-end}). LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO común se emita; los 12 miembros SON contrato, pero los guardan la union de tipos Placement + el test de Tooltip, no la automatización. POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. LÍMITE data-attrs: el gate verifica PRESENCIA en el bundle, no EMISIÓN (un attr solo mencionado en un querySelector pasaría) — los 6 congelados son load-bearing (borrar su emisión rompe tests de componente: posicionamiento, animaciones, tema, querySelector), así que los tests son el guardián real de la emisión. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). El contrato estable es EXACTAMENTE lo aquí listado. FUERA DEL FREEZE: la capa utility (ig-bg-*, ig-text-*, ig-border-*, ig-font-*, ig-flex, ig-gap-*, spacing, ig-gradient-*, ig-glow-*, ig-ring-*, ig-fill-*, ig-stroke-*, ig-filter-* y sus variantes de estado hover:/focus:/... del state.css) es opt-in, shippeada y documentada, pero EXPERIMENTAL: su vocabulario puede evolucionar SIN major hasta que se declare estable en el CHANGELOG. Queda fuera por DECLARACIÓN explícita (CSSAPI.mdx + DesignTokens.mdx), no por silencio. Procedencia: clases raspadas de la PROSA de CSSAPI.mdx (menos code-blocks, prefijos de estado, menciones de token y 'Notas finales'); tokens Tier-2 derivados de las reglas de DesignTokens.mdx; todo ∩ dist; curado y RATIFICADO nombre a nombre.",
   "version": 1,
   "classes": [
     "ig-accordion",
@@ -340,10 +340,23 @@
       "ig-step-interactive"
     ],
     "dynamic": [
-      "ig-tooltip-place-top",
-      "ig-tooltip-place-right",
-      "ig-tooltip-place-bottom",
-      "ig-tooltip-place-left"
+      {
+        "prefix": "ig-tooltip-place-",
+        "members": [
+          "ig-tooltip-place-top",
+          "ig-tooltip-place-top-start",
+          "ig-tooltip-place-top-end",
+          "ig-tooltip-place-right",
+          "ig-tooltip-place-right-start",
+          "ig-tooltip-place-right-end",
+          "ig-tooltip-place-bottom",
+          "ig-tooltip-place-bottom-start",
+          "ig-tooltip-place-bottom-end",
+          "ig-tooltip-place-left",
+          "ig-tooltip-place-left-start",
+          "ig-tooltip-place-left-end"
+        ]
+      }
     ]
   },
   "dataAttributes": [
