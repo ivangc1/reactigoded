@@ -496,8 +496,19 @@ const WORKERS_MISSING_GLOBALS = new Set(["SharedArrayBuffer"]);
 // objeto-global de Vercel Edge es exótico y miente por enumeración / `in` /
 // `globalThis[x]`) y confirmó que estos 3 —que `@edge-runtime/vm` filtró de Node,
 // colándolos a SAFE— NO existen en el Edge real: un read bare lanza
-// ReferenceError ahí. WeakRef/FinalizationRegistry son GC-observables (los
-// runtimes-isolate los deshabilitan); DOMException no se expone como global bare.
+// ReferenceError ahí. DOS modos de fallo distintos, medidos por separado (bare /
+// globalThis[x] / construcción bare):
+//   - `WeakRef` y `FinalizationRegistry`: identificador INEXISTENTE →
+//     `ReferenceError: X is not defined`. Son GC-observables; los runtimes-isolate
+//     los deshabilitan.
+//   - `DOMException`: el binding EXISTE pero su valor es `undefined` →
+//     `new DOMException()` da `TypeError: DOMException is not a constructor` (no
+//     ReferenceError), y `typeof DOMException === "undefined"`. OJO: la doc de
+//     Vercel lo lista como Web Standard API soportada (codex P2) — y no se
+//     contradice con esto: el NOMBRE está declarado, pero no hay objeto detrás en
+//     el runtime medido. Para el gate da igual el matiz: usarlo LANZA en
+//     producción, así que fail-closed fuera de SAFE. Si un re-run futuro mide
+//     `domExceptionNewBare === "OK"`, esta entrada sale (ver premisas del probe).
 // Restar SOLO añade strictness (fail-closed): 0 módulos server-safe los usan hoy
 // (grep), así que cierra un FN LATENTE sin romper ninguno. Provenance del probe
 // pineada en scripts/runtime-oracle/vercel/README.md. Cross-check workerd/Deno +
