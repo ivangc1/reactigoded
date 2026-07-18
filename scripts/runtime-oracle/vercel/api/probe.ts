@@ -181,6 +181,24 @@ export default async function handler(): Promise<Response> {
       typeof console !== "undefined" ? typeof (console as Any).table : "no-console",
     waCompile:
       typeof WebAssembly !== "undefined" ? typeof WebAssembly.compile : "no-WA",
+    // #18 / codex P2: la doc de Vercel lista `DOMException` como Web Standard API,
+    // pero el probe lo midió AUSENTE bare. En ESTE runtime las 3 vías DIVERGEN
+    // (medido: `globalThis.performance` es undefined pero bare `performance` da
+    // "object"; `URL` resuelve por get aunque `in globalThis` dé false), así que
+    // se miden las tres por separado para los 3 de EDGE_MISSING_REAL. El gate
+    // decide sobre la REFERENCIA BARE — que es lo que revienta en runtime — no
+    // sobre "la API existe por alguna vía".
+    domExceptionBare: typeof DOMException,
+    domExceptionGet: typeof (globalThis as Any).DOMException,
+    domExceptionNewBare: tryCall(() => void new DOMException("x")),
+    weakRefBare: typeof WeakRef,
+    weakRefGet: typeof (globalThis as Any).WeakRef,
+    weakRefNewBare: tryCall(() => void new WeakRef({})),
+    finalizationRegistryBare: typeof FinalizationRegistry,
+    finalizationRegistryGet: typeof (globalThis as Any).FinalizationRegistry,
+    finalizationRegistryNewBare: tryCall(
+      () => void new FinalizationRegistry(() => {}),
+    ),
     newURL: tryCall(() => void new URL("https://a.b/c")),
     createObjectURLCall: tryCall(() =>
       void (URL as Any).createObjectURL(new Blob(["x"])),

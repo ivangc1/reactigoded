@@ -15,6 +15,11 @@ oráculo fiel para ese runtime — y confirma que el catálogo del gate
 deploy de **producción** (runtime Edge real).
 
 ```bash
+# 0. Regenerar el probe desde el catálogo del gate (OBLIGATORIO si el catálogo
+#    cambió: hornea un `typeof <bare>` literal por nombre). `compare` aborta si
+#    el probe desplegado no cubre el catálogo actual.
+node scripts/runtime-oracle/gen-probe.mjs
+
 # 1. Vercel CLI (si no la tienes)
 npm i -g vercel
 
@@ -22,13 +27,16 @@ npm i -g vercel
 cd scripts/runtime-oracle/vercel
 vercel deploy --prod --yes        # primera vez: te pide login + link a un proyecto
 
-# 3. Comparar contra el catálogo del gate (fail-loud si hay drift). `compare`
-#    hace POST con el catálogo → el probe prueba `name in globalThis` en el Edge
-#    real. La ENUMERACIÓN no es fiable (objeto-global exótico: URL/Blob/fetch no
-#    salen en getOwnPropertyNames ni en el prototype-walk aunque existan).
+# 3. Comparar contra el catálogo del gate (fail-loud si hay drift DURO). El probe
+#    responde por GET con la `presence` ya horneada — un `typeof <identificador
+#    -bare>` por nombre. NO se usa enumeración ni `name in globalThis`: en Edge
+#    ambas MIENTEN (getOwnPropertyNames omite URL/Blob/fetch aunque funcionen;
+#    `in globalThis` da false para ellos). Solo el bare resuelve como el código.
 cd -                              # volver al repo root
 node scripts/runtime-oracle/compare-vercel.mjs https://<tu-deploy>.vercel.app/api/probe
-# (inspección manual: curl GET https://<tu-deploy>.vercel.app/api/probe → dump)
+# equivalente en 2 pasos (para inspeccionar el JSON crudo):
+#   curl -s https://<tu-deploy>.vercel.app/api/probe -o /tmp/edge.json
+#   node scripts/runtime-oracle/compare-vercel.mjs /tmp/edge.json
 
 # 4. Borrar el deploy efímero cuando termines
 vercel rm <nombre-del-proyecto> --yes
