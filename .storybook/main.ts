@@ -2,11 +2,12 @@ import type { StorybookConfig } from "@storybook/react-vite";
 
 const config: StorybookConfig = {
   stories: [
-    // M-06 (beta.22): MDX de Foundations canónicamente en docs/.
-    // src/**/*.mdx se mantiene por si algún componente trae su propio
-    // MDX de docs (raro hoy pero patrón válido).
+    // M-06 (beta.22): MDX de Foundations canónicamente en docs/. Un
+    // componente con su propio MDX de docs usa la convención
+    // `*.stories.mdx` (cubierta abajo) o lo pone en docs/. No hay `.mdx`
+    // sueltos en src/, así que el glob `../src/**/*.mdx` se quitó: avisaba
+    // "No story files found for the specified pattern: src/**/*.mdx" (#17).
     "../docs/**/*.mdx",
-    "../src/**/*.mdx",
     "../src/**/*.stories.@(ts|tsx|mdx)",
   ],
   addons: [
@@ -43,6 +44,14 @@ const config: StorybookConfig = {
     <script src="/static/manager-runtime.js" defer></script>
   `,
   typescript: {
+    // NOTA (#17): el plugin `vite:react-docgen-typescript` loguea "Skipping
+    // docgen for .storybook/preview.tsx because it is not [a component]" en el
+    // build. Es CORRECTO — preview.tsx es config, no un componente; el docgen
+    // lo salta bien. No es un defecto. El plugin acepta `exclude`, pero
+    // @storybook/react-vite NO lo expone, y parchear el plugin (minificado)
+    // desde viteFinal es cirugía frágil por un mensaje informativo benigno →
+    // se deja. Los 2 warnings REALES del build (glob `src/**/*.mdx` vacío y
+    // chunks >500KB) sí se cerraron (ver `stories` y `viteFinal`).
     reactDocgen: "react-docgen-typescript",
     reactDocgenTypescriptOptions: {
       shouldExtractLiteralValuesFromEnum: true,
@@ -74,6 +83,15 @@ const config: StorybookConfig = {
         return true;
       },
     },
+  },
+  viteFinal: (config) => {
+    // El storybook-static es un artefacto de docs (dev tool cargado por
+    // desarrolladores, no shippeado a usuarios finales): el tamaño de chunk no
+    // es perf-crítico como en la lib publicada. Los chunks grandes son
+    // inherentes a los bundles de stories + los docs blocks, no un problema
+    // aquí — subimos el umbral del aviso para no ensuciar el build (#17).
+    config.build = { ...config.build, chunkSizeWarningLimit: 2000 };
+    return config;
   },
 };
 
