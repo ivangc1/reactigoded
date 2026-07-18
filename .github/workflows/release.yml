@@ -1,0 +1,107 @@
+name: Release
+
+# Publica a npm al pushear un tag `v*` (convención del repo: v1.0.0-beta.26).
+#
+# AUTENTICACIÓN: Trusted Publishing (OIDC) — SIN token. GitHub emite un token
+# efímero firmado, específico de ESTE workflow, que npm valida contra el Trusted
+# Publisher configurado en el paquete. Elimina de raíz la fricción del publish
+# manual (2FA, OTP caducando mientras corre el `verify` largo, tokens granulares
+# que exigen scope de organización) y firma **provenance** automáticamente.
+#
+# ⚠️ REQUISITO MANUAL, UNA VEZ: en npmjs.com → paquete `reactigoded` → Settings →
+# Trusted Publisher, dar de alta `ivangc1/reactigoded` con workflow
+# `release.yml`. Sin eso el publish falla con error de autenticación: el
+# workflow NO puede crear esa confianza por sí solo.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  # Obligatorio para que Actions pueda emitir el token OIDC. Sin este permiso
+  # npm cae al flujo de token clásico y falla (no hay NPM_TOKEN).
+  id-token: write
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          # Node 24, NO el floor 22.12: trusted publishing exige npm >= 11.5.1 y
+          # Node 22.12 trae npm 10.9. El floor sigue verificado por la matriz de
+          # `verify.yml` (que es donde importa: compatibilidad del consumer).
+          # Aquí solo se empaqueta y sube — el artefacto es idéntico.
+          node-version: "24"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Comprobar npm >= 11.5.1 (mínimo de trusted publishing)
+        # Fail-loud explícito: si una imagen futura del runner bajara la versión
+        # de npm, el publish fallaría con un error de auth confuso. Mejor morir
+        # aquí diciendo exactamente por qué.
+        run: |
+          NPM="$(npm -v)"
+          echo "npm: $NPM"
+          node -e '
+            const [a, b, c] = process.argv[1].split(".").map(Number);
+            const ok = a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1)));
+            if (!ok) {
+              console.error(`npm ${process.argv[1]} < 11.5.1 — trusted publishing (OIDC) no soportado`);
+              process.exit(1);
+            }
+          ' "$NPM"
+
+      - name: Comprobar que el tag coincide con package.json
+        # Guard contra el fallo silencioso más caro: tagear `v1.0.0-rc.1` con el
+        # package.json todavía en beta.26 publicaría la versión equivocada bajo
+        # un tag que promete otra cosa. npm no lo detecta.
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          echo "tag: $TAG · package.json: $PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::El tag ($TAG) no coincide con package.json ($PKG). Corrige el tag o el bump."
+            exit 1
+          fi
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Chromium (Playwright)
+        # `npm publish` dispara `prepublishOnly: npm run verify`, y `verify`
+        # incluye `verify:storybook` → vitest-browser → playwright. Sin esto el
+        # guard de publicación falla por entorno, no por defecto real.
+        run: npx playwright install --with-deps chromium
+
+      - name: Derivar dist-tag desde la versión
+        id: disttag
+        # Una prerelease NUNCA debe ir a `latest`. El identificador se extrae de
+        # la propia versión (`1.0.0-beta.26` → `beta`, `1.0.0-rc.1` → `rc`), así
+        # que el tag no puede desincronizarse de lo que se publica.
+        # NOTA: en el PRIMER publish de un paquete npm asigna `latest` pase lo
+        # que pase con `--tag` (un paquete no puede existir sin él) y no se puede
+        # borrar después (400). Ya ocurrió con beta.26 — ver RC1_DECISIONS.md.
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "${PKG#*-}" != "$PKG" ]; then
+            TAG="$(printf '%s' "$PKG" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-([a-zA-Z]+).*/\1/')"
+          else
+            TAG="latest"
+          fi
+          echo "versión $PKG → dist-tag $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar
+        # SIN `--ignore-scripts` a propósito: `prepublishOnly` (verify completo)
+        # es EL guard de publicación. Saltarlo para ahorrar minutos de CI lo
+        # dejaría bypasseable en silencio; el tiempo de runner es barato
+        # comparado con publicar algo roto de forma irreversible.
+        # Tampoco hace falta `--provenance`: trusted publishing la firma sola.
+        run: npm publish --tag "${{ steps.disttag.outputs.tag }}"
