@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { createRef, forwardRef, useEffect, useState, type ReactNode, type Ref } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,6 +11,13 @@ import {
 } from "@floating-ui/react";
 import { Tooltip } from "./Tooltip";
 import { FloatingTreeRoot } from "../primitives/FloatingTreeRoot";
+
+// #28 cat 3 — floating-ui dispara un update de posición async fuera de act;
+// happy-dom no tiene layout y ningún test de este fichero assertea posición
+// → suprimimos SOLO ese warning incidental; cualquier otro console.error falla.
+allowIncidentalConsoleError(
+  /An update to .* inside a test was not wrapped in act/,
+);
 
 describe("Tooltip — Floating UI (post-RC1)", () => {
   it("renderiza el child y el span SR-only role=tooltip persistente", () => {

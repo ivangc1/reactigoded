@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { useRef, useState, type ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Menu } from "./Menu";
@@ -8,6 +9,14 @@ import { MenuItem } from "./MenuItem";
 import { MenuSeparator } from "./MenuSeparator";
 import { MenuLabel } from "./MenuLabel";
 import { useMenu } from "./MenuContext";
+
+// #28 cat 3 — floating-ui dispara un update de posición async fuera de act;
+// happy-dom no tiene layout (getBoundingClientRect = ceros) y ningún test de
+// este fichero assertea posición (grep confirmado) → suprimimos SOLO ese
+// warning incidental; cualquier otro console.error sigue fallando.
+allowIncidentalConsoleError(
+  /An update to .* inside a test was not wrapped in act/,
+);
 
 describe("Menu — uncontrolled", () => {
   it("D2: aplica data-side/data-align/data-state al MenuContent según placement/direction default", () => {

@@ -1,10 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { useState } from "react";
 import { act, renderHook } from "@testing-library/react";
 import {
   SUPPRESS_NO_HANDLER_WARN,
   useControllableState,
 } from "./useControllableState";
+
+// #28 cat 3 — los tests de transición controlled↔uncontrolled disparan el
+// dev-warning "controlled sin onChange" como efecto incidental (asertan el
+// VALOR, no el warning). Se suprime SOLO ese patrón. Los tests cat-1 que SÍ
+// asertan el contrato del warning (spyOn(console,"warn") +
+// toHaveBeenCalledOnce / not.toHaveBeenCalled) siguen funcionando: su propio
+// spy intercepta antes que este helper. Cualquier otro console.error/warn falla.
+allowIncidentalConsoleError(/^\[useControllableState\]/);
 
 describe("useControllableState", () => {
   it("uncontrolled: defaultValue inicial", () => {

@@ -1,8 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
+import { allowIncidentalConsoleError } from "@/test-utils/allowIncidentalConsoleError";
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Alert } from "./Alert";
+
+// #28 cat 3 — dev-warning de useControllableState (Alert controla `open` sin
+// onChange en los tests de modo controlado); su contrato se testea en
+// useControllableState.test.ts, aquí es incidental → suprimimos SOLO ese
+// patrón; cualquier otro console.error/warn sigue fallando.
+allowIncidentalConsoleError(/^\[useControllableState\]/);
 
 describe("Alert", () => {
   it("renderiza con role=status y aria-live=polite por defecto (info)", () => {
