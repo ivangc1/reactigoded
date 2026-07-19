@@ -128,7 +128,20 @@ jobs:
         run: |
           PKG="$(node -p "require('./package.json').version")"
           if npm view "reactigoded@$PKG" version >/dev/null 2>&1; then
-            echo "::notice::reactigoded@$PKG ya está publicado — se omite el publish (re-run idempotente)."
+            # La version YA existe. Que exista no basta para tratarlo como
+            # re-run: si la publico otra cosa (p.ej. un publish MANUAL con otro
+            # dist-tag — algo que ya paso con beta.26), saltarse el publish y
+            # seguir grabaria en la Release un registro DURADERO Y FALSO sobre
+            # una publicacion que este workflow no hizo. Solo es re-run legitimo
+            # si el dist-tag derivado YA apunta exactamente a esta version.
+            CURRENT="$(npm view reactigoded dist-tags --json 2>/dev/null \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let t={};try{t=JSON.parse(s||"{}")}catch{};process.stdout.write(String(t[process.argv[1]]??""))})' "$APPLIED_TAG")"
+            if [ "$CURRENT" = "$PKG" ]; then
+              echo "::notice::reactigoded@$PKG ya publicado y '$APPLIED_TAG' ya apunta ahí — re-run idempotente, se omite el publish."
+            else
+              echo "::error::reactigoded@$PKG YA EXISTE pero el dist-tag '$APPLIED_TAG' apunta a '${CURRENT:-<ninguno>}'. No se publicó desde este workflow: continuar grabaría un registro FALSO en la Release. Reconciliar a mano."
+              exit 1
+            fi
           else
             npm publish --tag "$APPLIED_TAG"
           fi
