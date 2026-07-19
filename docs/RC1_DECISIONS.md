@@ -51,7 +51,10 @@ decide pausar la publicación a npm sin fecha definida.
 
 **Implicaciones operativas (commit `7a5c922` B-01-followup)**:
 - `src/stories/Introduction.mdx`: banner pasa a "no publicado, clona
-  + npm link" (estado real).
+  + npm link" (estado real). **NOTA 2026-07-18**: ese fichero se movió
+  después a `docs/Introduction.mdx`; la ruta de arriba se conserva
+  porque describe el estado de mayo-2026, pero el procedimiento de
+  reversión de abajo apunta al sitio actual.
 - `README.md`: instalación documentada como clone + npm link.
 - Tag git `v1.0.0-beta.22` se mantendrá tras merge para trazabilidad
   histórica del repo, pero NO se acompaña de `npm publish`.
@@ -60,7 +63,8 @@ decide pausar la publicación a npm sin fecha definida.
 1. Decidir versión a publicar (probablemente `1.0.0-beta.23` con cambios
    acumulados desde beta.22, o `beta.22` re-tagged si nada cambió).
 2. Revertir commit `7a5c922` (B-01-followup) o reescribir las docs
-   manualmente.
+   manualmente — hoy son `README.md` y **`docs/Introduction.mdx`**
+   (movido desde `src/stories/`).
 3. Ejecutar `npm publish --tag beta`.
 4. Añadir nueva sección "Reactivación" a este MD documentando fecha y
    versión publicada.
