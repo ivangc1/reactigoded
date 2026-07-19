@@ -1,0 +1,222 @@
+name: Release
+
+# Publica a npm al pushear un tag `v*` (convención del repo: v1.0.0-beta.26).
+#
+# AUTENTICACIÓN: Trusted Publishing (OIDC) — SIN token. GitHub emite un token
+# efímero firmado, específico de ESTE workflow, que npm valida contra el Trusted
+# Publisher configurado en el paquete. Elimina de raíz la fricción del publish
+# manual (2FA, OTP caducando mientras corre el `verify` largo, tokens granulares
+# que exigen scope de organización) y firma **provenance** automáticamente.
+#
+# ⚠️ REQUISITO MANUAL, UNA VEZ: en npmjs.com → paquete `reactigoded` → Settings →
+# Trusted Publisher, dar de alta `ivangc1/reactigoded` con workflow
+# `release.yml`. Sin eso el publish falla con error de autenticación: el
+# workflow NO puede crear esa confianza por sí solo.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  # `write` (no `read`) porque el último step crea la GitHub Release, que es el
+  # único sitio DURADERO donde queda constancia del dist-tag aplicado.
+  contents: write
+  # Obligatorio para que Actions pueda emitir el token OIDC. Sin este permiso
+  # npm cae al flujo de token clásico y falla (no hay NPM_TOKEN).
+  id-token: write
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          # Node 24, NO el floor 22.12: trusted publishing exige npm >= 11.5.1 y
+          # Node 22.12 trae npm 10.9. El floor sigue verificado por la matriz de
+          # `verify.yml` (que es donde importa: compatibilidad del consumer).
+          # Aquí solo se empaqueta y sube — el artefacto es idéntico.
+          node-version: "24"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Comprobar npm >= 11.5.1 (mínimo de trusted publishing)
+        # Fail-loud explícito: si una imagen futura del runner bajara la versión
+        # de npm, el publish fallaría con un error de auth confuso. Mejor morir
+        # aquí diciendo exactamente por qué.
+        run: |
+          NPM="$(npm -v)"
+          echo "npm: $NPM"
+          node -e '
+            const [a, b, c] = process.argv[1].split(".").map(Number);
+            const ok = a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1)));
+            if (!ok) {
+              console.error(`npm ${process.argv[1]} < 11.5.1 — trusted publishing (OIDC) no soportado`);
+              process.exit(1);
+            }
+          ' "$NPM"
+
+      - name: Comprobar que el tag coincide con package.json
+        # Guard contra el fallo silencioso más caro: tagear `v1.0.0-rc.1` con el
+        # package.json todavía en beta.26 publicaría la versión equivocada bajo
+        # un tag que promete otra cosa. npm no lo detecta.
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          echo "tag: $TAG · package.json: $PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::El tag ($TAG) no coincide con package.json ($PKG). Corrige el tag o el bump."
+            exit 1
+          fi
+
+      - name: Comprobar que el README cita la versión que se publica
+        # El README documenta la version publicada en su seccion de Instalacion.
+        # Es el ULTIMO sitio con la version hardcodeada (el banner se desduplico
+        # en #144), asi que deriva en cada bump si nadie se acuerda. Ofreci este
+        # guard en review y no lo habia implementado — cerrado aqui.
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          if ! grep -qF "$PKG" README.md; then
+            echo "::error::README.md no menciona la versión $PKG. Actualiza la sección de Instalación en el mismo commit del bump."
+            exit 1
+          fi
+          echo "README cita $PKG ✓"
+
+      - name: Derivar dist-tag desde la versión
+        id: disttag
+        # ANTES del install/verify a propósito: si el dist-tag no es derivable,
+        # morir aquí y no tras varios minutos de verify (codex P2).
+        #
+        # Una prerelease NUNCA debe ir a `latest`. El identificador sale de la
+        # propia versión, así que no puede desincronizarse de lo que se publica.
+        # Sin regex frágil: expansión de parámetros (`${PKG#*-}` = todo tras el
+        # primer guion; `${PRE%%.*}` = primer componente).
+        #
+        # OJO con el estado del registro: `latest` apunta a `1.0.0-beta.26` y NO
+        # se puede quitar (400). Un `--tag rc` NO lo moverá, así que
+        # `npm install reactigoded` seguirá dando la beta hasta el 1.0.0 final o
+        # hasta moverlo a mano. Ver RC1_DECISIONS.md.
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          case "$PKG" in
+            *-*) PRE="${PKG#*-}"; TAG="${PRE%%.*}" ;;
+            *)   TAG="latest" ;;
+          esac
+          # npm RECHAZA un dist-tag que sea un semver válido. Una prerelease con
+          # identificador numérico (`1.0.0-0`, `1.0.0-2026.1`) derivaría en un tag
+          # inválido y el publish moriría DESPUÉS del verify. Fail-loud aquí.
+          if ! printf '%s' "$TAG" | grep -qE '^[a-zA-Z][a-zA-Z0-9-]*$'; then
+            echo "::error::dist-tag derivado inválido: '$TAG' (versión $PKG). Debe empezar por letra y no ser un semver. Usa un identificador alfabético (beta, rc, alpha) o publica a mano."
+            exit 1
+          fi
+          echo "versión $PKG → dist-tag $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Chromium (Playwright)
+        # `npm publish` dispara `prepublishOnly: npm run verify`, y `verify`
+        # incluye `verify:storybook` → vitest-browser → playwright. Sin esto el
+        # guard de publicación falla por entorno, no por defecto real.
+        run: npx playwright install --with-deps chromium
+
+      - name: Publicar
+        # SIN `--ignore-scripts` a propósito: `prepublishOnly` (verify completo)
+        # es EL guard de publicación. Saltarlo para ahorrar minutos de CI lo
+        # dejaría bypasseable en silencio; el tiempo de runner es barato
+        # comparado con publicar algo roto de forma irreversible.
+        # Tampoco hace falta `--provenance`: trusted publishing la firma sola.
+        #
+        # IDEMPOTENTE (codex P2): una version publicada es INMUTABLE, asi que si
+        # el publish funciono pero un step posterior fallo, un re-run normal de
+        # Actions moriria aqui y el job quedaria rojo para siempre — sin poder
+        # crear el registro duradero que falta. Se comprueba antes y se omite.
+        env:
+          APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          if npm view "reactigoded@$PKG" version >/dev/null 2>&1; then
+            # La version YA existe. Que exista no basta para tratarlo como
+            # re-run: si la publico otra cosa (p.ej. un publish MANUAL con otro
+            # dist-tag — algo que ya paso con beta.26), saltarse el publish y
+            # seguir grabaria en la Release un registro DURADERO Y FALSO sobre
+            # una publicacion que este workflow no hizo. Solo es re-run legitimo
+            # si el dist-tag derivado YA apunta exactamente a esta version.
+            CURRENT="$(npm view reactigoded dist-tags --json 2>/dev/null \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let t={};try{t=JSON.parse(s||"{}")}catch{};process.stdout.write(String(t[process.argv[1]]??""))})' "$APPLIED_TAG")"
+            if [ "$CURRENT" = "$PKG" ]; then
+              # La consistencia tag<->version NO prueba QUIEN publico. Un publish
+              # manual con el mismo tag pasaria por re-run y grabaria un registro
+              # falso. Se verifica la ATTESTATION DE PROVENANCE: trusted
+              # publishing siempre la adjunta, un `npm publish` manual desde una
+              # CLI NO — y ademas nombra repo y workflow.
+              ATT="$(npm view "reactigoded@$PKG" --json 2>/dev/null \
+                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let j={};try{j=JSON.parse(s||"{}")}catch{};process.stdout.write(String(j?.dist?.attestations?.url??""))})')"
+              if [ -z "$ATT" ]; then
+                echo "::error::reactigoded@$PKG existe pero SIN attestation de provenance → no se publicó desde este workflow (un publish manual no la adjunta). Reconciliar a mano."
+                exit 1
+              fi
+              # NO basta el repo: otro workflow de ESTE mismo repo publicando
+              # con token+provenance pasaria el check, y la Release afirmaria que
+              # la publico este workflow. Se validan los tres campos que
+              # identifican la build: repo, PATH del workflow y REF del tag.
+              read -r A_REPO A_PATH A_REF <<EOF2
+          $(curl -fsSL "$ATT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const b=JSON.parse(s);const p=JSON.parse(Buffer.from(b.attestations?.[0]?.bundle?.dsseEnvelope?.payload??"","base64").toString("utf8"));const w=p?.predicate?.buildDefinition?.externalParameters?.workflow??{};process.stdout.write([w.repository||"-",w.path||"-",w.ref||"-"].join(" "))}catch{process.stdout.write("- - -")}})')
+          EOF2
+              EXP_REPO="https://github.com/$GITHUB_REPOSITORY"
+              EXP_PATH=".github/workflows/release.yml"
+              EXP_REF="refs/tags/$GITHUB_REF_NAME"
+              if [ "$A_REPO" != "$EXP_REPO" ] || [ "$A_PATH" != "$EXP_PATH" ] || [ "$A_REF" != "$EXP_REF" ]; then
+                echo "::error::La provenance de reactigoded@$PKG no corresponde a este workflow. attested: repo='$A_REPO' path='$A_PATH' ref='$A_REF' · esperado: repo='$EXP_REPO' path='$EXP_PATH' ref='$EXP_REF'. Fail-closed: no se puede afirmar que lo publicara este release."
+                exit 1
+              fi
+              echo "::notice::reactigoded@$PKG ya publicado por este repo (provenance verificada) y '$APPLIED_TAG' apunta ahí — re-run idempotente, se omite el publish."
+            else
+              echo "::error::reactigoded@$PKG YA EXISTE pero el dist-tag '$APPLIED_TAG' apunta a '${CURRENT:-<ninguno>}'. No se publicó desde este workflow: continuar grabaría un registro FALSO en la Release. Reconciliar a mano."
+              exit 1
+            fi
+          else
+            npm publish --tag "$APPLIED_TAG"
+          fi
+
+      - name: Registrar la publicación en la GitHub Release
+        # ÚNICO artefacto duradero donde queda el dist-tag APLICADO.
+        # No vale `npm view dist-tags`: un dist-tag es un puntero MUTABLE
+        # (`npm dist-tag add` lo mueve — este repo incluso lo contempla para
+        # `latest` en el rc.1), así que solo prueba el valor ACTUAL, no el que se
+        # aplicó en este release. El log de Actions tampoco vale: su retención
+        # caduca (máx. 400 días). Ver RC1_DECISIONS.md.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          PRERELEASE=""
+          if [ "$APPLIED_TAG" != "latest" ]; then PRERELEASE="--prerelease"; fi
+          {
+            printf '`reactigoded@%s` publicado en npm.\n\n' "$PKG"
+            printf '| | |\n|---|---|\n'
+            printf '| dist-tag aplicado | `%s` |\n' "$APPLIED_TAG"
+            printf '| commit | `%s` |\n' "$GITHUB_SHA"
+            printf '| workflow run | `%s` |\n\n' "$GITHUB_RUN_ID"
+            printf 'Provenance firmada por trusted publishing (OIDC).\n'
+          } > /tmp/release-notes.md
+          # IDEMPOTENTE: si la release ya existe (creada a mano, o por un run
+          # anterior que fallo despues), se actualiza en vez de reventar.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::notice::La release $GITHUB_REF_NAME ya existe — se actualizan las notas."
+            gh release edit "$GITHUB_REF_NAME" \
+              --notes-file /tmp/release-notes.md \
+              $PRERELEASE
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file /tmp/release-notes.md \
+              $PRERELEASE
+          fi
