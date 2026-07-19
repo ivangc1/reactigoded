@@ -53,7 +53,7 @@ internamente `Tooltip` (y futuros `Popover`, `HoverCard`, etc.).
 Instálalo **siempre** junto a la librería:
 
 ```bash
-npm install reactigoded react react-dom @floating-ui/react clsx
+npm install reactigoded@rc react react-dom @floating-ui/react clsx
 ```
 
 **`clsx` (^2.1) también es peer-dep requerido** — lo usa el helper `cn`
