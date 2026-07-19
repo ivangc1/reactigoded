@@ -42,7 +42,17 @@ jobs:
           # Aquí solo se empaqueta y sube — el artefacto es idéntico.
           node-version: "24"
           cache: npm
-          registry-url: "https://registry.npmjs.org"
+          # SIN `registry-url` A PROPOSITO — no es un olvido.
+          # setup-node, cuando se le pasa `registry-url`, escribe en .npmrc:
+          #     //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          # Sin NODE_AUTH_TOKEN (que es justo el caso en trusted publishing), eso
+          # expande a VACIO. npm lee el .npmrc, da por hecho que "hay auth
+          # configurada" y NUNCA inicia el intercambio OIDC -> el registry te
+          # trata como anonimo -> un anonimo no puede PUT -> `E404 Not Found`
+          # enganoso (npm devuelve 404 en vez de 403 para no filtrar existencia).
+          # Bug upstream: actions/setup-node#1551. Reventó el primer intento de
+          # release del rc.1. El registry por defecto ya es registry.npmjs.org,
+          # asi que la linea no aportaba nada.
 
       - name: Comprobar npm >= 11.5.1 (mínimo de trusted publishing)
         # Fail-loud explícito: si una imagen futura del runner bajara la versión
