@@ -4,7 +4,9 @@ Design system de **igoded** — 32 componentes React 19 + TypeScript estricto
 sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 `components` + `reset` opt-in + `state` opt-in).
 
-> **Estado**: `1.0.0-beta.25`.
+> **Estado**: pre-1.0 — la versión publicada vive en
+> [Instalación](#instalación), no aquí (duplicarla derivaba en cada bump:
+> este banner decía `beta.25` con el paquete ya en `beta.26`).
 > Paleta cardinal estable: 7 cardinales con geometría OKLCH dual
 > (L_lux≈0.32 / L_nox≈0.84 / ΔH≤10°), todos AAA contra los 5 fondos
 > del tema en ambos modos. El cardinal `info` se llama internamente
@@ -18,9 +20,16 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 
 ## Instalación
 
-> **Nota**: el paquete aún no está publicado a npm. La instalación
-> se hace vía clone + `npm link` mientras tanto. La publicación al
-> registro está prevista pero sin fecha confirmada.
+> **Estado**: publicado en npm como **`1.0.0-beta.26`**.
+> **Es una pre-release**: la API pública ya está congelada
+> (`docs/` §5.13, gate anti-rename) pero el tag `rc.1` todavía no ha
+> salido — puede haber cambios antes de `1.0.0`.
+
+```bash
+npm install reactigoded react react-dom @floating-ui/react clsx
+```
+
+Para trabajar **sobre** la librería (o probar cambios sin publicar):
 
 ```bash
 git clone https://github.com/ivangc1/reactigoded.git

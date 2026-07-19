@@ -51,7 +51,10 @@ decide pausar la publicación a npm sin fecha definida.
 
 **Implicaciones operativas (commit `7a5c922` B-01-followup)**:
 - `src/stories/Introduction.mdx`: banner pasa a "no publicado, clona
-  + npm link" (estado real).
+  + npm link" (estado real). **NOTA 2026-07-18**: ese fichero se movió
+  después a `docs/Introduction.mdx`; la ruta de arriba se conserva
+  porque describe el estado de mayo-2026, pero el procedimiento de
+  reversión de abajo apunta al sitio actual.
 - `README.md`: instalación documentada como clone + npm link.
 - Tag git `v1.0.0-beta.22` se mantendrá tras merge para trazabilidad
   histórica del repo, pero NO se acompaña de `npm publish`.
@@ -60,7 +63,8 @@ decide pausar la publicación a npm sin fecha definida.
 1. Decidir versión a publicar (probablemente `1.0.0-beta.23` con cambios
    acumulados desde beta.22, o `beta.22` re-tagged si nada cambió).
 2. Revertir commit `7a5c922` (B-01-followup) o reescribir las docs
-   manualmente.
+   manualmente — hoy son `README.md` y **`docs/Introduction.mdx`**
+   (movido desde `src/stories/`).
 3. Ejecutar `npm publish --tag beta`.
 4. Añadir nueva sección "Reactivación" a este MD documentando fecha y
    versión publicada.
@@ -69,6 +73,129 @@ decide pausar la publicación a npm sin fecha definida.
 betas`. Lo único que cambia es la fecha — de "tras merge de
 rc1-gate-fixes" a "cuando Iván tenga capacidad operativa o consumer
 externo lo justifique".
+
+---
+
+### Reactivación 2026-07-18: publicado `1.0.0-beta.26`
+
+**Qué se publicó**: `reactigoded@1.0.0-beta.26`, con `npm publish --tag beta`.
+Estado resultante en el registro:
+
+```
+dist-tags = { beta: '1.0.0-beta.26', latest: '1.0.0-beta.26' }
+time.created = 2026-07-18T22:09:23Z
+```
+
+**Qué motivó levantar la pausa** — una razón que la decisión de mayo **no
+ponía en la balanza**: el nombre `reactigoded` seguía **sin reservar** en npm
+(`npm view` → 404). Con el freeze de API pública ya cerrado (§5.13: 323
+clases, 37 tokens Tier-2, 6 data-attrs), 27 tags git, el CHANGELOG y
+`igoded.es` apuntando todos a ese nombre, perderlo habría forzado un rename
+de blast-radius total **justo después de congelar**. Probabilidad baja
+(nombre acuñado), coste altísimo, mitigación de un comando: asimetría clara.
+
+**El `latest` NO fue intencionado.** El plan era publicar solo bajo `beta`
+para reservar el nombre sin que `npm install reactigoded` resolviera.
+
+Lo **medido**, que es lo único que este documento afirma:
+
+```
+tras la publicación → dist-tags = { beta: 1.0.0-beta.26, latest: 1.0.0-beta.26 }
+npm dist-tag rm reactigoded latest → 400 Bad Request
+```
+
+**La causa NO está establecida.** Una primera versión de esta sección afirmaba
+que "npm asigna `latest` en el primer publish pase lo que pase con `--tag`".
+Eso era una **inferencia**, no una medición, y la documentación de npm dice lo
+contrario: *"Publishing a package sets the `latest` tag ... unless the `--tag`
+option is used"* ([npm-dist-tag](https://docs.npmjs.com/cli/v11/commands/npm-dist-tag/)).
+El issue [npm/cli#7553](https://github.com/npm/cli/issues/7553), que parecía
+respaldarlo, reproduce el caso **sin** `--tag` — no es este. Cazado por codex en
+review; la afirmación se retira.
+
+**La invocación SÍ está confirmada.** Comando ejecutado, verbatim (Iván):
+
+```bash
+cd ~/reactigoded && npm publish --tag beta
+```
+
+El log de npm de esa ejecución ya se rotó, así que no hay traza automática — la
+evidencia es testimonial, pero es el comando exacto, no una reconstrucción. Con
+el flag confirmado el confound queda descartado y lo observado es:
+
+> primera publicación del paquete, **con `--tag beta` explícito** → npm asignó
+> **`beta` y `latest`**.
+
+Eso **contradice la documentación** citada arriba. Lo honesto es dejarlo ahí:
+la contradicción está medida, pero es **n=1** sobre un solo paquete y un solo
+registro, así que **no se eleva a regla general de npm**. Si alguien necesita la
+regla, hace falta reproducirlo con un paquete de prueba.
+
+**Regla que sale de esto**: una operación irreversible sobre un registro
+público se ejecuta **dejando traza del comando exacto**, no fiándose de que el
+log sobreviva ni de la memoria.
+
+Para el `rc.1` esa trazabilidad la aporta el workflow de release
+(`.github/workflows/release.yml`) — **pero no por su log**. Los logs de Actions
+tienen **retención limitada y configurable** (máx. 400 días): apoyarse solo en
+ellos reproduce este mismo hueco cuando venzan, que es justo lo que pasó aquí
+con el log de npm. Lo que sí es duradero, y que el release automatizado aporta
+sin esfuerzo extra:
+
+| Evidencia | Dónde vive | Durabilidad |
+|---|---|---|
+| **El comando exacto** | El propio `release.yml`, en el commit tageado | Permanente: es código versionado, no una línea de log |
+| **Origen del artefacto** (repo, commit SHA, workflow) | Attestation de **provenance**, que trusted publishing firma sola | La retiene npm/Sigstore, independiente de Actions |
+| **dist-tag aplicado** | Cuerpo de la GitHub Release, escrito por el workflow | Sobrevive a la retención de Actions |
+
+Ese es el argumento real para automatizar el release, más allá de la comodidad:
+**convierte el comando en un artefacto versionado** en vez de en algo que
+depende de que alguien recuerde o de que un log sobreviva.
+
+> **Por qué el dist-tag NO se lee del registro.** `npm view reactigoded
+> dist-tags` solo prueba el valor **actual**: un dist-tag es un **puntero
+> mutable** y `npm dist-tag add` lo mueve (de hecho, más abajo se sugiere
+> justamente eso para `latest` en el `rc.1`). Consultarlo a futuro no dice qué
+> tag se aplicó **en ese release**. Por eso el workflow lo escribe en el cuerpo
+> de la GitHub Release junto al SHA — ahí queda el valor del momento, aunque el
+> puntero se mueva después.
+
+Todo lo anterior **solo aplica cuando el workflow esté en `main`**. Mientras no
+lo esté, publicar el `rc.1` a mano **repite exactamente esta misma falta de
+evidencia**. Comprobación antes de tagear, no asunción:
+
+```bash
+git ls-tree -r main --name-only | grep -q '^\.github/workflows/release\.yml$' \
+  && echo "trazabilidad cubierta" || echo "NO cubierta: publicar a mano deja el mismo hueco"
+```
+
+**Consecuencia operativa a vigilar**: con `latest` apuntando a `beta.26`, un
+`--tag rc` en el rc.1 **no lo moverá** — `npm install reactigoded` seguiría
+dando la beta hasta que se publique `1.0.0` final (que sí mueve `latest`) o se
+mueva a mano con `npm dist-tag add`.
+
+**Consecuencia real, sin adornos**: esto es una publicación normal, no una
+"reserva silenciosa". `npm install reactigoded` funciona. La distinción
+`beta`-vs-`latest` resultó ser cosmética para lo que preocupaba: el paquete
+es público, indexado e instalable en ambos casos; `@beta` era una pulsación
+de teclas, no una barrera.
+
+**Qué pasa con las razones de la pausa**:
+- *"Iván es el único consumer previsible"* → sigue siendo cierto. Sin difusión
+  ni promoción, los consumers reales son ~0.
+- *"Publicar implica compromiso de mantenimiento sostenido"* → asumido. El
+  coste escala con consumers reales; hoy es teórico.
+- *"Sin urgencia de DS público, mejor esperar"* → **superado**: la urgencia no
+  era publicar, era **no perder el nombre**.
+
+**Implicaciones aplicadas**:
+- `README.md`: la nota "aún no está publicado a npm" + instalación por
+  clone/`npm link` era **falsa** desde el publish → sustituida por
+  `npm install` con el aviso de pre-release; el clone/`npm link` se conserva
+  como vía de desarrollo sobre la librería.
+
+**Lo que NO cambia**: el tag `rc.1` sigue pendiente y la API congelada manda.
+Publicar una beta no adelanta el release ni relaja el freeze.
 
 ---
 
