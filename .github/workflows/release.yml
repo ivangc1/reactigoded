@@ -161,10 +161,18 @@ jobs:
                 echo "::error::reactigoded@$PKG existe pero SIN attestation de provenance → no se publicó desde este workflow (un publish manual no la adjunta). Reconciliar a mano."
                 exit 1
               fi
-              ATT_REPO="$(curl -fsSL "$ATT" \
-                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const b=JSON.parse(s);const p=JSON.parse(Buffer.from(b.attestations?.[0]?.bundle?.dsseEnvelope?.payload??"","base64").toString("utf8"));process.stdout.write(String(p?.predicate?.buildDefinition?.externalParameters?.workflow?.repository??""))}catch{process.stdout.write("")}})')"
-              if [ "$ATT_REPO" != "https://github.com/$GITHUB_REPOSITORY" ]; then
-                echo "::error::La provenance de reactigoded@$PKG apunta a '${ATT_REPO:-<no verificable>}', no a https://github.com/$GITHUB_REPOSITORY. Fail-closed: no se puede confirmar que lo publicara este workflow."
+              # NO basta el repo: otro workflow de ESTE mismo repo publicando
+              # con token+provenance pasaria el check, y la Release afirmaria que
+              # la publico este workflow. Se validan los tres campos que
+              # identifican la build: repo, PATH del workflow y REF del tag.
+              read -r A_REPO A_PATH A_REF <<EOF2
+          $(curl -fsSL "$ATT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const b=JSON.parse(s);const p=JSON.parse(Buffer.from(b.attestations?.[0]?.bundle?.dsseEnvelope?.payload??"","base64").toString("utf8"));const w=p?.predicate?.buildDefinition?.externalParameters?.workflow??{};process.stdout.write([w.repository||"-",w.path||"-",w.ref||"-"].join(" "))}catch{process.stdout.write("- - -")}})')
+          EOF2
+              EXP_REPO="https://github.com/$GITHUB_REPOSITORY"
+              EXP_PATH=".github/workflows/release.yml"
+              EXP_REF="refs/tags/$GITHUB_REF_NAME"
+              if [ "$A_REPO" != "$EXP_REPO" ] || [ "$A_PATH" != "$EXP_PATH" ] || [ "$A_REF" != "$EXP_REF" ]; then
+                echo "::error::La provenance de reactigoded@$PKG no corresponde a este workflow. attested: repo='$A_REPO' path='$A_PATH' ref='$A_REF' · esperado: repo='$EXP_REPO' path='$EXP_PATH' ref='$EXP_REF'. Fail-closed: no se puede afirmar que lo publicara este release."
                 exit 1
               fi
               echo "::notice::reactigoded@$PKG ya publicado por este repo (provenance verificada) y '$APPLIED_TAG' apunta ahí — re-run idempotente, se omite el publish."
