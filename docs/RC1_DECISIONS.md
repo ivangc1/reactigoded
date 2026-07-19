@@ -129,9 +129,18 @@ regla, hace falta reproducirlo con un paquete de prueba.
 
 **Regla que sale de esto**: una operación irreversible sobre un registro
 público se ejecuta **dejando traza del comando exacto**, no fiándose de que el
-log sobreviva ni de la memoria. Para el `rc.1` queda cubierto: publica el
-workflow `release.yml`, cuyo log de Actions conserva la invocación y el
-dist-tag derivado de forma permanente.
+log sobreviva ni de la memoria.
+
+Para el `rc.1` esa trazabilidad **la aporta el workflow de release**
+(`.github/workflows/release.yml`), cuyo log de Actions conserva invocación y
+dist-tag derivado de forma permanente — **pero solo cuando ese workflow esté en
+`main`**. Mientras no lo esté, publicar el `rc.1` a mano **repite exactamente
+esta misma falta de evidencia**. Comprobación antes de tagear, no asunción:
+
+```bash
+git ls-tree -r main --name-only | grep -q '^\.github/workflows/release\.yml$' \
+  && echo "trazabilidad cubierta" || echo "NO cubierta: publicar a mano deja el mismo hueco"
+```
 
 **Consecuencia operativa a vigilar**: con `latest` apuntando a `beta.26`, un
 `--tag rc` en el rc.1 **no lo moverá** — `npm install reactigoded` seguiría
