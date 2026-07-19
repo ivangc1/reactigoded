@@ -7,17 +7,194 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+_Sin cambios desde `1.0.0-rc.1`._
+
+## [1.0.0-rc.1] — 2026-07-19 · **API pública congelada**
+
+Primer release candidate. **La superficie pública de 1.0 queda congelada**: a partir de
+aquí, cambiarla exige un bump MAJOR. Cierra el gate `claudegate6` (auditoría con cruce de
+dos auditores independientes A+B sobre `beta.26`) — 2 BLOCKER, 3 HIGH, 6 MEDIUM y 4 LOW.
+
+Este documento declara también **lo que NO se hizo y por qué**: en un release de freeze,
+los residuales declarados valen más que una lista solo de logros.
+
 ### Cambiado — BREAKING (última ventana antes de 1.0)
 
-- Renombres de API pública para eliminar colisiones de nombre antes de congelar 1.0:
-  - Clases `.ig-tooltip-color-*` → `.ig-tooltip-*` (el infijo `-color-` era dialecto local; la doc ya prometía la forma sin él).
-  - Clase `.ig-navbar-brand` → `.ig-navbar-logo` y componente `NavbarBrand` → `NavbarLogo` (`brand` colisionaba con el eje de rol de color; el slot es el logo).
-  - Clases `.ig-input-error`/`.ig-input-success` → `.ig-input-invalid`/`.ig-input-valid` y valores del prop `state` (`"invalid"`/`"valid"`), alineados con `aria-invalid`.
+Renombres de API pública para eliminar colisiones de nombre antes de congelar. Se hacen
+ahora porque el paquete tenía **0 consumidores en npm**; después de 1.0 costarían un major.
+
+- Clases `.ig-tooltip-color-*` → `.ig-tooltip-*` (el infijo `-color-` era dialecto local; la doc ya prometía la forma sin él).
+- Clase `.ig-navbar-brand` → `.ig-navbar-logo` y componente `NavbarBrand` → **`NavbarLogo`** (`brand` colisionaba con el eje de rol de color; el slot es el logo).
+- Clases `.ig-input-error`/`.ig-input-success` → `.ig-input-invalid`/`.ig-input-valid` y valores del prop `state` (`"invalid"`/`"valid"`), alineados con `aria-invalid`.
+
+Además, 4 correcciones de documentación de clases que **se documentaban pero no shippean**:
+`ig-btn-md`, `ig-timeline-dot-default`, `ig-step-interactive`, `ig-text-on-cinis`.
 
 ### Añadido
 
-- **Garantía `@server-safe` validada contra Vercel Edge REAL (#18)**: el catálogo de globals permitidos se medía contra `@edge-runtime/vm` (sandbox sobre Node que filtra globals Node-shared, ~95% fiel). Un probe de deploy real a Vercel Edge producción (`scripts/runtime-oracle/vercel/`, `typeof <bare>` — el único test fiel dado que el objeto-global de Edge es exótico) cerró ese ~5%: **3 globals que `@edge-runtime/vm` reportaba presentes por fuga de Node (`WeakRef`, `FinalizationRegistry`, `DOMException`) NO existen en Vercel Edge real** → restados de `SAFE_GLOBALS` (nuevo set `EDGE_MISSING_REAL`). Cierra un falso-negativo latente (0 módulos los usaban) que habría dejado pasar un `new WeakRef(...)` bare que crashea en producción Edge. Premisas del catálogo (createObjectURL/WASM/eval/elu) confirmadas 6/6 en el Edge real.
-- **Freeze de API pública (§5.13)**: la superficie estable de 1.0 (clases de componente, data-attributes de estado, tokens Tier-2) se congela en `src/_audit/public-api-names.json`, protegida por el gate `scripts/check-public-api-names.mjs` (`⊆ dist`, encadenado en `verify:unit`). Editar el freeze exige bump MAJOR. La capa utility (`state.css`) y los tokens Tier-1/Tier-3 quedan fuera del freeze **por declaración explícita** (ver CSSAPI.mdx + DesignTokens.mdx).
+- **Freeze de API pública (§5.13)**. La superficie estable de 1.0 se congela en
+  `src/_audit/public-api-names.json`: **332 clases** de componente, **2 classHooks**,
+  **6 data-attributes** de estado y **37 tokens Tier-2**. Protegido por el gate
+  `scripts/check-public-api-names.mjs` (verifica `JSON ⊆ dist`, encadenado en `verify:unit`
+  **post-build**). Editar el freeze exige **bump MAJOR** + entrada aquí.
+  **Alcance declarado del gate: solo integridad.** Caza el rename *accidental* que olvida
+  actualizar el contrato; **no** impide el rename deliberado — así es exactamente como se
+  renombra, a propósito y con major.
+  **Fuera del freeze por declaración explícita** (no por silencio): la **capa utility** de
+  `state.css` (`ig-bg-*`, `ig-text-*`, `ig-flex`, `ig-gap-*`…), por ser opt-in y
+  **experimental** — su vocabulario puede evolucionar sin major hasta que se declare estable
+  aquí; y los **tokens Tier-1 y Tier-3**, porque una escala conserva la libertad de perder un
+  escalón sin major. Documentado en `docs/CSSAPI.mdx` y `docs/DesignTokens.mdx`.
+- **Publicación en npm.** El paquete existe en el registro (`reactigoded`). Ver
+  *Limitaciones conocidas* para el estado de los dist-tags.
+- **Pipeline de release automatizado** vía **Trusted Publishing (OIDC)**: sin tokens
+  almacenados, sin 2FA/OTP, con **provenance firmada** automáticamente. Se dispara al
+  pushear un tag `v*` y publica tras el `verify` completo, registrando versión, dist-tag y
+  commit en la GitHub Release.
+
+### Corregido
+
+**BLOCKER**
+
+- **Gate `@server-safe`: de denylist frágil a fail-closed.** `CLIENT_GLOBALS` era una
+  **denylist de ~46 nombres**, pero `lib.dom.d.ts` declara ~826 globals client-only que
+  lanzan `ReferenceError` en Node: **~780 pasaban en silencio** (`HTMLElement`, `self`,
+  `CSS`, `instanceof Element`…), incluso por ruta transitiva. Reemplazado por una
+  **whitelist fail-closed** (`SAFE_GLOBALS` = builtins ES ∪ globals de Node, menos
+  denegaciones intencionales y overclaims verificados), anclada al engine mínimo (Node
+  22.12) mediante la matriz CI. Ahora un global DOM nuevo **se caza solo**: un falso
+  positivo es ruido corregible, no un crash en producción SSR.
+- **Marcador `@server-safe` anidado = fail-open silencioso.** La detección solo miraba los
+  statements top-level, así que un marcador en posición anidada no marcaba **y no avisaba**.
+  Ahora recorre el AST completo y **lanza** en posición no soportada (fail-loud).
+
+**HIGH**
+
+- **`Slot` descartaba children en silencio.** Con más de un hijo renderizaba solo el
+  primero, borrando CTAs y nodos accesibles sin aviso. Ahora devuelve `null`: fallo
+  observable en vez de pérdida silenciosa.
+- **`composeRefs` descartaba los cleanups de refs de React 19.** Un callback ref que
+  devuelve función de limpieza nunca la ejecutaba al desmontar (y recibía un `ref(null)`
+  inesperado), **fugando observers**. Retorno ensanchado a `void | (() => void)` con
+  recolección y combinación de cleanups.
+- **`ContrastPairs` con aserción unidireccional.** Solo comprobaba el límite inferior, así
+  que un drift **hacia arriba** (cardinales separándose) pasaba silencioso. Ahora es una
+  banda de dos lados, más un assert fail-loud de que todo cardinal del allowlist esté
+  mapeado a variante.
+
+**MEDIUM**
+
+- `clsx` faltaba en el **comando de install del README**: quien lo siguiera y lo omitiera se
+  encontraba `reactigoded/cn` reventando con `ERR_MODULE_NOT_FOUND`. *(El packaging no se
+  toca: `clsx` es peer externalizada por decisión cerrada de beta.24.)*
+- **133 `.d.ts.map` colgantes**: apuntaban a `../src/*.ts`, que **no se publica** (`files` no
+  incluye `src`), rompiendo el go-to-definition del consumer y engordando el tarball.
+  `declarationMap: false` — **decisión final**.
+- **`consumer-pack` validaba 2 de 36 exports** server-safe desde el tarball; el bug que
+  motivó el gate (259 errores TS2834 bajo NodeNext) seguía latente en los otros 34. Ahora
+  materializa los 36 en ambas resoluciones (Bundler y NodeNext).
+- **Rutas UNC** (`//host/share`) colapsaban a `/` en el gate, rompiendo la ejecución en esos
+  paths. Fix simétrico al del drive-letter.
+- **Crash de `attw` en ARM64** — resuelto upstream y verificado en vivo.
+- **~106 líneas de warnings en stderr** durante los tests. Política nueva: solo se permiten
+  los dev-warnings propios del DS; cualquier otro `console` **falla el test**. stderr = 0.
+
+**LOW**
+
+- **ERESOLVE en `npm ci` plano** (eslint 10 vs plugins con peer `^9`): cerrado con
+  `overrides` quirúrgico. `--legacy-peer-deps` **eliminado de los 3 jobs de CI**.
+- **`npm run verify` ≠ CI**: `test:no-dev-warns` corría en CI pero no en `verify`, así que
+  `prepublishOnly` podía saltárselo. Encadenado.
+- **`build-storybook` pasaba con warnings**: glob `.mdx` vacío eliminado y umbral de chunk
+  ajustado. *(Ver Diferido para el tercer warning, que no se toca a propósito.)*
+- **`npm publish --dry-run` inutilizable**: npm propaga `npm_config_dry_run` a los comandos
+  anidados, así que el `npm pack` del gate anunciaba el tarball **sin escribirlo** →
+  el ensayo previo a una operación irreversible fallaba siempre. Neutralizada la herencia.
+
+### Garantía `@server-safe` validada contra Vercel Edge **real**
+
+El catálogo de globals permitidos se derivaba de `@edge-runtime/vm`, un sandbox sobre Node
+que **filtra globals Node-shared** (~95% fiel). Un probe desplegado a Vercel Edge de
+producción cerró ese ~5%:
+
+- **3 falsos negativos cazados** — `WeakRef`, `FinalizationRegistry` y `DOMException`
+  aparecían como presentes por la fuga de Node, pero **no existen en Vercel Edge**. Restados
+  de `SAFE_GLOBALS` (set nuevo `EDGE_MISSING_REAL`). Cierra un fallo latente que habría
+  dejado pasar un `new WeakRef(...)` que crashea en producción.
+- **Premisas confirmadas** (`createObjectURL`/`revokeObjectURL` lanzan, `WebAssembly.compile`
+  lanza `CompileError`, `new Function` lanza `EvalError`, `performance.eventLoopUtilization`
+  ausente) y **0 fail-opens** en los 22 guards browser-only.
+- **Validado cross-región**: `lhr1` vs `iad1`, **0 diferencias en 1489 puntos** medidos → lo
+  pineado es propiedad del *runtime*, no de una región.
+
+Medición reproducible en `scripts/runtime-oracle/vercel/`.
+
+### `exactOptionalPropertyTypes` — las 2 fronteras
+
+307 props públicas se ensancharon a `?: T | undefined` para consumers con
+`exactOptionalPropertyTypes: true`. **Dos clases quedan fuera a propósito**, porque
+ensancharlas rompería su semántica:
+
+1. **Discriminantes con literal `?: undefined`** (3): `NavbarLogo`, `SidebarItem` y
+   `MenuItem` — el `undefined` literal *es* lo que activa la rama `button`/`div` del
+   discriminated union.
+2. **Exclusiones con `?: never`** (8): en `Accordion`, `Avatar` (×3), `BreadcrumbItem` y
+   `useControllableState` (×3) — `never` *es* el mecanismo de exclusión de variantes.
+
+Inventario completo: `node scripts/eopt-classify.mjs`.
+
+### Limitaciones conocidas
+
+- **Paquete ESM-only.** Desde CJS hay que usar `import()` dinámico. El engine mínimo es Node
+  `>=22.12`.
+- **`npm install reactigoded` devuelve `1.0.0-beta.26`, no el rc.1.** El dist-tag `latest`
+  quedó apuntando a la beta en la primera publicación y **npm no permite retirarlo**
+  (responde 400). `--tag rc` no lo mueve. Para el rc.1: `npm install reactigoded@rc`. Se
+  corrige solo al publicar `1.0.0` final.
+- **Go-to-definition aterriza en los `.d.ts`**, no en el `.ts` original (consecuencia de
+  `declarationMap: false`). Shippear `src` + maps es aditivo y se evalúa post-1.0.
+- **Falsos positivos conocidos del gate `@server-safe`** — todos *fail-closed*, ninguno
+  oculta código ejecutable: `process.env` con guard `typeof` se flagea (workaround:
+  `import.meta.env`); 10 globals de streams/eventos presentes en Edge real siguen flageados
+  por sobre-estrictez deliberada; `console.clear` se flagea aunque funciona.
+- **El marcador `@server-safe` debe ir en su propia línea.** Prosa *antes* del marcador en la
+  misma línea no marca **y no avisa** (residual declarado abajo).
+- **Contraste `axis` vs `kobalium` en tema oscuro**: ΔE `0.0522`, allowlisteado
+  conscientemente. Pueden confundirse si quedan adyacentes.
+- **CSP estricta con el Storybook del DS**: el script propio está 100% externalizado, pero
+  Storybook inyecta upstream un `<script>` inline. Requiere `'unsafe-inline'` o un nonce.
+
+### Diferido y residual — con su razón
+
+**No hecho a propósito** (no es deuda olvidada):
+
+- **Coverage de `perceptual-allowlist.json?import`** — *verificado no-issue*. Lo excluido es
+  un JSON de **datos, no código**; coverage **no es gate**; y en vitest 4
+  `coverageConfigDefaults.exclude` viene vacío, así que setearlo habría borrado los excludes
+  built-in y **deflactado** el número. Arreglarlo era un falso arreglo.
+- **Tercer warning de `build-storybook`** (`Skipping docgen for preview.tsx`) — es Storybook
+  informando de que saltó **correctamente** un fichero de configuración. Silenciarlo exigiría
+  parchear un plugin minificado.
+
+**Residual por diseño** (fronteras declaradas, no huecos):
+
+- **Data-flow / provenance** — el gate no sigue valores a través de llamadas, parámetros,
+  fronteras cross-módulo ni round-trips de representación. Cazar solo el subconjunto
+  sintáctico obvio sería **falsa cobertura**.
+- **Frontera del eval-sink** — se caza el *token presente en su sitio*; el **token
+  ensamblado** (`"a"+"b"`, `fromCharCode`, `join`) es residual: hay infinitas escrituras
+  equivalentes y cazar una sería teatro. Con cláusula de caducidad si `@server-safe` pasara a
+  ser frontera de confianza sobre código no auditado.
+- **Prosa antes del marcador en la misma línea** — se tolera en silencio porque el
+  discriminador intención-vs-mención dentro de prosa es genuinamente ambiguo
+  (`/** not yet @server-safe */` es una mención legítima que no debe lanzar).
+
+**Diferido a releases posteriores**: `process.env` con guard (rc.2); derivación sistemática
+de globals Edge con las patas **workerd** y **Deno** (la de Vercel Edge ya está cerrada);
+re-derivar `EDGE_MISSING_GLOBALS` desde Edge real para retirar la receta basada en
+`@edge-runtime/vm`; `typescript@7` como autoritativo (bloqueado por `typescript-eslint` y
+porque el port nativo no expone la Compiler API que usan los gates AST); `attw` como gate de
+CI; go-to-definition al source.
 
 ## [1.0.0-beta.26] — 2026-05-29 (bloque claudegate5 / beta.27 cerrado)
 

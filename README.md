@@ -20,14 +20,17 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 
 ## Instalación
 
-> **Estado**: publicado en npm como **`1.0.0-beta.26`**.
-> **Es una pre-release**: la API pública ya está congelada
-> (`docs/` §5.13, gate anti-rename) pero el tag `rc.1` todavía no ha
-> salido — puede haber cambios antes de `1.0.0`.
+> **Release candidate `1.0.0-rc.1`** — la API pública está **congelada**
+> (§5.13, protegida por gate): cambiarla exige un bump MAJOR.
 
 ```bash
-npm install reactigoded react react-dom @floating-ui/react clsx
+npm install reactigoded@rc react react-dom @floating-ui/react clsx
 ```
+
+> ⚠️ **El `@rc` es necesario.** El dist-tag `latest` quedó apuntando a
+> `1.0.0-beta.26` en la primera publicación y npm no permite retirarlo, así que
+> `npm install reactigoded` **a secas devuelve la beta**. Se corrige solo al
+> publicar `1.0.0` final. Ver CHANGELOG → *Limitaciones conocidas*.
 
 Para trabajar **sobre** la librería (o probar cambios sin publicar):
 
@@ -50,7 +53,7 @@ internamente `Tooltip` (y futuros `Popover`, `HoverCard`, etc.).
 Instálalo **siempre** junto a la librería:
 
 ```bash
-npm install reactigoded react react-dom @floating-ui/react clsx
+npm install reactigoded@rc react react-dom @floating-ui/react clsx
 ```
 
 **`clsx` (^2.1) también es peer-dep requerido** — lo usa el helper `cn`
