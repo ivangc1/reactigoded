@@ -73,6 +73,36 @@ jobs:
             exit 1
           fi
 
+      - name: Derivar dist-tag desde la versión
+        id: disttag
+        # ANTES del install/verify a propósito: si el dist-tag no es derivable,
+        # morir aquí y no tras varios minutos de verify (codex P2).
+        #
+        # Una prerelease NUNCA debe ir a `latest`. El identificador sale de la
+        # propia versión, así que no puede desincronizarse de lo que se publica.
+        # Sin regex frágil: expansión de parámetros (`${PKG#*-}` = todo tras el
+        # primer guion; `${PRE%%.*}` = primer componente).
+        #
+        # OJO con el estado del registro: `latest` apunta a `1.0.0-beta.26` y NO
+        # se puede quitar (400). Un `--tag rc` NO lo moverá, así que
+        # `npm install reactigoded` seguirá dando la beta hasta el 1.0.0 final o
+        # hasta moverlo a mano. Ver RC1_DECISIONS.md.
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          case "$PKG" in
+            *-*) PRE="${PKG#*-}"; TAG="${PRE%%.*}" ;;
+            *)   TAG="latest" ;;
+          esac
+          # npm RECHAZA un dist-tag que sea un semver válido. Una prerelease con
+          # identificador numérico (`1.0.0-0`, `1.0.0-2026.1`) derivaría en un tag
+          # inválido y el publish moriría DESPUÉS del verify. Fail-loud aquí.
+          if ! printf '%s' "$TAG" | grep -qE '^[a-zA-Z][a-zA-Z0-9-]*$'; then
+            echo "::error::dist-tag derivado inválido: '$TAG' (versión $PKG). Debe empezar por letra y no ser un semver. Usa un identificador alfabético (beta, rc, alpha) o publica a mano."
+            exit 1
+          fi
+          echo "versión $PKG → dist-tag $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Instalar dependencias
         run: npm ci
 
@@ -82,34 +112,26 @@ jobs:
         # guard de publicación falla por entorno, no por defecto real.
         run: npx playwright install --with-deps chromium
 
-      - name: Derivar dist-tag desde la versión
-        id: disttag
-        # Una prerelease NUNCA debe ir a `latest`. El identificador se extrae de
-        # la propia versión (`1.0.0-beta.26` → `beta`, `1.0.0-rc.1` → `rc`), así
-        # que el tag no puede desincronizarse de lo que se publica.
-        # OJO con el estado actual del registro: `latest` apunta a `1.0.0-beta.26`
-        # (se puso en la primera publicación; la causa no está establecida — ver
-        # RC1_DECISIONS.md) y NO se puede quitar: `npm dist-tag rm ... latest`
-        # responde 400. Consecuencia: publicar con `--tag rc` NO moverá `latest`,
-        # así que `npm install reactigoded` seguirá dando la beta hasta el 1.0.0
-        # final o hasta moverlo a mano con `npm dist-tag add`.
-        run: |
-          PKG="$(node -p "require('./package.json').version")"
-          if [ "${PKG#*-}" != "$PKG" ]; then
-            TAG="$(printf '%s' "$PKG" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-([a-zA-Z]+).*/\1/')"
-          else
-            TAG="latest"
-          fi
-          echo "versión $PKG → dist-tag $TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
       - name: Publicar
         # SIN `--ignore-scripts` a propósito: `prepublishOnly` (verify completo)
         # es EL guard de publicación. Saltarlo para ahorrar minutos de CI lo
         # dejaría bypasseable en silencio; el tiempo de runner es barato
         # comparado con publicar algo roto de forma irreversible.
         # Tampoco hace falta `--provenance`: trusted publishing la firma sola.
-        run: npm publish --tag "${{ steps.disttag.outputs.tag }}"
+        #
+        # IDEMPOTENTE (codex P2): una version publicada es INMUTABLE, asi que si
+        # el publish funciono pero un step posterior fallo, un re-run normal de
+        # Actions moriria aqui y el job quedaria rojo para siempre — sin poder
+        # crear el registro duradero que falta. Se comprueba antes y se omite.
+        env:
+          APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          if npm view "reactigoded@$PKG" version >/dev/null 2>&1; then
+            echo "::notice::reactigoded@$PKG ya está publicado — se omite el publish (re-run idempotente)."
+          else
+            npm publish --tag "$APPLIED_TAG"
+          fi
 
       - name: Registrar la publicación en la GitHub Release
         # ÚNICO artefacto duradero donde queda el dist-tag APLICADO.
@@ -133,8 +155,17 @@ jobs:
             printf '| workflow run | `%s` |\n\n' "$GITHUB_RUN_ID"
             printf 'Provenance firmada por trusted publishing (OIDC).\n'
           } > /tmp/release-notes.md
-          gh release create "$GITHUB_REF_NAME" \
-            --verify-tag \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file /tmp/release-notes.md \
-            $PRERELEASE
+          # IDEMPOTENTE: si la release ya existe (creada a mano, o por un run
+          # anterior que fallo despues), se actualiza en vez de reventar.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::notice::La release $GITHUB_REF_NAME ya existe — se actualizan las notas."
+            gh release edit "$GITHUB_REF_NAME" \
+              --notes-file /tmp/release-notes.md \
+              $PRERELEASE
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file /tmp/release-notes.md \
+              $PRERELEASE
+          fi
