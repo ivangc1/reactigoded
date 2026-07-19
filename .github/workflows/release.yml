@@ -85,9 +85,12 @@ jobs:
         # Una prerelease NUNCA debe ir a `latest`. El identificador se extrae de
         # la propia versión (`1.0.0-beta.26` → `beta`, `1.0.0-rc.1` → `rc`), así
         # que el tag no puede desincronizarse de lo que se publica.
-        # NOTA: en el PRIMER publish de un paquete npm asigna `latest` pase lo
-        # que pase con `--tag` (un paquete no puede existir sin él) y no se puede
-        # borrar después (400). Ya ocurrió con beta.26 — ver RC1_DECISIONS.md.
+        # OJO con el estado actual del registro: `latest` apunta a `1.0.0-beta.26`
+        # (se puso en la primera publicación; la causa no está establecida — ver
+        # RC1_DECISIONS.md) y NO se puede quitar: `npm dist-tag rm ... latest`
+        # responde 400. Consecuencia: publicar con `--tag rc` NO moverá `latest`,
+        # así que `npm install reactigoded` seguirá dando la beta hasta el 1.0.0
+        # final o hasta moverlo a mano con `npm dist-tag add`.
         run: |
           PKG="$(node -p "require('./package.json').version")"
           if [ "${PKG#*-}" != "$PKG" ]; then
