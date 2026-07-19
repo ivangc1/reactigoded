@@ -131,11 +131,26 @@ regla, hace falta reproducirlo con un paquete de prueba.
 público se ejecuta **dejando traza del comando exacto**, no fiándose de que el
 log sobreviva ni de la memoria.
 
-Para el `rc.1` esa trazabilidad **la aporta el workflow de release**
-(`.github/workflows/release.yml`), cuyo log de Actions conserva invocación y
-dist-tag derivado de forma permanente — **pero solo cuando ese workflow esté en
-`main`**. Mientras no lo esté, publicar el `rc.1` a mano **repite exactamente
-esta misma falta de evidencia**. Comprobación antes de tagear, no asunción:
+Para el `rc.1` esa trazabilidad la aporta el workflow de release
+(`.github/workflows/release.yml`) — **pero no por su log**. Los logs de Actions
+tienen **retención limitada y configurable** (máx. 400 días): apoyarse solo en
+ellos reproduce este mismo hueco cuando venzan, que es justo lo que pasó aquí
+con el log de npm. Lo que sí es duradero, y que el release automatizado aporta
+sin esfuerzo extra:
+
+| Evidencia | Dónde vive | Durabilidad |
+|---|---|---|
+| **El comando exacto** | El propio `release.yml`, en el commit tageado | Permanente: es código versionado, no una línea de log |
+| **Origen del artefacto** (repo, commit SHA, workflow) | Attestation de **provenance**, que trusted publishing firma sola | La retiene npm/Sigstore, independiente de Actions |
+| **dist-tag aplicado** | El propio registro (`npm view reactigoded dist-tags`) | Permanente |
+
+Ese es el argumento real para automatizar el release, más allá de la comodidad:
+**convierte el comando en un artefacto versionado** en vez de en algo que
+depende de que alguien recuerde o de que un log sobreviva.
+
+Todo lo anterior **solo aplica cuando el workflow esté en `main`**. Mientras no
+lo esté, publicar el `rc.1` a mano **repite exactamente esta misma falta de
+evidencia**. Comprobación antes de tagear, no asunción:
 
 ```bash
 git ls-tree -r main --name-only | grep -q '^\.github/workflows/release\.yml$' \
