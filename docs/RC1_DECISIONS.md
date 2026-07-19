@@ -90,12 +90,41 @@ clases, 37 tokens Tier-2, 6 data-attrs), 27 tags git, el CHANGELOG y
 de blast-radius total **justo después de congelar**. Probabilidad baja
 (nombre acuñado), coste altísimo, mitigación de un comando: asimetría clara.
 
-**El `latest` NO fue intencionado, y no se puede quitar.** El plan era
-publicar solo bajo `beta` para reservar el nombre sin que
-`npm install reactigoded` resolviera. Pero npm asigna `latest` en el
-**primer** publish de un paquete pase lo que pase con `--tag` (un paquete no
-puede existir sin `latest`), y `npm dist-tag rm reactigoded latest` responde
-**400**: el registro protege ese tag. Verificado, no asumido.
+**El `latest` NO fue intencionado.** El plan era publicar solo bajo `beta`
+para reservar el nombre sin que `npm install reactigoded` resolviera.
+
+Lo **medido**, que es lo único que este documento afirma:
+
+```
+tras la publicación → dist-tags = { beta: 1.0.0-beta.26, latest: 1.0.0-beta.26 }
+npm dist-tag rm reactigoded latest → 400 Bad Request
+```
+
+**La causa NO está establecida.** Una primera versión de esta sección afirmaba
+que "npm asigna `latest` en el primer publish pase lo que pase con `--tag`".
+Eso era una **inferencia**, no una medición, y la documentación de npm dice lo
+contrario: *"Publishing a package sets the `latest` tag ... unless the `--tag`
+option is used"* ([npm-dist-tag](https://docs.npmjs.com/cli/v11/commands/npm-dist-tag/)).
+El issue [npm/cli#7553](https://github.com/npm/cli/issues/7553), que parecía
+respaldarlo, reproduce el caso **sin** `--tag` — no es este. Cazado por codex en
+review; la afirmación se retira.
+
+Queda sin resolver porque **la evidencia se perdió**: el `--tag beta` está
+confirmado en el intento que dio 403, pero el comando exacto del publish que
+funcionó (tras resolver el 2FA) no se registró, y npm ya rotó ese log. Sin él
+no se puede distinguir entre "npm especializa el primer publish" y "se publicó
+sin el flag".
+
+**Regla que sale de esto**: una operación irreversible sobre un registro
+público se ejecuta **dejando traza del comando exacto**. Aquí no se hizo, y por
+eso hay una pregunta que ya no tiene respuesta. Para el `rc.1` esto queda
+cubierto: publica el workflow `release.yml`, cuyo log de Actions conserva la
+invocación y el dist-tag derivado.
+
+**Consecuencia operativa a vigilar**: con `latest` apuntando a `beta.26`, un
+`--tag rc` en el rc.1 **no lo moverá** — `npm install reactigoded` seguiría
+dando la beta hasta que se publique `1.0.0` final (que sí mueve `latest`) o se
+mueva a mano con `npm dist-tag add`.
 
 **Consecuencia real, sin adornos**: esto es una publicación normal, no una
 "reserva silenciosa". `npm install reactigoded` funciona. La distinción
