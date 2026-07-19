@@ -142,11 +142,19 @@ sin esfuerzo extra:
 |---|---|---|
 | **El comando exacto** | El propio `release.yml`, en el commit tageado | Permanente: es código versionado, no una línea de log |
 | **Origen del artefacto** (repo, commit SHA, workflow) | Attestation de **provenance**, que trusted publishing firma sola | La retiene npm/Sigstore, independiente de Actions |
-| **dist-tag aplicado** | El propio registro (`npm view reactigoded dist-tags`) | Permanente |
+| **dist-tag aplicado** | Cuerpo de la GitHub Release, escrito por el workflow | Sobrevive a la retención de Actions |
 
 Ese es el argumento real para automatizar el release, más allá de la comodidad:
 **convierte el comando en un artefacto versionado** en vez de en algo que
 depende de que alguien recuerde o de que un log sobreviva.
+
+> **Por qué el dist-tag NO se lee del registro.** `npm view reactigoded
+> dist-tags` solo prueba el valor **actual**: un dist-tag es un **puntero
+> mutable** y `npm dist-tag add` lo mueve (de hecho, más abajo se sugiere
+> justamente eso para `latest` en el `rc.1`). Consultarlo a futuro no dice qué
+> tag se aplicó **en ese release**. Por eso el workflow lo escribe en el cuerpo
+> de la GitHub Release junto al SHA — ahí queda el valor del momento, aunque el
+> puntero se mueva después.
 
 Todo lo anterior **solo aplica cuando el workflow esté en `main`**. Mientras no
 lo esté, publicar el `rc.1` a mano **repite exactamente esta misma falta de
