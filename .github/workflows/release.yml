@@ -16,6 +16,18 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Re-lanzamiento MANUAL. Necesario porque en un trigger `push: tags` Actions
+  # ejecuta el workflow TAL COMO ESTA EN EL COMMIT DEL TAG: si el workflow tenia
+  # un bug (paso el rc.1 con el `registry-url` que bloqueaba OIDC), re-ejecutar
+  # el run vuelve a correr la version rota, y el tag NO se puede mover porque una
+  # regla del repo lo protege contra borrado — correctamente: un tag de release
+  # debe ser inmutable. Este modo corre el workflow DE LA RAMA (ya arreglado)
+  # sobre EL CODIGO DEL TAG.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version exacta a publicar; debe coincidir con el package.json del tag (p.ej. 1.0.0-rc.1)"
+        required: true
 
 permissions:
   # `write` (no `read`) porque el último step crea la GitHub Release, que es el
@@ -32,6 +44,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # En modo manual se publica EL CODIGO DEL TAG, no el de la rama desde la
+          # que se lanza: el workflow lo aporta la rama (con los fixes), el
+          # artefacto lo aporta el tag. Sin esto se publicaria la rama, que puede
+          # haber avanzado desde el tag.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/v{0}', inputs.version) || github.ref }}
+          fetch-tags: true
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -70,18 +89,35 @@ jobs:
             }
           ' "$NPM"
 
-      - name: Comprobar que el tag coincide con package.json
-        # Guard contra el fallo silencioso más caro: tagear `v1.0.0-rc.1` con el
-        # package.json todavía en beta.26 publicaría la versión equivocada bajo
-        # un tag que promete otra cosa. npm no lo detecta.
+      - name: Resolver el tag del release y comprobar que coincide con package.json
+        id: reltag
+        # Guard contra el fallo silencioso más caro: publicar una versión bajo un
+        # tag que promete otra cosa. npm no lo detecta.
+        # Resuelve además el nombre del tag, que en modo manual NO es
+        # `GITHUB_REF_NAME` (ahí seria la rama).
+        env:
+          IN_VERSION: ${{ inputs.version }}
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
           PKG="$(node -p "require('./package.json').version")"
-          echo "tag: $TAG · package.json: $PKG"
-          if [ "$TAG" != "$PKG" ]; then
-            echo "::error::El tag ($TAG) no coincide con package.json ($PKG). Corrige el tag o el bump."
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$IN_VERSION" != "$PKG" ]; then
+              echo "::error::La versión indicada ($IN_VERSION) no coincide con el package.json del tag ($PKG)."
+              exit 1
+            fi
+            TAG="v$PKG"
+          else
+            TAG="$GITHUB_REF_NAME"
+            if [ "${TAG#v}" != "$PKG" ]; then
+              echo "::error::El tag ($TAG) no coincide con package.json ($PKG). Corrige el tag o el bump."
+              exit 1
+            fi
+          fi
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::El tag $TAG no existe en el repo."
             exit 1
           fi
+          echo "modo: $GITHUB_EVENT_NAME · tag: $TAG · package.json: $PKG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Comprobar que el README cita la versión que se publica
         # El README documenta la version publicada en su seccion de Instalacion.
@@ -148,6 +184,7 @@ jobs:
         # crear el registro duradero que falta. Se comprueba antes y se omite.
         env:
           APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
+          REL_TAG: ${{ steps.reltag.outputs.tag }}
         run: |
           PKG="$(node -p "require('./package.json').version")"
           if npm view "reactigoded@$PKG" version >/dev/null 2>&1; then
@@ -180,7 +217,7 @@ jobs:
           EOF2
               EXP_REPO="https://github.com/$GITHUB_REPOSITORY"
               EXP_PATH=".github/workflows/release.yml"
-              EXP_REF="refs/tags/$GITHUB_REF_NAME"
+              EXP_REF="refs/tags/$REL_TAG"
               if [ "$A_REPO" != "$EXP_REPO" ] || [ "$A_PATH" != "$EXP_PATH" ] || [ "$A_REF" != "$EXP_REF" ]; then
                 echo "::error::La provenance de reactigoded@$PKG no corresponde a este workflow. attested: repo='$A_REPO' path='$A_PATH' ref='$A_REF' · esperado: repo='$EXP_REPO' path='$EXP_PATH' ref='$EXP_REF'. Fail-closed: no se puede afirmar que lo publicara este release."
                 exit 1
@@ -204,6 +241,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
+          REL_TAG: ${{ steps.reltag.outputs.tag }}
         run: |
           PKG="$(node -p "require('./package.json').version")"
           PRERELEASE=""
@@ -218,15 +256,15 @@ jobs:
           } > /tmp/release-notes.md
           # IDEMPOTENTE: si la release ya existe (creada a mano, o por un run
           # anterior que fallo despues), se actualiza en vez de reventar.
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "::notice::La release $GITHUB_REF_NAME ya existe — se actualizan las notas."
-            gh release edit "$GITHUB_REF_NAME" \
+          if gh release view "$REL_TAG" >/dev/null 2>&1; then
+            echo "::notice::La release $REL_TAG ya existe — se actualizan las notas."
+            gh release edit "$REL_TAG" \
               --notes-file /tmp/release-notes.md \
               $PRERELEASE
           else
-            gh release create "$GITHUB_REF_NAME" \
+            gh release create "$REL_TAG" \
               --verify-tag \
-              --title "$GITHUB_REF_NAME" \
+              --title "$REL_TAG" \
               --notes-file /tmp/release-notes.md \
               $PRERELEASE
           fi
