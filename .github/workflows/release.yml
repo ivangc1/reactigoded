@@ -18,7 +18,9 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  # `write` (no `read`) porque el último step crea la GitHub Release, que es el
+  # único sitio DURADERO donde queda constancia del dist-tag aplicado.
+  contents: write
   # Obligatorio para que Actions pueda emitir el token OIDC. Sin este permiso
   # npm cae al flujo de token clásico y falla (no hay NPM_TOKEN).
   id-token: write
@@ -108,3 +110,31 @@ jobs:
         # comparado con publicar algo roto de forma irreversible.
         # Tampoco hace falta `--provenance`: trusted publishing la firma sola.
         run: npm publish --tag "${{ steps.disttag.outputs.tag }}"
+
+      - name: Registrar la publicación en la GitHub Release
+        # ÚNICO artefacto duradero donde queda el dist-tag APLICADO.
+        # No vale `npm view dist-tags`: un dist-tag es un puntero MUTABLE
+        # (`npm dist-tag add` lo mueve — este repo incluso lo contempla para
+        # `latest` en el rc.1), así que solo prueba el valor ACTUAL, no el que se
+        # aplicó en este release. El log de Actions tampoco vale: su retención
+        # caduca (máx. 400 días). Ver RC1_DECISIONS.md.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          PRERELEASE=""
+          if [ "$APPLIED_TAG" != "latest" ]; then PRERELEASE="--prerelease"; fi
+          {
+            printf '`reactigoded@%s` publicado en npm.\n\n' "$PKG"
+            printf '| | |\n|---|---|\n'
+            printf '| dist-tag aplicado | `%s` |\n' "$APPLIED_TAG"
+            printf '| commit | `%s` |\n' "$GITHUB_SHA"
+            printf '| workflow run | `%s` |\n\n' "$GITHUB_RUN_ID"
+            printf 'Provenance firmada por trusted publishing (OIDC).\n'
+          } > /tmp/release-notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file /tmp/release-notes.md \
+            $PRERELEASE
