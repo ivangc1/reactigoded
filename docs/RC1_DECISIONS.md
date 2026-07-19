@@ -109,17 +109,24 @@ El issue [npm/cli#7553](https://github.com/npm/cli/issues/7553), que parecía
 respaldarlo, reproduce el caso **sin** `--tag` — no es este. Cazado por codex en
 review; la afirmación se retira.
 
-Queda sin resolver porque **la evidencia se perdió**: el `--tag beta` está
-confirmado en el intento que dio 403, pero el comando exacto del publish que
-funcionó (tras resolver el 2FA) no se registró, y npm ya rotó ese log. Sin él
-no se puede distinguir entre "npm especializa el primer publish" y "se publicó
-sin el flag".
+**La invocación SÍ está confirmada** (Iván, por testimonio: ejecutó el bloque
+`npm publish --tag beta` tal cual). El log de npm de esa ejecución ya se rotó,
+así que no hay traza automática — pero con el flag confirmado, el confound
+queda descartado y lo observado es:
+
+> primera publicación del paquete, **con `--tag beta` explícito** → npm asignó
+> **`beta` y `latest`**.
+
+Eso **contradice la documentación** citada arriba. Lo honesto es dejarlo ahí:
+la contradicción está medida, pero es **n=1** sobre un solo paquete y un solo
+registro, así que **no se eleva a regla general de npm**. Si alguien necesita la
+regla, hace falta reproducirlo con un paquete de prueba.
 
 **Regla que sale de esto**: una operación irreversible sobre un registro
-público se ejecuta **dejando traza del comando exacto**. Aquí no se hizo, y por
-eso hay una pregunta que ya no tiene respuesta. Para el `rc.1` esto queda
-cubierto: publica el workflow `release.yml`, cuyo log de Actions conserva la
-invocación y el dist-tag derivado.
+público se ejecuta **dejando traza del comando exacto**, no fiándose de que el
+log sobreviva ni de la memoria. Para el `rc.1` queda cubierto: publica el
+workflow `release.yml`, cuyo log de Actions conserva la invocación y el
+dist-tag derivado de forma permanente.
 
 **Consecuencia operativa a vigilar**: con `latest` apuntando a `beta.26`, un
 `--tag rc` en el rc.1 **no lo moverá** — `npm install reactigoded` seguiría
