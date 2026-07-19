@@ -73,6 +73,19 @@ jobs:
             exit 1
           fi
 
+      - name: Comprobar que el README cita la versión que se publica
+        # El README documenta la version publicada en su seccion de Instalacion.
+        # Es el ULTIMO sitio con la version hardcodeada (el banner se desduplico
+        # en #144), asi que deriva en cada bump si nadie se acuerda. Ofreci este
+        # guard en review y no lo habia implementado — cerrado aqui.
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          if ! grep -qF "$PKG" README.md; then
+            echo "::error::README.md no menciona la versión $PKG. Actualiza la sección de Instalación en el mismo commit del bump."
+            exit 1
+          fi
+          echo "README cita $PKG ✓"
+
       - name: Derivar dist-tag desde la versión
         id: disttag
         # ANTES del install/verify a propósito: si el dist-tag no es derivable,
@@ -137,7 +150,24 @@ jobs:
             CURRENT="$(npm view reactigoded dist-tags --json 2>/dev/null \
               | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let t={};try{t=JSON.parse(s||"{}")}catch{};process.stdout.write(String(t[process.argv[1]]??""))})' "$APPLIED_TAG")"
             if [ "$CURRENT" = "$PKG" ]; then
-              echo "::notice::reactigoded@$PKG ya publicado y '$APPLIED_TAG' ya apunta ahí — re-run idempotente, se omite el publish."
+              # La consistencia tag<->version NO prueba QUIEN publico. Un publish
+              # manual con el mismo tag pasaria por re-run y grabaria un registro
+              # falso. Se verifica la ATTESTATION DE PROVENANCE: trusted
+              # publishing siempre la adjunta, un `npm publish` manual desde una
+              # CLI NO — y ademas nombra repo y workflow.
+              ATT="$(npm view "reactigoded@$PKG" --json 2>/dev/null \
+                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let j={};try{j=JSON.parse(s||"{}")}catch{};process.stdout.write(String(j?.dist?.attestations?.url??""))})')"
+              if [ -z "$ATT" ]; then
+                echo "::error::reactigoded@$PKG existe pero SIN attestation de provenance → no se publicó desde este workflow (un publish manual no la adjunta). Reconciliar a mano."
+                exit 1
+              fi
+              ATT_REPO="$(curl -fsSL "$ATT" \
+                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const b=JSON.parse(s);const p=JSON.parse(Buffer.from(b.attestations?.[0]?.bundle?.dsseEnvelope?.payload??"","base64").toString("utf8"));process.stdout.write(String(p?.predicate?.buildDefinition?.externalParameters?.workflow?.repository??""))}catch{process.stdout.write("")}})')"
+              if [ "$ATT_REPO" != "https://github.com/$GITHUB_REPOSITORY" ]; then
+                echo "::error::La provenance de reactigoded@$PKG apunta a '${ATT_REPO:-<no verificable>}', no a https://github.com/$GITHUB_REPOSITORY. Fail-closed: no se puede confirmar que lo publicara este workflow."
+                exit 1
+              fi
+              echo "::notice::reactigoded@$PKG ya publicado por este repo (provenance verificada) y '$APPLIED_TAG' apunta ahí — re-run idempotente, se omite el publish."
             else
               echo "::error::reactigoded@$PKG YA EXISTE pero el dist-tag '$APPLIED_TAG' apunta a '${CURRENT:-<ninguno>}'. No se publicó desde este workflow: continuar grabaría un registro FALSO en la Release. Reconciliar a mano."
               exit 1
