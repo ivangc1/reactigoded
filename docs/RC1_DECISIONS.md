@@ -109,10 +109,15 @@ El issue [npm/cli#7553](https://github.com/npm/cli/issues/7553), que parecía
 respaldarlo, reproduce el caso **sin** `--tag` — no es este. Cazado por codex en
 review; la afirmación se retira.
 
-**La invocación SÍ está confirmada** (Iván, por testimonio: ejecutó el bloque
-`npm publish --tag beta` tal cual). El log de npm de esa ejecución ya se rotó,
-así que no hay traza automática — pero con el flag confirmado, el confound
-queda descartado y lo observado es:
+**La invocación SÍ está confirmada.** Comando ejecutado, verbatim (Iván):
+
+```bash
+cd ~/reactigoded && npm publish --tag beta
+```
+
+El log de npm de esa ejecución ya se rotó, así que no hay traza automática — la
+evidencia es testimonial, pero es el comando exacto, no una reconstrucción. Con
+el flag confirmado el confound queda descartado y lo observado es:
 
 > primera publicación del paquete, **con `--tag beta` explícito** → npm asignó
 > **`beta` y `latest`**.
