@@ -2,10 +2,11 @@ import { Meta } from "@storybook/addon-docs/blocks";
 
 <Meta title="Introducción" />
 
-> ⚠️ **Estado pre-1.0.0-rc.1**: API en estabilización. El paquete aún
-> no está publicado en npm. Para probarlo, clona el repo y `npm link`
-> localmente. La instalación vía npm estará disponible cuando se
-> publique la primera beta a registro (decisión pendiente, sin fecha).
+> ⚠️ **Pre-1.0.0-rc.1**: API en estabilización. El paquete **ya está
+> publicado en npm**, pero el tag `rc.1` todavía no ha salido: puede
+> haber cambios antes de `1.0.0`. La superficie pública ya está
+> congelada por gate (§5.13), así que los renames no ocurren en
+> silencio — pero trátalo como pre-release.
 
 # Igoded Design System
 
@@ -21,8 +22,15 @@ Componentes React tipados + sistema CSS utility-first state-driven.
 
 ## Instalación
 
-> **Nota**: el paquete aún no está publicado a npm. Mientras tanto,
-> instalación local vía clone + `npm link`:
+```bash
+npm install reactigoded react react-dom @floating-ui/react clsx
+```
+
+`react` / `react-dom` (>= 19), `@floating-ui/react` (^0.27) y `clsx` (^2.1)
+son **peer-deps requeridos** — el README del repo explica por qué se
+externalizan y qué pasa si falta alguno.
+
+Para trabajar **sobre** la librería (o probar cambios sin publicar):
 
 ```bash
 git clone https://github.com/ivangc1/reactigoded.git
