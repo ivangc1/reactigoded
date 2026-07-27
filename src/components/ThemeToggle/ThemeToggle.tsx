@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type Ref,
@@ -67,25 +68,46 @@ function readDomTheme(attribute: string | null): Theme | null {
  * "Dark" con la página ya en claro, y el primer click ni siquiera movía
  * `aria-checked`, lo que además invierte la semántica de `role="switch"`.
  */
-function useDomTheme(attribute: string | null): Theme | null {
-  // `subscribe` NO observa. Es deliberado y es la diferencia entre arreglar
-  // SSR-01 y cambiar de comportamiento por el camino:
+function useDomTheme(
+  attribute: string | null,
+  /** Último valor que ESTE componente escribió en el atributo. Ver abajo. */
+  selfWritten: { current: Theme | null },
+): Theme | null {
+  // `subscribe` observa de verdad, con MutationObserver, igual que `useTheme`.
+  // No es adorno: sin suscripción el control MIENTE. Medido — si otro
+  // componente llama `useTheme().setTheme("light")` (API pública del mismo DS),
+  // `<html data-theme>` pasa a "light" y este switch se queda con
+  // `aria-checked="true"`. Es la misma clase de defecto que SSR-01, un
+  // `role="switch"` cuyo estado programático no describe la realidad (WCAG
+  // 4.1.2), solo que alcanzable sin SSR.
   //
-  // Lo que hace falta para el fix es que la HIDRATACIÓN use el snapshot de
-  // servidor (`null`) y que React re-lea el valor real justo después — eso lo
-  // garantiza React solo, comparando `getServerSnapshot` con `getSnapshot` en
-  // su effect posterior a la hidratación, sin necesidad de suscripción. En
-  // renders de cliente normales, `getSnapshot` lee el atributo igual que antes
-  // hacía `derive()`, así que el comportamiento observable no cambia.
-  //
-  // Poner un `MutationObserver` aquí (como sí hace `useTheme`, cuyo propósito
-  // ES la sincronización viva del tema) añadiría una capacidad nueva: el
-  // toggle reaccionaría a escrituras de terceros sobre `<html>`. Medido, eso
-  // crea además un bucle con la propia escritura del effect que entrega
-  // notificaciones fuera de `act()` en 20 tests. No entra en el arreglo de un
-  // defecto de hidratación; si algún día se quiere esa capacidad, es un cambio
-  // con su propia justificación y sus propios tests.
-  const subscribe = useCallback(() => () => {}, []);
+  // El coste de tenerlo es que las notificaciones llegan asíncronas: los tests
+  // que montan ThemeToggle tienen que dejar asentar el ciclo dentro de `act()`.
+  // Eso es correcto: el componente ES asíncrono frente a una fuente externa, y
+  // un test que no lo espera está midiendo un estado intermedio.
+  const subscribe = useCallback(
+    (cb: () => void) => {
+      if (!attribute || typeof document === "undefined") return () => {};
+      const observer = new MutationObserver(() => {
+        // Ignora la propia escritura del effect. El componente ESCRIBE este
+        // atributo y a la vez lo observa: sin este filtro se despierta a sí
+        // mismo en cada montaje, gasta un render cuyo output es idéntico y
+        // —en tests— entrega la notificación fuera de `act()`. Lo que
+        // interesa observar son los escritores AJENOS (`useTheme`, el script
+        // anti-flash del consumer, código de la app).
+        if (readDomTheme(attribute) === selfWritten.current) return;
+        cb();
+      });
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: [attribute],
+      });
+      return () => {
+        observer.disconnect();
+      };
+    },
+    [attribute, selfWritten],
+  );
   const getSnapshot = useCallback(() => readDomTheme(attribute), [attribute]);
   const getServerSnapshot = useCallback(() => null, []);
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -148,7 +170,10 @@ export function ThemeToggle({
   ...rest
 }: ThemeToggleProps) {
   const stored = useStoredTheme(storageKey);
-  const domTheme = useDomTheme(attribute);
+  // Registro de lo que este componente escribe, para que su observer no
+  // confunda su propia escritura con la de un tercero.
+  const selfWritten = useRef<Theme | null>(null);
+  const domTheme = useDomTheme(attribute, selfWritten);
   const [override, setOverride] = useState<Theme | null>(null);
 
   // Modo derive del hook: la fuente uncontrolled se computa en render
@@ -194,7 +219,14 @@ export function ThemeToggle({
       defaultTheme ??
       "dark";
     if (attribute && typeof document !== "undefined") {
-      document.documentElement.setAttribute(attribute, resolved);
+      // Escribir solo si cambia. `setAttribute` encola un registro de mutación
+      // aunque el valor sea el mismo, así que reescribirlo despertaría a este
+      // propio componente (y a cualquier observer del consumer) para nada.
+      const root = document.documentElement;
+      if (root.getAttribute(attribute) !== resolved) {
+        selfWritten.current = resolved;
+        root.setAttribute(attribute, resolved);
+      }
     }
     if (storageKey && typeof window !== "undefined") {
       try {

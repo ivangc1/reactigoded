@@ -53,6 +53,18 @@ del release.
   casos de hidratación de `__ssr__.test.tsx`, de los que estaba excluido con una premisa
   escrita que era falsa. Los 3 casos nuevos fallan tanto con el bug original como con el fix
   naive: es la diferencia entre un test que acompaña al fix y uno que lo defiende.
+- **`ThemeToggle` sigue ahora a los escritores externos de `<html data-theme>`.** Antes solo
+  leía el atributo en render, así que si otro código lo cambiaba —`useTheme()`, el script
+  anti-flash, la propia app— el switch se quedaba anunciando el tema anterior. Es la misma
+  clase de defecto que el anterior, un `role="switch"` cuyo estado no describe la realidad,
+  alcanzable sin SSR. El observador **filtra las escrituras del propio componente**: si no,
+  se despertaría a sí mismo en cada montaje para renderizar exactamente lo mismo. Y el effect
+  ya no reescribe el atributo cuando su valor es el correcto, porque `setAttribute` encola una
+  mutación aunque el valor no cambie y eso despertaría también a los observadores del consumer.
+  *Límite conocido, medido y anotado en `POST_RC1_BACKLOG.md`*: con `storageKey` activo el
+  orden de resolución hace que el storage gane al atributo, así que un `ThemeToggle` con
+  persistencia sigue sin converger con `useTheme`. Cambiar ese orden es un breaking que exige
+  decidir antes qué significa "preferencia del usuario"; no se hace en un fix de hidratación.
 
 ### Corrección de registro
 

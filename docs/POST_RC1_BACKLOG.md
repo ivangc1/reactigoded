@@ -416,3 +416,35 @@ coverage por un mensaje benigno de V8 en una métrica no-gate = falso
 arreglo. Si algún día `test:coverage` pasa a gate, revisar entonces.
 
 ---
+
+## `ThemeToggle` con storage ignora a `useTheme` (tensión de diseño, no defecto)
+
+**Medido durante el cierre de SSR-01 (gate 1.0.0).** `useTheme` es API pública
+y escribe `<html data-theme>` directamente. `ThemeToggle` ya observa ese
+atributo, así que se entera del cambio — pero su orden de resolución es
+`override ?? stored ?? dom ?? default`, y su effect de montaje **persiste el
+tema en `localStorage`**. Consecuencia: en cuanto hay valor persistido (o sea,
+desde el primer montaje con `storageKey` activo), una escritura de `useTheme`
+llega, se procesa y **pierde** frente al storage. Los dos siguen mostrando
+temas distintos de forma estable.
+
+Reproducción mínima: montar `<ThemeToggle />` y `useTheme().setTheme("light")`
+desde otro componente → `<html data-theme>` = `light`, switch en `dark`.
+Con `<ThemeToggle storageKey={null} />` sí converge (cubierto por
+`ThemeToggle.test.tsx`, bloque "sigue a escritores externos de data-theme").
+
+**Por qué no se toca ahora**: las tres salidas cambian contrato documentado y
+ninguna es obviamente correcta.
+- (a) `dom` por delante de `stored` — respeta al último escritor, pero rompe
+  "tu preferencia guardada gana al default" tal como lo prueba el test
+  `storage='light' GANA al default dark-first`, y habría que redefinir qué
+  significa "preferencia".
+- (b) Que `useTheme().setTheme` escriba también el storage — le da a un hook de
+  lectura/escritura del DOM una responsabilidad de persistencia que hoy no
+  tiene, y la clave de storage es prop de `ThemeToggle`, no global.
+- (c) Documentar que ambos no deben coexistir — barato, pero es admitir que dos
+  piezas públicas del mismo DS no componen.
+
+Decisión pre-1.0.0: **no cambiar el orden**, porque hacerlo sin decidir (a/b/c)
+convertiría una tensión conocida en un breaking mal fundamentado. Queda anotado
+para 1.1.0 con las tres opciones ya medidas.
