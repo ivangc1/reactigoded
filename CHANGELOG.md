@@ -133,6 +133,18 @@ del release.
   NodeNext, con `skipLibCheck:false` y `types:[]`. Las fixtures de consumer solo cubren lo
   alcanzable desde una entry pública; este gate cubre lo que *viaja*. Es el `[MUST]` que
   `CLAUDEGATE6-RC1-GATE.md:282` daba por cumplido sin haberlo ejecutado.
+- **La taxonomía de tokens ahora particiona, y el sembrador del freeze deja de ser ciego**
+  (`E31-F4`). Tres defectos medidos, los tres cerrados:
+  - `DesignTokens.mdx` decía que los tres tiers *organizan* los tokens del DS. Cubren **116**
+    de **553**: son el vocabulario del color, no del sistema entero. Ahora la doc lo dice, y
+    enumera las 437 restantes en una tabla que **suma exacto** — partición, no muestra.
+  - El patrón Tier-3 documentado era `--ig-{cardinal}-glow`, que matchea **0** tokens: el
+    real tiene el segmento invertido, `--ig-glow-{cardinal}` (33 tokens con `-sm`/`-lg`).
+  - El checker del freeze derivaba los tokens existentes leyendo **solo** `igoded-tokens.css`,
+    así que 6 declarados en otros CSS eran invisibles y por tanto imposibles de congelar
+    (`--ig-gradient-{from,via,to}`, `--ig-snap-strictness`, `--ig-ring-offset-{width,color}`).
+    Un sembrador que mira un solo fichero hereda su recorte — la misma causa raíz que C-1,
+    donde la semilla heredó las omisiones de la prosa de `CSSAPI.mdx`.
 - **Gate `test:emitted-classes`** — el freeze, en la dirección que faltaba. `test:public-api`
   comprueba `freeze ⊆ dist`: caza el nombre congelado que desaparece. Este comprueba
   **`emitido ⊆ freeze ∪ exclusiones con razón escrita`**: caza el nombre que el DS empieza a

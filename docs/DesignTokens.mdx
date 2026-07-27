@@ -84,7 +84,12 @@ en **Fundamentos/Espaciado**.
 
 ## Tres tiers de tokens
 
-Los tokens del DS se organizan en tres tiers explícitos:
+Los tres tiers organizan el **sistema de color**, no el conjunto entero de tokens. Conviene
+decirlo con números, porque la redacción anterior daba a entender lo segundo: de los **553**
+custom properties que shippea el paquete, los patrones de esta sección cubren **116**. Los
+**437** restantes son otras capas —espaciado, tipografía, animación, efectos, z-index,
+contenedores, y los tokens por componente— y quedan fuera del freeze por declaración, igual
+que Tier-1 y Tier-3. Ver *Lo que estos tiers NO cubren*, más abajo.
 
 - **Tier 1 — Primitivos**: `--ig-{cardinal}-{lux|nox}`, `--ig-fundus-{lux|nox}`.
   Son hex literales con geometría OKLCH validada. **No usar directamente
@@ -97,13 +102,48 @@ Los tokens del DS se organizan en tres tiers explícitos:
 
 **Freeze de API pública 1.0 (§5.13):** los tokens **Tier-2** de esta lista están congelados en `src/_audit/public-api-names.json` — renombrarlos exige bump **MAJOR** + entrada en CHANGELOG. **Tier-1** (primitivos `-lux`/`-nox`) y **Tier-3** (escalas: `-alpha-*`, `-glow`, `--ig-neutral-*`, tamaños de texto) quedan **fuera del freeze por declaración**, no por silencio: una escala conserva la libertad de perder o añadir un escalón sin major, y se estabiliza con un minor cuando se declare en el CHANGELOG. Los tokens de **componente** (`--ig-card-*`, `--ig-input-*`, …) son una capa aparte, aún sin clasificar — tampoco congelados.
 - **Tier 3 — Escalas**: `--ig-neutral-{50..950}` (universal, **no adaptativa**
-  al tema), `--ig-{cardinal}-alpha-{10|20|30|50|70}`, `--ig-{cardinal}-glow`,
-  `--ig-glass-*`. Para uso ad-hoc por consumers que necesiten opacidades o
-  niveles concretos.
+  al tema), `--ig-{cardinal}-alpha-{10|20|30|50|70}`, `--ig-glow-{cardinal|role}`
+  con sus variantes `-sm` y `-lg`, `--ig-glass-*`. Para uso ad-hoc por consumers
+  que necesiten opacidades o niveles concretos.
+
+  > Hasta el gate 1.0.0 esta línea decía `--ig-{cardinal}-glow`, que **no existe**:
+  > el patrón real es `--ig-glow-{cardinal}`, con el segmento invertido. Ese patrón
+  > documentado matcheaba **0** de los 33 tokens `--ig-glow-*` que se publican.
 
 `--ig-neutral-*` es escala universal: los mismos hex en dark y light. Si
 necesitas un gris adaptativo al tema, usa `--ig-text-body`, `--ig-bg-muted`
 o `--ig-border-subtle` en su lugar.
+
+### Lo que estos tiers NO cubren
+
+Los tres tiers son el vocabulario del **color**. El paquete publica 553 custom properties en
+70 familias, y las 437 que caen fuera de los patrones de arriba no son un descuido: son otras
+capas del sistema. Se enumeran aquí para que la exclusión sea **declarada y no derivada del
+silencio** — un token que nadie nombra acaba siendo contrato de facto en cuanto un consumer lo
+usa:
+
+| Capa | Familias | Tokens |
+|---|---|---|
+| Espaciado y layout | `--ig-space-*`, `--ig-container-*`, `--ig-z-*`, `--ig-rounded-*` | 81 |
+| Tipografía | `--ig-text-*` (tamaños), `--ig-font-*`, `--ig-leading-*`, `--ig-tracking-*` | 42 |
+| Movimiento | `--ig-anim-*`, `--ig-duration-*`, `--ig-transition-*`, `--ig-ease-*` | 42 |
+| Efectos | `--ig-glow-*`, `--ig-filter-*`, `--ig-blend-*`, `--ig-clip-*`, `--ig-gradient-*`, `--ig-ring-*`, `--ig-shadow-*` | 115 |
+| Por componente | `--ig-card-*`, `--ig-input-*`, `--ig-alert-*`, … | 97 |
+| Resto | `--ig-aspect-*`, `--ig-black-alpha-*`, `--ig-white-alpha-*` y familias menores | 60 |
+
+La tabla **suma 437 exactos**: es una partición, no una muestra. Si mañana no sumara, es que
+apareció una capa nueva que nadie declaró — que es justo lo que esta sección existe para
+impedir.
+
+**Ninguna de estas capas está congelada**, con dos excepciones nombradas en el freeze: los
+cuatro tokens de theming (`--ig-space-unit`, `--ig-font-{base,heading,mono}`), que la propia
+doc enseña a sobrescribir, y `--ig-progress-percent`, que es una custom property que el
+componente **escribe** y el CSS lee. Las dos están en `src/_audit/public-api-names.json` con
+su categoría.
+
+Que no estén congeladas significa exactamente esto: **pueden cambiar de nombre en una minor**.
+Si construyes sobre ellas, ánclalas tú —copia el valor a un token propio— en vez de
+referenciarlas directamente.
 
 ## Tipografía
 
