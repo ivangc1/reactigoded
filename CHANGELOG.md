@@ -70,13 +70,20 @@ del release.
 
 - La entrada de `beta.25` afirma que Chromatic quedó con **revisión visual humana obligatoria**
   al quitarle `--auto-accept-changes=main` y `--exit-zero-on-changes` (`[H-02]`). Es falso, y
-  lo sigue siendo hoy: `--exit-once-uploaded` continúa ahí, y su semántica medida es salir con
-  0 en cuanto los snapshots se han subido — antes de que exista veredicto de comparación. El
-  check acredita el **upload**, no la revisión. Además la GitHub App de Chromatic no publica
-  ningún status en este repo (medido: `total_count=0` en los HEAD de los 3 PRs más recientes),
-  así que tampoco hay un rojo alternativo que bloquee. Un drift visual se mergea con todo
-  verde. Cerrarlo exige instalar la App y añadir su contexto al ruleset — acción manual
-  documentada en `chromatic.yml`.
+  lo medido es peor que lo que el propio gate 1.0.0 describía como `A-CI-01`.
+  - `--exit-once-uploaded` sigue ahí, y su semántica medida es salir con 0 en cuanto los
+    snapshots se han subido — antes de que exista veredicto. El check acredita el **upload**.
+  - Pero además, **la revisión visual no se está ejecutando en absoluto**. El log del build
+    620 (2026-07-28) dice literalmente «Snapshot quota reached — this build is limited because
+    your account is out of snapshots for the month» y «No UI tests or UI review enabled». El
+    status `UI Tests` de la GitHub App queda en `pending` permanente.
+  - O sea: no es que el gate mida mal, es que **no mide**. No hay snapshots que comparar, así
+    que tampoco hay nada que aprobar en la UI de Chromatic. Un drift visual se mergea en verde
+    y ningún humano ha revisado nada desde el 2026-07-19.
+  - La GitHub App **sí** está instalada y publica `Storybook Publish` + `UI Tests`. Lo que
+    falta es cuota de snapshots y habilitar UI Tests en el proyecto. Añadir `UI Tests` a los
+    checks requeridos **antes** de eso convertiría el gate vacuo en un candado: un contexto
+    requerido clavado en `pending` deja todos los PRs sin poder mergearse.
 
 ### Cambiado
 

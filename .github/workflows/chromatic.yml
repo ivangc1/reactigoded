@@ -51,16 +51,28 @@ jobs:
         # del ruleset son todos de github-actions. O sea: hoy un drift visual se
         # mergea con todo verde.
         #
-        # ⚠️ REQUISITO MANUAL, UNA VEZ (lo cierra el dueño, no este workflow):
-        #   1. Instalar/autorizar la GitHub App de Chromatic sobre
-        #      `ivangc1/reactigoded` — en chromatic.com (Manage → Integrations)
-        #      y en github.com/settings/installations.
-        #   2. Añadir su contexto (`UI Tests`, y `UI Review` si se usa) a
-        #      `required_status_checks` del ruleset 16867823.
-        # Hasta que eso esté, este job solo acredita que los snapshots subieron.
+        # ESTADO (medido 2026-07-28, build 620):
+        #   ✅ La GitHub App de Chromatic está instalada y publica dos contextos
+        #      en cada commit: `Storybook Publish` y `UI Tests`.
+        #   ❌ `UI Tests` se queda en `pending` con "Update your plan to resume
+        #      testing". El log del build lo dice literal: «Snapshot quota
+        #      reached — this build is limited because your account is out of
+        #      snapshots for the month», y remata con «No UI tests or UI review
+        #      enabled».
         #
-        # Por qué la App y no simplemente quitar el flag: el status de la App se
-        # actualiza EN SITIO al aprobar en Chromatic, mientras que un job de
-        # Actions ya terminado no se repinta — con el flag quitado habría que
-        # re-lanzar el job a mano después de cada aprobación.
+        # Es decir: la revisión visual NO SE ESTÁ EJECUTANDO. No es que el check
+        # mida mal — es que no mide. Los snapshots no se toman, así que tampoco
+        # hay nada que aprobar en la UI de Chromatic.
+        #
+        # ⚠️ NO añadir `UI Tests` a `required_status_checks` del ruleset 16867823
+        # mientras siga así: un contexto requerido que nunca sale de `pending`
+        # deja TODOS los PRs sin poder mergearse. El gate pasaría de vacuo a
+        # candado, que es peor.
+        #
+        # Para cerrarlo hace falta cuota de snapshots (plan) + habilitar UI Tests
+        # en el proyecto. Con eso hecho, el cierre es una línea: añadir el
+        # contexto al ruleset. Por qué la App y no simplemente quitar el flag: su
+        # status se actualiza EN SITIO al aprobar en Chromatic, mientras que un
+        # job de Actions ya terminado no se repinta — con el flag quitado habría
+        # que re-lanzar el job a mano tras cada aprobación.
         run: npx chromatic --exit-once-uploaded --only-changed
