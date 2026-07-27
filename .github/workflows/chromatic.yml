@@ -69,6 +69,25 @@ jobs:
         # deja TODOS los PRs sin poder mergearse. El gate pasaría de vacuo a
         # candado, que es peor.
         #
+        # ARITMÉTICA DEL PLAN GRATUITO (por qué se agota, medido):
+        #   239 stories → un build completo son 239 snapshots. El plan incluye
+        #   5.000/mes ⇒ caben ~20 builds completos. Y este workflow dispara en
+        #   DOS eventos: cada push a una rama de PR es un build, y el merge a
+        #   `main` es otro. Un PR con 3 pushes ≈ 4 builds ≈ 1.000 snapshots, o
+        #   sea ~5 PRs al mes. `--only-changed` (TurboSnap) recorta, pero no en
+        #   el primer build de una rama ni cuando el diff toca ficheros que
+        #   afectan a muchas stories.
+        #
+        # ⚠️ NO resolver esto con un filtro `paths:` en este workflow. `Run
+        # Chromatic` es un contexto REQUERIDO del ruleset, y un job que no se
+        # dispara deja el check en "Expected — Waiting" indefinidamente: los PRs
+        # que no toquen `src/` quedarían sin poder mergearse. Misma trampa que
+        # añadir `UI Tests` estando en pending.
+        #
+        # Palancas reales: quitar el trigger de `push: main` (≈ mitad de gasto,
+        # a costa de la línea base con la que se comparan los PRs), agrupar
+        # commits para pushear menos veces, o pagar plan.
+        #
         # Para cerrarlo hace falta cuota de snapshots (plan) + habilitar UI Tests
         # en el proyecto. Con eso hecho, el cierre es una línea: añadir el
         # contexto al ruleset. Por qué la App y no simplemente quitar el flag: su
