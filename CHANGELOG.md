@@ -43,11 +43,30 @@ del release.
   que se pisan en las dos direcciones: en `rc.1` una edición manual borró la tabla que el
   workflow había escrito. El asset se verifica además contra npm y contra la attestation.
 
+- **`dist/components/Slot/` deja de viajar en el tarball.** Su barrel shippeaba con 3×TS2305:
+  el doc-block del fichero termina en `@internal` y TS adhiere esa etiqueta solo al primer
+  statement, así que `stripInternal` vació los tres hermanos a `export {}` mientras el barrel
+  seguía re-exportando de ellos. No era alcanzable desde ninguna entry (0 referencias
+  entrantes, ausente del `exports` map), y el propio fichero declaraba no ser API — así que se
+  saca entero en vez de etiquetar statement a statement.
+
 ### Añadido
 
 - `sigstore` como **devDependency** (no viaja en el paquete), para verificar la firma de la
   attestation SLSA. Se fija en la línea `4.x` a propósito: `5.x` exige Node `^22.22.2`, por
-  encima del floor del repo.
+  encima del floor del repo. Y `yaml`, que ya se usaba de forma transitiva, pasa a estar
+  declarada: un gate que depende de una transitiva se rompe el día que su padre la suelte.
+- **Gate `test:dist-dts`** — compila los `.d.ts` del tarball como programa, en Bundler y
+  NodeNext, con `skipLibCheck:false` y `types:[]`. Las fixtures de consumer solo cubren lo
+  alcanzable desde una entry pública; este gate cubre lo que *viaja*. Es el `[MUST]` que
+  `CLAUDEGATE6-RC1-GATE.md:282` daba por cumplido sin haberlo ejecutado.
+- **Gate `test:ci-covers-verify`** — compara la cadena de `npm run verify` con los steps de
+  `verify.yml` y falla si alguno no corre en CI. `test:public-api` llevaba fuera de los checks
+  requeridos (`A-CI-02`): una mutación del JSON de freeze pasaba CI y solo habría muerto en
+  `prepublishOnly`, con el tag protegido ya creado. Es la **segunda** vez que este repo sufre
+  ese drift; la primera se cerró por-caso, y por eso volvió. Ahora se cierra el espacio: lo
+  que no se cubre exige una exención con razón escrita, y un `run:` que el gate no sepa
+  parsear es fallo, no pase.
 
 ## [1.0.0-rc.1] — 2026-07-19 · **API pública congelada**
 

@@ -281,6 +281,18 @@ cd ~/reactigoded && npx attw --pack reactigoded-*.tgz
 ```
 - `tsc --noEmit --skipLibCheck false` sobre `dist/**/*.d.ts` bajo Bundler Y NodeNext. Patrón `as InternalProps` en TODOS los compound. `@internal` efectivamente stripped (DialogContext `.d.ts` = `export {}`, StepInternalProps fuera, Slot fuera). `attw` para ESM/CJS/condiciones (`react-server`, `default`, `./server-safe`, `./cn`).
 
+> **Corrección (gate 1.0.0, `B34-1`).** Esta celda `[MUST]` se dio por cumplida sin ejecutarla:
+> la afirmación «Slot fuera» era **falsa**. `dist/components/Slot/` seguía en el tarball con su
+> barrel roto (3×TS2305), y la compilación de los `.d.ts` como programa —que esta misma línea
+> pedía— nunca se corrió: al hacerla, esos 3 errores eran los **únicos** de los 133 ficheros.
+> Las otras dos mitades sí eran ciertas (`DialogContext.d.ts` = `export {};`, `StepInternalProps`
+> fuera), y comprobarlas una a una probablemente dio la sensación de haber comprobado la tercera.
+>
+> Es el patrón «réplica-a-ojo» que este repo ya tiene registrado: describir lo que un comando
+> *daría* en vez de correrlo. Cerrado convirtiendo la celda en gate automático
+> (`npm run test:dist-dts`), que es la única forma de que una afirmación así no pueda volver a
+> quedarse sin medir.
+
 ### 5.10 [MAY-SKIP] Storybook vs código
 
 ```

@@ -100,6 +100,8 @@
     "test:scope-leaks": "node scripts/check-css-scope-leaks.mjs --strict",
     "test:hex-drift": "node scripts/check-hex-drift.mjs --strict",
     "test:state-css-exclusion": "node scripts/check-state-css-exclusion.mjs",
+    "test:dist-dts": "node scripts/check-dist-dts.mjs",
+    "test:ci-covers-verify": "node scripts/check-ci-covers-verify.mjs",
     "test:public-api": "node scripts/check-public-api-names.mjs",
     "test:no-dev-warns": "node scripts/check-no-dev-warns.mjs",
     "test:server-safe-markers": "node scripts/check-server-safe-markers.mjs",
@@ -118,7 +120,7 @@
     "build-storybook:chromatic": "storybook build",
     "_comment_verify_fast": "Verify rápido para iterar local: ~5 min cold (lint+typecheck+test:unit threads). Bajan ~50s con vitest cache caliente, pero el escenario típico es cold (cambia un componente, vitest reconstruye su grafo). vs ~25-30 min de verify:unit completo (--isolate --pool=forks). Sirve para iterar local; CI sigue corriendo el verify completo tras push y caza estado compartido entre tests / mocks que se filtran / divergencias de typecheck por @types instalados pero no incluidos en compilerOptions.types. Contador CI fallos con verify:fast OK: 1 (B-05 process.env.NODE_ENV — typecheck local pasó por @types/node ambient, CI strict cazó; fix: usar `import.meta.env.DEV` patrón Slider/Pagination del DS).",
     "verify:fast": "npm run lint && npm run typecheck:native && npm run test:unit",
-    "verify:unit": "node scripts/clean.mjs tsconfig.tsbuildinfo && npm run lint && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run test:server-safe-markers && npm run build && npm run test:no-dev-warns && npm run test:state-css-exclusion && npm run test:public-api && npm run test:publint && npm run test:rsc-fixture && npm run test:consumer-types && npm run test:consumer-types:nodenext && npm run test:consumer-pack",
+    "verify:unit": "node scripts/clean.mjs tsconfig.tsbuildinfo && npm run lint && npm run test:ci-covers-verify && npm run typecheck && npm run test:unit:ci && npm run test:contrast && npm run test:scope-leaks && npm run test:hex-drift && npm run test:server-safe-markers && npm run build && npm run test:dist-dts && npm run test:no-dev-warns && npm run test:state-css-exclusion && npm run test:public-api && npm run test:publint && npm run test:rsc-fixture && npm run test:consumer-types && npm run test:consumer-types:nodenext && npm run test:consumer-pack",
     "verify:storybook": "npm run test:storybook",
     "verify:size": "size-limit",
     "verify": "npm run verify:unit && npm run verify:storybook && npm run verify:size",
@@ -278,6 +280,7 @@
     "typescript-eslint": "^8.64.0",
     "vite": "^8.1.5",
     "vite-plugin-dts": "^5.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "yaml": "^2.9.0"
   }
 }

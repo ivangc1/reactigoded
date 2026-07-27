@@ -55,6 +55,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: CI cubre la cadena de verify (anti-drift, A-CI-02)
+        # Este fichero reimplementa a mano la cadena de `npm run verify` para
+        # que el log muestre qué gate falló y para poder documentar cada step.
+        # El precio es que las dos listas pueden divergir en silencio, y ya han
+        # divergido dos veces (`test:state-css-exclusion` pre-beta.25,
+        # `test:public-api` en el gate 1.0.0). Este gate compara ambas: cerrar
+        # el caso concreto no cierra la clase.
+        #
+        # Va pronto a propósito: es barato y falla antes de gastar 20 minutos
+        # de matriz para descubrir que un gate no estaba corriendo.
+        run: npm run test:ci-covers-verify
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -95,6 +107,13 @@ jobs:
       - name: Build (lib + dts + styles)
         run: npm run build
 
+      - name: dist .d.ts compilan como programa (B34-1)
+        # Compila los `.d.ts` del tarball con `skipLibCheck:false` y `types:[]`
+        # en Bundler Y NodeNext. Las fixtures de consumer solo ven lo que se
+        # importa desde una entry: `dist/components/Slot/index.d.ts` shippeó
+        # con 3×TS2305 porque ningún consumer puede alcanzar ese barrel.
+        run: npm run test:dist-dts
+
       - name: state.css exclusion gate (H-07/D9)
         # Verifica que dist/index.js no arrastra utilities pseudo-class
         # del state.css (713 KB gzip standalone). Si un componente del
@@ -103,6 +122,19 @@ jobs:
         # beta.25 el script existía en verify:unit pero NO en CI; el
         # cruce de gate reviews (Codex + Claude) lo cazó.
         run: npm run test:state-css-exclusion
+
+      - name: Public API freeze gate (§5.13)
+        # A-CI-02: este gate estaba encadenado en `verify:unit` pero NO aquí,
+        # así que una mutación de `src/_audit/public-api-names.json` pasaba los
+        # checks requeridos y solo habría muerto en `prepublishOnly` — es decir,
+        # con el tag protegido ya creado e irreversible.
+        #
+        # Es la SEGUNDA vez que este repo sufre esta misma clase de drift (la
+        # primera, con `test:state-css-exclusion`, está documentada en el step
+        # de arriba). Por eso, además del step, hay un gate que compara la
+        # cadena de `verify` con los steps de este fichero: cerrar el caso
+        # concreto sin cerrar el espacio es lo que permitió la reincidencia.
+        run: npm run test:public-api
 
       - name: Publint gate (D1-P3)
         # Valida package.json exports + types resolution. Aceptamos
