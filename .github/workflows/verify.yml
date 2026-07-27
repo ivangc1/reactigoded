@@ -236,3 +236,41 @@ jobs:
 
       - name: Storybook tests (vitest browser + axe-core)
         run: npm run test:storybook
+
+  next-consumer:
+    name: Consumer Next App Router (RSC boundary)
+    # Ubuntu-only y FUERA de la matriz de 4 celdas a propósito: lo que se mide
+    # aquí es la resolución de condiciones de export por el bundler de Next,
+    # que no depende del SO ni de la versión de Node. Meterlo en la matriz
+    # multiplicaría por 4 el coste (~5 min por celda) sin añadir señal.
+    #
+    # Cierra A-RSC-01, que ninguna fixture de tipos puede cazar: `tsc` resuelve
+    # por `dist/index.d.ts` (97 exports) mientras el grafo RSC resuelve por la
+    # condición `react-server` → `dist/server-safe.js` (44). Los 53 que faltan
+    # no dan error de tipos, dan error de build.
+    #
+    # ⚠️ Este job NO bloquea nada hasta que su contexto se añada a
+    # `required_status_checks` del ruleset 16867823 — un job nuevo no es
+    # requerido por existir. El nombre a añadir es el de `name:` de arriba.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (lib + dts + styles)
+        # Imprescindible: el gate hace `npm pack`, y `npm pack` NO construye.
+        # Sin esto empaquetaría el `dist/` que hubiera (o ninguno) y mediría
+        # otro artefacto.
+        run: npm run build
+
+      - name: Consumer Next App Router (server + client + control negativo)
+        run: npm run test:next-consumer

@@ -133,6 +133,19 @@ del release.
   NodeNext, con `skipLibCheck:false` y `types:[]`. Las fixtures de consumer solo cubren lo
   alcanzable desde una entry pública; este gate cubre lo que *viaja*. Es el `[MUST]` que
   `CLAUDEGATE6-RC1-GATE.md:282` daba por cumplido sin haberlo ejecutado.
+- **Gate `test:next-consumer`** — consumer Next.js App Router real (job propio en CI, no en
+  `verify:unit`: instala Next y corre cuatro builds). Cierra `A-RSC-01`, que ninguna fixture de
+  tipos podía cazar: `tsc` resuelve por `dist/index.d.ts` (97 exports) mientras el grafo RSC
+  resuelve por la condición `react-server` → `dist/server-safe.js` (44). Los 53 que faltan no
+  dan error de tipos, dan error de build — verde en el editor, rojo en el CI del consumer.
+  `fixtures/rsc/` era ciega a esto **por construcción**: fuerza `customConditions:
+  ["react-server"]` y `paths` al subset, o sea exactamente la mitad opuesta del fallo.
+  El gate mide cuatro celdas en Webpack **y** Turbopack, y la que lo convierte en gate es el
+  **control negativo**: un Server Component importando un export client-only debe FALLAR. Sin
+  él, el job quedaría verde aunque la frontera server-safe dejara de discriminar. Verificado
+  por mutación: exportando `Accordion` desde `server-safe` el gate se pone rojo en las cuatro.
+  Y comprueba que el error **nombra el export** — un control negativo que falla por otra causa
+  daría un verde falso, que es la trampa que este tipo de test suele tener.
 - **Gate `test:ci-covers-verify`** — compara la cadena de `npm run verify` con los steps de
   `verify.yml` y falla si alguno no corre en CI. `test:public-api` llevaba fuera de los checks
   requeridos (`A-CI-02`): una mutación del JSON de freeze pasaba CI y solo habría muerto en

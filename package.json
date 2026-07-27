@@ -102,6 +102,7 @@
     "test:state-css-exclusion": "node scripts/check-state-css-exclusion.mjs",
     "test:dist-dts": "node scripts/check-dist-dts.mjs",
     "test:ci-covers-verify": "node scripts/check-ci-covers-verify.mjs",
+    "test:next-consumer": "node scripts/test-next-consumer.mjs",
     "test:public-api": "node scripts/check-public-api-names.mjs",
     "test:no-dev-warns": "node scripts/check-no-dev-warns.mjs",
     "test:server-safe-markers": "node scripts/check-server-safe-markers.mjs",
