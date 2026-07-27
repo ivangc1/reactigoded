@@ -133,6 +133,24 @@ del release.
   NodeNext, con `skipLibCheck:false` y `types:[]`. Las fixtures de consumer solo cubren lo
   alcanzable desde una entry pública; este gate cubre lo que *viaja*. Es el `[MUST]` que
   `CLAUDEGATE6-RC1-GATE.md:282` daba por cumplido sin haberlo ejecutado.
+- **Gate `test:emitted-classes`** — el freeze, en la dirección que faltaba. `test:public-api`
+  comprueba `freeze ⊆ dist`: caza el nombre congelado que desaparece. Este comprueba
+  **`emitido ⊆ freeze ∪ exclusiones con razón escrita`**: caza el nombre que el DS empieza a
+  emitir y que nadie congela — el hueco por el que pasaron las 4 clases de C-1, que llevaban
+  años emitidas fuera del contrato y las encontró una auditoría en vez de CI.
+  - Deriva los nombres del **AST de `src`** con el checker de TypeScript, no del CSS. El
+    espacio CSS **no es decidible**, y está medido: ~2.600 clases `ig-*` en `dist/styles`
+    frente a 336 congeladas, la exclusión de la capa utility que documenta `CSSAPI.mdx` es una
+    lista abierta que deja ~1.800 sin cubrir, y no hay discriminador estructural (0 `@layer`;
+    1.696 de esas ~1.800 conviven con las congeladas en el mismo fichero). El espacio de
+    **emisión** sí lo es: ~350 nombres, cada uno con su `file:line`.
+  - Las clases ensambladas (`` `ig-table-${layout}` ``) se expanden por el tipo de la
+    expresión. Si el tipo no es una unión finita de literales, el gate **falla** en vez de
+    saltarse el sitio: no se puede congelar lo que no se puede enumerar. Es cierre
+    por-espacio, no por-casos.
+  - Verificado con tres controles: quitando las 4 clases de C-1 del freeze las caza
+    exactamente a esas cuatro; una clase nueva emitida la caza; y un ensamblaje ensanchado a
+    `string` falla como no-derivable en vez de colarse.
 - **Gate `test:next-consumer`** — consumer Next.js App Router real (job propio en CI, no en
   `verify:unit`: instala Next y corre cuatro builds). Cierra `A-RSC-01`, que ninguna fixture de
   tipos podía cazar: `tsc` resuelve por `dist/index.d.ts` (97 exports) mientras el grafo RSC

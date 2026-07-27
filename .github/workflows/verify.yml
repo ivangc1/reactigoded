@@ -136,6 +136,18 @@ jobs:
         # concreto sin cerrar el espacio es lo que permitió la reincidencia.
         run: npm run test:public-api
 
+      - name: Gate inverso — emitido ⊆ freeze (F3)
+        # La otra dirección del freeze. El step de arriba caza el nombre
+        # congelado que DESAPARECE de dist (rename accidental); este caza el
+        # nombre que el DS EMITE y que nadie congeló. Es el hueco por el que
+        # pasaron las 4 clases de C-1, que llevaban años emitidas fuera del
+        # contrato y las encontró una auditoría en vez de CI.
+        #
+        # Deriva los nombres del AST de src con el checker de TS, no del CSS:
+        # el espacio CSS no es decidible (~1.800 clases de la capa utility sin
+        # predicado que las separe), el de emisión sí.
+        run: npm run test:emitted-classes
+
       - name: Publint gate (D1-P3)
         # Valida package.json exports + types resolution. Aceptamos
         # warnings actualmente (1 sobre types ESM en condición require);
