@@ -36,6 +36,24 @@ del release.
   claves publicadas de npm, y compara digest, `gitHead`, ref, commit y evento. Corre en el
   release y es post-hoc: se puede lanzar contra cualquier versión ya publicada.
 
+- **`ThemeToggle` rompía la hidratación siguiendo el patrón anti-flash del propio README**
+  (`SSR-01`). Leía `<html data-theme>` **durante** el render de hidratación, así que con un
+  script anti-flash que resolviera un tema distinto de `defaultTheme` producía o un mismatch
+  recuperable (React descarta el árbol del servidor y lo regenera) o —en producción— un
+  desync silencioso: el control decía "Dark" con la página ya en claro, no se autocorregía, y
+  el primer click cambiaba el tema **sin mover `aria-checked`**. Un `role="switch"` cuyo
+  estado programático no cambia al activarlo es además un fallo WCAG 4.1.2.
+  Ahora el DOM y el `localStorage` entran por `useSyncExternalStore` con snapshot de servidor
+  estable, y el effect **re-resuelve contra las fuentes vivas** en vez de escribir el valor
+  del render de hidratación. Esa segunda mitad es la que evita convertir el fix en una
+  regresión peor: sin ella se elimina el mismatch pero se sobrescribe el `data-theme` del
+  script anti-flash **y la preferencia guardada del usuario** — medido, un visitante con tema
+  claro entraba y salía con `"dark"` persistido.
+  El claim del README que prometía lo contrario queda corregido, y `ThemeToggle` entra en los
+  casos de hidratación de `__ssr__.test.tsx`, de los que estaba excluido con una premisa
+  escrita que era falsa. Los 3 casos nuevos fallan tanto con el bug original como con el fix
+  naive: es la diferencia entre un test que acompaña al fix y uno que lo defiende.
+
 ### Corrección de registro
 
 - La entrada de `beta.25` afirma que Chromatic quedó con **revisión visual humana obligatoria**
@@ -121,6 +139,12 @@ ahora porque el paquete tenía **0 consumidores en npm**; después de 1.0 costar
 - Clases `.ig-tooltip-color-*` → `.ig-tooltip-*` (el infijo `-color-` era dialecto local; la doc ya prometía la forma sin él).
 - Clase `.ig-navbar-brand` → `.ig-navbar-logo` y componente `NavbarBrand` → **`NavbarLogo`** (`brand` colisionaba con el eje de rol de color; el slot es el logo).
 - Clases `.ig-input-error`/`.ig-input-success` → `.ig-input-invalid`/`.ig-input-valid` y valores del prop `state` (`"invalid"`/`"valid"`), alineados con `aria-invalid`.
+  > **Modo de fallo si no migras y no usas TypeScript** (medido en el gate 1.0.0, `E32-F2`):
+  > el valor viejo **no cae a un error visible, cae a silencio**. Sin clase de estado, sin
+  > `aria-invalid` y sin warning en ningún canal — build, SSR y consola incluidos: el
+  > `<input>` queda idéntico a no pasar `state`. Aplica a `Input`, `Textarea` y
+  > `NativeSelect`. Greps de migración:
+  > `rg 'state="(error|success)"'` y `rg 'ig-input-(error|success)'`.
 
 Además, 4 correcciones de documentación de clases que **se documentaban pero no shippean**:
 `ig-btn-md`, `ig-timeline-dot-default`, `ig-step-interactive`, `ig-text-on-cinis`.

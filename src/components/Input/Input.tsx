@@ -17,7 +17,15 @@ export interface InputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   /** Tamaño del input. `md` no añade clase. */
   size?: InputSize | undefined;
-  /** Estado de validación visual. `error` y `success` aplican color y borde. */
+  /**
+   * Estado de validación visual. `invalid` y `valid` aplican color, borde y
+   * `aria-invalid`; `default` no añade clase.
+   *
+   * Si pasas un valor fuera de la unión desde JS sin tipos (por ejemplo los
+   * antiguos `"error"`/`"success"`), **no hay error visible en ningún canal**:
+   * no se aplica clase de estado, no se emite `aria-invalid` y no se avisa por
+   * consola — el input queda igual que si no pasaras `state`.
+   */
   state?: InputState | undefined;
   /**
    * IDs de elementos descriptivos (típicamente `Helper`/`ErrorText`) que se
