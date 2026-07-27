@@ -36,12 +36,40 @@ del release.
   claves publicadas de npm, y compara digest, `gitHead`, ref, commit y evento. Corre en el
   release y es post-hoc: se puede lanzar contra cualquier versión ya publicada.
 
+### Corrección de registro
+
+- La entrada de `beta.25` afirma que Chromatic quedó con **revisión visual humana obligatoria**
+  al quitarle `--auto-accept-changes=main` y `--exit-zero-on-changes` (`[H-02]`). Es falso, y
+  lo sigue siendo hoy: `--exit-once-uploaded` continúa ahí, y su semántica medida es salir con
+  0 en cuanto los snapshots se han subido — antes de que exista veredicto de comparación. El
+  check acredita el **upload**, no la revisión. Además la GitHub App de Chromatic no publica
+  ningún status en este repo (medido: `total_count=0` en los HEAD de los 3 PRs más recientes),
+  así que tampoco hay un rojo alternativo que bloquee. Un drift visual se mergea con todo
+  verde. Cerrarlo exige instalar la App y añadir su contexto al ruleset — acción manual
+  documentada en `chromatic.yml`.
+
 ### Cambiado
 
 - El **registro durable** del release pasa del cuerpo de la GitHub Release a un asset
   `release-record.json`. El cuerpo es a la vez notas para humanos y registro de máquina, así
   que se pisan en las dos direcciones: en `rc.1` una edición manual borró la tabla que el
   workflow había escrito. El asset se verifica además contra npm y contra la attestation.
+
+- **El freeze de API pública pasa a `336 clases + 13 hooks + 41 tokens Tier-2 + 8 data-attrs +
+  1 custom property de componente`** (desde `332 + 13 + 37 + 6 + —`). Todo lo que entra ya
+  shippeaba: se congela lo que estaba emitido y sin ancla, no se añade superficie nueva.
+  - Las **4 clases** que la semilla del freeze perdió: `ig-caption-bottom`, `ig-table-auto`,
+    `ig-skeleton-container`, `ig-table-scroll-region`. La semilla fue `prosa de CSSAPI.mdx ∩
+    dist`, y la doc documenta solo la mitad de cada par (`ig-caption-top` sí, `-bottom` no;
+    `ig-table-fixed` sí, `-auto` no), así que el freeze heredó la omisión de la doc. Tres
+    métodos independientes —derivación del tarball, render real desde exports públicos y
+    derivación AST sobre el ensamblaje JS— dan exactamente estas 4 y ninguna más.
+  - Los **4 tokens de theming** `--ig-space-unit` y `--ig-font-{base,heading,mono}`, que la doc
+    ya enseñaba a sobrescribir sin que nada los protegiera. `--ig-space-unit` gobierna 32
+    tokens derivados: su rename no daría ningún error, solo degradaría el spacing entero de la
+    app del consumer.
+  - Los **2 data-attrs** de portal `data-toast-container` y `data-tooltip-content`, que estaban
+    excluidos por silencio en vez de por declaración.
 
 - **`dist/components/Slot/` deja de viajar en el tarball.** Su barrel shippeaba con 3×TS2305:
   el doc-block del fichero termina en `@internal` y TS adhiere esa etiqueta solo al primer
@@ -52,6 +80,14 @@ del release.
 
 ### Añadido
 
+- **Categoría de freeze `componentCustomProperties`** — custom properties que el JS escribe
+  como estilo inline y el CSS lee con `var()`. `--ig-progress-percent` no cabía en
+  `tokensTier2` porque el predicado de esa categoría lee *declaraciones* de
+  `igoded-tokens.css` y esta no se declara en ningún CSS: meterla ahí habría hecho **fallar**
+  el gate. El predicado nuevo comprueba las dos mitades del contrato (la emite el JS ∧ la lee
+  el CSS), porque cualquiera de las dos ausencias rompe al consumer. Medido: es la única
+  custom property que el bundle emite desde JS, así que la categoría está completa por
+  medición y no por enumeración.
 - `sigstore` como **devDependency** (no viaja en el paquete), para verificar la firma de la
   attestation SLSA. Se fija en la línea `4.x` a propósito: `5.x` exige Node `^22.22.2`, por
   encima del floor del repo. Y `yaml`, que ya se usaba de forma transitiva, pasa a estar

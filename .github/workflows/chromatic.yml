@@ -31,10 +31,36 @@ jobs:
       - name: Run Chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        # H-02 (rc1): visual review is gated. Removed --exit-zero-on-changes
-        # (so a snapshot drift now FAILS the job) and --auto-accept-changes=main
-        # (every change to main has to be approved by a human reviewer in
-        # the Chromatic UI). --exit-once-uploaded stays so the job does not
-        # block waiting for review — the gating is the green/red on the PR
-        # and the manual approval in chromatic.com.
+        # ⚠️ ESTE JOB NO BLOQUEA UN DRIFT VISUAL, Y EL COMENTARIO ANTERIOR DECÍA
+        # QUE SÍ (A-CI-01, gate 1.0.0).
+        #
+        # Decía: «Removed --exit-zero-on-changes (so a snapshot drift now FAILS
+        # the job) … --exit-once-uploaded stays so the job does not block
+        # waiting for review — the gating is the green/red on the PR». Las dos
+        # mitades no se sostienen a la vez. La semántica medida de la CLI
+        # (18.0.1) es literal: «--exit-once-uploaded [branch]  Exit with 0 once
+        # the built version has been published to Chromatic». Es decir, sale 0
+        # ANTES de que existan resultados de comparación: acredita el UPLOAD, no
+        # la revisión. Quitar `--exit-zero-on-changes` no cambia nada mientras
+        # este flag esté, porque el proceso ya ha salido cuando llegaría el
+        # veredicto.
+        #
+        # Y el «green/red on the PR» no existe hoy: la GitHub App de Chromatic
+        # NO publica ningún status en este repo — medido, `total_count=0` en los
+        # commits HEAD de los 3 PRs más recientes, y los 6 contextos requeridos
+        # del ruleset son todos de github-actions. O sea: hoy un drift visual se
+        # mergea con todo verde.
+        #
+        # ⚠️ REQUISITO MANUAL, UNA VEZ (lo cierra el dueño, no este workflow):
+        #   1. Instalar/autorizar la GitHub App de Chromatic sobre
+        #      `ivangc1/reactigoded` — en chromatic.com (Manage → Integrations)
+        #      y en github.com/settings/installations.
+        #   2. Añadir su contexto (`UI Tests`, y `UI Review` si se usa) a
+        #      `required_status_checks` del ruleset 16867823.
+        # Hasta que eso esté, este job solo acredita que los snapshots subieron.
+        #
+        # Por qué la App y no simplemente quitar el flag: el status de la App se
+        # actualiza EN SITIO al aprobar en Chromatic, mientras que un job de
+        # Actions ya terminado no se repinta — con el flag quitado habría que
+        # re-lanzar el job a mano después de cada aprobación.
         run: npx chromatic --exit-once-uploaded --only-changed

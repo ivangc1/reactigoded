@@ -1,5 +1,5 @@
 {
-  "_doc": "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, classHooks, data-attributes, tokens Tier-2 semánticos). classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 12 ig-tooltip-place-* de Tooltip (union TooltipPlacement: 4 sides × {base,-start,-end}). LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO común se emita; los 12 miembros SON contrato, pero los guardan la union de tipos Placement + el test de Tooltip, no la automatización. POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. LÍMITE data-attrs: el gate verifica PRESENCIA en el bundle, no EMISIÓN (un attr solo mencionado en un querySelector pasaría) — los 6 congelados son load-bearing (borrar su emisión rompe tests de componente: posicionamiento, animaciones, tema, querySelector), así que los tests son el guardián real de la emisión. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). El contrato estable es EXACTAMENTE lo aquí listado. FUERA DEL FREEZE: la capa utility (ig-bg-*, ig-text-*, ig-border-*, ig-font-*, ig-flex, ig-gap-*, spacing, ig-gradient-*, ig-glow-*, ig-ring-*, ig-fill-*, ig-stroke-*, ig-filter-* y sus variantes de estado hover:/focus:/... del state.css) es opt-in, shippeada y documentada, pero EXPERIMENTAL: su vocabulario puede evolucionar SIN major hasta que se declare estable en el CHANGELOG. Queda fuera por DECLARACIÓN explícita (CSSAPI.mdx + DesignTokens.mdx), no por silencio. Procedencia: clases raspadas de la PROSA de CSSAPI.mdx (menos code-blocks, prefijos de estado, menciones de token y 'Notas finales'); tokens Tier-2 derivados de las reglas de DesignTokens.mdx; todo ∩ dist; curado y RATIFICADO nombre a nombre.",
+  "_doc": "CONTRATO API PÚBLICA ESTABLE 1.0. Congela los NOMBRES públicos de COMPONENTE (clases CSS, classHooks, data-attributes, tokens Tier-2 semánticos). classHooks = clases que el DS EMITE por JS SIN regla CSS (existen solo para targeting): ig-step-interactive (literal, verificado entero) + los 12 ig-tooltip-place-* de Tooltip (union TooltipPlacement: 4 sides × {base,-start,-end}). LÍMITE de los dinámicos: ig-tooltip-place-* se ENSAMBLA en runtime (indirección, ADR §141), así que el gate solo verifica que el PREFIJO común se emita; los 12 miembros SON contrato, pero los guardan la union de tipos Placement + el test de Tooltip, no la automatización. POLÍTICA (para humanos): editar este fichero = breaking change → exige bump MAJOR + entrada en CHANGELOG. ALCANCE AUTOMATIZADO (check-public-api-names.mjs): SOLO integridad — verifica que todo nombre de aquí existe en dist, cazando el rename ACCIDENTAL que olvida el contrato; NO caza el rename DELIBERADO (así es como se renombra: a propósito, con major) ni debe. LÍMITE data-attrs: el gate verifica PRESENCIA en el bundle, no EMISIÓN (un attr solo mencionado en un querySelector pasaría) — los 6 congelados son load-bearing (borrar su emisión rompe tests de componente: posicionamiento, animaciones, tema, querySelector), así que los tests son el guardián real de la emisión. El major y el CHANGELOG los respaldan el review del PR y el release-gate (ver #15). El contrato estable es EXACTAMENTE lo aquí listado. FUERA DEL FREEZE: la capa utility (ig-bg-*, ig-text-*, ig-border-*, ig-font-*, ig-flex, ig-gap-*, spacing, ig-gradient-*, ig-glow-*, ig-ring-*, ig-fill-*, ig-stroke-*, ig-filter-* y sus variantes de estado hover:/focus:/... del state.css) es opt-in, shippeada y documentada, pero EXPERIMENTAL: su vocabulario puede evolucionar SIN major hasta que se declare estable en el CHANGELOG. Queda fuera por DECLARACIÓN explícita (CSSAPI.mdx + DesignTokens.mdx), no por silencio. Procedencia: clases raspadas de la PROSA de CSSAPI.mdx (menos code-blocks, prefijos de estado, menciones de token y 'Notas finales'); tokens Tier-2 derivados de las reglas de DesignTokens.mdx; todo ∩ dist; curado y RATIFICADO nombre a nombre. —— AMPLIACIÓN gate 1.0.0 (auditoría cruzada A+B sobre rc.1). (1) C-1: entran 4 clases que la semilla perdió porque CSSAPI.mdx documenta solo la mitad de cada par (ig-caption-top pero no -bottom, ig-table-fixed pero no -auto): ig-caption-bottom, ig-table-auto, ig-skeleton-container, ig-table-scroll-region. Se hallaron por TRES métodos independientes (derivación del tarball, render real desde exports públicos, y derivación AST sobre el ensamblaje JS) con el mismo resultado exacto, lo que dice que el hueco era de la SEMILLA (prosa ∩ dist), no del predicado. (2) CATEGORÍA NUEVA componentCustomProperties: custom properties que el JS ESCRIBE como estilo inline y el CSS LEE con var(). No caben en tokensTier2 porque ese predicado lee DECLARACIONES de igoded-tokens.css y estas no se declaran en ningún CSS — por eso --ig-progress-percent quedó fuera pese a estar documentada como patrón de consumo en CSSAPI.mdx y a que el ADR H-03 registra que allowlists CSP pueden depender de sus 101 valores cuantizados. El gate comprueba las DOS mitades (emitida por JS ∧ leída por CSS): cualquiera de las dos ausencias es el breaking. Medido: --ig-progress-percent es la ÚNICA custom property que el bundle emite desde JS, así que la categoría está completa por medición, no por enumeración. (3) DECISIÓN F4, tokens de theming CONGELADOS: --ig-space-unit y --ig-font-{base,heading,mono} entran en tokensTier2 (37→41). Razón: la doc ENSEÑA a sobrescribirlos (Spacing.mdx: \"escala TODO tu app\") y --ig-space-unit gobierna 32 tokens derivados, así que su rename sería silencioso — una custom property que nadie consume no da ningún error, solo degrada el spacing entero del consumer. (4) DECISIÓN F4, data-attrs CONGELADOS: data-toast-container y data-tooltip-content entran en dataAttributes (6→8). Son hooks de querySelector interno de los portales de Toast/Tooltip; congelarlos ata esos nombres a la implementación, y se acepta ese precio a cambio de proteger a quien los use como selector de CSS o de test.",
   "version": 1,
   "classes": [
     "ig-accordion",
@@ -83,6 +83,7 @@
     "ig-btn-warning",
     "ig-btn-xl",
     "ig-btn-xs",
+    "ig-caption-bottom",
     "ig-caption-top",
     "ig-card",
     "ig-card-body",
@@ -236,6 +237,7 @@
     "ig-skeleton-avatar-lg",
     "ig-skeleton-button",
     "ig-skeleton-card",
+    "ig-skeleton-container",
     "ig-skeleton-image",
     "ig-skeleton-text",
     "ig-skeleton-title",
@@ -274,10 +276,12 @@
     "ig-switch-track",
     "ig-switch-warning",
     "ig-table",
+    "ig-table-auto",
     "ig-table-bordered",
     "ig-table-compact",
     "ig-table-fixed",
     "ig-table-hover",
+    "ig-table-scroll-region",
     "ig-table-striped",
     "ig-tabs",
     "ig-tabs-brand",
@@ -365,7 +369,9 @@
     "data-side",
     "data-state",
     "data-step-index",
-    "data-theme"
+    "data-theme",
+    "data-toast-container",
+    "data-tooltip-content"
   ],
   "tokensTier2": [
     "--ig-axis",
@@ -380,12 +386,16 @@
     "--ig-brand",
     "--ig-cinis",
     "--ig-danger",
+    "--ig-font-base",
+    "--ig-font-heading",
+    "--ig-font-mono",
     "--ig-info",
     "--ig-kobalium",
     "--ig-laurus",
     "--ig-malum",
     "--ig-rutilus",
     "--ig-secondary",
+    "--ig-space-unit",
     "--ig-success",
     "--ig-text-body",
     "--ig-text-disabled",
@@ -405,5 +415,8 @@
     "--ig-text-on-warning",
     "--ig-vitreus",
     "--ig-warning"
+  ],
+  "componentCustomProperties": [
+    "--ig-progress-percent"
   ]
 }

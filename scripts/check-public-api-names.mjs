@@ -93,6 +93,26 @@ for (const d of hooks.dynamic ?? []) {
     missing.push(`hook  ${d.prefix}* (prefijo no emitido en JS; cubre ${String((d.members ?? []).length)} miembros)`);
   }
 }
+// componentCustomProperties: custom properties que el JS ESCRIBE (inline style) y
+// el CSS LEE con var(). No caben en `tokensTier2` porque el predicado de esa
+// categoría lee DECLARACIONES de igoded-tokens.css, y estas no se declaran en
+// ningún CSS — por eso `--ig-progress-percent` quedó fuera del freeze pese a
+// estar documentada como patrón de consumo público (CSSAPI.mdx) y a que un ADR
+// registra que allowlists CSP pueden depender de sus valores.
+//
+// Se comprueban las DOS mitades porque el contrato son las dos: si el JS deja de
+// emitirla, el consumer que la lee se queda sin valor; si el CSS deja de leerla,
+// el nombre ya no gobierna nada. Cualquiera de las dos ausencias es el breaking.
+const cssAll = [
+  "dist/styles/igoded-tokens.css",
+  "dist/styles/igoded-components.css",
+  "dist/styles/igoded-base.css",
+  "dist/styles/igoded-design.css",
+].filter(has).map(rd).join("\n");
+for (const p of json.componentCustomProperties ?? []) {
+  if (!bundlesText.includes(p)) missing.push(`custom-prop  ${p} (no emitida por JS)`);
+  else if (!cssAll.includes(`var(${p}`)) missing.push(`custom-prop  ${p} (emitida, pero ya no la lee ningún CSS)`);
+}
 
 if (missing.length > 0) {
   console.error(
@@ -114,6 +134,7 @@ const hookCount = (hooks.literal?.length ?? 0) + (hooks.dynamic ?? []).reduce((n
 console.log(
   `✓ public-api-names: ${String(json.classes.length)} clases + ${String(hookCount)} hooks + ` +
     `${String(json.tokensTier2.length)} tokens + ` +
-    `${String(json.dataAttributes.length)} data-attrs — todos presentes en dist.`,
+    `${String(json.dataAttributes.length)} data-attrs + ` +
+    `${String((json.componentCustomProperties ?? []).length)} custom-props — todos presentes en dist.`,
 );
 process.exit(0);
