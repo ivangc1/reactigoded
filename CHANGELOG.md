@@ -7,7 +7,47 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-_Sin cambios desde `1.0.0-rc.1`._
+Cierre del gate `1.0.0` estable (auditoría cruzada A+B sobre `rc.1`: 28 hallazgos, 4 HIGH).
+Nada de esto cambia la API pública ni el contenido del paquete: es la **cadena de evidencia**
+del release.
+
+### Corregido — HIGH
+
+- **La provenance firmaba el commit equivocado** (`A-REL-01`). En `rc.1` la attestation SLSA
+  quedó firmando `refs/heads/main` + el commit de main, mientras el tarball, el `gitHead` y
+  el tag eran `318e159`. Causa: npm deriva la provenance de las variables del **evento** de
+  Actions, no del `actions/checkout` — y aquel publish salió por `workflow_dispatch` desde
+  main con checkout del tag. El tarball era correcto; la evidencia apuntaba a otro árbol, que
+  es peor que no tenerla porque parece correcta.
+  - `release.yml` gana un **guard de evento pre-publish**: solo un `push` de tag cuyo
+    `GITHUB_REF`/`GITHUB_SHA` coincidan con el tag puede publicar. Es pre-publish porque una
+    versión de npm es inmutable: después solo se puede negar el registro, no arreglar la firma.
+  - `workflow_dispatch` **ya no publica**. Queda reducido a re-verificar la evidencia de algo
+    ya publicado y regenerar su registro. Si el workflow del tag está roto y el publish nunca
+    ocurrió, la salida es un tag nuevo — cuesta un número de versión, y ese es el precio de
+    que la evidencia sea cierta.
+- **El guard de provenance no comprobaba lo que decía comprobar.** Vivía embebido en el
+  workflow, seleccionaba la attestation **por índice** (`attestations[0]`, que es siempre el
+  predicado `npm-publish`, no el SLSA), y decodificaba el sobre DSSE **sin verificar la
+  firma** — o sea solo probaba «el registro me devolvió este JSON». Además solo existía en la
+  rama de re-run, así que nunca llegó a ejecutarse sobre una publicación real.
+  Sustituido por `scripts/verify-provenance.mjs`, que selecciona por `predicateType`
+  (0 y >1 son ambos fallo), verifica la firma SLSA contra Fulcio y la del registro contra las
+  claves publicadas de npm, y compara digest, `gitHead`, ref, commit y evento. Corre en el
+  release y es post-hoc: se puede lanzar contra cualquier versión ya publicada.
+
+### Cambiado
+
+- El **registro durable** del release pasa del cuerpo de la GitHub Release a un asset
+  `release-record.json`. El cuerpo es a la vez notas para humanos y registro de máquina, así
+  que se pisan en las dos direcciones: en `rc.1` una edición manual borró la tabla que el
+  workflow había escrito. El asset se verifica además contra npm y contra la attestation.
+
+### Añadido
+
+- `sigstore` como **devDependency** (no viaja en el paquete), para verificar la firma de la
+  attestation SLSA. Se fija en la línea `4.x` a propósito: `5.x` exige Node `^22.22.2`, por
+  encima del floor del repo.
 
 ## [1.0.0-rc.1] — 2026-07-19 · **API pública congelada**
 

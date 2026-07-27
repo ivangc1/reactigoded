@@ -1,17 +1,28 @@
 {
+  "_id": "reactigoded@1.0.0-rc.1",
+  "_rev": "2-2ae43462c53d6779cd3450e916b5f565",
   "name": "reactigoded",
-  "version": "1.0.0-rc.1",
-  "description": "igoded design system — componentes React + CSS utility-first state-driven",
-  "license": "MIT",
-  "author": "ivangc1",
-  "homepage": "https://github.com/ivangc1/reactigoded#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ivangc1/reactigoded.git"
+  "dist-tags": {
+    "beta": "1.0.0-beta.26",
+    "latest": "1.0.0-beta.26",
+    "rc": "1.0.0-rc.1"
+  },
+  "versions": [
+    "1.0.0-beta.26",
+    "1.0.0-rc.1"
+  ],
+  "time": {
+    "created": "2026-07-18T22:09:23.717Z",
+    "modified": "2026-07-19T03:46:42.541Z",
+    "1.0.0-beta.26": "2026-07-18T22:09:23.952Z",
+    "1.0.0-rc.1": "2026-07-19T03:46:42.234Z"
   },
   "bugs": {
     "url": "https://github.com/ivangc1/reactigoded/issues"
   },
+  "author": "ivangc1",
+  "license": "MIT",
+  "homepage": "https://github.com/ivangc1/reactigoded#readme",
   "keywords": [
     "react",
     "react-19",
@@ -32,6 +43,17 @@
     "utility-first",
     "igoded"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivangc1/reactigoded.git"
+  },
+  "description": "igoded design system — componentes React + CSS utility-first state-driven",
+  "maintainers": [
+    "igoded <ivangc1smr2010@gmail.com>"
+  ],
+  "readmeFilename": "README.md",
+  "_contentLength": 21775,
+  "version": "1.0.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -69,12 +91,6 @@
     "./styles/all.css": "./dist/styles/index.css",
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
   "browserslist": [
     "last 2 chrome versions",
     "last 2 firefox versions",
@@ -214,7 +230,6 @@
       "gzip": true
     }
   ],
-  "_comment_overrides": "eslint-plugin-jest-dom (peer eslint <=^9) y eslint-plugin-jsx-a11y (peer <=^9) aun no publican version con peer ^10: jest-dom PR #416 esta merged en main pero SIN release (latest 5.5.0), jsx-a11y issue #1075 sigue abierto. El override quirurgico $eslint referencia el spec del eslint raiz (auto-sync al bumpear) y satisface SOLO ese edge del peer, sin el --legacy-peer-deps global. BORRAR el override de cada plugin cuando publique un release con peer ^10 (check vivo: npm view <plugin>@latest peerDependencies.eslint).",
   "overrides": {
     "eslint-plugin-jest-dom": {
       "eslint": "$eslint"
@@ -270,7 +285,6 @@
     "publint": "^0.3.21",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "sigstore": "^4.1.1",
     "size-limit": "^12.1.0",
     "storybook": "^10.5.2",
     "tsc-alias": "^1.9.1",
@@ -279,5 +293,34 @@
     "vite": "^8.1.5",
     "vite-plugin-dts": "^5.0.3",
     "vitest": "^4.1.7"
-  }
+  },
+  "gitHead": "318e159e42492f6d3da8cd4c26e7aecc08a0f148",
+  "_nodeVersion": "24.18.0",
+  "_npmVersion": "11.16.0",
+  "dist": {
+    "integrity": "sha512-G1YnBnkfgg+Eea3+lnDD2YZRT+Ry2RO5FHQeIk3eOotlJldqccvpcocbG/EcaVpT6tkADLwJqPBNUJAmr8ot8w==",
+    "shasum": "e64ff6be536550ae49c9b199c89cbdf34df8ba66",
+    "tarball": "https://registry.npmjs.org/reactigoded/-/reactigoded-1.0.0-rc.1.tgz",
+    "fileCount": 177,
+    "unpackedSize": 13710915,
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/reactigoded@1.0.0-rc.1",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "signatures": [
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEUCIQDvf/twMh9IY9m18dlmgy44MKupFUwqDigP+Do/nqvXAwIgPk+oMaqSbT4+cskDnvjQ6qVrO6SdGT1U/3JK0tNIijw="
+      }
+    ]
+  },
+  "_npmUser": "GitHub Actions <npm-oidc-no-reply@github.com>",
+  "directories": {},
+  "_npmOperationalInternal": {
+    "host": "s3://npm-registry-packages-npm-production",
+    "tmp": "tmp/reactigoded_1.0.0-rc.1_1784432802061_0.48337905685225446"
+  },
+  "_hasShrinkwrap": false
 }

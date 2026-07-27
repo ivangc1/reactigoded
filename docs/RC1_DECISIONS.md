@@ -146,7 +146,26 @@ sin esfuerzo extra:
 |---|---|---|
 | **El comando exacto** | El propio `release.yml`, en el commit tageado | Permanente: es código versionado, no una línea de log |
 | **Origen del artefacto** (repo, commit SHA, workflow) | Attestation de **provenance**, que trusted publishing firma sola | La retiene npm/Sigstore, independiente de Actions |
-| **dist-tag aplicado** | Cuerpo de la GitHub Release, escrito por el workflow | Sobrevive a la retención de Actions |
+| **dist-tag aplicado** | Asset `release-record.json` de la GitHub Release | Sobrevive a la retención de Actions y a una edición del cuerpo |
+
+> **Corrección de registro (gate 1.0.0, hallazgo `A-REL-01`).** Esta tabla se escribió como
+> argumento *a priori* del release automatizado y dos de sus tres filas resultaron falsas al
+> medirlas sobre `rc.1`:
+>
+> - La fila de **origen del artefacto** describía lo que la provenance *debería* decir. Lo que
+>   dijo fue `refs/heads/main` + el commit de main, porque npm deriva la attestation de las
+>   variables del **evento** de Actions y aquel publish salió por `workflow_dispatch`. Quien
+>   siguiera la provenance auditaba otro árbol. Cerrado con el guard de evento de `release.yml`
+>   (solo un push de tag publica) y con `scripts/verify-provenance.mjs`, que lo comprueba en
+>   cada release en vez de darlo por hecho.
+> - La fila del **dist-tag** decía «cuerpo de la GitHub Release». El cuerpo es a la vez notas
+>   para humanos y registro de máquina: una edición manual borró la tabla que el workflow había
+>   escrito, así que el registro «duradero» duró horas. Ahora va como asset
+>   `release-record.json`, que ninguna edición del texto toca, y se verifica contra npm y contra
+>   la attestation al final del release.
+>
+> La lección no es que la automatización no sirva: el comando *sí* quedó versionado. Es que un
+> argumento sobre durabilidad hay que **medirlo sobre el artefacto**, no derivarlo del diseño.
 
 Ese es el argumento real para automatizar el release, más allá de la comodidad:
 **convierte el comando en un artefacto versionado** en vez de en algo que
