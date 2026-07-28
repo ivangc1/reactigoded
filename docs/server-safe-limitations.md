@@ -125,8 +125,15 @@ subsystem the gate renounces. Never hides anything executable.
 ## 5. Deferred — solvable, tracked for a later release
 
 - **Guarded `process.env` (rc.2).** Denied (it `ReferenceError`s on the strict Edge baseline). The guarded
-  form `if (typeof process !== "undefined") process.env.X` is safe but currently flagged. *Workaround: read
-  env via `import.meta.env`, or annotate the guarded read.*
+  form `if (typeof process !== "undefined") process.env.X` is safe but currently flagged. *Workaround:
+  annotate the guarded read.*
+
+  > **Corrección (gate 1.0.0, `PR-2`).** El workaround decía además «read env via `import.meta.env`». Eso
+  > no es lectura de entorno **para un consumer de esta librería**: Vite en lib-mode **hornea**
+  > `import.meta.env` en tiempo de build, con los valores del build del DS, no los del consumer. Medido
+  > sobre el artefacto: `import.meta.env` aparece **0 veces** en `dist/index.js`, frente a 21 guards
+  > `import.meta.env.DEV` en el source. O sea que dentro del DS sirve para podar código en build, y para
+  > leer el entorno del consumer no sirve en absoluto. Se quita del workaround.
 - **Systematic Edge-global derivation (#190).** `SAFE_GLOBALS` is derived from Node ∪ ES builtins minus the
   Vercel-Edge-missing set, with `SharedArrayBuffer` additionally removed (Cloudflare disables it — Spectre).
   A fully systematic `{workerd ∩ Deno ∩ Vercel-Edge}` intersection (and the `Atomics` / high-resolution-timer

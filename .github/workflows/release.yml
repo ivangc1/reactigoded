@@ -163,16 +163,16 @@ jobs:
           echo "evento push sobre refs/tags/$REL_TAG @ $TAG_COMMIT ✓"
 
       - name: Comprobar que el README cita la versión que se publica
-        # El README documenta la version publicada en su seccion de Instalacion.
-        # Es el ULTIMO sitio con la version hardcodeada (el banner se desduplico
-        # en #144), asi que deriva en cada bump si nadie se acuerda.
-        run: |
-          PKG="$(node -p "require('./package.json').version")"
-          if ! grep -qF "$PKG" README.md; then
-            echo "::error::README.md no menciona la versión $PKG. Actualiza la sección de Instalación en el mismo commit del bump."
-            exit 1
-          fi
-          echo "README cita $PKG ✓"
+        # Era un `grep -qF "$PKG" README.md`, o sea un substring match sobre el
+        # fichero entero. Con PKG=1.0.0 eso matchea dentro de `1.0.0-rc.1` y
+        # dentro de un rango `^1.0.0`: la ESTABLE podía publicarse con el README
+        # entero hablando de un release candidate y el guard daba verde
+        # (A-DOC-01). Medido: con package.json en 1.0.0 y el README de rc, el
+        # grep pasa y este script falla con las dos causas.
+        #
+        # Ahora compara contra un marcador estructurado y, si la versión no es
+        # prerelease, exige que el README no contenga vocabulario de prerelease.
+        run: npm run test:readme-version
 
       - name: Derivar dist-tag desde la versión
         id: disttag

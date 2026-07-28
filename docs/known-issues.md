@@ -15,11 +15,22 @@ NO defectos del `dist`):
 - Entrypoints JS (`reactigoded`, `/server-safe`, `/cn`): `node16 (from
   ESM)` 🟢 + `bundler` 🟢 → los consumers modernos resuelven bien.
 - `node16 (from CJS)`: ⚠️ ESM dynamic-import-only — inherente a
-  `"type":"module"` (un `require` CJS debe pasar a `import()` dinámico).
+  `"type":"module"`. **El veredicto de attw es sobre los TIPOS y es correcto**;
+  el paréntesis que había aquí («un `require` CJS debe pasar a `import()`
+  dinámico») era falso en runtime y se ha quitado: ver la corrección de abajo.
 - `node10`: 💀 — resolución legacy sin soporte de `exports`; irrelevante
-  (engine floor `>=22.12`).
+  (engine floor `>=22.13`).
 - Entrypoints `styles/*.css`: 💀 — los bundlers los resuelven sin problema, pero
   **no es un falso positivo de attw**. Ver la corrección justo debajo.
+
+> **Corrección de registro (gate 1.0.0, `PR-4`).** El paréntesis de la fila `node16 (from CJS)`
+> decía que un `require` desde CJS «debe pasar a `import()` dinámico». En runtime es falso, y
+> encima el propio CHANGELOG dice lo contrario en su entrada de D1-P4. Medido sobre el `dist`:
+> `require("reactigoded")` devuelve los **97 exports** tanto en **22.12** (el floor anterior)
+> como en 24 — Node soporta `require()` síncrono de ESM desde 22.12, con un warning de feature
+> experimental. Lo que attw dice sigue siendo cierto **para los tipos**: en la resolución
+> `node16 from CJS` los `.d.ts` no se ven como CJS. Son dos cosas distintas y la línea las
+> mezclaba en una.
 
 > **Corrección de registro (gate 1.0.0, `A-CSS-01`).** Esta línea decía «falso positivo de attw
 > (no entiende exports CSS sin tipos)». Lo primero es cierto, lo segundo no: el hueco es real y

@@ -66,7 +66,63 @@ del release.
   persistencia sigue sin converger con `useTheme`. Cambiar ese orden es un breaking que exige
   decidir antes qué significa "preferencia del usuario"; no se hace en un fix de hidratación.
 
+### Migración desde `1.0.0-beta.26` — lee esto antes, hay DOS beta.26
+
+El identificador `1.0.0-beta.26` apunta a **dos árboles distintos e incompatibles**, así que una
+sola guía de migración describiría mal a la mitad de la gente. Medido:
+
+| De dónde lo instalaste | Árbol real | ¿Cruza los renames de rc.1? |
+|---|---|---|
+| `npm install reactigoded@1.0.0-beta.26` | `95c374e` | **No.** Ese tarball ya venía con los nombres nuevos |
+| tag git `v1.0.0-beta.26` | `d3f2328` | **Sí.** Ese árbol es anterior a los renames |
+
+Los dos commits distan **24 commits**. El publish de npm salió de un árbol de `main` posterior al
+tag, a mano y antes del workflow de release — por eso `gitHead` en el registro dice `95c374e` y no
+el commit del tag.
+
+**Si vienes de npm**: no tienes que hacer nada por los renames; ya los tenías.
+
+**Si vienes del tag git**, cruzas los renames de rc.1 y hay una trampa: los imports y las props
+rompen ruidosamente (TypeScript te lo dice), pero **las clases CSS desaparecen en silencio** — tu
+hoja de estilos sigue siendo válida, simplemente deja de aplicar. Son estas 9:
+
+```
+ig-input-error          → ig-input-invalid
+ig-input-success        → ig-input-valid
+ig-navbar-brand         → ig-navbar-logo
+ig-tooltip-color-brand      → ig-tooltip-brand
+ig-tooltip-color-danger     → ig-tooltip-danger
+ig-tooltip-color-info       → ig-tooltip-info
+ig-tooltip-color-secondary  → ig-tooltip-secondary
+ig-tooltip-color-success    → ig-tooltip-success
+ig-tooltip-color-warning    → ig-tooltip-warning
+```
+
+Grep de migración, pegable tal cual:
+
+```bash
+rg "ig-input-(error|success)|ig-navbar-brand|ig-tooltip-color-"
+rg "state=\"(error|success)\""
+```
 ### Corrección de registro
+
+- La entrada **`[1.0.0-beta.26]`** lleva fecha **2026-05-29**, que es la del tag. El publish real a
+  npm fue el **2026-07-18**, siete semanas después y desde otro árbol (`95c374e`, no el commit del
+  tag). La entrada describe lo que se tageó, no lo que se publicó.
+- La misma entrada atribuye a `rc.1` los renames BREAKING. En npm **ya habían shippeado dentro de
+  beta.26**: el tarball publicado sale de `95c374e`, que es post-rename. Para quien instaló de npm,
+  el salto `beta.26 → rc.1` es de **0 cambios** — los dos publishes tienen el `dist/` byte a byte.
+- La descripción de la capa utility la sitúa en `state.css`, y sus tres clases de ejemplo
+  (`ig-flex`, `ig-gap-*`, `ig-bg-*`) están en `igoded-components.css` (`E31-F5`). La capa utility
+  se reparte entre los dos ficheros; decir «la capa utility de state.css» describe mal dónde vive.
+- El header de `server-safe.d.ts` decía que cada componente del subset «garantiza» las 4
+  propiedades, y citaba un script que **no viaja en el tarball** (`E33-F1`). Un consumer no puede
+  ejecutar la comprobación que se le ofrece como aval. Reescrito: dice qué verifica el gate del
+  repo, y que su alcance son sus fronteras declaradas, no una garantía absoluta.
+- El workaround de `process.env` en `server-safe-limitations.md` ofrecía «leer el entorno vía
+  `import.meta.env`» (`PR-2`). Para un consumer eso no lee nada: Vite lo **hornea** en build con los
+  valores del build del DS. Medido — `import.meta.env` aparece **0 veces** en `dist/index.js`,
+  frente a 21 guards en el source.
 
 - La entrada de `beta.25` afirma que Chromatic quedó con **revisión visual humana obligatoria**
   al quitarle `--auto-accept-changes=main` y `--exit-zero-on-changes` (`[H-02]`). Es falso, y
@@ -86,6 +142,15 @@ del release.
     requerido clavado en `pending` deja todos los PRs sin poder mergearse.
 
 ### Cambiado
+
+- **El engine floor sube a `>=22.13.0`** (`C-5`, decisión de floor). Aplica el principio ya
+  ratificado en este mismo CHANGELOG —«floor alineado al peor caso del ecosistema»— con el tooling
+  de hoy: con 22.12, `pnpm` ≥11 rechaza el install (exige ≥22.13) y `npm ci --engine-strict` falla
+  con 10 `EBADENGINE` de la familia ESLint 10. Excluye una única release, **22.12.0**, que es la
+  primera de su línea. Subirlo después de 1.0.0 costaría un MAJOR; por eso va ahora.
+  Matiz medido y anotado: ESLint 10.7 **funciona** en 22.12 pese a declararse fuera de rango, así
+  que la celda CI de 22.12 pasaba **por suerte, no por contrato** — un patch podía romperla sin
+  aviso. La matriz de CI pasa a 22.13.
 
 - El **registro durable** del release pasa del cuerpo de la GitHub Release a un asset
   `release-record.json`. El cuerpo es a la vez notas para humanos y registro de máquina, así

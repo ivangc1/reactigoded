@@ -20,6 +20,8 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 
 ## Instalación
 
+<!-- readme-version: 1.0.0-rc.1 -->
+
 > **Release candidate `1.0.0-rc.1`** — la API pública está **congelada**
 > (§5.13, protegida por gate): cambiarla exige un bump MAJOR.
 
@@ -451,6 +453,41 @@ en [`docs/decisions/D11-hooks-disposition.md`](docs/decisions/D11-hooks-disposit
   `role="alertdialog"` + `closeOnBackdrop=false` por defecto (D8).
 - `Tooltip` inyecta `aria-describedby` en el child y un `<span role="tooltip">`
   sr-only para lectores de pantalla.
+
+### React Server Components: 44 de los 97 exports
+
+Si tu app usa **Server Components** (Next.js App Router, Astro server islands, Remix), esto es lo
+primero que necesitas saber, y hasta 1.0.0 no estaba escrito en ninguna parte.
+
+El paquete declara la condición `react-server` en su `exports`. Cuando el bundler resuelve un
+import **desde un Server Component**, no te da el barrel completo: te da el subconjunto
+server-safe. Son **44 exports de los 97**. Los otros 53 —`Dialog`, `Menu`, `Tooltip`, `Toast`,
+`Accordion`, `Tabs`, `Switch`, `ThemeToggle`…— no existen en ese grafo.
+
+```tsx
+// app/page.tsx — Server Component
+import { Button, Card, Badge } from "reactigoded";   // ✅ están en el subset
+
+// app/page.tsx — Server Component
+import { Accordion } from "reactigoded";             // ❌ el build falla
+```
+
+**La trampa está en que `tsc` no te avisa.** El typecheck resuelve los tipos por
+`dist/index.d.ts`, donde están los 97; el build resuelve el runtime por la condición
+`react-server`, donde hay 44. Verde en tu editor y en `npm run typecheck`, rojo al construir —
+con Webpack y con Turbopack por igual. Lo cubre un job de CI de este repo con control negativo,
+justamente porque una fixture de tipos no puede verlo.
+
+La salida es la de siempre en RSC: marca el componente que necesita interactividad con
+`"use client"`, y ahí tienes los 97.
+
+```tsx
+"use client";
+import { Accordion } from "reactigoded";             // ✅
+```
+
+Si prefieres ser explícito, `reactigoded/server-safe` importa el subset directamente desde
+cualquier contexto.
 
 ### SSR / hydration
 
