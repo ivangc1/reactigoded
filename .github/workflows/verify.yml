@@ -148,6 +148,13 @@ jobs:
         # predicado que las separe), el de emisión sí.
         run: npm run test:emitted-classes
 
+      - name: Inventario nominal de exports (F2)
+        # Congela los NOMBRES de export por entry, separando valores de tipos.
+        # Las fixtures de consumer no sirven de ancla: congelan lo que usan, no
+        # la superficie. Medido — quitar `export type { NavbarLogoProps }` deja
+        # las dos fixtures en verde mientras un consumer real rompe con TS2724.
+        run: npm run test:public-api-exports
+
       - name: Publint gate (D1-P3)
         # Valida package.json exports + types resolution. Aceptamos
         # warnings actualmente (1 sobre types ESM en condición require);

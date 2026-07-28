@@ -145,6 +145,22 @@ del release.
     (`--ig-gradient-{from,via,to}`, `--ig-snap-strictness`, `--ig-ring-offset-{width,color}`).
     Un sembrador que mira un solo fichero hereda su recorte — la misma causa raíz que C-1,
     donde la semilla heredó las omisiones de la prosa de `CSSAPI.mdx`.
+- **Gate `test:public-api-exports`** — inventario nominal de los **346** nombres de export
+  (valores y tipos, por entry: `.`, `./server-safe`, `./cn`). Los nombres de export son lo
+  PRIMERO que rompe a un consumer y no tenían ancla: 75 de los 97 valores la tenían solo de
+  forma **incidental** —alguna fixture los importa— y los otros 22 valores más 133 de los 142
+  tipos no tenían ninguna. 155 nombres.
+  - Probado por mutación, no inferido: retirando `export type { NavbarLogoProps }` las dos
+    fixtures de consumer siguen pasando con **exit 0** mientras un consumer real rompe con
+    TS2724. Una fixture congela lo que usa, no la superficie.
+  - La separación **valor/tipo** no es cosmética: convertir un valor en type-only lo borra del
+    runtime aunque el nombre siga en el `.d.ts`. Detectarlo exige mirar la marca type-only del
+    re-export ANTES de resolver el alias —`getAliasedSymbol` la atraviesa y devuelve los flags
+    del símbolo original—. La primera versión del gate no lo hacía y daba la mutación por
+    buena; lo cazó su propio control.
+  - Un export que desaparece o cambia de clase es **fallo** (exige MAJOR); uno nuevo es un
+    **aviso**, porque añadir superficie es una minor legítima y convertirlo en error obligaría
+    a tocar el freeze en cada feature.
 - **Gate `test:emitted-classes`** — el freeze, en la dirección que faltaba. `test:public-api`
   comprueba `freeze ⊆ dist`: caza el nombre congelado que desaparece. Este comprueba
   **`emitido ⊆ freeze ∪ exclusiones con razón escrita`**: caza el nombre que el DS empieza a
