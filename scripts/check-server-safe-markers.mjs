@@ -9398,7 +9398,23 @@ function checkSourceFile(
     // CLOSED LOUD (no residual-silencioso): un mod del glob con `process.cwd` pasaría sin auditar = fail-open
     // por N. El contribuidor audita por import directo (seguido) o evita glob en @server-safe. codex-diligencia.
     if (ts.isCallExpression(node)) {
-      const callee = node.expression;
+      // El CALLEE se desenvuelve igual que la key del bracket. Sin esto,
+      // `(import.meta.glob)(…)` y `(import.meta.glob as any)(…)` NO llegan a la
+      // rama de PropertyAccessExpression —son Parenthesized/AsExpression— y
+      // pasaban sin flaggear (gate 1.0.0, PR-1).
+      //
+      // Se creía out-of-mandate por una premisa escrita en
+      // `server-safe-limitations.md`: «el macro no se expande → crash
+      // universal». MEDIDO contra vite 8, y es falsa justo para esas dos
+      // formas: AMBAS EXPANDEN. Es decir funcionan en producción y cargan N
+      // módulos que el gate nunca auditó — fail-open real, no residual.
+      // El discriminador del proyecto es «¿hay prod-runtime donde funciona?»:
+      // aquí sí, luego está DENTRO del mandato.
+      //
+      // `const g = import.meta.glob; g(…)` y `(0, import.meta.glob)(…)` sí
+      // quedan fuera: medido, vite NO los expande y crashean en cualquier
+      // runtime, así que nadie puede shippearlos.
+      const callee = unwrapErased(node.expression);
       // La KEY del bracket puede venir ERASED (`["glob" as const]`, `[("glob")]`) — el `as`/paren se borra al
       // mismo `import.meta["glob"]` que el gate fail-cierra → desenvolver antes del StringLiteralLike (codex P2).
       // Una key VARIABLE (`import.meta[k]`) sigue null = NO-glob: Vite tampoco la trata como macro (runtime error
