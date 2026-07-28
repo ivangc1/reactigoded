@@ -83,8 +83,8 @@
     "not dead"
   ],
   "scripts": {
-    "_comment_prepare": "Aplica patches con patch-package SOLO en dev local (npm install desde git checkout). NO se ejecuta cuando un consumer instala reactigoded como dep.",
-    "prepare": "patch-package",
+    "_comment_prepare": "Aplica patches con patch-package (ver docs/decisions/H-14). El guard existsSync('patches') NO es cosmetico y la frase anterior era falsa: este script VIAJA en el manifest publicado, y npm ejecuta `prepare` al instalar desde un DIRECTORIO o un symlink. Sin guard, `npm link` y `npm install file:<dir>` fallan HARD porque patch-package no esta en el node_modules del consumer, y `--ignore-scripts` no lo evita en el npm del engine floor (SYM-1, gate 1.0.0). Con guard, el consumer no tiene carpeta patches/ y el script es un no-op. NO mover esto a prepack: se intento (3cc9249) y hubo que revertirlo (7d62faf) porque prepack NO corre en `npm ci`, que es donde el repo necesita el patch.",
+    "prepare": "node -e \"if(require('node:fs').existsSync('patches'))require('node:child_process').execSync('patch-package',{stdio:'inherit'})\"",
     "dev": "vite",
     "build": "node scripts/build-state-css-fragments.mjs && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && vite build -c vite.lib.config.ts && node scripts/clean-internal-dist.mjs && node scripts/fix-dts-esm-extensions.mjs",
     "preview": "vite preview",

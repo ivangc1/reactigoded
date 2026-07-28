@@ -94,6 +94,14 @@ const RESOLUTIONS = [
     name: "NodeNext",
     options: { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext },
   },
+  {
+    // T5: `Node16` es la tercera resolución que un consumer puede elegir y no
+    // la cubría ningún gate. Hoy da lo mismo que NodeNext para este paquete
+    // —es ESM puro—, pero eso es un resultado MEDIDO, no una premisa: si algún
+    // día divergen, el sitio donde se nota es aquí.
+    name: "Node16",
+    options: { module: ts.ModuleKind.Node16, moduleResolution: ts.ModuleResolutionKind.Node16 },
+  },
 ];
 
 const fmtHost = {

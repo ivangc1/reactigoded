@@ -34,6 +34,7 @@
  * El bloque href DEBE ESTAR EN VERDE EN AMBOS ESTADOS — el control.
  */
 import {
+  Chip,
   Accordion,
   AccordionItem,
   AccordionHeader,
@@ -286,3 +287,18 @@ export const HrefControl_NavbarLogoUndef = (
 export const HrefControl_NavbarLogoString = (
   <NavbarLogo href="/">Marca</NavbarLogo>
 );
+
+// ─── Chip (A-TYPES-02, gate 1.0.0) ──────────────────────────────────
+// Chip no estaba en este fixture, y por eso la matriz EOPT del gate
+// anterior salió 14/14 verde: cobertura de fixture, no ausencia de
+// defecto. Sus props condicionales rompían con EOPT porque el union
+// discriminado envuelve los miembros en ParenthesizedTypeNode y el
+// clasificador no lo atravesaba.
+export const Chip_SelectableCond = (
+  <Chip selectable={Math.random() > 0.5 ? false : undefined}>x</Chip>
+);
+
+// `prop={undefined}` es el idioma que el DS BENDICE y blinda con
+// fixtures para `href`. Que Chip lo rechace es romper una convención de
+// contrato del propio DS, no solo un tipo.
+export const Chip_SelectableUndef = <Chip selectable={undefined}>x</Chip>;

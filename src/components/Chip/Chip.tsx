@@ -28,15 +28,21 @@ interface ChipBase {
   children?: React.ReactNode | undefined;
 }
 
+// Las opcionales llevan `| undefined` explícito: sin él, un consumer con
+// `exactOptionalPropertyTypes: true` no puede escribir `selectable={cond ? false
+// : undefined}` ni `selectable={undefined}` — y ese segundo es el idioma que el
+// propio DS bendice y blinda con fixtures para `href` en MenuItem, SidebarItem y
+// NavbarLogo. Chip se quedó fuera del fixture EOPT, así que la matriz salió
+// verde por cobertura, no por ausencia de defecto (A-TYPES-02).
 export type ChipProps =
   | (ChipBase & { selectable: true } & Omit<
         ButtonHTMLAttributes<HTMLButtonElement>,
         keyof ChipBase
-      > & { ref?: Ref<HTMLButtonElement> })
-  | (ChipBase & { selectable?: false } & Omit<
+      > & { ref?: Ref<HTMLButtonElement> | undefined })
+  | (ChipBase & { selectable?: false | undefined } & Omit<
         HTMLAttributes<HTMLSpanElement>,
         keyof ChipBase
-      > & { ref?: Ref<HTMLSpanElement> });
+      > & { ref?: Ref<HTMLSpanElement> | undefined });
 
 /**
  * Chip — etiqueta compacta. Por defecto inline (`<span>`); con `selectable`

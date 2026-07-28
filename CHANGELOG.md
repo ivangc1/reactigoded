@@ -145,6 +145,26 @@ del release.
     (`--ig-gradient-{from,via,to}`, `--ig-snap-strictness`, `--ig-ring-offset-{width,color}`).
     Un sembrador que mira un solo fichero hereda su recorte — la misma causa raíz que C-1,
     donde la semilla heredó las omisiones de la prosa de `CSSAPI.mdx`.
+- **`Chip` rompía con `exactOptionalPropertyTypes`** (`A-TYPES-02`). Sus props condicionales
+  daban 2×TS2375, y una de ellas es `selectable={undefined}` — el idioma que el propio DS
+  bendice y blinda con fixtures para `href` en `MenuItem`, `SidebarItem` y `NavbarLogo`. Chip
+  rompía una convención de contrato del DS, no solo un tipo.
+  - **No es una tercera frontera EOPT**: el CHANGELOG sigue listando **dos**. Era un falso
+    negativo del clasificador, que no atravesaba `ParenthesizedTypeNode` — la forma AST de
+    cualquier union discriminado con intersecciones, o sea de `ChipProps` entero. Medido: con
+    el fix, las props sin ensanchar pasan de 11 a 14; sin el fix, 11. Las 3 que faltaban.
+  - La matriz EOPT del gate anterior salió 14/14 verde porque `Chip' **no estaba en el
+    fixture**. Cobertura de fixture, no ausencia de defecto. Ahora está.
+- **`scripts.prepare` deja de romper `npm link` y `npm install file:<dir>`** (`SYM-1`). El hook
+  viaja en el manifest publicado y npm lo ejecuta al instalar desde un directorio o symlink, así
+  que el consumer moría porque `patch-package` no está en su `node_modules` — y
+  `--ignore-scripts` no lo evita en el npm del engine floor. Ahora el hook se autoguarda: solo
+  invoca `patch-package` si existe `patches/`. Medido en un consumer real: antes falla, ahora
+  pasa. No se mueve a `prepack` porque ya se intentó (`3cc9249`) y hubo que revertirlo
+  (`7d62faf`): `prepack` no corre en `npm ci`, que es donde el repo necesita el patch.
+- El gate `test:dist-dts` añade la resolución **Node16**, que no cubría ningún gate (`T5`). Hoy
+  da lo mismo que NodeNext —el paquete es ESM puro— pero eso pasa a ser un resultado medido en
+  cada build en vez de una premisa.
 - **Gate `test:public-api-exports`** — inventario nominal de los **346** nombres de export
   (valores y tipos, por entry: `.`, `./server-safe`, `./cn`). Los nombres de export son lo
   PRIMERO que rompe a un consumer y no tenían ancla: 75 de los 97 valores la tenían solo de

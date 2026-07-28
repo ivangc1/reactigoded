@@ -22,8 +22,20 @@ Upstream (`eslint-plugin-jest-dom@5.5.0`) sin update desde feb 2025 por NPM_TOKE
 ## Operativa actual
 
 - `prepare` hook del package.json invoca `patch-package` automáticamente en `npm install` local.
-- Consumer del paquete final NO ejecuta el `prepare` hook (`prepublishOnly` lo bloquea).
+- El hook está **autoguardado**: solo llama a `patch-package` si existe la carpeta `patches/`.
 - CI corre el patch en cada install + verify.
+
+> **Corrección (gate 1.0.0, `SYM-1`).** Este documento afirmaba que «el consumer del paquete
+> final NO ejecuta el `prepare` hook (`prepublishOnly` lo bloquea)». Las dos mitades son falsas:
+> `prepublishOnly` es un hook del **publish de este paquete**, no bloquea nada en el consumer; y
+> `prepare` **sí** se ejecuta cuando alguien instala desde un directorio o un symlink, porque
+> viaja en el manifest publicado. Medido: `npm link` y `npm install file:<dir>` fallaban HARD con
+> el `patch-package` pelado, y `--ignore-scripts` no lo evitaba en el npm del engine floor.
+>
+> Se cierra con el guard, no sacando `patch-package` de `prepare`: mover el hook a `prepack` ya
+> se intentó (`3cc9249`) y hubo que revertirlo (`7d62faf`) porque `prepack` no corre en
+> `npm ci`, que es justo donde el repo necesita el patch. El espacio de soluciones estaba
+> acotado por esa reversión previa, no era libre.
 
 ## Plan post-RC1
 
