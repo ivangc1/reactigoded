@@ -34,6 +34,8 @@ import {
   deriveDistTag,
   esVersionAusente,
   leerDelRegistro,
+  descargarAttestations,
+  limiteDePropagacion,
 } from "../../scripts/verify-provenance.mjs";
 import type {
   Attestation,
@@ -586,5 +588,94 @@ describe("espera a que la versión sea visible en el registro", () => {
   it("--wait-for-publish se parsea y su ausencia es 0", () => {
     expect(parseArgs(["1.2.3", "--commit", "x", "--wait-for-publish", "180"]).waitForPublish).toBe(180);
     expect(parseArgs(["1.2.3", "--commit", "x"]).waitForPublish).toBe(0);
+  });
+});
+
+/**
+ * La espera se puso donde se vio el fallo, no donde estaba la clase. En `rc.2`
+ * reventó `npm view`; se le puso espera, y en `rc.3` reventó la SIGUIENTE
+ * lectura del registro —el bundle de attestations, 404— que no tenía ninguna:
+ *
+ *     ✖ no se pudo descargar el bundle de attestations (404) desde
+ *       https://registry.npmjs.org/-/npm/v1/attestations/reactigoded@1.0.0-rc.3
+ *
+ * Publicar deja un intervalo en el que el paquete existe y sus documentos
+ * derivados aún no. Afecta a TODA lectura por versión.
+ */
+describe("el bundle de attestations comparte la espera", () => {
+  const respuesta = (status: number, cuerpo: unknown = {}) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(cuerpo),
+  });
+
+  it("reintenta el 404 y devuelve el bundle en cuanto aparece", async () => {
+    let llamadas = 0;
+    const dormidas: number[] = [];
+    const doc = await descargarAttestations("https://reg/att", {
+      limite: Date.now() + 180_000,
+      pausa: (ms: number) => {
+        dormidas.push(ms);
+        return Promise.resolve();
+      },
+      buscar: () => {
+        llamadas += 1;
+        return Promise.resolve(llamadas < 3 ? respuesta(404) : respuesta(200, { attestations: [] }));
+      },
+    });
+    expect(doc).toEqual({ attestations: [] });
+    expect(llamadas).toBe(3);
+    expect(dormidas).toHaveLength(2);
+  });
+
+  it("un 500 es terminal — solo el 404 significa «todavía no»", async () => {
+    let llamadas = 0;
+    await expect(
+      descargarAttestations("https://reg/att", {
+        limite: Date.now() + 180_000,
+        pausa: () => Promise.resolve(),
+        buscar: () => {
+          llamadas += 1;
+          return Promise.resolve(respuesta(500));
+        },
+      }),
+    ).rejects.toThrow(/\(500\)/);
+    expect(llamadas).toBe(1);
+  });
+
+  it("agotado el presupuesto FALLA, sin salida silenciosa", async () => {
+    await expect(
+      descargarAttestations("https://reg/att", {
+        limite: Date.now() - 1,
+        pausa: () => Promise.resolve(),
+        buscar: () => Promise.resolve(respuesta(404)),
+      }),
+    ).rejects.toThrow(/sigue dando 404/);
+  });
+
+  it("sin presupuesto, un 404 falla al instante", async () => {
+    // Uso post-hoc: ahí «no hay attestations» ES la respuesta.
+    let llamadas = 0;
+    await expect(
+      descargarAttestations("https://reg/att", {
+        buscar: () => {
+          llamadas += 1;
+          return Promise.resolve(respuesta(404));
+        },
+      }),
+    ).rejects.toThrow(/404/);
+    expect(llamadas).toBe(1);
+  });
+
+  it("el presupuesto es UNO para todas las lecturas, no uno por endpoint", () => {
+    // Con un plazo nuevo por lectura, el peor caso se multiplicaría por el
+    // número de endpoints — justo lo que un límite existe para impedir.
+    const a = limiteDePropagacion(180);
+    const b = limiteDePropagacion(180);
+    expect(a.espera).toBe(180);
+    // Dos cálculos independientes dan dos plazos: por eso `main` lo computa una
+    // sola vez y lo INYECTA en ambas lecturas.
+    expect(Math.abs(a.limite - b.limite)).toBeLessThan(1000);
+    expect(() => limiteDePropagacion("bogus")).toThrow(/inválido/);
   });
 });
