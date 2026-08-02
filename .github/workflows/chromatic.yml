@@ -68,15 +68,36 @@ jobs:
         # si la cuota se agota vuelve a quedarse en `pending` → TODOS los PRs
         # dejan de poder mergearse hasta el siguiente ciclo.
         #
-        # El contexto va PINEADO a la GitHub App de Chromatic (`integration_id:
-        # 47100`, app slug `chromatic-com` de `chromaui`), igual que los otros
-        # seis van pineados a github-actions (15368). Sin pinear, cualquier
-        # fuente con permiso de statuses podría publicar un `UI Tests` verde y
-        # satisfacer el check. El id NO se puede derivar del status —su
-        # `creator` viene `null` y el `avatar_url` lleva un id de OAuth app, que
-        # es otro espacio de nombres (comprobado: `/app/581325` devuelve una app
-        # sin relación)—; se obtiene consultando la app por su slug:
-        #     gh api /apps/chromatic-com --jq .id
+        # ⚠️ `UI Tests` ES EL ÚNICO CONTEXTO REQUERIDO SIN PINEAR, Y HOY NO SE
+        # PUEDE PINEAR. Los otros siete van a github-actions (15368).
+        #
+        # Este comentario llegó a decir que iba pineado a `integration_id:
+        # 47100` (app `chromatic-com` de `chromaui`). Era falso: el ruleset lo
+        # tenía sin pinear. Se intentó, y con el pin puesto el PR quedaba
+        # BLOCKED con todo verde, porque de esa app no llega ningún status.
+        #
+        # La razón que se dio entonces —«el `creator` del status viene `null`,
+        # así que el id se consulta por slug»— venía de mirar el endpoint
+        # equivocado. `/commits/{sha}/status` (combinado) NO incluye ese campo;
+        # `/commits/{sha}/statuses` (lista) sí, y dice:
+        #     context=UI Tests  creator=ivangc1  creator_type=User
+        # O sea que Chromatic firma como USUARIO vía OAuth, no como GitHub App.
+        # `integration_id` solo admite Apps ⇒ ningún id puede casar. No es un id
+        # mal elegido, es imposible mientras la integración sea OAuth.
+        #
+        # CONDICIÓN DE DESBLOQUEO: conectar el proyecto a la GitHub App de
+        # Chromatic (Manage → Integrations → GitHub). Cuando los statuses los
+        # firme la App, esto se cierra añadiendo `integration_id: 47100` al
+        # contexto —el id se obtiene con `gh api /apps/chromatic-com --jq .id`—
+        # y verificando que sigue llegando el status.
+        #
+        # RIESGO REAL MIENTRAS TANTO, dimensionado y no minimizado: sin pinear,
+        # cualquier fuente con `statuses: write` puede publicar un `UI Tests`
+        # verde. Aquí eso es el propio dueño y los workflows de este repo (los
+        # PRs de fork reciben token de solo lectura). Y `bypass_actors` ya da
+        # bypass `always` al rol de admin, así que frente a ese actor el pin no
+        # añadía garantía ninguna. Requerido-sin-pinear es más débil de lo que
+        # parece, pero es estrictamente mejor que no requerirlo.
         #
         # ARITMÉTICA DEL PLAN GRATUITO (por qué se agota, medido):
         #   239 stories → un build completo son 560 snapshots (× modos/viewports;
@@ -99,10 +120,17 @@ jobs:
         # a costa de la línea base con la que se comparan los PRs), agrupar
         # commits para pushear menos veces, o pagar plan.
         #
-        # Para cerrarlo hace falta cuota de snapshots (plan) + habilitar UI Tests
-        # en el proyecto. Con eso hecho, el cierre es una línea: añadir el
-        # contexto al ruleset. Por qué la App y no simplemente quitar el flag: su
-        # status se actualiza EN SITIO al aprobar en Chromatic, mientras que un
-        # job de Actions ya terminado no se repinta — con el flag quitado habría
-        # que re-lanzar el job a mano tras cada aprobación.
+        # POR QUÉ NO SE QUITA `--exit-once-uploaded` PARA QUE ESTE JOB —que SÍ
+        # está pineado— acredite la comparación en vez del upload. Sería la vía
+        # de tener el gate visual bajo un check pineado hoy mismo, sin depender
+        # de cómo firme Chromatic. Se descarta por la aritmética de arriba: sin
+        # el flag, la CLI espera al veredicto y sale ≠0 si hay cambios sin
+        # revisar; un job de Actions ya terminado NO se repinta al aprobar en
+        # Chromatic, así que cada cambio visual exigiría re-lanzar el job. Si
+        # ese re-lanzamiento genera un build nuevo son ~560 snapshots más sobre
+        # un presupuesto de ~9 builds/mes. NO ESTÁ MEDIDO si Chromatic reutiliza
+        # el build del mismo commit; se deja escrito como incógnita en vez de
+        # asumirlo, porque el riesgo cae del lado caro y comprobarlo cuesta
+        # justamente la cuota que está en juego. El status de la App, en cambio,
+        # se actualiza EN SITIO al aprobar.
         run: npx chromatic --exit-once-uploaded --only-changed
