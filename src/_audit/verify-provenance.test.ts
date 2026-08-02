@@ -388,13 +388,67 @@ describe("deriveDistTag replica la derivación del workflow", () => {
  * murió DESPUÉS de publicar, dejando el registro durable sin escribir.
  */
 describe("espera a que la versión sea visible en el registro", () => {
-  it("distingue el E404 por CÓDIGO, no por el texto del mensaje", () => {
-    expect(esVersionAusente("npm error code E404\nnpm error 404 No match")).toBe(true);
-    // Lo que un match por substring de '404' daría por bueno sin serlo:
+  it("exige la LÍNEA estructurada de npm, no un token suelto", () => {
+    // Formato real medido en npm 11 (release de 1.0.0-rc.2).
+    expect(
+      esVersionAusente("npm error code E404\nnpm error 404 No match found for version 1.0.0-rc.2"),
+    ).toBe(true);
+    // npm < 10.
+    expect(esVersionAusente("npm ERR! code E404")).toBe(true);
     expect(esVersionAusente("request to https://reg/404-proxy failed, ENOTFOUND")).toBe(false);
     expect(esVersionAusente("npm error code E401 Unauthorized")).toBe(false);
     expect(esVersionAusente("")).toBe(false);
     expect(esVersionAusente(undefined)).toBe(false);
+    // El token dentro de otra línea NO cuenta: sin la línea `code E404` no hay
+    // afirmación de que la versión falte.
+    expect(esVersionAusente("npm error 404 algo sobre E404 en prosa")).toBe(false);
+  });
+
+  it("la clasificación mira SOLO stderr, nunca el message", async () => {
+    // Contrato, no mecanismo: `message` lo compone Node con el comando
+    // reflejado, o sea con texto que viene de la ENTRADA. Decidir con él es
+    // dejar que la entrada influya en su propia clasificación. Aquí el
+    // `message` trae la línea estructurada y `stderr` no: debe ganar `stderr`.
+    const estado = { llamadas: 0 };
+    const ejecutar = () => {
+      estado.llamadas += 1;
+      const e = new Error("npm error code E404") as Error & { stderr: string };
+      e.stderr = "npm error code E401 Unauthorized";
+      throw e;
+    };
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0", waitForPublish: 180 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/E401/);
+    expect(estado.llamadas).toBe(1);
+  });
+
+  it("una versión que contenga 'E404' no secuestra la clasificación", async () => {
+    // `1.0.0-E404` es SemVer válido, y `execFileSync` refleja el comando en
+    // `message`: «Command failed: npm view reactigoded@1.0.0-E404 --json».
+    // Mezclar `message` con `stderr` metía texto controlado por la ENTRADA
+    // dentro del dato con el que se decide, así que un E401 se reintentaba
+    // hasta agotar el plazo y moría con un timeout que enterraba la causa
+    // real (codex).
+    const estado = { llamadas: 0 };
+    const ejecutar = () => {
+      estado.llamadas += 1;
+      const e = new Error(
+        "Command failed: npm view reactigoded@1.0.0-E404 --json",
+      ) as Error & { stderr: string };
+      e.stderr = "npm error code E401 Unauthorized";
+      throw e;
+    };
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0-E404", waitForPublish: 180 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/E401/);
+    // Terminal a la primera: ni un solo reintento.
+    expect(estado.llamadas).toBe(1);
   });
 
   // Un `execFileSync` de mentira que falla `fallos` veces con `stderr` y luego

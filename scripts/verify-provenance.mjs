@@ -165,12 +165,25 @@ export function deriveDistTag(version) {
  * lógica de comparación sin red y, a la vez, simular una firma inválida.
  */
 /**
- * ¿Es este error el 404 de «esa versión todavía no existe»? Se mira el CÓDIGO
- * del registro (`E404`), no el texto: un match por substring sobre stderr daría
- * verde ante cualquier mensaje que mencione 404 por otro motivo.
+ * ¿Es este error el 404 de «esa versión todavía no existe»?
+ *
+ * Recibe SOLO `stderr`, y exige la línea ESTRUCTURADA que emite npm:
+ *
+ *     npm error code E404
+ *
+ * Antes buscaba `\bE404\b` en cualquier parte de `stderr + message`, que es
+ * justo lo que el comentario decía no hacer. `execFileSync` refleja el comando
+ * en `message` (`Command failed: npm view <pkg>@<version> --json`), así que con
+ * una versión que contenga el token —`1.0.0-E404` es SemVer válido— CUALQUIER
+ * fallo (E401, red, JSON corrupto) se clasificaba como «aún no existe» y se
+ * reintentaba hasta agotar el plazo, enterrando la causa real bajo un timeout
+ * (codex).
+ *
+ * `ERR!` se acepta además de `error` porque es el prefijo de npm < 10; el
+ * formato medido en npm 11 es `npm error code E404`.
  */
-export function esVersionAusente(salida) {
-  return /\bE404\b/.test(String(salida ?? ""));
+export function esVersionAusente(stderr) {
+  return /^\s*npm (?:error|ERR!)\s+code\s+E404\s*$/m.test(String(stderr ?? ""));
 }
 
 /**
@@ -246,11 +259,16 @@ export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
     try {
       return JSON.parse(await correr());
     } catch (err) {
-      const salida = `${err?.stderr ?? ""}\n${err?.message ?? ""}`;
+      // La CLASIFICACIÓN va contra `stderr` solo; el `message` se usa nada más
+      // que para el informe. Mezclarlos era el bug: `message` lleva el comando
+      // reflejado, o sea la versión pedida, o sea texto controlado por la
+      // entrada dentro del dato con el que se decide.
+      const stderr = String(err?.stderr ?? "");
+      const salida = `${stderr}\n${err?.message ?? ""}`;
       // Un fallo terminal se re-lanza con la salida del registro incorporada:
       // `execFileSync` deja el motivo real en `stderr` y pone «Command failed»
       // en `message`, así que propagar el error tal cual esconde la causa.
-      if (!esVersionAusente(salida)) {
+      if (!esVersionAusente(stderr)) {
         throw new Error(`npm view ${opts.pkg}@${opts.version} falló:\n${salida.trim()}`, {
           cause: err,
         });
