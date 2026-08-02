@@ -156,12 +156,37 @@ export declare function esVersionAusente(salida: unknown): boolean;
  * cualquier otro fallo es terminal. Agotado el presupuesto, falla.
  * `dormir` y `ejecutar` se inyectan en tests: nada de mock de modulo.
  */
+export declare function limiteDePropagacion(waitForPublish: unknown): {
+  espera: number;
+  limite: number;
+};
+
+export declare function reintentarMientrasPropague<T>(
+  intento: () => Promise<T>,
+  io: {
+    esAusente: (err: unknown) => boolean;
+    limite: number;
+    pausa: (ms: number) => Promise<void>;
+    mensajeAgotado: () => string;
+  },
+): Promise<T>;
+
+export declare function descargarAttestations(
+  attUrl: string,
+  io?: {
+    limite?: number;
+    pausa?: (ms: number) => Promise<void>;
+    buscar?: (url: string) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+  },
+): Promise<unknown>;
+
 export declare function leerDelRegistro(
   opts: { pkg: string; version: string; waitForPublish?: number },
   io?: {
     dormir?: (ms: number) => Promise<void>;
     /** Devuelve la salida cruda de npm view. Se inyecta en tests. */
     ejecutar?: () => string | Promise<string>;
+    limite?: number;
   },
 ): Promise<NpmMeta>;
 

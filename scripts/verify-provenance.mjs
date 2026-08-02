@@ -207,8 +207,8 @@ export function esVersionAusente(stderr) {
  *    timeout, que informa peor.
  *  - Agotado el presupuesto, FALLA. No hay salida silenciosa.
  */
-export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
-  const espera = Number(opts.waitForPublish ?? 0);
+export function limiteDePropagacion(waitForPublish) {
+  const espera = Number(waitForPublish ?? 0);
   // ALLOWLIST POSITIVO, no lista de casos malos. `Number("bogus")` y
   // `Number(undefined)` —esto último es `--wait-for-publish` sin valor al final
   // de argv— dan `NaN`, y con `NaN` el presupuesto deja de acotar:
@@ -233,10 +233,53 @@ export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
   // mágico, es el límite de lo que el mecanismo puede afirmar que hace.
   if (!Number.isFinite(espera) || espera < 0 || espera > 3600) {
     throw new Error(
-      `--wait-for-publish inválido: ${String(opts.waitForPublish)}. ` +
+      `--wait-for-publish inválido: ${String(waitForPublish)}. ` +
         "Debe ser un número de segundos entre 0 y 3600.",
     );
   }
+  return { espera, limite: Date.now() + espera * 1000 };
+}
+
+/**
+ * Reintenta `intento` mientras el fallo signifique «todavía no propagado» y
+ * quede presupuesto. Agotado, lanza.
+ *
+ * Existe porque la espera se puso donde se vio el fallo en vez de donde está la
+ * clase. En `rc.2` reventó `npm view`; se le puso espera, y en `rc.3` reventó la
+ * SIGUIENTE lectura del registro —el bundle de attestations, 404— que no tenía
+ * ninguna. Publicar deja un intervalo en el que el paquete existe y sus
+ * documentos derivados aún no, y eso afecta a TODA lectura por versión, no a la
+ * que casualmente falló primero.
+ */
+export async function reintentarMientrasPropague(
+  intento,
+  { esAusente, limite, pausa, mensajeAgotado },
+) {
+  let n = 0;
+  for (;;) {
+    try {
+      return await intento();
+    } catch (err) {
+      if (!esAusente(err)) throw err;
+      if (Date.now() >= limite) throw new Error(mensajeAgotado(), { cause: err });
+      n += 1;
+      // Backoff con techo: los primeros reintentos son rápidos porque la
+      // propagación suele resolverse en segundos, y el techo evita dormir más
+      // de lo que queda de presupuesto.
+      await pausa(Math.min(2000 * n, 15000, Math.max(0, limite - Date.now())));
+    }
+  }
+}
+
+/**
+ * Lee `npm view <pkg>@<version> --json`, esperando opcionalmente a que la
+ * versión sea visible. `limite` permite COMPARTIR el presupuesto con las demás
+ * lecturas del registro: la espera es «este publish tiene N segundos para
+ * hacerse visible», no N segundos por endpoint.
+ */
+export async function leerDelRegistro(opts, { dormir, ejecutar, limite } = {}) {
+  const { espera, limite: propio } = limiteDePropagacion(opts.waitForPublish);
+  const tope = limite ?? propio;
   const pausa = dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   // Se INYECTA en vez de mockear `node:child_process`: el mock de módulo se
   // demostró frágil —dejaba pasar la llamada real al registro en unos tests y
@@ -252,46 +295,72 @@ export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
         stdio: ["ignore", "pipe", "pipe"],
       });
     });
-  const limite = Date.now() + espera * 1000;
-  let intento = 0;
-
-  for (;;) {
-    try {
-      return JSON.parse(await correr());
-    } catch (err) {
-      // La CLASIFICACIÓN va contra `stderr` solo; el `message` se usa nada más
-      // que para el informe. Mezclarlos era el bug: `message` lleva el comando
-      // reflejado, o sea la versión pedida, o sea texto controlado por la
-      // entrada dentro del dato con el que se decide.
-      const stderr = String(err?.stderr ?? "");
-      const salida = `${stderr}\n${err?.message ?? ""}`;
-      // Un fallo terminal se re-lanza con la salida del registro incorporada:
-      // `execFileSync` deja el motivo real en `stderr` y pone «Command failed»
-      // en `message`, así que propagar el error tal cual esconde la causa.
-      if (!esVersionAusente(stderr)) {
+  return reintentarMientrasPropague(
+    async () => {
+      try {
+        return JSON.parse(await correr());
+      } catch (err) {
+        // La CLASIFICACIÓN va contra `stderr` solo; el `message` se usa nada
+        // más que para el informe. Mezclarlos era el bug: `message` lleva el
+        // comando reflejado, o sea la versión pedida, o sea texto controlado
+        // por la entrada dentro del dato con el que se decide.
+        const stderr = String(err?.stderr ?? "");
+        // El E404 se re-lanza CRUDO para que el reintento pueda reconocerlo.
+        if (esVersionAusente(stderr)) throw err;
+        // Un fallo terminal se re-lanza con la salida incorporada: `execFileSync`
+        // deja el motivo real en `stderr` y pone «Command failed» en `message`,
+        // así que propagarlo tal cual esconde la causa.
+        const salida = `${stderr}\n${err?.message ?? ""}`;
         throw new Error(`npm view ${opts.pkg}@${opts.version} falló:\n${salida.trim()}`, {
           cause: err,
         });
       }
-      if (Date.now() >= limite) {
-        // LANZA, no devuelve. `die` imprime y devuelve 1, así que un
-        // `return die(...)` aquí dejaría `meta = 1` y el fallo se reportaría
-        // como «no tiene attestations» — un mensaje falso tapando el real.
-        throw new Error(
-          espera > 0
-            ? `${opts.pkg}@${opts.version} sigue sin aparecer en el registro tras ${espera}s de espera.`
-            : `${opts.pkg}@${opts.version} no está publicado (E404).`,
-          { cause: err },
-        );
-      }
-      intento += 1;
-      // Backoff con techo: los primeros reintentos son rápidos porque la
-      // propagación suele resolverse en segundos, y el techo evita dormir más
-      // de lo que queda de presupuesto.
-      const espera_ms = Math.min(2000 * intento, 15000, Math.max(0, limite - Date.now()));
-      await pausa(espera_ms);
-    }
-  }
+    },
+    {
+      esAusente: (err) => esVersionAusente(String(err?.stderr ?? "")),
+      limite: tope,
+      pausa,
+      // LANZA, no devuelve. `die` imprime y devuelve 1, así que un
+      // `return die(...)` dejaría `meta = 1` y el fallo se reportaría como «no
+      // tiene attestations» — un mensaje falso tapando el real.
+      mensajeAgotado: () =>
+        espera > 0
+          ? `${opts.pkg}@${opts.version} sigue sin aparecer en el registro tras ${espera}s de espera.`
+          : `${opts.pkg}@${opts.version} no está publicado (E404).`,
+    },
+  );
+}
+
+/**
+ * Descarga el bundle de attestations, con la MISMA espera acotada y el MISMO
+ * presupuesto que la lectura de metadatos.
+ *
+ * Un 404 aquí justo después de publicar no significa «este paquete no tiene
+ * provenance», significa «todavía no». Es lo que tumbó el release de `rc.3`:
+ * `npm view` ya respondía —la espera hizo su trabajo— y este endpoint aún no.
+ * Cualquier otro estado (500, red, JSON inválido) es terminal.
+ */
+export async function descargarAttestations(attUrl, { limite, pausa, buscar } = {}) {
+  const pedir = buscar ?? ((url) => fetch(url));
+  const dormir = pausa ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  return reintentarMientrasPropague(
+    async () => {
+      const res = await pedir(attUrl);
+      if (res.ok) return res.json();
+      const err = new Error(
+        `no se pudo descargar el bundle de attestations (${String(res.status)}) desde ${attUrl}`,
+      );
+      err.status = res.status;
+      throw err;
+    },
+    {
+      esAusente: (err) => err?.status === 404,
+      limite: limite ?? Date.now(),
+      pausa: dormir,
+      mensajeAgotado: () =>
+        `el bundle de attestations sigue dando 404 tras agotar la espera: ${attUrl}`,
+    },
+  );
 }
 
 export function buildRows({ meta, bundleDoc, expected, signatures, record = null }) {
@@ -479,12 +548,23 @@ async function main(argv) {
     return 1;
   };
 
+  // UN SOLO presupuesto para todas las lecturas del registro. La espera es
+  // «este publish tiene N segundos para hacerse visible», no N por endpoint:
+  // con un plazo nuevo por lectura el peor caso se multiplicaría por el número
+  // de endpoints, que es justo lo que un límite existe para impedir.
+  let limite;
+  try {
+    ({ limite } = limiteDePropagacion(opts.waitForPublish));
+  } catch (err) {
+    return die(err instanceof Error ? err.message : String(err));
+  }
+
   let meta;
   if (opts.fromDir) {
     meta = readJson(resolve(opts.fromDir, "meta.json"));
   } else {
     try {
-      meta = await leerDelRegistro(opts);
+      meta = await leerDelRegistro(opts, { limite });
     } catch (err) {
       return die(err instanceof Error ? err.message : String(err));
     }
@@ -497,9 +577,11 @@ async function main(argv) {
   if (opts.fromDir) {
     bundleDoc = readJson(resolve(opts.fromDir, "attestations.json"));
   } else {
-    const res = await fetch(attUrl);
-    if (!res.ok) return die(`no se pudo descargar el bundle de attestations (${String(res.status)}) desde ${attUrl}`);
-    bundleDoc = await res.json();
+    try {
+      bundleDoc = await descargarAttestations(attUrl, { limite });
+    } catch (err) {
+      return die(err instanceof Error ? err.message : String(err));
+    }
   }
 
   const { slsa: slsaAll, npm: npmAll } = selectAttestations(bundleDoc);
