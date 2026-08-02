@@ -207,10 +207,21 @@ export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
   // Enumerar `NaN` e `Infinity` habría dejado fuera la siguiente categoría que
   // no se me ocurriera. Se exige finito y no negativo: lo demás cae, sin haber
   // tocado el registro todavía.
-  if (!Number.isFinite(espera) || espera < 0) {
+  //
+  // Y el techo NO es adorno. Con solo `Number.isFinite` bastaba `1e308` para
+  // reabrirlo: es finito, pero `1e308 * 1000` DESBORDA a `Infinity`, así que
+  // `limite` volvía a ser inalcanzable (codex). Validar el deadline calculado
+  // tampoco cerraría del todo — `1e15` segundos es finito y el bucle correría
+  // igual hasta que muriese el job. Lo que acota es el INTERVALO aceptado.
+  //
+  // 3600 sale de para qué existe esto: el desfase de propagación del registro
+  // se mide en segundos (el caso real fueron <2 minutos), y una espera mayor
+  // que una hora no sobreviviría al job de todas formas. No es un número
+  // mágico, es el límite de lo que el mecanismo puede afirmar que hace.
+  if (!Number.isFinite(espera) || espera < 0 || espera > 3600) {
     throw new Error(
       `--wait-for-publish inválido: ${String(opts.waitForPublish)}. ` +
-        "Debe ser un número de segundos finito y no negativo.",
+        "Debe ser un número de segundos entre 0 y 3600.",
     );
   }
   const pausa = dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));

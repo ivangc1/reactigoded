@@ -481,6 +481,11 @@ describe("espera a que la versión sea visible en el registro", () => {
     [Number.NaN, "lo que produce parseArgs con la flag sin valor"],
     [Number.POSITIVE_INFINITY, "infinito: finito no es lo mismo que grande"],
     [-5, "un presupuesto negativo"],
+    // Finito, y aun así reabría el bucle: 1e308 * 1000 DESBORDA a Infinity, con
+    // lo que `limite` volvía a ser inalcanzable. Validar la entrada no bastaba;
+    // hay que acotar el intervalo (codex).
+    [1e308, "finito pero desborda el deadline en milisegundos"],
+    [3601, "por encima del techo de una hora"],
   ];
   it.each(PRESUPUESTOS_INVALIDOS)("rechaza %s (%s) sin tocar el registro", async (valor) => {
     const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
@@ -493,17 +498,17 @@ describe("espera a que la versión sea visible en el registro", () => {
     expect(estado.llamadas).toBe(0);
   });
 
-  it("0 y un valor positivo SÍ se aceptan — el allowlist no es demasiado estrecho", async () => {
+  // Un allowlist mal puesto rompe por el otro lado: rechazar lo legítimo. Se
+  // fijan los DOS bordes del intervalo, incluido el techo exacto.
+  it.each([
+    [0, "sin espera"],
+    [180, "lo que pasa release.yml"],
+    [3600, "el techo exacto, que debe entrar"],
+  ])("acepta %s (%s)", async (valor) => {
     const ok = JSON.stringify({ gitHead: "abc" });
     await expect(
       leerDelRegistro(
-        { pkg: "reactigoded", version: "1.0.0", waitForPublish: 0 },
-        { ejecutar: () => Promise.resolve(ok), dormir: () => Promise.resolve() },
-      ),
-    ).resolves.toEqual({ gitHead: "abc" });
-    await expect(
-      leerDelRegistro(
-        { pkg: "reactigoded", version: "1.0.0", waitForPublish: 180 },
+        { pkg: "reactigoded", version: "1.0.0", waitForPublish: valor },
         { ejecutar: () => Promise.resolve(ok), dormir: () => Promise.resolve() },
       ),
     ).resolves.toEqual({ gitHead: "abc" });
