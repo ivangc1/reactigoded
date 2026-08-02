@@ -16,10 +16,10 @@ jobs:
     # Linux y solo cazados manualmente por Codex en su sandbox real.
     # Esta matriz es la red de seguridad que los habría cazado
     # automáticamente.
-    #   - ubuntu-latest + Node 22.13.0: baseline (engine mínimo del
+    #   - ubuntu-latest + Node 22.22.2: baseline (engine mínimo del
     #     package.json, lo que se publicaba pre-#151).
     #   - ubuntu-latest + Node 24: forward compat con Node current.
-    #   - windows-latest + Node 22.13.0 / 24: paridad de plataforma del
+    #   - windows-latest + Node 22.22.2 / 24: paridad de plataforma del
     #     paquete publicado. Caza POSIX-only commands, path separator
     #     leaks, line-ending sensitivity, shell-specific scripts.
     # `fail-fast: false` para que un fallo en Windows-Node24 no aborte
@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: ["22.13.0", "24"]
+        node: ["22.22.2", "24"]
     # Sin override de shell: todos los steps invocan `npm run ...` o
     # `npx ...`, que son cross-platform. El único step inline que
     # requería bash (`grep -cF '[reactigoded]'`) se migró a
@@ -245,7 +245,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22.13.0
+          node-version: 22.22.2
           cache: npm
 
       - name: Install dependencies

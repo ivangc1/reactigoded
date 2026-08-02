@@ -153,14 +153,49 @@ rg "state=\"(error|success)\""
 
 ### Cambiado
 
-- **El engine floor sube a `>=22.13.0`** (`C-5`, decisión de floor). Aplica el principio ya
-  ratificado en este mismo CHANGELOG —«floor alineado al peor caso del ecosistema»— con el tooling
-  de hoy: con 22.12, `pnpm` ≥11 rechaza el install (exige ≥22.13) y `npm ci --engine-strict` falla
-  con 10 `EBADENGINE` de la familia ESLint 10. Excluye una única release, **22.12.0**, que es la
-  primera de su línea. Subirlo después de 1.0.0 costaría un MAJOR; por eso va ahora.
-  Matiz medido y anotado: ESLint 10.7 **funciona** en 22.12 pese a declararse fuera de rango, así
-  que la celda CI de 22.12 pasaba **por suerte, no por contrato** — un patch podía romperla sin
-  aviso. La matriz de CI pasa a 22.13.
+- **Bump de 27 devDependencies** — 23 minor/patch y 4 majors: `sigstore` 4→5, `size-limit` y
+  `@size-limit/file` 12→13, `@testing-library/jest-dom` 6→7. Ninguna toca runtime ni peers, así
+  que el consumer no ve nada de esto.
+  - **`typescript` se queda en `6.0.3` a propósito.** TS 7 nativo **no expone la Compiler API de
+    JS**, y de ella dependen cinco gates de este repo (`check-server-safe-markers`,
+    `check-emitted-classes`, `check-public-api-exports`, `check-dist-dts`, `eopt-classify`) además
+    de `typescript-eslint`. **Condición de desbloqueo**: que 7.1 publique esa API y
+    `typescript-eslint` la soporte (upstream #10940). Está anotado en `_comment_typecheck_native`
+    del `package.json`, que es donde vive el rationale completo.
+  - Fallout real: **0 regresiones funcionales**. Lo único que salió fueron 12 violaciones de
+    reglas nuevas de los linters actualizados, todas atendidas en código salvo una (ver abajo).
+- **Se retiran `patch-package`, la carpeta `patches/` y el hook `prepare`.** El patch existía
+  porque `eslint-plugin-jest-dom@5.5.0` usaba `context.getSourceCode()`, retirado en ESLint 9+.
+  La 5.10.1 ya no lo usa —verificado: 0 ocurrencias en `dist/rules/`— y `patch-package` de hecho
+  rechazaba aplicar el patch por desajuste de versión. Se cumplió la condición de salida que el
+  propio `eslint.config.js` tenía escrita.
+  - **Esto disuelve `SYM-1` de raíz**: sin `prepare` en el manifest publicado no hay hook que se
+    ejecute al instalar desde un directorio o un symlink, así que `npm link` y
+    `npm install file:<dir>` no tienen nada que romper. El guard que se había añadido para ello
+    deja de hacer falta.
+- **Ref callbacks explícitos en `Menu` y `Tooltip`.** Los setters de Floating UI se pasaban
+  sueltos (`refs.setReference`), y FUI los **tipa** como métodos aunque los **implementa** como
+  funciones estables sin `this`. Ahora van envueltos en `useCallback` sobre `[refs]` —identidad
+  igual de estable, `refs` lo es— y `MenuContext` declara `(node: HTMLElement | null) => void` en
+  vez de arrastrar el tipo interno de la librería. Además `allowIncidentalConsoleError` hace
+  `.bind(console)`: ahí el receptor perdido **no** era falso positivo, y el guard se re-invoca
+  desde dentro de un mock, así que habría sido un fallo silencioso justo en el camino que existe
+  para no perder mensajes.
+- **El engine floor sube a `>=22.22.2`** (`C-5`, decisión de floor). Sale del principio ya
+  ratificado en este mismo CHANGELOG —«floor alineado al peor caso del ecosistema»— re-derivado con
+  el tooling de hoy: con 22.12, `pnpm` ≥11 rechaza el install y `npm ci --engine-strict` falla con
+  10 `EBADENGINE` de la familia ESLint 10; y con el bump de devDeps de este release, `sigstore@5`
+  pide `^22.22.2`.
+  - **Por qué 22.22.2 y no 22.13**: es una decisión explícita del mantenedor, no la aplicación
+    mecánica del principio. Hoy el paquete no tiene consumers reales —`latest` sigue apuntando a
+    `beta.26`— y las máquinas del único consumer van por encima de esa versión. Pre-1.0 subirlo es
+    gratis; después de 1.0.0 costaría un MAJOR. Y relajarlo más adelante **no** es breaking, así
+    que la decisión no es irreversible en la dirección peligrosa.
+  - Matiz medido que conviene no perder: ESLint 10.7 **funciona** en 22.12 pese a declararse fuera
+    de rango, así que la celda CI del floor anterior pasaba **por suerte, no por contrato**.
+  - La matriz de CI y los contextos requeridos del ruleset pasan a `22.22.2`. Los dos: un job
+    renombrado sin actualizar el ruleset deja checks requeridos que no aparecen nunca y bloquea
+    todos los PRs.
 
 - El **registro durable** del release pasa del cuerpo de la GitHub Release a un asset
   `release-record.json`. El cuerpo es a la vez notas para humanos y registro de máquina, así

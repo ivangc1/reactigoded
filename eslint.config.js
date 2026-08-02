@@ -80,21 +80,16 @@ export default defineConfig([
 
   // Tests — Testing Library + jest-dom matchers
   //
-  // `eslint-plugin-jest-dom@5.5.0` (última publicada) usa
-  // `context.getSourceCode()` retirado en ESLint 9+. v6 lleva bloqueada
-  // desde feb 2025 por NPM_TOKEN inválido del bot semantic-release; el
-  // maintainer principal (@benmonro) no responde y solo él tiene permisos
-  // para republicar (issue upstream:
-  // https://github.com/testing-library/eslint-plugin-jest-dom/issues/417).
+  // Histórico (CERRADO en el gate 1.0.0): la 5.5.0 usaba
+  // context.getSourceCode(), retirado en ESLint 9+, y la v6 llevaba bloqueada
+  // desde feb-2025 por un NPM_TOKEN caducado del bot de release upstream. El
+  // repo convivía con un patch local vía patch-package.
   //
-  // Mientras tanto, aplicamos un patch local con `patch-package` que
-  // sustituye `context.getSourceCode()` por `context.sourceCode` en
-  // `dist/context.js` + 3 reglas afectadas. El patch vive en
-  // `patches/eslint-plugin-jest-dom+5.5.0.patch` y se aplica
-  // automáticamente con el script `prepare` del package.json (`npm install`
-  // local lo invoca; el consumer del paquete final NO lo ejecuta).
-  // Cuando v6 (o un fork bajo @eslint-community / @testing-library) salga,
-  // basta `npm install` la versión nueva y `rm patches/eslint-plugin-jest-dom+*`.
+  // La 5.10.1 ya no usa esa API (verificado: 0 ocurrencias de getSourceCode()
+  // en dist/rules), asi que se cumplió la condición de salida que este mismo
+  // comentario declaraba. Fuera el patch, fuera patch-package y fuera el hook
+  // prepare — lo que ademas disuelve SYM-1 por completo: sin prepare en el
+  // manifest publicado no hay nada que rompa npm link ni npm install file:<dir>.
   {
     ...testingLibrary.configs["flat/react"],
     files: ["**/*.{test,spec}.{ts,tsx}"],

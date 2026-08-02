@@ -19,11 +19,34 @@ Upstream (`eslint-plugin-jest-dom@5.5.0`) sin update desde feb 2025 por NPM_TOKE
 - **PR upstream**: el repo upstream no tiene maintainers activos respondiendo. Un PR queda colgado indefinidamente.
 - **Sustituir plugin** (eslint-community fork): trabajo grande sin garantía de longevidad. Probable que el fork también muera.
 
-## Operativa actual
+## CERRADO (gate 1.0.0, 2026-08-02)
 
-- `prepare` hook del package.json invoca `patch-package` automáticamente en `npm install` local.
-- El hook está **autoguardado**: solo llama a `patch-package` si existe la carpeta `patches/`.
-- CI corre el patch en cada install + verify.
+**El patch ya no existe y no hace falta.** La condición de salida que este mismo documento
+declaraba —«cuando salga una versión nueva, basta instalarla y borrar el patch»— se cumplió:
+`eslint-plugin-jest-dom@5.10.1` ya no usa `context.getSourceCode()`. Verificado: **0**
+ocurrencias en `dist/rules/`, y `patch-package` rechazaba aplicar el patch por desajuste de
+versión (hecho para 5.5.0, instalada 5.10.1).
+
+Se retiran las tres piezas: `patches/`, la devDependency `patch-package` y el hook `prepare`.
+
+**Efecto colateral que cierra otro hallazgo**: sin `prepare` en el manifest publicado, `SYM-1`
+desaparece de raíz. Ya no hay hook que se ejecute al instalar desde un directorio o un symlink,
+así que `npm link` y `npm install file:<dir>` no tienen nada que romper — ni siquiera hace falta
+el guard `existsSync("patches")` que se había añadido para ello.
+
+Nota de método: la 5.10.1 trajo además dos reglas nuevas. Una de ellas,
+`jest-dom/prefer-to-have-value`, tiene un **autofix incorrecto** para atributos ARIA: convirtió
+5 aserciones sobre `aria-valuenow` en `toHaveValue()` y rompió 10 tests de `Progress`, porque
+`toHaveValue` lee la propiedad `value` de un control de formulario y un
+`<div role="progressbar">` no la tiene. Está desactivada solo en ese fichero, con la razón
+escrita ahí.
+
+Lo de abajo queda como registro histórico del problema y de por qué se eligió parchear.
+
+## Operativa (histórica)
+
+- El hook `prepare` invocaba `patch-package` en cada `npm install` local.
+- CI corría el patch en cada install + verify.
 
 > **Corrección (gate 1.0.0, `SYM-1`).** Este documento afirmaba que «el consumer del paquete
 > final NO ejecuta el `prepare` hook (`prepublishOnly` lo bloquea)». Las dos mitades son falsas:

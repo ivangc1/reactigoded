@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useId,
   useMemo,
   useRef,
@@ -192,6 +193,24 @@ export function Menu({
   const { getReferenceProps, getFloatingProps, getItemProps } =
     useInteractions([click, dismiss, role, listNavigation, typeahead]);
 
+  // Ref callbacks explícitos en vez de pasar `refs.setReference` suelto.
+  // FUI los TIPA como métodos (`setReference(node): void`) aunque los
+  // IMPLEMENTA como funciones estables sin `this` — así que extraerlos deja
+  // un método sin receptor a ojos de TypeScript. Envolverlos declara lo que
+  // realmente son en este contexto: ref callbacks. `refs` es estable en FUI,
+  // luego la identidad de estos también lo es y la memoización no cambia.
+  const setReference = useCallback(
+    (node: HTMLElement | null) => {
+      refs.setReference(node);
+    },
+    [refs],
+  );
+  const setFloating = useCallback(
+    (node: HTMLElement | null) => {
+      refs.setFloating(node);
+    },
+    [refs],
+  );
   const ctxValue = useMemo(
     () => ({
       open,
@@ -206,8 +225,8 @@ export function Menu({
       labelsRef,
       activeIndex,
       setActiveIndex,
-      setReference: refs.setReference,
-      setFloating: refs.setFloating,
+      setReference,
+      setFloating,
       context,
       floatingStyles,
       nodeId,
@@ -222,8 +241,8 @@ export function Menu({
       getFloatingProps,
       getItemProps,
       activeIndex,
-      refs.setReference,
-      refs.setFloating,
+      setReference,
+      setFloating,
       context,
       floatingStyles,
       nodeId,

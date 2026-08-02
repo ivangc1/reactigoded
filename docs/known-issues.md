@@ -19,7 +19,7 @@ NO defectos del `dist`):
   el paréntesis que había aquí («un `require` CJS debe pasar a `import()`
   dinámico») era falso en runtime y se ha quitado: ver la corrección de abajo.
 - `node10`: 💀 — resolución legacy sin soporte de `exports`; irrelevante
-  (engine floor `>=22.13`).
+  (engine floor `>=22.22`).
 - Entrypoints `styles/*.css`: 💀 — los bundlers los resuelven sin problema, pero
   **no es un falso positivo de attw**. Ver la corrección justo debajo.
 

@@ -1,11 +1,7 @@
 "use client";
 
 import { createContext, useContext, type CSSProperties, type RefObject } from "react";
-import type {
-  FloatingContext,
-  useFloating,
-  useInteractions,
-} from "@floating-ui/react";
+import type { FloatingContext, useInteractions } from "@floating-ui/react";
 
 export interface MenuContextValue {
   /** Si el menú está visible. */
@@ -39,10 +35,18 @@ export interface MenuContextValue {
   activeIndex: number | null;
   /** Setter del index activo. */
   setActiveIndex: (index: number | null) => void;
-  /** `setReference` para que `MenuTrigger` registre su elemento. */
-  setReference: ReturnType<typeof useFloating>["refs"]["setReference"];
-  /** `setFloating` para que `MenuContent` registre su elemento. */
-  setFloating: ReturnType<typeof useFloating>["refs"]["setFloating"];
+  /**
+   * Ref callback para que `MenuTrigger` registre su elemento.
+   *
+   * Se declara como ref callback y no como
+   * `ReturnType<typeof useFloating>["refs"]["setReference"]`: eso último es el
+   * tipo-MÉTODO de Floating UI, que arrastra un `this` implícito y acopla este
+   * contexto a un detalle de tipado de la librería. Lo que este contexto
+   * necesita —y lo que sus consumidores hacen con ello— es un ref callback.
+   */
+  setReference: (node: HTMLElement | null) => void;
+  /** Ref callback para que `MenuContent` registre su elemento. Ver arriba. */
+  setFloating: (node: HTMLElement | null) => void;
   /** Context FUI para `<FloatingFocusManager>` en MenuContent. */
   context: FloatingContext;
   /**

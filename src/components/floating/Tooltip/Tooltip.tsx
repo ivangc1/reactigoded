@@ -483,6 +483,24 @@ export function Tooltip({
   // (`getBoundingClientRect`). Rechaza imperative handles
   // (`useImperativeHandle` con objeto custom) — FUI no puede medirlos
   // y el tooltip queda igualmente roto.
+  // Ref callbacks explícitos, no `refs.setX` suelto: FUI los TIPA como
+  // métodos aunque los IMPLEMENTA como funciones estables sin `this`, así que
+  // extraerlos deja un método sin receptor a ojos de TypeScript. Envolverlos
+  // declara lo que son aquí —ref callbacks— y `refs` es estable, luego estos
+  // también.
+  const setReferenceRef = useCallback(
+    (node: HTMLElement | null) => {
+      refs.setReference(node);
+    },
+    [refs],
+  );
+  const setFloatingRef = useCallback(
+    (node: HTMLElement | null) => {
+      refs.setFloating(node);
+    },
+    [refs],
+  );
+
   const refEverConnectedRef = useRef(false);
   const probeRef = useCallback((node: Element | null) => {
     if (node == null) return;
@@ -511,7 +529,7 @@ export function Tooltip({
   const handlersInvokedRef = useRef(false);
 
   const childRef = children.props.ref ?? null;
-  const referenceRef = useMergeRefs([refs.setReference, probeRef, childRef]);
+  const referenceRef = useMergeRefs([setReferenceRef, probeRef, childRef]);
 
   const warnedNoForwardRefRef = useRef(false);
   // Source diferenciado: `"intent"` (sentinel disparó tras hover/focus,
@@ -704,7 +722,7 @@ export function Tooltip({
   const portal = isOpen && (
     <FloatingPortal {...(container ? { root: container } : {})}>
       <span
-        ref={refs.setFloating}
+        ref={setFloatingRef}
         style={floatingStyles}
         className={cn(
           "ig-tooltip",
