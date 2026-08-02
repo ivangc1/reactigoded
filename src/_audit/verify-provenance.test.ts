@@ -476,12 +476,13 @@ describe("espera a que la versión sea visible en el registro", () => {
   // es siempre falso y la pausa sale `NaN`, que `setTimeout` trata como 0 — o
   // sea bucle infinito contra el registro. Se rechaza ANTES de la primera
   // consulta (codex).
-  it.each([
+  const PRESUPUESTOS_INVALIDOS: [string | number, string][] = [
     ["bogus", "un valor no numérico"],
     [Number.NaN, "lo que produce parseArgs con la flag sin valor"],
     [Number.POSITIVE_INFINITY, "infinito: finito no es lo mismo que grande"],
     [-5, "un presupuesto negativo"],
-  ])("rechaza %s (%s) sin tocar el registro", async (valor) => {
+  ];
+  it.each(PRESUPUESTOS_INVALIDOS)("rechaza %s (%s) sin tocar el registro", async (valor) => {
     const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
     await expect(
       leerDelRegistro(
