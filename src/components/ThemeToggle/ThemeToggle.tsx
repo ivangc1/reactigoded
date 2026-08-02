@@ -95,7 +95,18 @@ function useDomTheme(
         // —en tests— entrega la notificación fuera de `act()`. Lo que
         // interesa observar son los escritores AJENOS (`useTheme`, el script
         // anti-flash del consumer, código de la app).
-        if (readDomTheme(attribute) === selfWritten.current) return;
+        //
+        // La marca se CONSUME al usarla: es un vale de un solo uso para LA
+        // notificación que genera nuestra escritura, no un valor a ignorar
+        // para siempre. Dejarla puesta abría este agujero (codex P2): tras
+        // escribir "dark", un tercero pone "light" —se propaga bien— y luego
+        // vuelve a "dark"; esa segunda sí es ajena, pero coincidía con la
+        // marca vieja y se descartaba, dejando `aria-checked` y el label
+        // desincronizados de `<html>` de forma estable.
+        if (readDomTheme(attribute) === selfWritten.current) {
+          selfWritten.current = null;
+          return;
+        }
         cb();
       });
       observer.observe(document.documentElement, {

@@ -332,4 +332,39 @@ describe("ThemeToggle — sigue a escritores externos de data-theme", () => {
       obs.disconnect();
     }
   });
+
+  it("sigue sincronizado si un tercero vuelve al último valor que el componente escribió", async () => {
+    // El agujero que cerró codex P2. La marca anti-auto-despertar es un vale de
+    // UN SOLO USO; si se quedara puesta, esta secuencia la reutilizaría para
+    // descartar una notificación ajena:
+    //
+    //   1. montaje sin atributo → el componente escribe "dark"  (marca = dark)
+    //   2. un tercero pone "light"                              → se propaga OK
+    //   3. el tercero vuelve a "dark"                           → coincide con
+    //      la marca vieja y se descartaba, dejando el switch en "light" con
+    //      `<html data-theme="dark">` de forma ESTABLE, no transitoria.
+    render(<ThemeToggle storageKey={null} />);
+    const sw = screen.getByRole("switch");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    // (1) el componente aplicó su default al DOM
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(sw).toBeChecked();
+
+    // (2) escritor externo → light
+    await act(async () => {
+      document.documentElement.setAttribute("data-theme", "light");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(sw).not.toBeChecked();
+
+    // (3) el mismo escritor vuelve a dark: es ajena, debe propagarse.
+    await act(async () => {
+      document.documentElement.setAttribute("data-theme", "dark");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(sw).toBeChecked();
+    expect(screen.getByText("Dark")).toBeInTheDocument();
+  });
 });

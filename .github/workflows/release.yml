@@ -284,14 +284,43 @@ jobs:
           VERSION: ${{ steps.reltag.outputs.version }}
         run: |
           META="$(npm view "reactigoded@$VERSION" --json)"
-          printf '%s' "$META" | node -e '
+          # Los dist-tags que HOY apuntan a esta versión, leídos del registro.
+          # El registro durable no puede AFIRMAR el dist-tag derivado por este
+          # workflow sin comprobarlo (codex P1): en modo reconcile la versión
+          # pudo publicarla una revisión anterior con otro tag, y la provenance
+          # —que prueba paquete, commit y workflow— no dice nada del dist-tag,
+          # que además es un puntero MUTABLE.
+          DIST_TAGS="$(npm view reactigoded dist-tags --json)"
+          printf '%s\n%s' "$META" "$DIST_TAGS" | node -e '
             let s = "";
             process.stdin.on("data", (d) => (s += d)).on("end", () => {
-              const m = JSON.parse(s);
+              const [metaRaw, tagsRaw] = s.split("\n");
+              const m = JSON.parse(metaRaw);
+              const tags = JSON.parse(tagsRaw || "{}");
+              const version = process.env.VERSION;
+              const applied = process.env.APPLIED_TAG;
+              // Todos los que apuntan a esta versión, no solo el derivado.
+              const apuntan = Object.entries(tags)
+                .filter(([, v]) => v === version)
+                .map(([k]) => k)
+                .sort();
+              if (!apuntan.includes(applied)) {
+                console.error(
+                  `::error::El dist-tag derivado '${applied}' NO apunta a ${version} en el registro ` +
+                    `(apuntan: ${apuntan.join(", ") || "ninguno"}). Grabarlo haría FALSO el registro ` +
+                    `durable. Si la publicó otra revisión del workflow con otro tag, reconcilia a mano.`,
+                );
+                process.exit(1);
+              }
               const integrity = String(m?.dist?.integrity ?? "");
               const rec = {
                 version: process.env.VERSION,
+                // Verificado contra el registro por el guard de arriba.
                 distTag: process.env.APPLIED_TAG,
+                // Y se graban TODOS los que apuntan, porque un dist-tag es
+                // mutable: esto es lo observado al escribir el registro, no una
+                // afirmación sobre lo que se pasó a `npm publish`.
+                distTagsObservados: apuntan,
                 tag: process.env.REL_TAG,
                 tagCommit: process.env.TAG_COMMIT,
                 runId: process.env.GITHUB_RUN_ID,
