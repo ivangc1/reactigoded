@@ -32,6 +32,8 @@ import {
   buildRows,
   parseArgs,
   deriveDistTag,
+  esVersionAusente,
+  leerDelRegistro,
 } from "../../scripts/verify-provenance.mjs";
 import type {
   Attestation,
@@ -306,6 +308,24 @@ describe("el dist-tag del registro durable", () => {
     expect(fila(filasCon(sinTag), "record-distTag").ok).toBe(false);
   });
 
+  it("un registro SIN distTagsObservados falla, no se salta la comprobación", () => {
+    // La fila vivía bajo un `if (Array.isArray(...))`, así que un registro al
+    // que le faltara el campo —regresión del generador, asset sobrescrito a
+    // mano— no producía fila y el gate salía verde por no tener nada que
+    // comparar (codex). Contradecía el contrato de la cabecera del script:
+    // error ante CUALQUIER cosa que no se pueda afirmar. Ausente no es «no
+    // aplica», es «no verificable».
+    const sinObservados = Object.fromEntries(
+      Object.entries(RECORD_BASE).filter(([k]) => k !== "distTagsObservados"),
+    );
+    const rows = filasCon(sinObservados);
+    expect(fila(rows, "record-distTag-coherente").ok).toBe(false);
+    expect(fila(rows, "record-distTag-coherente").medido).toBe("<ausente>");
+    // El resto del registro sigue verde: sin esta fila, el documento pasaba.
+    expect(fila(rows, "record-distTag").ok).toBe(true);
+    expect(fila(rows, "record-version").ok).toBe(true);
+  });
+
   it("caza un registro que se contradice a sí mismo", () => {
     // Aplicado `rc` pero observados solo `latest`: el workflow valida al
     // escribir que el tag apunte de verdad a esta versión, así que esto no
@@ -357,5 +377,214 @@ describe("deriveDistTag replica la derivación del workflow", () => {
   ];
   it.each(TABLA)("%s → %s", (version, esperado) => {
     expect(deriveDistTag(version)).toBe(esperado);
+  });
+});
+
+/**
+ * La carrera de propagación del registro, medida en el release de
+ * `1.0.0-rc.2`: el paso `Publicar` terminó a las 21:08:53 y este gate corrió a
+ * las 21:08:53 — el mismo segundo. `npm view` respondió `E404` sobre un paquete
+ * que SÍ estaba publicado (`gitHead` correcto, `dist-tags.rc` aplicado). El job
+ * murió DESPUÉS de publicar, dejando el registro durable sin escribir.
+ */
+describe("espera a que la versión sea visible en el registro", () => {
+  it("exige la LÍNEA estructurada de npm, no un token suelto", () => {
+    // Formato real medido en npm 11 (release de 1.0.0-rc.2).
+    expect(
+      esVersionAusente("npm error code E404\nnpm error 404 No match found for version 1.0.0-rc.2"),
+    ).toBe(true);
+    // npm < 10.
+    expect(esVersionAusente("npm ERR! code E404")).toBe(true);
+    expect(esVersionAusente("request to https://reg/404-proxy failed, ENOTFOUND")).toBe(false);
+    expect(esVersionAusente("npm error code E401 Unauthorized")).toBe(false);
+    expect(esVersionAusente("")).toBe(false);
+    expect(esVersionAusente(undefined)).toBe(false);
+    // El token dentro de otra línea NO cuenta: sin la línea `code E404` no hay
+    // afirmación de que la versión falte.
+    expect(esVersionAusente("npm error 404 algo sobre E404 en prosa")).toBe(false);
+  });
+
+  it("la clasificación mira SOLO stderr, nunca el message", async () => {
+    // Contrato, no mecanismo: `message` lo compone Node con el comando
+    // reflejado, o sea con texto que viene de la ENTRADA. Decidir con él es
+    // dejar que la entrada influya en su propia clasificación. Aquí el
+    // `message` trae la línea estructurada y `stderr` no: debe ganar `stderr`.
+    const estado = { llamadas: 0 };
+    const ejecutar = () => {
+      estado.llamadas += 1;
+      const e = new Error("npm error code E404") as Error & { stderr: string };
+      e.stderr = "npm error code E401 Unauthorized";
+      throw e;
+    };
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0", waitForPublish: 180 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/E401/);
+    expect(estado.llamadas).toBe(1);
+  });
+
+  it("una versión que contenga 'E404' no secuestra la clasificación", async () => {
+    // `1.0.0-E404` es SemVer válido, y `execFileSync` refleja el comando en
+    // `message`: «Command failed: npm view reactigoded@1.0.0-E404 --json».
+    // Mezclar `message` con `stderr` metía texto controlado por la ENTRADA
+    // dentro del dato con el que se decide, así que un E401 se reintentaba
+    // hasta agotar el plazo y moría con un timeout que enterraba la causa
+    // real (codex).
+    const estado = { llamadas: 0 };
+    const ejecutar = () => {
+      estado.llamadas += 1;
+      const e = new Error(
+        "Command failed: npm view reactigoded@1.0.0-E404 --json",
+      ) as Error & { stderr: string };
+      e.stderr = "npm error code E401 Unauthorized";
+      throw e;
+    };
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0-E404", waitForPublish: 180 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/E401/);
+    // Terminal a la primera: ni un solo reintento.
+    expect(estado.llamadas).toBe(1);
+  });
+
+  // Un `execFileSync` de mentira que falla `fallos` veces con `stderr` y luego
+  // devuelve `ok`. Inyectado, no mockeado a nivel de módulo.
+  const registroQueFalla = (stderr: string, fallos: number, ok?: string) => {
+    const estado = { llamadas: 0 };
+    const ejecutar = () => {
+      estado.llamadas += 1;
+      // Sin respuesta buena, falla SIEMPRE. Con `dormir` inyectado a no-op el
+      // bucle itera a toda velocidad, así que un tope de fallos se agotaría y
+      // el fake acabaría lanzando otra cosa — enmascarando lo que se mide.
+      if (ok === undefined || estado.llamadas <= fallos) {
+        const e = new Error("Command failed") as Error & { stderr: string };
+        e.stderr = stderr;
+        throw e;
+      }
+      return Promise.resolve(ok);
+    };
+    return { estado, ejecutar };
+  };
+
+  it("reintenta el E404 y devuelve la meta en cuanto aparece", async () => {
+    const { estado, ejecutar } = registroQueFalla(
+      "npm error code E404\nnpm error 404 No match found",
+      2,
+      JSON.stringify({ gitHead: "abc123" }),
+    );
+    const dormidas: number[] = [];
+    const meta = await leerDelRegistro(
+      { pkg: "reactigoded", version: "1.0.0-rc.2", waitForPublish: 180 },
+      {
+        ejecutar,
+        dormir: (ms: number) => {
+          dormidas.push(ms);
+          return Promise.resolve();
+        },
+      },
+    );
+    expect(meta).toEqual({ gitHead: "abc123" });
+    expect(estado.llamadas).toBe(3);
+    expect(dormidas).toHaveLength(2);
+  });
+
+  it("NO reintenta lo que no es un E404 — un fallo real informa mejor que un timeout", async () => {
+    const { estado, ejecutar } = registroQueFalla("npm error code E401 Unauthorized", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "9.9.9", waitForPublish: 180 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+      // El motivo real viaja en `stderr`; `message` solo dice «Command failed».
+      // Propagar el error tal cual escondería la causa.
+    ).rejects.toThrow(/E401/);
+    expect(estado.llamadas).toBe(1);
+  });
+
+  it("sin --wait-for-publish, un E404 falla al instante", async () => {
+    // Es lo correcto en el uso post-hoc: ahí «no existe» ES la respuesta, y
+    // esperar tres minutos para confirmarla solo enmascara el resultado.
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro({ pkg: "reactigoded", version: "9.9.9" }, { ejecutar, dormir: () => Promise.resolve() }),
+    ).rejects.toThrow(/no está publicado/);
+    expect(estado.llamadas).toBe(1);
+  });
+
+  it("agotado el presupuesto FALLA, no sale en silencio", async () => {
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "9.9.9", waitForPublish: 0.05 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/sigue sin aparecer/);
+    expect(estado.llamadas).toBeGreaterThan(1);
+  });
+
+  // Un presupuesto que no es un número finito no acota nada: `Date.now() >= NaN`
+  // es siempre falso y la pausa sale `NaN`, que `setTimeout` trata como 0 — o
+  // sea bucle infinito contra el registro. Se rechaza ANTES de la primera
+  // consulta (codex).
+  const PRESUPUESTOS_INVALIDOS: [string | number, string][] = [
+    ["bogus", "un valor no numérico"],
+    [Number.NaN, "lo que produce parseArgs con la flag sin valor"],
+    [Number.POSITIVE_INFINITY, "infinito: finito no es lo mismo que grande"],
+    [-5, "un presupuesto negativo"],
+    // Finito, y aun así reabría el bucle: 1e308 * 1000 DESBORDA a Infinity, con
+    // lo que `limite` volvía a ser inalcanzable. Validar la entrada no bastaba;
+    // hay que acotar el intervalo (codex).
+    [1e308, "finito pero desborda el deadline en milisegundos"],
+    [3601, "por encima del techo de una hora"],
+  ];
+  it.each(PRESUPUESTOS_INVALIDOS)("rechaza %s (%s) sin tocar el registro", async (valor) => {
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "9.9.9", waitForPublish: valor as number },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/wait-for-publish inválido/);
+    expect(estado.llamadas).toBe(0);
+  });
+
+  // Un allowlist mal puesto rompe por el otro lado: rechazar lo legítimo. Se
+  // fijan los DOS bordes del intervalo, incluido el techo exacto.
+  it.each([
+    [0, "sin espera"],
+    [180, "lo que pasa release.yml"],
+    [3600, "el techo exacto, que debe entrar"],
+  ])("acepta %s (%s)", async (valor) => {
+    const ok = JSON.stringify({ gitHead: "abc" });
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0", waitForPublish: valor },
+        { ejecutar: () => Promise.resolve(ok), dormir: () => Promise.resolve() },
+      ),
+    ).resolves.toEqual({ gitHead: "abc" });
+  });
+
+  it("la flag SIN valor recorre el camino real: parseArgs → NaN → rechazo", async () => {
+    // El caso que describe codex no llega como `undefined` sino como lo que
+    // `parseArgs` produce al no haber siguiente argumento: `Number(undefined)`.
+    const args = parseArgs(["1.2.3", "--commit", "x", "--wait-for-publish"]);
+    expect(Number.isNaN(args.waitForPublish)).toBe(true);
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.2.3", waitForPublish: args.waitForPublish },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/wait-for-publish inválido/);
+    expect(estado.llamadas).toBe(0);
+  });
+
+  it("--wait-for-publish se parsea y su ausencia es 0", () => {
+    expect(parseArgs(["1.2.3", "--commit", "x", "--wait-for-publish", "180"]).waitForPublish).toBe(180);
+    expect(parseArgs(["1.2.3", "--commit", "x"]).waitForPublish).toBe(0);
   });
 });
