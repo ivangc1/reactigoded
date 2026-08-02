@@ -196,6 +196,23 @@ export function esVersionAusente(salida) {
  */
 export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
   const espera = Number(opts.waitForPublish ?? 0);
+  // ALLOWLIST POSITIVO, no lista de casos malos. `Number("bogus")` y
+  // `Number(undefined)` —esto último es `--wait-for-publish` sin valor al final
+  // de argv— dan `NaN`, y con `NaN` el presupuesto deja de acotar:
+  // `Date.now() >= NaN` es SIEMPRE falso y la pausa calculada sale `NaN`, que
+  // `setTimeout` trata como 0. O sea un bucle infinito martilleando el registro
+  // justo en el gate que existe para no publicar a ciegas. `Infinity` hace lo
+  // mismo por la otra puerta (codex).
+  //
+  // Enumerar `NaN` e `Infinity` habría dejado fuera la siguiente categoría que
+  // no se me ocurriera. Se exige finito y no negativo: lo demás cae, sin haber
+  // tocado el registro todavía.
+  if (!Number.isFinite(espera) || espera < 0) {
+    throw new Error(
+      `--wait-for-publish inválido: ${String(opts.waitForPublish)}. ` +
+        "Debe ser un número de segundos finito y no negativo.",
+    );
+  }
   const pausa = dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   // Se INYECTA en vez de mockear `node:child_process`: el mock de módulo se
   // demostró frágil —dejaba pasar la llamada real al registro en unos tests y

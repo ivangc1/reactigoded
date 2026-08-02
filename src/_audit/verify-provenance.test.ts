@@ -472,6 +472,57 @@ describe("espera a que la versión sea visible en el registro", () => {
     expect(estado.llamadas).toBeGreaterThan(1);
   });
 
+  // Un presupuesto que no es un número finito no acota nada: `Date.now() >= NaN`
+  // es siempre falso y la pausa sale `NaN`, que `setTimeout` trata como 0 — o
+  // sea bucle infinito contra el registro. Se rechaza ANTES de la primera
+  // consulta (codex).
+  it.each([
+    ["bogus", "un valor no numérico"],
+    [Number.NaN, "lo que produce parseArgs con la flag sin valor"],
+    [Number.POSITIVE_INFINITY, "infinito: finito no es lo mismo que grande"],
+    [-5, "un presupuesto negativo"],
+  ])("rechaza %s (%s) sin tocar el registro", async (valor) => {
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "9.9.9", waitForPublish: valor as number },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/wait-for-publish inválido/);
+    expect(estado.llamadas).toBe(0);
+  });
+
+  it("0 y un valor positivo SÍ se aceptan — el allowlist no es demasiado estrecho", async () => {
+    const ok = JSON.stringify({ gitHead: "abc" });
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0", waitForPublish: 0 },
+        { ejecutar: () => Promise.resolve(ok), dormir: () => Promise.resolve() },
+      ),
+    ).resolves.toEqual({ gitHead: "abc" });
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.0.0", waitForPublish: 180 },
+        { ejecutar: () => Promise.resolve(ok), dormir: () => Promise.resolve() },
+      ),
+    ).resolves.toEqual({ gitHead: "abc" });
+  });
+
+  it("la flag SIN valor recorre el camino real: parseArgs → NaN → rechazo", async () => {
+    // El caso que describe codex no llega como `undefined` sino como lo que
+    // `parseArgs` produce al no haber siguiente argumento: `Number(undefined)`.
+    const args = parseArgs(["1.2.3", "--commit", "x", "--wait-for-publish"]);
+    expect(Number.isNaN(args.waitForPublish)).toBe(true);
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "1.2.3", waitForPublish: args.waitForPublish },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/wait-for-publish inválido/);
+    expect(estado.llamadas).toBe(0);
+  });
+
   it("--wait-for-publish se parsea y su ausencia es 0", () => {
     expect(parseArgs(["1.2.3", "--commit", "x", "--wait-for-publish", "180"]).waitForPublish).toBe(180);
     expect(parseArgs(["1.2.3", "--commit", "x"]).waitForPublish).toBe(0);
