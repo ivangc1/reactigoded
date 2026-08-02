@@ -305,7 +305,8 @@ jobs:
             --commit "$TAG_COMMIT" \
             --repo "$GITHUB_REPOSITORY" \
             --workflow ".github/workflows/release.yml" \
-            --event push
+            --event push \
+            --wait-for-publish 180
 
       - name: Registrar la publicación en la GitHub Release
         # ÚNICO artefacto duradero donde queda el dist-tag APLICADO.

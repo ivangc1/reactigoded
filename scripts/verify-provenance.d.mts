@@ -144,6 +144,27 @@ export declare function tarballSha512Hex(integrity: unknown): string | null;
  */
 export declare function deriveDistTag(version: string): string;
 
+/**
+ * Discrimina el 404 de «esa versión todavía no existe» por el CÓDIGO del
+ * registro (`E404`), no por el texto del mensaje.
+ */
+export declare function esVersionAusente(salida: unknown): boolean;
+
+/**
+ * Lee `npm view <pkg>@<version> --json`, esperando opcionalmente a que la
+ * versión sea visible (`waitForPublish` segundos). Solo reintenta el `E404`;
+ * cualquier otro fallo es terminal. Agotado el presupuesto, falla.
+ * `dormir` y `ejecutar` se inyectan en tests: nada de mock de modulo.
+ */
+export declare function leerDelRegistro(
+  opts: { pkg: string; version: string; waitForPublish?: number },
+  io?: {
+    dormir?: (ms: number) => Promise<void>;
+    /** Devuelve la salida cruda de npm view. Se inyecta en tests. */
+    ejecutar?: () => string | Promise<string>;
+  },
+): Promise<NpmMeta>;
+
 /** Separa las attestations POR `predicateType`, nunca por índice. */
 export declare function selectAttestations(bundleDoc: unknown): {
   slsa: Attestation[];
@@ -193,6 +214,8 @@ export interface ParsedArgs {
   fromDir: string | undefined;
   record: string | undefined;
   distTag: string | undefined;
+  /** Segundos a esperar a que la versión sea VISIBLE en el registro. 0 = no esperar. */
+  waitForPublish: number;
   asJson: boolean;
 }
 

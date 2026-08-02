@@ -44,6 +44,7 @@
  *     [--pkg reactigoded] [--repo ivangc1/reactigoded] \
  *     [--workflow .github/workflows/release.yml] [--event push] \
  *     [--check-release-record <fichero.json>] [--dist-tag <tag>] \
+ *     [--wait-for-publish <segundos>] \
  *     [--json] [--from-dir <dir>]
  *
  * • Invoker: `release.yml` tras publicar y ANTES de escribir la GitHub
@@ -163,6 +164,90 @@ export function deriveDistTag(version) {
  * INYECTAN ya resueltas (`signatures`), para que el test pueda ejercitar la
  * lógica de comparación sin red y, a la vez, simular una firma inválida.
  */
+/**
+ * ¿Es este error el 404 de «esa versión todavía no existe»? Se mira el CÓDIGO
+ * del registro (`E404`), no el texto: un match por substring sobre stderr daría
+ * verde ante cualquier mensaje que mencione 404 por otro motivo.
+ */
+export function esVersionAusente(salida) {
+  return /\bE404\b/.test(String(salida ?? ""));
+}
+
+/**
+ * Lee `npm view <pkg>@<version> --json`, opcionalmente esperando a que la
+ * versión sea VISIBLE.
+ *
+ * Por qué existe la espera, medido en el release de `1.0.0-rc.2`: el paso
+ * `Publicar` terminó a las 21:08:53 y este gate corrió a las 21:08:53 — el
+ * mismo segundo. `npm view` respondió `E404 No match found for version
+ * 1.0.0-rc.2` sobre un paquete que SÍ estaba publicado (`gitHead` correcto,
+ * `dist-tags.rc` aplicado). El publish escribe y la vía de lectura del registro
+ * tarda en reflejarlo; el gate leía sin margen y tumbaba el job DESPUÉS de
+ * haber publicado, dejando el registro durable sin escribir.
+ *
+ * La espera es OPT-IN y acotada, no un retry global:
+ *  - Sin `--wait-for-publish`, un E404 falla al instante. Es lo correcto en el
+ *    uso post-hoc, donde «no existe» es la respuesta verdadera y esperar dos
+ *    minutos para confirmarlo solo enmascara el resultado.
+ *  - Solo se reintenta el E404. Cualquier otro fallo de `npm view` (red, auth,
+ *    JSON corrupto) es terminal: reintentarlo convertiría un fallo real en un
+ *    timeout, que informa peor.
+ *  - Agotado el presupuesto, FALLA. No hay salida silenciosa.
+ */
+export async function leerDelRegistro(opts, { dormir, ejecutar } = {}) {
+  const espera = Number(opts.waitForPublish ?? 0);
+  const pausa = dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  // Se INYECTA en vez de mockear `node:child_process`: el mock de módulo se
+  // demostró frágil —dejaba pasar la llamada real al registro en unos tests y
+  // no en otros, con lo que el test verde no probaba lo que decía— y además
+  // esto deja el gate ejercitable sin red.
+  const correr =
+    ejecutar ??
+    (async () => {
+      const { execFileSync } = await import("node:child_process");
+      return execFileSync("npm", ["view", `${opts.pkg}@${opts.version}`, "--json"], {
+        encoding: "utf8",
+        maxBuffer: 32 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    });
+  const limite = Date.now() + espera * 1000;
+  let intento = 0;
+
+  for (;;) {
+    try {
+      return JSON.parse(await correr());
+    } catch (err) {
+      const salida = `${err?.stderr ?? ""}\n${err?.message ?? ""}`;
+      // Un fallo terminal se re-lanza con la salida del registro incorporada:
+      // `execFileSync` deja el motivo real en `stderr` y pone «Command failed»
+      // en `message`, así que propagar el error tal cual esconde la causa.
+      if (!esVersionAusente(salida)) {
+        throw new Error(`npm view ${opts.pkg}@${opts.version} falló:\n${salida.trim()}`, {
+          cause: err,
+        });
+      }
+      if (Date.now() >= limite) {
+        // LANZA, no devuelve. `die` imprime y devuelve 1, así que un
+        // `return die(...)` aquí dejaría `meta = 1` y el fallo se reportaría
+        // como «no tiene attestations» — un mensaje falso tapando el real.
+        throw new Error(
+          espera > 0
+            ? `${opts.pkg}@${opts.version} sigue sin aparecer en el registro tras ${espera}s de espera.`
+            : `${opts.pkg}@${opts.version} no está publicado (E404).`,
+          { cause: err },
+        );
+      }
+      intento += 1;
+      // Backoff con techo: los primeros reintentos son rápidos porque la
+      // propagación suele resolverse en segundos, y el techo evita dormir más
+      // de lo que queda de presupuesto.
+      const espera_ms = Math.min(2000 * intento, 15000, Math.max(0, limite - Date.now()));
+      await pausa(espera_ms);
+    }
+  }
+}
+
 export function buildRows({ meta, bundleDoc, expected, signatures, record = null }) {
   const rows = [];
   const row = (key, esperado, medido, nota) =>
@@ -262,14 +347,22 @@ export function buildRows({ meta, bundleDoc, expected, signatures, record = null
     // que el dist-tag aplicado apunte de verdad a esta versión, así que un
     // registro válido tiene su `distTag` dentro de los observados. Si no, el
     // documento se contradice a sí mismo.
-    if (Array.isArray(record.distTagsObservados)) {
-      row(
-        "record-distTag-coherente",
-        true,
-        record.distTagsObservados.includes(record.distTag),
-        `observados al escribir: ${record.distTagsObservados.join(", ") || "(ninguno)"}`,
-      );
-    }
+    //
+    // La fila se emite SIEMPRE. Estaba bajo un `if (Array.isArray(...))`, o sea
+    // que un registro sin el campo —regresión del generador, asset
+    // sobrescrito a mano— no producía fila y el gate salía verde por no haber
+    // nada que comparar (codex). Eso contradecía el contrato escrito en la
+    // cabecera de este mismo fichero: error ante CUALQUIER cosa que no se
+    // pueda afirmar. Ausente no es «no aplica», es «no verificable» ⇒ fallo.
+    const observados = record.distTagsObservados;
+    row(
+      "record-distTag-coherente",
+      true,
+      Array.isArray(observados) ? observados.includes(record.distTag) : "<ausente>",
+      Array.isArray(observados)
+        ? `observados al escribir: ${observados.join(", ") || "(ninguno)"}`
+        : "el registro no trae `distTagsObservados`",
+    );
   }
 
   return rows;
@@ -289,7 +382,7 @@ export function formatReport(rows, { pkg, version, tag, commit }) {
 
 const VALUE_FLAGS = new Set([
   "pkg", "tag", "commit", "repo", "workflow", "event", "from-dir", "check-release-record",
-  "dist-tag",
+  "dist-tag", "wait-for-publish",
 ]);
 
 export function parseArgs(argv) {
@@ -316,6 +409,7 @@ export function parseArgs(argv) {
     fromDir: flag("from-dir"),
     record: flag("check-release-record"),
     distTag: flag("dist-tag"),
+    waitForPublish: Number(flag("wait-for-publish", "0")),
     asJson: argv.includes("--json"),
   };
 }
@@ -326,7 +420,8 @@ async function main(argv) {
     console.error(
       "uso: node scripts/verify-provenance.mjs <version> --tag <tag> --commit <sha>\n" +
         "     [--pkg <nombre>] [--repo <owner/repo>] [--workflow <path>] [--event <nombre>]\n" +
-        "     [--check-release-record <fichero>] [--dist-tag <tag>] [--from-dir <dir>] [--json]\n\n" +
+        "     [--check-release-record <fichero>] [--dist-tag <tag>] [--wait-for-publish <s>]\n" +
+        "     [--from-dir <dir>] [--json]\n\n" +
         (opts.version ? "falta --commit <sha>: sin el commit esperado no hay nada que afirmar." : ""),
     );
     return 2;
@@ -342,13 +437,11 @@ async function main(argv) {
   if (opts.fromDir) {
     meta = readJson(resolve(opts.fromDir, "meta.json"));
   } else {
-    const { execFileSync } = await import("node:child_process");
-    meta = JSON.parse(
-      execFileSync("npm", ["view", `${opts.pkg}@${opts.version}`, "--json"], {
-        encoding: "utf8",
-        maxBuffer: 32 * 1024 * 1024,
-      }),
-    );
+    try {
+      meta = await leerDelRegistro(opts);
+    } catch (err) {
+      return die(err instanceof Error ? err.message : String(err));
+    }
   }
 
   const attUrl = meta?.dist?.attestations?.url;

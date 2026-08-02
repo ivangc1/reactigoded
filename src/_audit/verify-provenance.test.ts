@@ -32,6 +32,8 @@ import {
   buildRows,
   parseArgs,
   deriveDistTag,
+  esVersionAusente,
+  leerDelRegistro,
 } from "../../scripts/verify-provenance.mjs";
 import type {
   Attestation,
@@ -306,6 +308,24 @@ describe("el dist-tag del registro durable", () => {
     expect(fila(filasCon(sinTag), "record-distTag").ok).toBe(false);
   });
 
+  it("un registro SIN distTagsObservados falla, no se salta la comprobación", () => {
+    // La fila vivía bajo un `if (Array.isArray(...))`, así que un registro al
+    // que le faltara el campo —regresión del generador, asset sobrescrito a
+    // mano— no producía fila y el gate salía verde por no tener nada que
+    // comparar (codex). Contradecía el contrato de la cabecera del script:
+    // error ante CUALQUIER cosa que no se pueda afirmar. Ausente no es «no
+    // aplica», es «no verificable».
+    const sinObservados = Object.fromEntries(
+      Object.entries(RECORD_BASE).filter(([k]) => k !== "distTagsObservados"),
+    );
+    const rows = filasCon(sinObservados);
+    expect(fila(rows, "record-distTag-coherente").ok).toBe(false);
+    expect(fila(rows, "record-distTag-coherente").medido).toBe("<ausente>");
+    // El resto del registro sigue verde: sin esta fila, el documento pasaba.
+    expect(fila(rows, "record-distTag").ok).toBe(true);
+    expect(fila(rows, "record-version").ok).toBe(true);
+  });
+
   it("caza un registro que se contradice a sí mismo", () => {
     // Aplicado `rc` pero observados solo `latest`: el workflow valida al
     // escribir que el tag apunte de verdad a esta versión, así que esto no
@@ -357,5 +377,103 @@ describe("deriveDistTag replica la derivación del workflow", () => {
   ];
   it.each(TABLA)("%s → %s", (version, esperado) => {
     expect(deriveDistTag(version)).toBe(esperado);
+  });
+});
+
+/**
+ * La carrera de propagación del registro, medida en el release de
+ * `1.0.0-rc.2`: el paso `Publicar` terminó a las 21:08:53 y este gate corrió a
+ * las 21:08:53 — el mismo segundo. `npm view` respondió `E404` sobre un paquete
+ * que SÍ estaba publicado (`gitHead` correcto, `dist-tags.rc` aplicado). El job
+ * murió DESPUÉS de publicar, dejando el registro durable sin escribir.
+ */
+describe("espera a que la versión sea visible en el registro", () => {
+  it("distingue el E404 por CÓDIGO, no por el texto del mensaje", () => {
+    expect(esVersionAusente("npm error code E404\nnpm error 404 No match")).toBe(true);
+    // Lo que un match por substring de '404' daría por bueno sin serlo:
+    expect(esVersionAusente("request to https://reg/404-proxy failed, ENOTFOUND")).toBe(false);
+    expect(esVersionAusente("npm error code E401 Unauthorized")).toBe(false);
+    expect(esVersionAusente("")).toBe(false);
+    expect(esVersionAusente(undefined)).toBe(false);
+  });
+
+  // Un `execFileSync` de mentira que falla `fallos` veces con `stderr` y luego
+  // devuelve `ok`. Inyectado, no mockeado a nivel de módulo.
+  const registroQueFalla = (stderr: string, fallos: number, ok?: string) => {
+    const estado = { llamadas: 0 };
+    const ejecutar = () => {
+      estado.llamadas += 1;
+      // Sin respuesta buena, falla SIEMPRE. Con `dormir` inyectado a no-op el
+      // bucle itera a toda velocidad, así que un tope de fallos se agotaría y
+      // el fake acabaría lanzando otra cosa — enmascarando lo que se mide.
+      if (ok === undefined || estado.llamadas <= fallos) {
+        const e = new Error("Command failed") as Error & { stderr: string };
+        e.stderr = stderr;
+        throw e;
+      }
+      return Promise.resolve(ok);
+    };
+    return { estado, ejecutar };
+  };
+
+  it("reintenta el E404 y devuelve la meta en cuanto aparece", async () => {
+    const { estado, ejecutar } = registroQueFalla(
+      "npm error code E404\nnpm error 404 No match found",
+      2,
+      JSON.stringify({ gitHead: "abc123" }),
+    );
+    const dormidas: number[] = [];
+    const meta = await leerDelRegistro(
+      { pkg: "reactigoded", version: "1.0.0-rc.2", waitForPublish: 180 },
+      {
+        ejecutar,
+        dormir: (ms: number) => {
+          dormidas.push(ms);
+          return Promise.resolve();
+        },
+      },
+    );
+    expect(meta).toEqual({ gitHead: "abc123" });
+    expect(estado.llamadas).toBe(3);
+    expect(dormidas).toHaveLength(2);
+  });
+
+  it("NO reintenta lo que no es un E404 — un fallo real informa mejor que un timeout", async () => {
+    const { estado, ejecutar } = registroQueFalla("npm error code E401 Unauthorized", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "9.9.9", waitForPublish: 180 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+      // El motivo real viaja en `stderr`; `message` solo dice «Command failed».
+      // Propagar el error tal cual escondería la causa.
+    ).rejects.toThrow(/E401/);
+    expect(estado.llamadas).toBe(1);
+  });
+
+  it("sin --wait-for-publish, un E404 falla al instante", async () => {
+    // Es lo correcto en el uso post-hoc: ahí «no existe» ES la respuesta, y
+    // esperar tres minutos para confirmarla solo enmascara el resultado.
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro({ pkg: "reactigoded", version: "9.9.9" }, { ejecutar, dormir: () => Promise.resolve() }),
+    ).rejects.toThrow(/no está publicado/);
+    expect(estado.llamadas).toBe(1);
+  });
+
+  it("agotado el presupuesto FALLA, no sale en silencio", async () => {
+    const { estado, ejecutar } = registroQueFalla("npm error code E404", 99);
+    await expect(
+      leerDelRegistro(
+        { pkg: "reactigoded", version: "9.9.9", waitForPublish: 0.05 },
+        { ejecutar, dormir: () => Promise.resolve() },
+      ),
+    ).rejects.toThrow(/sigue sin aparecer/);
+    expect(estado.llamadas).toBeGreaterThan(1);
+  });
+
+  it("--wait-for-publish se parsea y su ausencia es 0", () => {
+    expect(parseArgs(["1.2.3", "--commit", "x", "--wait-for-publish", "180"]).waitForPublish).toBe(180);
+    expect(parseArgs(["1.2.3", "--commit", "x"]).waitForPublish).toBe(0);
   });
 });
