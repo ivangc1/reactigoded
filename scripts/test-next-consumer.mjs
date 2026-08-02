@@ -92,9 +92,33 @@ function run(cmd, opts = {}) {
   });
 }
 
-/** Corre un build y devuelve `{ ok, salida }` sin lanzar: el fallo puede ser lo esperado. */
+/**
+ * Corre un build y devuelve `{ ok, salida }` sin lanzar: el fallo puede ser lo
+ * esperado.
+ *
+ * Los DOS flags son explícitos a propósito. En Next 16 el default es Turbopack,
+ * así que un `next build` pelado NO es la celda Webpack — es Turbopack otra vez.
+ * La primera versión de este gate hacía justo eso: corría Turbopack dos veces y
+ * etiquetaba una de ellas como Webpack, de modo que una regresión de resolución
+ * RSC específica de Webpack habría pasado en verde. Lo cazó el review de Codex;
+ * medido después: `next build` imprime «(Turbopack)» y `next build --webpack`
+ * imprime «(webpack)».
+ */
+function bundlerDeclarado(salida) {
+  // Lo que el propio Next dice haber usado. Confiar en el flag es lo que
+  // permitió el falso «Webpack» de la primera versión.
+  //
+  // El escape ANSI se construye con String.fromCharCode en vez de escribirlo
+  // literal: un carácter de control dentro de un regex literal dispara
+  // no-control-regex, y silenciarlo con un disable sería ruido por algo que se
+  // expresa igual de bien sin él.
+  const ansi = new RegExp(String.fromCharCode(27) + "\\[[0-9;]*m", "g");
+  const m = /Next\.js [\d.]+ \(([^)]+)\)/.exec(salida.replace(ansi, ""));
+  return m ? m[1].toLowerCase() : null;
+}
+
 function build(cwd, { turbopack }) {
-  const cmd = turbopack ? "npx next build --turbopack" : "npx next build";
+  const cmd = turbopack ? "npx next build --turbopack" : "npx next build --webpack";
   try {
     const salida = run(cmd, { cwd, capture: true });
     return { ok: true, salida };
@@ -252,8 +276,17 @@ export default function ClientPage() {
     const nombre = turbopack ? "Turbopack" : "Webpack";
     console.log(`\n[next-consumer 4/6] build ${nombre} — grafos server + client`);
     const r = build(sandbox, { turbopack });
+    const usado = bundlerDeclarado(r.salida);
+    const esperado = turbopack ? "turbopack" : "webpack";
+    if (usado !== esperado) {
+      fallos.push(
+        `${nombre}: la celda dice usar \`${esperado}\` pero Next reporta \`${usado ?? "?"}\`. ` +
+          `Una celda que no corre el bundler que anuncia no cubre nada — es el defecto que ` +
+          `tenia la primera version de este gate (Turbopack dos veces etiquetado como los dos).`,
+      );
+    }
     if (r.ok) {
-      console.log(`  ✓ ${nombre}: compila`);
+      console.log(`  ✓ ${nombre}: compila (${usado})`);
     } else {
       fallos.push(
         `${nombre}: el build de la app CORRECTA falló. Un Server Component usando solo ` +
