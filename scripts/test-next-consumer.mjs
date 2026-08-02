@@ -73,7 +73,14 @@ const SERVER_SAFE_EXPORT = "Button";
 /** Export que NO está en `dist/server-safe.js` — solo en el root (53 exports). */
 const CLIENT_ONLY_EXPORT = "Accordion";
 
-const CHILD_ENV = { ...process.env, npm_config_yes: "true" };
+// `CI: "true"` SIEMPRE, también en local. Next cambia de comportamiento según
+// esa variable: fuera de CI auto-instala en silencio lo que le falte (typescript,
+// @types/*), y dentro de CI se niega y aborta. Sin fijarla, este gate pasaba en
+// local por una auto-instalación que en CI no ocurre — verde prestado, y la
+// divergencia solo se veía después de pushear. Fijarla hace que correrlo en
+// local mida lo mismo que mide en CI, que es la única razón por la que un gate
+// local sirve de algo.
+const CHILD_ENV = { ...process.env, npm_config_yes: "true", CI: "true" };
 
 function run(cmd, opts = {}) {
   return execSync(cmd, {
@@ -137,6 +144,16 @@ try {
           react: installedVersion("react"),
           "react-dom": installedVersion("react-dom"),
           reactigoded: `file:${tarball}`,
+          // `next build` corre su propio typecheck cuando hay `tsconfig.json` +
+          // ficheros TS, y para eso necesita estas tres. Declararlas NO es
+          // opcional aunque en local parezca que sí: fuera de CI, Next las
+          // AUTO-INSTALA en silencio, y con `CI=true` se niega y aborta el
+          // build. Así que sin esta línea el gate pasa en local y falla en CI
+          // — un verde prestado por una auto-instalación, que es justo el tipo
+          // de diferencia de entorno que este gate existe para no tener.
+          typescript: installedVersion("typescript"),
+          "@types/react": installedVersion("@types/react"),
+          "@types/node": installedVersion("@types/node"),
         },
       },
       null,
