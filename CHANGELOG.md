@@ -125,21 +125,19 @@ rg "state=\"(error|success)\""
   frente a 21 guards en el source.
 
 - La entrada de `beta.25` afirma que Chromatic quedó con **revisión visual humana obligatoria**
-  al quitarle `--auto-accept-changes=main` y `--exit-zero-on-changes` (`[H-02]`). Es falso, y
-  lo medido es peor que lo que el propio gate 1.0.0 describía como `A-CI-01`.
-  - `--exit-once-uploaded` sigue ahí, y su semántica medida es salir con 0 en cuanto los
-    snapshots se han subido — antes de que exista veredicto. El check acredita el **upload**.
-  - Pero además, **la revisión visual no se está ejecutando en absoluto**. El log del build
-    620 (2026-07-28) dice literalmente «Snapshot quota reached — this build is limited because
-    your account is out of snapshots for the month» y «No UI tests or UI review enabled». El
-    status `UI Tests` de la GitHub App queda en `pending` permanente.
-  - O sea: no es que el gate mida mal, es que **no mide**. No hay snapshots que comparar, así
-    que tampoco hay nada que aprobar en la UI de Chromatic. Un drift visual se mergea en verde
-    y ningún humano ha revisado nada desde el 2026-07-19.
-  - La GitHub App **sí** está instalada y publica `Storybook Publish` + `UI Tests`. Lo que
-    falta es cuota de snapshots y habilitar UI Tests en el proyecto. Añadir `UI Tests` a los
-    checks requeridos **antes** de eso convertiría el gate vacuo en un candado: un contexto
-    requerido clavado en `pending` deja todos los PRs sin poder mergearse.
+  al quitarle `--auto-accept-changes=main` y `--exit-zero-on-changes` (`[H-02]`). Era falso, y lo
+  medido fue peor que lo que el propio `A-CI-01` describía.
+  - El informe decía «el check acredita el upload, no la revisión». Cierto, pero incompleto:
+    **la revisión visual no se estaba ejecutando en absoluto** desde el 2026-07-19. El log del
+    build lo decía literal — «Snapshot quota reached» y «No UI tests or UI review enabled»—, así
+    que no había snapshots que comparar ni, por tanto, nada que aprobar en la UI.
+  - **Cerrado el 2026-07-28**: instalada la GitHub App de Chromatic, restablecida la cuota y
+    `UI Tests` añadido a `required_status_checks`. El build 621 pasó con 239 stories y 560
+    snapshots. Un drift visual ya no se mergea en verde.
+  - Queda un modo de fallo que conviene tener a la vista: `UI Tests` es un check **requerido**,
+    así que si la cuota se agota vuelve a `pending` y **bloquea todos los PRs** hasta el
+    siguiente ciclo. Un build completo son **560** snapshots sobre 5.000/mes — unos 9 al mes, no
+    los ~20 que estimé antes de medirlo.
 
 ### Cambiado
 

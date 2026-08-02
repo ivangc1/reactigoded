@@ -51,30 +51,31 @@ jobs:
         # del ruleset son todos de github-actions. O sea: hoy un drift visual se
         # mergea con todo verde.
         #
-        # ESTADO (medido 2026-07-28, build 620):
-        #   ✅ La GitHub App de Chromatic está instalada y publica dos contextos
-        #      en cada commit: `Storybook Publish` y `UI Tests`.
-        #   ❌ `UI Tests` se queda en `pending` con "Update your plan to resume
-        #      testing". El log del build lo dice literal: «Snapshot quota
-        #      reached — this build is limited because your account is out of
-        #      snapshots for the month», y remata con «No UI tests or UI review
-        #      enabled».
+        # ESTADO: CERRADO (build 621, 2026-07-28). La GitHub App de Chromatic
+        # esta instalada, `UI Tests` corre de verdad («Tested 239 stories …
+        # captured 560 snapshots») y su contexto esta en
+        # `required_status_checks` del ruleset 16867823. Un drift visual ya no
+        # se mergea en verde.
         #
-        # Es decir: la revisión visual NO SE ESTÁ EJECUTANDO. No es que el check
-        # mida mal — es que no mide. Los snapshots no se toman, así que tampoco
-        # hay nada que aprobar en la UI de Chromatic.
+        # Historia, porque A-CI-01 lo describia mas suave de lo que era: el
+        # informe decia «el check acredita el upload, no la revision». Lo medido
+        # el 28-jul fue peor — la revision visual NO SE EJECUTABA EN ABSOLUTO
+        # desde el 19-jul: cuota agotada, y el log remataba con «No UI tests or
+        # UI review enabled». No es que el gate midiera mal, es que no media, y
+        # por tanto tampoco habia nada que aprobar en la UI.
         #
-        # ⚠️ NO añadir `UI Tests` a `required_status_checks` del ruleset 16867823
-        # mientras siga así: un contexto requerido que nunca sale de `pending`
-        # deja TODOS los PRs sin poder mergearse. El gate pasaría de vacuo a
-        # candado, que es peor.
+        # ⚠️ EL MODO DE FALLO A VIGILAR. `UI Tests` es ahora un check REQUERIDO:
+        # si la cuota se agota vuelve a quedarse en `pending` → TODOS los PRs
+        # dejan de poder mergearse hasta el siguiente ciclo.
         #
         # ARITMÉTICA DEL PLAN GRATUITO (por qué se agota, medido):
-        #   239 stories → un build completo son 239 snapshots. El plan incluye
-        #   5.000/mes ⇒ caben ~20 builds completos. Y este workflow dispara en
+        #   239 stories → un build completo son 560 snapshots (× modos/viewports;
+        #   MEDIDO en el build 621, no estimado: mi primera cuenta dijo 239 y se
+        #   quedaba corta a la mitad). El plan incluye 5.000/mes ⇒ caben ~9
+        #   builds completos, no ~20. Y este workflow dispara en
         #   DOS eventos: cada push a una rama de PR es un build, y el merge a
         #   `main` es otro. Un PR con 3 pushes ≈ 4 builds ≈ 1.000 snapshots, o
-        #   sea ~5 PRs al mes. `--only-changed` (TurboSnap) recorta, pero no en
+        #   sea ~2 PRs al mes. `--only-changed` (TurboSnap) recorta, pero no en
         #   el primer build de una rama ni cuando el diff toca ficheros que
         #   afectan a muchas stories.
         #
