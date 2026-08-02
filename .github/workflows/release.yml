@@ -188,6 +188,13 @@ jobs:
           echo "evento push sobre refs/tags/$REL_TAG @ $TAG_COMMIT ✓"
 
       - name: Comprobar que el README cita la versión que se publica
+        # Solo en modo publish, por la misma regla que el paso de dist-tag: este
+        # guard valida el README del ARTEFACTO, y el workspace ya no es el árbol
+        # del tag. En reconcile no se publica nada —no hay nada que guardar— y
+        # correrlo compararía el README de la rama contra la versión de la rama,
+        # abortando el reconcile por un desajuste que no tiene que ver con el
+        # release que se está reconstruyendo.
+        if: steps.reltag.outputs.mode == 'publish'
         # Era un `grep -qF "$PKG" README.md`, o sea un substring match sobre el
         # fichero entero. Con PKG=1.0.0 eso matchea dentro de `1.0.0-rc.1` y
         # dentro de un rango `^1.0.0`: la ESTABLE podía publicarse con el README
@@ -213,8 +220,19 @@ jobs:
         # se puede quitar (400). Un `--tag rc` NO lo moverá, así que
         # `npm install reactigoded` seguirá dando la beta hasta el 1.0.0 final o
         # hasta moverlo a mano. Ver RC1_DECISIONS.md.
+        #
+        # ⚠️ LA VERSIÓN SALE DE `reltag`, NO DEL WORKSPACE. Desde que el checkout
+        # es siempre la revisión del workflow (y no el árbol del tag), leer
+        # `./package.json` aquí devolvería la versión de la RAMA. En modo
+        # publish coinciden; en reconcile no tienen por qué: reconciliar
+        # `v1.0.0-rc.2` con la rama ya en `1.0.1` derivaría `latest` en vez de
+        # `rc`, y la validación contra el registro abortaría un reconcile
+        # válido. Regresión introducida al arreglar el checkout, cazada por
+        # codex. Regla general del job: lo que responde «qué se publicó» sale
+        # del TAG (`steps.reltag.outputs.*`); el workspace es solo herramienta.
+        env:
+          PKG: ${{ steps.reltag.outputs.version }}
         run: |
-          PKG="$(node -p "require('./package.json').version")"
           case "$PKG" in
             *-*) PRE="${PKG#*-}"; TAG="${PRE%%.*}" ;;
             *)   TAG="latest" ;;

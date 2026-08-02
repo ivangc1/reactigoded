@@ -105,6 +105,9 @@ export interface ReleaseRecord {
   gitHead?: string | null;
   tarballSha512?: string | null;
   attestationUrl?: string | null;
+  /** Dist-tags que apuntaban a esta versión al escribir el registro. Snapshot
+   *  de un puntero MUTABLE: por eso se etiqueta como observado, no afirmado. */
+  distTagsObservados?: string[];
 }
 
 export interface ExpectedIdentity {
@@ -115,6 +118,8 @@ export interface ExpectedIdentity {
   repo: string;
   workflow: string;
   event: string;
+  /** Dist-tag esperado. Si se omite, se DERIVA de la versión. */
+  distTag?: string;
 }
 
 /**
@@ -130,6 +135,14 @@ export declare function pae(payloadType: string, payloadBytes: Buffer): Buffer;
  * inventado, porque una comparación contra basura pasaría por verde.
  */
 export declare function tarballSha512Hex(integrity: unknown): string | null;
+
+/**
+ * Deriva el dist-tag de una versión: primer componente del identificador de
+ * prerelease, o `latest` si no hay. Réplica deliberada de la derivación del
+ * workflow — no comparte código con ella, para que la comprobación no sea una
+ * tautología.
+ */
+export declare function deriveDistTag(version: string): string;
 
 /** Separa las attestations POR `predicateType`, nunca por índice. */
 export declare function selectAttestations(bundleDoc: unknown): {
@@ -179,6 +192,7 @@ export interface ParsedArgs {
   event: string;
   fromDir: string | undefined;
   record: string | undefined;
+  distTag: string | undefined;
   asJson: boolean;
 }
 

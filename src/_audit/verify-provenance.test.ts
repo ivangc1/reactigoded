@@ -31,6 +31,7 @@ import {
   verifyNpmSignatureWithKeys,
   buildRows,
   parseArgs,
+  deriveDistTag,
 } from "../../scripts/verify-provenance.mjs";
 import type {
   Attestation,
@@ -254,5 +255,107 @@ describe("piezas de apoyo", () => {
 
   it("el tag por defecto se deriva de la versión", () => {
     expect(parseArgs(["9.9.9", "--commit", "x"]).tag).toBe("v9.9.9");
+  });
+});
+
+/**
+ * El registro durable existe para afirmar el DIST-TAG: la provenance prueba
+ * paquete, commit y workflow, pero no el canal, y en el registro npm un
+ * dist-tag es un puntero mutable. Se verificaba todo el documento MENOS ese
+ * campo, así que una regresión del generador o una sobrescritura del asset
+ * colaban un canal falso con el gate en verde (codex).
+ */
+describe("el dist-tag del registro durable", () => {
+  const RECORD_BASE = {
+    version: EXPECTED.version,
+    tag: EXPECTED.tag,
+    tagCommit: EXPECTED.commit,
+    distTag: "rc",
+    distTagsObservados: ["rc"],
+    attestationUrl: META.dist?.attestations?.url ?? null,
+    tarballSha512: tarballSha512Hex(META.dist?.integrity),
+  };
+  const filasCon = (record: Record<string, unknown>): ProvenanceRow[] =>
+    buildRows({ meta: META, bundleDoc: correctedBundle(), expected: EXPECTED, signatures: SIGS_OK, record });
+  const fila = (rows: ProvenanceRow[], key: string): ProvenanceRow => {
+    const r = rows.find((x) => x.key === key);
+    if (!r) throw new Error(`no se emitió la fila ${key}`);
+    return r;
+  };
+
+  it("acepta el dist-tag que corresponde a la versión", () => {
+    expect(fila(filasCon(RECORD_BASE), "record-distTag").ok).toBe(true);
+  });
+
+  it("RECHAZA un canal falso — el caso que se colaba entero", () => {
+    // Un registro por lo demás perfecto, con `latest` en vez de `rc`: la
+    // prerelease diciendo que salió por el canal estable.
+    const rows = filasCon({ ...RECORD_BASE, distTag: "latest", distTagsObservados: ["latest"] });
+    expect(fila(rows, "record-distTag").ok).toBe(false);
+    // Y ninguna otra fila del registro se entera, que es justo por qué hacía
+    // falta esta: sin ella el documento pasa verde.
+    for (const k of ["record-version", "record-tag", "record-tagCommit", "record-attestationUrl"]) {
+      expect(fila(rows, k).ok).toBe(true);
+    }
+  });
+
+  it("rechaza el campo ausente en vez de darlo por bueno", () => {
+    const sinTag = Object.fromEntries(
+      Object.entries(RECORD_BASE).filter(([k]) => k !== "distTag"),
+    );
+    expect(fila(filasCon(sinTag), "record-distTag").ok).toBe(false);
+  });
+
+  it("caza un registro que se contradice a sí mismo", () => {
+    // Aplicado `rc` pero observados solo `latest`: el workflow valida al
+    // escribir que el tag apunte de verdad a esta versión, así que esto no
+    // puede salir de una ejecución sana.
+    const rows = filasCon({ ...RECORD_BASE, distTagsObservados: ["latest"] });
+    expect(fila(rows, "record-distTag").ok).toBe(true);
+    expect(fila(rows, "record-distTag-coherente").ok).toBe(false);
+  });
+
+  it("--dist-tag fuerza el esperado, para un release publicado a mano", () => {
+    const rows = buildRows({
+      meta: META,
+      bundleDoc: correctedBundle(),
+      expected: { ...EXPECTED, distTag: "canary" },
+      signatures: SIGS_OK,
+      record: { ...RECORD_BASE, distTag: "canary", distTagsObservados: ["canary"] },
+    });
+    expect(fila(rows, "record-distTag").ok).toBe(true);
+  });
+});
+
+/**
+ * `deriveDistTag` REPLICA la derivación del workflow (`${PKG#*-}` /
+ * `${PRE%%.*}`) en vez de compartir código con ella: un verificador que
+ * importase la derivación del productor no verificaría nada. El precio de esa
+ * decisión es que las dos pueden divergir, así que la tabla fija la
+ * equivalencia — cada fila se midió ejecutando el `case` real de bash.
+ */
+describe("deriveDistTag replica la derivación del workflow", () => {
+  const TABLA: [string, string][] = [
+    ["1.0.0", "latest"],
+    ["1.0.0-rc.1", "rc"],
+    ["1.0.0-rc.2", "rc"],
+    ["1.0.0-beta.26", "beta"],
+    ["1.0.0-alpha", "alpha"],
+    ["1.0.0-rc", "rc"],
+    ["1.0.0-0", "0"],
+    ["1.0.0-2026.1", "2026"],
+    ["2.0.0-next.1+build.5", "next"],
+    ["1.0.0-x.7.z.92", "x"],
+    ["1.0.0+build", "latest"],
+    ["1.0.0-alpha-beta.1", "alpha-beta"],
+    ["1.0.0-rc.1+meta", "rc"],
+    ["1.0.0+a-b", "b"],
+    ["0.0.1-canary.abc.def", "canary"],
+    ["1.0.0-", ""],
+    ["1.0.0-.", ""],
+    ["10.20.30-RC.1", "RC"],
+  ];
+  it.each(TABLA)("%s → %s", (version, esperado) => {
+    expect(deriveDistTag(version)).toBe(esperado);
   });
 });

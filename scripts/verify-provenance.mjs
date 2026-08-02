@@ -43,7 +43,8 @@
  *     --tag v<version> --commit <sha> \
  *     [--pkg reactigoded] [--repo ivangc1/reactigoded] \
  *     [--workflow .github/workflows/release.yml] [--event push] \
- *     [--check-release-record <fichero.json>] [--json] [--from-dir <dir>]
+ *     [--check-release-record <fichero.json>] [--dist-tag <tag>] \
+ *     [--json] [--from-dir <dir>]
  *
  * • Invoker: `release.yml` tras publicar y ANTES de escribir la GitHub
  *   Release; y `npm run test:provenance` (unit, offline, sobre fixtures).
@@ -140,6 +141,24 @@ export async function verifySlsaSignature(bundle) {
 }
 
 /**
+ * Deriva el dist-tag que le corresponde a una versión: el primer componente del
+ * identificador de prerelease, o `latest` si no la hay. `1.0.0-rc.2` → `rc`,
+ * `1.0.0` → `latest`.
+ *
+ * Réplica DELIBERADA de la derivación del workflow (`${PKG#*-}` / `${PRE%%.*}`).
+ * No se comparte código a propósito: importar la derivación del productor
+ * convertiría la comprobación en una tautología.
+ */
+export function deriveDistTag(version) {
+  const v = String(version);
+  const guion = v.indexOf("-");
+  if (guion < 0) return "latest";
+  const pre = v.slice(guion + 1);
+  const punto = pre.indexOf(".");
+  return punto < 0 ? pre : pre.slice(0, punto);
+}
+
+/**
  * Construye la tabla de afirmaciones. PURA: las verificaciones de firma se le
  * INYECTAN ya resueltas (`signatures`), para que el test pueda ejercitar la
  * lógica de comparación sin red y, a la vez, simular una firma inválida.
@@ -219,6 +238,38 @@ export function buildRows({ meta, bundleDoc, expected, signatures, record = null
     row("record-tagCommit", commit, record.tagCommit ?? "<ausente>");
     if (tarballSha512 !== null) row("record-tarballSha512", tarballSha512, record.tarballSha512 ?? "<ausente>");
     row("record-attestationUrl", meta?.dist?.attestations?.url ?? "<ausente>", record.attestationUrl ?? "<ausente>");
+
+    // El dist-tag es LA razón de ser de este registro: la provenance prueba
+    // paquete, commit y workflow, pero no dice nada del canal, y en el registro
+    // npm el dist-tag es un puntero MUTABLE. Se comprobaba todo menos justo el
+    // campo por el que existe el artefacto, así que una regresión del generador
+    // o una sobrescritura manual del asset colaban un canal falso con el gate
+    // en verde (codex).
+    //
+    // El esperado se DERIVA de la versión con la misma regla que el workflow,
+    // reimplementada aquí a propósito: un verificador que importase la
+    // derivación del productor no verificaría nada, se limitaría a estar de
+    // acuerdo consigo mismo. Si las dos derivaciones divergen, esto falla — que
+    // es exactamente lo que se quiere.
+    row(
+      "record-distTag",
+      expected.distTag ?? deriveDistTag(version),
+      record.distTag ?? "<ausente>",
+      expected.distTag ? "esperado forzado con --dist-tag" : "derivado de la versión",
+    );
+
+    // Coherencia interna del propio registro. El workflow valida al escribirlo
+    // que el dist-tag aplicado apunte de verdad a esta versión, así que un
+    // registro válido tiene su `distTag` dentro de los observados. Si no, el
+    // documento se contradice a sí mismo.
+    if (Array.isArray(record.distTagsObservados)) {
+      row(
+        "record-distTag-coherente",
+        true,
+        record.distTagsObservados.includes(record.distTag),
+        `observados al escribir: ${record.distTagsObservados.join(", ") || "(ninguno)"}`,
+      );
+    }
   }
 
   return rows;
@@ -238,6 +289,7 @@ export function formatReport(rows, { pkg, version, tag, commit }) {
 
 const VALUE_FLAGS = new Set([
   "pkg", "tag", "commit", "repo", "workflow", "event", "from-dir", "check-release-record",
+  "dist-tag",
 ]);
 
 export function parseArgs(argv) {
@@ -263,6 +315,7 @@ export function parseArgs(argv) {
     event: flag("event", "push"),
     fromDir: flag("from-dir"),
     record: flag("check-release-record"),
+    distTag: flag("dist-tag"),
     asJson: argv.includes("--json"),
   };
 }
@@ -273,7 +326,7 @@ async function main(argv) {
     console.error(
       "uso: node scripts/verify-provenance.mjs <version> --tag <tag> --commit <sha>\n" +
         "     [--pkg <nombre>] [--repo <owner/repo>] [--workflow <path>] [--event <nombre>]\n" +
-        "     [--check-release-record <fichero>] [--from-dir <dir>] [--json]\n\n" +
+        "     [--check-release-record <fichero>] [--dist-tag <tag>] [--from-dir <dir>] [--json]\n\n" +
         (opts.version ? "falta --commit <sha>: sin el commit esperado no hay nada que afirmar." : ""),
     );
     return 2;
@@ -342,6 +395,7 @@ async function main(argv) {
     repo: opts.repo,
     workflow: opts.workflow,
     event: opts.event,
+    ...(opts.distTag ? { distTag: opts.distTag } : {}),
   };
   const rows = buildRows({ meta, bundleDoc, expected, signatures, record });
   const failed = rows.filter((r) => !r.ok);
