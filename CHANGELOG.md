@@ -7,6 +7,39 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] — 2026-08-03 · **el camino de release, ejecutado entero**
+
+Sin cambios de API ni de contenido del paquete: `dist` es byte-a-byte el de `rc.2`. Esta versión
+existe para **ejecutar** el camino de publicación completo, porque el arreglo que lo cierra nunca
+había corrido.
+
+`rc.2` fue el primer release real por push de tag y **murió después de publicar**: el gate de
+evidencia consultaba el registro el mismo segundo en que terminaba `npm publish`, y npm respondía
+`E404` sobre un paquete que ya estaba bien subido. El paquete quedó en npm sin registro durable
+ni GitHub Release; la evidencia se reconstruyó luego con el modo reconcile.
+
+El arreglo (`--wait-for-publish`) se mergeó **después** de tagear `rc.2`, y en `push: tags` Actions
+ejecuta el workflow *del commit del tag* — así que sobre `rc.2` no puede correr ni re-lanzándolo.
+El reconcile tampoco lo ejercita: allí la versión llevaba horas publicada y `npm view` responde a
+la primera. Quedaba, por tanto, como código que viaja sin ejecutarse en el único camino que
+importa.
+
+`rc.3` cierra eso: es la primera vez que **publish → verificar provenance → registrar → verificar
+el registro** completa sola en una única ejecución. Se hace ahora y no en el `1.0.0` estable
+porque ese release no admite repetición.
+
+### Corregido
+
+- El gate de evidencia esperaba a que la versión fuera visible en el registro antes de fallar
+  (`--wait-for-publish`, opt-in y acotado a `[0, 3600]`; solo reintenta el `E404` de npm,
+  discriminado por su línea estructurada y contra `stderr` únicamente).
+- El registro durable verifica ahora el **dist-tag**, que era su razón de ser y el único campo que
+  nadie comprobaba: la provenance prueba paquete, commit y workflow, pero no dice nada del canal.
+- El modo reconcile ya no hace checkout del árbol del tag —donde no existen las herramientas que
+  lo auditan— y deriva el dist-tag del tag, no del manifiesto de la rama.
+- Chromatic atribuía cada build de PR al merge commit efímero, lo que rompía la cadena de líneas
+  base de TurboSnap y dejaba `UI Review` sin resolver.
+
 ## [1.0.0-rc.2] — 2026-07-28 · **cierre del gate 1.0.0 estable**
 
 Cierra los **28 hallazgos** de la auditoría cruzada A+B sobre `1.0.0-rc.1` (0 BLOCKER, 4 HIGH,
