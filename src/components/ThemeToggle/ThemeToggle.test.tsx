@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterAll, beforeEach, describe, it, expect, vi } from "vitest";
+import { render, screen, act } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { ThemeToggle } from "./index";
@@ -10,8 +10,13 @@ describe("ThemeToggle", () => {
     document.documentElement.removeAttribute("data-theme");
   });
 
-  afterEach(() => {
+  afterAll(() => {
+    // Se limpia UNA vez, con todo desmontado. Hacerlo en afterEach tocaba
+    // el atributo con el componente aún montado —el cleanup de RTL corre en
+    // su propio hook y no está garantizado que vaya antes—, y ThemeToggle lo
+    // observa: recibía una notificación legítima fuera de act().
     document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-mode");
   });
 
   it("renderiza por defecto en dark y muestra label 'Dark' (dark-first desde 1.0.0-beta.3)", () => {
@@ -101,7 +106,6 @@ describe("ThemeToggle", () => {
     // Default dark; primer click → light.
     await user.click(screen.getByRole("switch"));
     expect(document.documentElement).toHaveAttribute("data-mode", "light");
-    document.documentElement.removeAttribute("data-mode");
   });
 
   it("label custom como función recibe el tema actual", async () => {
@@ -162,7 +166,11 @@ describe("ThemeToggle — respects pre-set html[data-theme] on mount (B-08)", ()
     document.documentElement.removeAttribute("data-mode");
   });
 
-  afterEach(() => {
+  afterAll(() => {
+    // Se limpia UNA vez, con todo desmontado. Hacerlo en afterEach tocaba
+    // el atributo con el componente aún montado —el cleanup de RTL corre en
+    // su propio hook y no está garantizado que vaya antes—, y ThemeToggle lo
+    // observa: recibía una notificación legítima fuera de act().
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-mode");
   });
@@ -253,5 +261,140 @@ describe("ThemeToggle — respects pre-set html[data-theme] on mount (B-08)", ()
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+/**
+ * Sincronización con escritores EXTERNOS de `<html data-theme>`.
+ *
+ * `useTheme` es API pública y escribe el atributo directamente. Sin
+ * suscripción al DOM, ThemeToggle no se enteraba: medido, `<html>` pasaba a
+ * `light` y el switch se quedaba con `aria-checked="true"`. Un `role="switch"`
+ * cuyo estado programático no describe la realidad es fallo WCAG 4.1.2 — la
+ * MISMA clase que SSR-01, alcanzable sin SSR y solo con API pública del DS.
+ *
+ * Este bloque defiende esa decisión: si alguien "simplifica" el subscribe a un
+ * no-op, aquí salta.
+ */
+describe("ThemeToggle — sigue a escritores externos de data-theme", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  afterAll(() => {
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  it("se sincroniza cuando otro código cambia html[data-theme]", async () => {
+    // `storageKey={null}` a propósito: con persistencia activa el orden de
+    // `derive` es `override ?? stored ?? dom ?? default`, y el effect de
+    // montaje ya habría escrito el tema en storage — que GANA al atributo. Lo
+    // que se prueba aquí es la suscripción al DOM, no el orden de prioridad.
+    // (El desajuste entre `useTheme` y un ThemeToggle CON storage es una
+    // tensión de diseño aparte, anotada en el backlog.)
+    document.documentElement.setAttribute("data-theme", "dark");
+    render(<ThemeToggle storageKey={null} />);
+    const sw = screen.getByRole("switch");
+    expect(sw).toBeChecked();
+
+    // Lo que hace `useTheme().setTheme("light")` desde cualquier punto de la
+    // app: escribir el atributo y confiar en que quien lo observe se entere.
+    await act(async () => {
+      document.documentElement.setAttribute("data-theme", "light");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(sw).not.toBeChecked();
+    expect(screen.getByText("Light")).toBeInTheDocument();
+  });
+
+  it("no reescribe el atributo cuando ya tiene el valor resuelto", async () => {
+    // `setAttribute` encola un registro de mutación aunque el valor sea el
+    // mismo (la spec no compara), así que reescribirlo despertaría a este
+    // componente y a cualquier observer del consumer para nada.
+    document.documentElement.setAttribute("data-theme", "dark");
+    const mutaciones: (string | null)[] = [];
+    const obs = new MutationObserver((records) => {
+      for (const r of records) mutaciones.push(r.attributeName);
+    });
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    try {
+      render(<ThemeToggle />);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(mutaciones).toEqual([]);
+    } finally {
+      obs.disconnect();
+    }
+  });
+
+  it("sigue sincronizado si un tercero vuelve al último valor que el componente escribió", async () => {
+    // Invariante, no mecanismo: pase lo que pase por dentro, el control tiene
+    // que acabar describiendo lo que dice `<html>`.
+    //
+    //   1. montaje sin atributo → el componente escribe "dark"
+    //   2. un tercero pone "light"                            → se propaga
+    //   3. el tercero VUELVE a "dark"                         → debe propagarse
+    //
+    // El (3) es el que importa y viene del review de Codex: la marca que
+    // ignora la escritura propia del componente no se consumía, así que ese
+    // paso quedaba descartado por coincidir con ella — dejando el switch en
+    // "light" con `<html data-theme="dark">` de forma ESTABLE, no transitoria.
+    //
+    // Está escrito como invariante y no como mecanismo: pase lo que pase por
+    // dentro, el control tiene que acabar describiendo lo que dice `<html>`.
+    render(<ThemeToggle storageKey={null} />);
+    const sw = screen.getByRole("switch");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    // (1) el componente aplicó su default al DOM
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(sw).toBeChecked();
+
+    // (2) escritor externo → light
+    await act(async () => {
+      document.documentElement.setAttribute("data-theme", "light");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(sw).not.toBeChecked();
+
+    // (3) el mismo escritor vuelve a dark: es ajena, debe propagarse.
+    await act(async () => {
+      document.documentElement.setAttribute("data-theme", "dark");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(sw).toBeChecked();
+    expect(screen.getByText("Dark")).toBeInTheDocument();
+  });
+
+  it("sigue sincronizado si un tercero escribe en el MISMO lote que la escritura propia", async () => {
+    // Segunda variante del review de Codex, y la que no cierra consumir la
+    // marca: `MutationObserver` entrega POR LOTES. Si un effect hermano escribe
+    // en la misma tarea que la escritura de montaje, el callback se ejecuta UNA
+    // sola vez para las dos mutaciones. Una marca comparada contra el registro
+    // del lote se quedaría rancia y el cambio ajeno se perdería.
+    //
+    // Aquí ambas escrituras ocurren dentro del mismo `act`, sin ceder el hilo
+    // entre ellas, que es lo que fuerza el lote único.
+    render(<ThemeToggle storageKey={null} />);
+    const sw = screen.getByRole("switch");
+
+    await act(async () => {
+      // El effect de montaje escribe "dark"; sin esperar a que se entregue esa
+      // notificación, un tercero deja el atributo en "light".
+      document.documentElement.setAttribute("data-theme", "light");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Gana el DOM vivo, no la marca: el control describe "light".
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(sw).not.toBeChecked();
+    expect(screen.getByText("Light")).toBeInTheDocument();
   });
 });

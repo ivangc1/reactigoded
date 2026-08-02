@@ -1,6 +1,6 @@
 name: Release
 
-# Publica a npm al pushear un tag `v*` (convención del repo: v1.0.0-beta.26).
+# Publica a npm al pushear un tag `v*` (convención del repo: v1.0.0-rc.2).
 #
 # AUTENTICACIÓN: Trusted Publishing (OIDC) — SIN token. GitHub emite un token
 # efímero firmado, específico de ESTE workflow, que npm valida contra el Trusted
@@ -12,26 +12,43 @@ name: Release
 # Trusted Publisher, dar de alta `ivangc1/reactigoded` con workflow
 # `release.yml`. Sin eso el publish falla con error de autenticación: el
 # workflow NO puede crear esa confianza por sí solo.
+#
+# ─── LA REGLA QUE GOBIERNA ESTE FICHERO (gate 1.0.0, A-REL-01) ───────────
+# npm NO deriva la provenance del `actions/checkout`: la deriva de las
+# variables del EVENTO (`GITHUB_REF`, `GITHUB_SHA`, `GITHUB_WORKFLOW_REF`; ver
+# `libnpmpublish/lib/provenance.js`). Consecuencia medida en rc.1: un publish
+# lanzado por `workflow_dispatch` desde main, aunque haga checkout del tag,
+# produce un tarball CORRECTO con una provenance que firma `refs/heads/main` y
+# el commit de main. La firma es criptográficamente válida y apunta al árbol
+# equivocado — peor que no tener provenance, porque parece correcta.
+#
+# Por eso: **solo un push de tag puede publicar**. El modo manual existe, pero
+# reducido a reconciliar la evidencia de algo ya publicado; nunca publica.
 
 on:
   push:
     tags: ["v*"]
-  # Re-lanzamiento MANUAL. Necesario porque en un trigger `push: tags` Actions
-  # ejecuta el workflow TAL COMO ESTA EN EL COMMIT DEL TAG: si el workflow tenia
-  # un bug (paso el rc.1 con el `registry-url` que bloqueaba OIDC), re-ejecutar
-  # el run vuelve a correr la version rota, y el tag NO se puede mover porque una
-  # regla del repo lo protege contra borrado — correctamente: un tag de release
-  # debe ser inmutable. Este modo corre el workflow DE LA RAMA (ya arreglado)
-  # sobre EL CODIGO DEL TAG.
+  # Re-lanzamiento MANUAL, en modo RECONCILIAR (no publica).
+  #
+  # Antes este modo publicaba, y era la vía de recuperación cuando el workflow
+  # del commit del tag venía con un bug (Actions ejecuta el workflow TAL COMO
+  # ESTÁ EN EL COMMIT DEL TAG, y el tag no se puede mover: una regla del repo
+  # lo protege contra borrado, correctamente). Publicar así fue exactamente lo
+  # que rompió la evidencia de rc.1. Hoy este modo sirve para: re-verificar la
+  # provenance de una versión ya publicada y regenerar su registro durable.
+  #
+  # Si el workflow del tag está roto y el publish NUNCA ocurrió, la salida NO
+  # es este modo: es un tag nuevo (`v1.0.0-rc.3`) con el workflow arreglado.
+  # Cuesta un número de versión y es el precio de que la evidencia sea cierta.
   workflow_dispatch:
     inputs:
       version:
-        description: "Version exacta a publicar; debe coincidir con el package.json del tag (p.ej. 1.0.0-rc.1)"
+        description: "Versión ya publicada cuya evidencia se re-verifica (p.ej. 1.0.0-rc.2). NO publica."
         required: true
 
 permissions:
-  # `write` (no `read`) porque el último step crea la GitHub Release, que es el
-  # único sitio DURADERO donde queda constancia del dist-tag aplicado.
+  # `write` (no `read`) porque se crea la GitHub Release y se le sube el
+  # registro durable como ASSET.
   contents: write
   # Obligatorio para que Actions pueda emitir el token OIDC. Sin este permiso
   # npm cae al flujo de token clásico y falla (no hay NPM_TOKEN).
@@ -45,18 +62,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          # En modo manual se publica EL CODIGO DEL TAG, no el de la rama desde la
-          # que se lanza: el workflow lo aporta la rama (con los fixes), el
-          # artefacto lo aporta el tag. Sin esto se publicaria la rama, que puede
-          # haber avanzado desde el tag.
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/v{0}', inputs.version) || github.ref }}
+          # SIEMPRE el ref del evento, también en modo manual.
+          #
+          # Antes el modo manual hacía checkout del ÁRBOL DEL TAG, y eso rompía
+          # el propio modo reconcile (codex P2): reconciliar un tag anterior a
+          # este cambio sustituye el workspace por un árbol donde no existen ni
+          # `scripts/verify-provenance.mjs`, ni el script `test:readme-version`,
+          # ni la devDep `sigstore` — así que el job moría antes de poder
+          # verificar nada. La vía de recuperación no puede depender de que el
+          # artefacto que va a auditar traiga consigo las herramientas que la
+          # auditan.
+          #
+          # Reconcile NO necesita el árbol del tag: sus comprobaciones van
+          # contra el REGISTRO (npm + attestation), y lo poco que necesita del
+          # tag —su commit y su `package.json`— se lee con `git rev-list` y
+          # `git show <tag>:package.json`, sin cambiar de árbol.
+          #
+          # En modo push, `github.ref` YA es el tag, así que la rama de publish
+          # sigue empaquetando exactamente el árbol tageado.
+          ref: ${{ github.ref }}
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          # Node 24, NO el floor 22.12: trusted publishing exige npm >= 11.5.1 y
-          # Node 22.12 trae npm 10.9. El floor sigue verificado por la matriz de
+          # Node 24, NO el floor: trusted publishing exige npm >= 11.5.1 y el
+          # floor trae npm 10.9. El floor sigue verificado por la matriz de
           # `verify.yml` (que es donde importa: compatibilidad del consumer).
           # Aquí solo se empaqueta y sube — el artefacto es idéntico.
           node-version: "24"
@@ -89,48 +121,90 @@ jobs:
             }
           ' "$NPM"
 
-      - name: Resolver el tag del release y comprobar que coincide con package.json
+      - name: Resolver el tag, el commit del tag y el modo
         id: reltag
         # Guard contra el fallo silencioso más caro: publicar una versión bajo un
         # tag que promete otra cosa. npm no lo detecta.
         # Resuelve además el nombre del tag, que en modo manual NO es
-        # `GITHUB_REF_NAME` (ahí seria la rama).
+        # `GITHUB_REF_NAME` (ahí seria la rama), y el COMMIT del tag, que es el
+        # valor que se graba en el registro durable (ver A-REL-01: grabar
+        # `$GITHUB_SHA` fue correcto por coincidencia, no por construcción).
         env:
           IN_VERSION: ${{ inputs.version }}
         run: |
-          PKG="$(node -p "require('./package.json').version")"
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="v$IN_VERSION"
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "::error::El tag $TAG no existe en el repo."
+              exit 1
+            fi
+            # El manifest del TAG se lee del objeto git, sin cambiar de árbol:
+            # el workspace es el de la revisión del workflow, que es donde viven
+            # las herramientas que este modo necesita (codex P2).
+            PKG="$(git show "refs/tags/$TAG:package.json" | node -p "JSON.parse(require('node:fs').readFileSync(0,'utf8')).version")"
             if [ "$IN_VERSION" != "$PKG" ]; then
               echo "::error::La versión indicada ($IN_VERSION) no coincide con el package.json del tag ($PKG)."
               exit 1
             fi
-            TAG="v$PKG"
+            MODE="reconcile"
           else
+            PKG="$(node -p "require('./package.json').version")"
             TAG="$GITHUB_REF_NAME"
             if [ "${TAG#v}" != "$PKG" ]; then
               echo "::error::El tag ($TAG) no coincide con package.json ($PKG). Corrige el tag o el bump."
               exit 1
             fi
+            MODE="publish"
           fi
           if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "::error::El tag $TAG no existe en el repo."
             exit 1
           fi
-          echo "modo: $GITHUB_EVENT_NAME · tag: $TAG · package.json: $PKG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          TAG_COMMIT="$(git rev-list -n1 "refs/tags/$TAG")"
+          echo "modo: $MODE · evento: $GITHUB_EVENT_NAME · tag: $TAG · commit del tag: $TAG_COMMIT · package.json: $PKG"
+          {
+            echo "tag=$TAG"
+            echo "tag_commit=$TAG_COMMIT"
+            echo "mode=$MODE"
+            echo "version=$PKG"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Comprobar que el README cita la versión que se publica
-        # El README documenta la version publicada en su seccion de Instalacion.
-        # Es el ULTIMO sitio con la version hardcodeada (el banner se desduplico
-        # en #144), asi que deriva en cada bump si nadie se acuerda. Ofreci este
-        # guard en review y no lo habia implementado — cerrado aqui.
+      - name: Guard de evento — solo un push de tag puede firmar provenance del tag
+        # EL guard de A-REL-01, y es PRE-publish a propósito: la provenance
+        # queda determinada por el evento en el instante del `npm publish`, y
+        # una versión de npm es INMUTABLE. Un check posterior solo puede negarse
+        # a escribir el registro; no puede arreglar una firma ya emitida.
+        if: steps.reltag.outputs.mode == 'publish'
+        env:
+          REL_TAG: ${{ steps.reltag.outputs.tag }}
+          TAG_COMMIT: ${{ steps.reltag.outputs.tag_commit }}
         run: |
-          PKG="$(node -p "require('./package.json').version")"
-          if ! grep -qF "$PKG" README.md; then
-            echo "::error::README.md no menciona la versión $PKG. Actualiza la sección de Instalación en el mismo commit del bump."
+          if [ "$GITHUB_EVENT_NAME" != "push" ] \
+            || [ "$GITHUB_REF" != "refs/tags/$REL_TAG" ] \
+            || [ "$GITHUB_SHA" != "$TAG_COMMIT" ]; then
+            echo "::error::evento=$GITHUB_EVENT_NAME ref=$GITHUB_REF sha=$GITHUB_SHA no puede producir provenance de $REL_TAG@$TAG_COMMIT. npm deriva la SLSA de GITHUB_REF/GITHUB_SHA/GITHUB_WORKFLOW_REF, NO del checkout: publicar aquí firmaría el commit equivocado."
             exit 1
           fi
-          echo "README cita $PKG ✓"
+          echo "evento push sobre refs/tags/$REL_TAG @ $TAG_COMMIT ✓"
+
+      - name: Comprobar que el README cita la versión que se publica
+        # Solo en modo publish, por la misma regla que el paso de dist-tag: este
+        # guard valida el README del ARTEFACTO, y el workspace ya no es el árbol
+        # del tag. En reconcile no se publica nada —no hay nada que guardar— y
+        # correrlo compararía el README de la rama contra la versión de la rama,
+        # abortando el reconcile por un desajuste que no tiene que ver con el
+        # release que se está reconstruyendo.
+        if: steps.reltag.outputs.mode == 'publish'
+        # Era un `grep -qF "$PKG" README.md`, o sea un substring match sobre el
+        # fichero entero. Con PKG=1.0.0 eso matchea dentro de `1.0.0-rc.1` y
+        # dentro de un rango `^1.0.0`: la ESTABLE podía publicarse con el README
+        # entero hablando de un release candidate y el guard daba verde
+        # (A-DOC-01). Medido: con package.json en 1.0.0 y el README de rc, el
+        # grep pasa y este script falla con las dos causas.
+        #
+        # Ahora compara contra un marcador estructurado y, si la versión no es
+        # prerelease, exige que el README no contenga vocabulario de prerelease.
+        run: npm run test:readme-version
 
       - name: Derivar dist-tag desde la versión
         id: disttag
@@ -146,8 +220,19 @@ jobs:
         # se puede quitar (400). Un `--tag rc` NO lo moverá, así que
         # `npm install reactigoded` seguirá dando la beta hasta el 1.0.0 final o
         # hasta moverlo a mano. Ver RC1_DECISIONS.md.
+        #
+        # ⚠️ LA VERSIÓN SALE DE `reltag`, NO DEL WORKSPACE. Desde que el checkout
+        # es siempre la revisión del workflow (y no el árbol del tag), leer
+        # `./package.json` aquí devolvería la versión de la RAMA. En modo
+        # publish coinciden; en reconcile no tienen por qué: reconciliar
+        # `v1.0.0-rc.2` con la rama ya en `1.0.1` derivaría `latest` en vez de
+        # `rc`, y la validación contra el registro abortaría un reconcile
+        # válido. Regresión introducida al arreglar el checkout, cazada por
+        # codex. Regla general del job: lo que responde «qué se publicó» sale
+        # del TAG (`steps.reltag.outputs.*`); el workspace es solo herramienta.
+        env:
+          PKG: ${{ steps.reltag.outputs.version }}
         run: |
-          PKG="$(node -p "require('./package.json').version")"
           case "$PKG" in
             *-*) PRE="${PKG#*-}"; TAG="${PRE%%.*}" ;;
             *)   TAG="latest" ;;
@@ -163,12 +248,16 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Instalar dependencias
+        # También en modo reconcile: `verify-provenance.mjs` necesita la devDep
+        # `sigstore` para verificar la firma de la attestation SLSA.
         run: npm ci
 
       - name: Instalar Chromium (Playwright)
         # `npm publish` dispara `prepublishOnly: npm run verify`, y `verify`
         # incluye `verify:storybook` → vitest-browser → playwright. Sin esto el
         # guard de publicación falla por entorno, no por defecto real.
+        # En modo reconcile no se publica, así que no hace falta.
+        if: steps.reltag.outputs.mode == 'publish'
         run: npx playwright install --with-deps chromium
 
       - name: Publicar
@@ -178,58 +267,45 @@ jobs:
         # comparado con publicar algo roto de forma irreversible.
         # Tampoco hace falta `--provenance`: trusted publishing la firma sola.
         #
-        # IDEMPOTENTE (codex P2): una version publicada es INMUTABLE, asi que si
-        # el publish funciono pero un step posterior fallo, un re-run normal de
-        # Actions moriria aqui y el job quedaria rojo para siempre — sin poder
-        # crear el registro duradero que falta. Se comprueba antes y se omite.
+        # IDEMPOTENTE: una versión publicada es INMUTABLE, así que si el publish
+        # funcionó pero un step posterior falló, un re-run normal de Actions
+        # moriría aquí y el job quedaría rojo para siempre — sin poder crear el
+        # registro duradero que falta. Se comprueba antes y se omite.
+        #
+        # Ya NO se valida aquí la attestation: eso lo hace el step siguiente con
+        # `verify-provenance.mjs`, que corre SIEMPRE (se haya publicado ahora o
+        # se esté re-verificando algo ya publicado). El guard inline anterior
+        # vivía solo en esta rama y por tanto nunca se ejecutó sobre una
+        # publicación real (A-REL-01).
+        if: steps.reltag.outputs.mode == 'publish'
         env:
           APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
-          REL_TAG: ${{ steps.reltag.outputs.tag }}
         run: |
           PKG="$(node -p "require('./package.json').version")"
           if npm view "reactigoded@$PKG" version >/dev/null 2>&1; then
-            # La version YA existe. Que exista no basta para tratarlo como
-            # re-run: si la publico otra cosa (p.ej. un publish MANUAL con otro
-            # dist-tag — algo que ya paso con beta.26), saltarse el publish y
-            # seguir grabaria en la Release un registro DURADERO Y FALSO sobre
-            # una publicacion que este workflow no hizo. Solo es re-run legitimo
-            # si el dist-tag derivado YA apunta exactamente a esta version.
-            CURRENT="$(npm view reactigoded dist-tags --json 2>/dev/null \
-              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let t={};try{t=JSON.parse(s||"{}")}catch{};process.stdout.write(String(t[process.argv[1]]??""))})' "$APPLIED_TAG")"
-            if [ "$CURRENT" = "$PKG" ]; then
-              # La consistencia tag<->version NO prueba QUIEN publico. Un publish
-              # manual con el mismo tag pasaria por re-run y grabaria un registro
-              # falso. Se verifica la ATTESTATION DE PROVENANCE: trusted
-              # publishing siempre la adjunta, un `npm publish` manual desde una
-              # CLI NO — y ademas nombra repo y workflow.
-              ATT="$(npm view "reactigoded@$PKG" --json 2>/dev/null \
-                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let j={};try{j=JSON.parse(s||"{}")}catch{};process.stdout.write(String(j?.dist?.attestations?.url??""))})')"
-              if [ -z "$ATT" ]; then
-                echo "::error::reactigoded@$PKG existe pero SIN attestation de provenance → no se publicó desde este workflow (un publish manual no la adjunta). Reconciliar a mano."
-                exit 1
-              fi
-              # NO basta el repo: otro workflow de ESTE mismo repo publicando
-              # con token+provenance pasaria el check, y la Release afirmaria que
-              # la publico este workflow. Se validan los tres campos que
-              # identifican la build: repo, PATH del workflow y REF del tag.
-              read -r A_REPO A_PATH A_REF <<EOF2
-          $(curl -fsSL "$ATT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const b=JSON.parse(s);const p=JSON.parse(Buffer.from(b.attestations?.[0]?.bundle?.dsseEnvelope?.payload??"","base64").toString("utf8"));const w=p?.predicate?.buildDefinition?.externalParameters?.workflow??{};process.stdout.write([w.repository||"-",w.path||"-",w.ref||"-"].join(" "))}catch{process.stdout.write("- - -")}})')
-          EOF2
-              EXP_REPO="https://github.com/$GITHUB_REPOSITORY"
-              EXP_PATH=".github/workflows/release.yml"
-              EXP_REF="refs/tags/$REL_TAG"
-              if [ "$A_REPO" != "$EXP_REPO" ] || [ "$A_PATH" != "$EXP_PATH" ] || [ "$A_REF" != "$EXP_REF" ]; then
-                echo "::error::La provenance de reactigoded@$PKG no corresponde a este workflow. attested: repo='$A_REPO' path='$A_PATH' ref='$A_REF' · esperado: repo='$EXP_REPO' path='$EXP_PATH' ref='$EXP_REF'. Fail-closed: no se puede afirmar que lo publicara este release."
-                exit 1
-              fi
-              echo "::notice::reactigoded@$PKG ya publicado por este repo (provenance verificada) y '$APPLIED_TAG' apunta ahí — re-run idempotente, se omite el publish."
-            else
-              echo "::error::reactigoded@$PKG YA EXISTE pero el dist-tag '$APPLIED_TAG' apunta a '${CURRENT:-<ninguno>}'. No se publicó desde este workflow: continuar grabaría un registro FALSO en la Release. Reconciliar a mano."
-              exit 1
-            fi
+            echo "::notice::reactigoded@$PKG ya existe en el registro — se omite el publish y se pasa a verificar su provenance."
           else
             npm publish --tag "$APPLIED_TAG"
           fi
+
+      - name: Verificar la provenance publicada
+        # Comprueba que la evidencia dice la verdad: attestation SLSA
+        # seleccionada por `predicateType` (nunca por índice), firma verificada
+        # contra Fulcio, firma de la attestation del registro verificada contra
+        # las claves de npm, digest del subject == tarball servido, y ref/commit
+        # atestados == el tag. Corre en los dos modos: es lo que convierte el
+        # modo reconcile en algo útil.
+        env:
+          REL_TAG: ${{ steps.reltag.outputs.tag }}
+          TAG_COMMIT: ${{ steps.reltag.outputs.tag_commit }}
+          VERSION: ${{ steps.reltag.outputs.version }}
+        run: |
+          node scripts/verify-provenance.mjs "$VERSION" \
+            --tag "$REL_TAG" \
+            --commit "$TAG_COMMIT" \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow ".github/workflows/release.yml" \
+            --event push
 
       - name: Registrar la publicación en la GitHub Release
         # ÚNICO artefacto duradero donde queda el dist-tag APLICADO.
@@ -238,29 +314,94 @@ jobs:
         # `latest` en el rc.1), así que solo prueba el valor ACTUAL, no el que se
         # aplicó en este release. El log de Actions tampoco vale: su retención
         # caduca (máx. 400 días). Ver RC1_DECISIONS.md.
+        #
+        # El registro va como ASSET, no en el body: el body es a la vez notas
+        # para humanos y registro de máquina, así que se pisan en las dos
+        # direcciones. En rc.1 una edición manual del body borró la tabla que
+        # este step había escrito — el registro "duradero" duró horas.
         env:
           GH_TOKEN: ${{ github.token }}
           APPLIED_TAG: ${{ steps.disttag.outputs.tag }}
           REL_TAG: ${{ steps.reltag.outputs.tag }}
+          TAG_COMMIT: ${{ steps.reltag.outputs.tag_commit }}
+          VERSION: ${{ steps.reltag.outputs.version }}
         run: |
-          PKG="$(node -p "require('./package.json').version")"
+          META="$(npm view "reactigoded@$VERSION" --json)"
+          # Los dist-tags que HOY apuntan a esta versión, leídos del registro.
+          # El registro durable no puede AFIRMAR el dist-tag derivado por este
+          # workflow sin comprobarlo (codex P1): en modo reconcile la versión
+          # pudo publicarla una revisión anterior con otro tag, y la provenance
+          # —que prueba paquete, commit y workflow— no dice nada del dist-tag,
+          # que además es un puntero MUTABLE.
+          DIST_TAGS="$(npm view reactigoded dist-tags --json)"
+          # Los dos documentos van a FICHEROS, no concatenados por stdin:
+          # `npm view --json` imprime JSON pretty-printed (326 líneas para este
+          # paquete), así que framing por saltos de línea es imposible — trocear
+          # por "\n" deja el primer fragmento en "{" y el JSON.parse revienta en
+          # CADA release. Medido: así estaba y así fallaba (codex P1).
+          printf '%s' "$META" > /tmp/npm-meta.json
+          printf '%s' "$DIST_TAGS" > /tmp/npm-dist-tags.json
+          node -e '
+            {
+              const fs = require("node:fs");
+              const m = JSON.parse(fs.readFileSync("/tmp/npm-meta.json", "utf8"));
+              const tags = JSON.parse(fs.readFileSync("/tmp/npm-dist-tags.json", "utf8"));
+              const version = process.env.VERSION;
+              const applied = process.env.APPLIED_TAG;
+              // Todos los que apuntan a esta versión, no solo el derivado.
+              const apuntan = Object.entries(tags)
+                .filter(([, v]) => v === version)
+                .map(([k]) => k)
+                .sort();
+              if (!apuntan.includes(applied)) {
+                console.error(
+                  `::error::El dist-tag derivado '${applied}' NO apunta a ${version} en el registro ` +
+                    `(apuntan: ${apuntan.join(", ") || "ninguno"}). Grabarlo haría FALSO el registro ` +
+                    `durable. Si la publicó otra revisión del workflow con otro tag, reconcilia a mano.`,
+                );
+                process.exit(1);
+              }
+              const integrity = String(m?.dist?.integrity ?? "");
+              const rec = {
+                version: process.env.VERSION,
+                // Verificado contra el registro por el guard de arriba.
+                distTag: process.env.APPLIED_TAG,
+                // Y se graban TODOS los que apuntan, porque un dist-tag es
+                // mutable: esto es lo observado al escribir el registro, no una
+                // afirmación sobre lo que se pasó a `npm publish`.
+                distTagsObservados: apuntan,
+                tag: process.env.REL_TAG,
+                tagCommit: process.env.TAG_COMMIT,
+                runId: process.env.GITHUB_RUN_ID,
+                runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+                gitHead: m?.gitHead ?? null,
+                tarballSha512: integrity.startsWith("sha512-")
+                  ? Buffer.from(integrity.slice(7), "base64").toString("hex")
+                  : null,
+                attestationUrl: m?.dist?.attestations?.url ?? null,
+              };
+              fs.writeFileSync("release-record.json", JSON.stringify(rec, null, 2));
+            }
+          '
+          cat release-record.json
           PRERELEASE=""
           if [ "$APPLIED_TAG" != "latest" ]; then PRERELEASE="--prerelease"; fi
           {
-            printf '`reactigoded@%s` publicado en npm.\n\n' "$PKG"
+            printf '`reactigoded@%s` publicado en npm.\n\n' "$VERSION"
             printf '| | |\n|---|---|\n'
             printf '| dist-tag aplicado | `%s` |\n' "$APPLIED_TAG"
-            printf '| commit | `%s` |\n' "$GITHUB_SHA"
+            printf '| commit del tag | `%s` |\n' "$TAG_COMMIT"
             printf '| workflow run | `%s` |\n\n' "$GITHUB_RUN_ID"
-            printf 'Provenance firmada por trusted publishing (OIDC).\n'
+            printf 'Provenance firmada por trusted publishing (OIDC) y verificada por\n'
+            printf '`scripts/verify-provenance.mjs`. El registro de máquina es el asset\n'
+            printf '`release-record.json` — editar este texto no lo altera.\n'
           } > /tmp/release-notes.md
           # IDEMPOTENTE: si la release ya existe (creada a mano, o por un run
-          # anterior que fallo despues), se actualiza en vez de reventar.
+          # anterior que falló después), se actualiza en vez de reventar. Las
+          # notas solo se escriben al CREARLA: si ya existe, se respeta el texto
+          # humano y solo se re-sube el asset.
           if gh release view "$REL_TAG" >/dev/null 2>&1; then
-            echo "::notice::La release $REL_TAG ya existe — se actualizan las notas."
-            gh release edit "$REL_TAG" \
-              --notes-file /tmp/release-notes.md \
-              $PRERELEASE
+            echo "::notice::La release $REL_TAG ya existe — se respeta su cuerpo y se re-sube el registro."
           else
             gh release create "$REL_TAG" \
               --verify-tag \
@@ -268,3 +409,23 @@ jobs:
               --notes-file /tmp/release-notes.md \
               $PRERELEASE
           fi
+          gh release upload "$REL_TAG" release-record.json --clobber
+
+      - name: Verificar el registro durable
+        # Cierra el bucle: el registro deja de ser prosa que alguien pueda
+        # contradecir sin que salte nada.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REL_TAG: ${{ steps.reltag.outputs.tag }}
+          TAG_COMMIT: ${{ steps.reltag.outputs.tag_commit }}
+          VERSION: ${{ steps.reltag.outputs.version }}
+        run: |
+          mkdir -p /tmp/rec
+          gh release download "$REL_TAG" -p release-record.json -D /tmp/rec --clobber
+          node scripts/verify-provenance.mjs "$VERSION" \
+            --tag "$REL_TAG" \
+            --commit "$TAG_COMMIT" \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow ".github/workflows/release.yml" \
+            --event push \
+            --check-release-record /tmp/rec/release-record.json

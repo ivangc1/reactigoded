@@ -3,8 +3,8 @@
  * Components (RSC).
  *
  * Re-exporta UNICAMENTE los componentes marcados `@server-safe` en el
- * codebase (verificados por `scripts/check-server-safe-markers.mjs`).
- * Cada uno garantiza:
+ * codebase. Un gate AST del repo (que NO viaja en el paquete) verifica
+ * en cada build que cada uno cumple:
  *
  *   1. NO `"use client"` directive.
  *   2. NO acceso a client globals (`document`/`window`/`navigator`/
@@ -13,6 +13,12 @@
  *   3. NO hooks deferred-only (`useEffect`, `useLayoutEffect`,
  *      `useInsertionEffect`) sin guard SSR.
  *   4. Render determinístico (double-render idempotence).
+ *
+ * El alcance de esa verificación es el del gate, no una garantía
+ * absoluta: sus fronteras declaradas están en
+ * `docs/server-safe-limitations.md` del repositorio. Decir "garantiza"
+ * a secas, y citar un script que el consumer no puede ejecutar porque
+ * no está en el tarball, prometía más de lo comprobable (E33-F1).
  *
  * Importable desde un Server Component (Next.js App Router, Astro
  * server islands, Remix loaders, etc.) sin `"use client"`. Para los

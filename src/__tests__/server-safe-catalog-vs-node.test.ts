@@ -22,12 +22,12 @@
  *
  *   A. ENGINE-MIN ANCHOR. Cada nombre de `SAFE_GLOBALS` debe resolver como
  *      binding real en el Node que ejecuta el test. `globals.nodeBuiltin`
- *      puede listar globals añadidos DESPUÉS de Node 22.12.0 (engine
+ *      puede listar globals añadidos DESPUÉS de Node 22.22.2 (engine
  *      mínimo declarado). Como este test corre en cada celda de la matriz
- *      CI (#151, ubuntu/windows × Node 22.12/24), la celda 22.12 falla si
+ *      CI (#151, ubuntu/windows × Node 22.22/24), la celda 22.22 falla si
  *      la whitelist incluye algo que el engine mínimo NO provee — un
- *      consumer en 22.12 recibiría un falso negativo (global tratado como
- *      seguro que en realidad lanza ReferenceError). El anclaje es a 22.12,
+ *      consumer en 22.22 recibiría un falso negativo (global tratado como
+ *      seguro que en realidad lanza ReferenceError). El anclaje es a 22.22,
  *      no al Node donde corre el dev.
  *
  *   B. DENIAL INVARIANT. Ningún `INTENTIONAL_DENY` está en `SAFE_GLOBALS`.
@@ -134,7 +134,7 @@ const SAFE_GLOBALS_PIN = [
 ];
 
 /**
- * Overclaims de `globals`: nombres que `globals@17.x` lista pero Node 22.12
+ * Overclaims de `globals`: nombres que `globals@17.x` lista pero Node 22.22
  * (engine floor) NO provee. Deben estar restados de SAFE_GLOBALS — si no, un
  * componente que los referencie bare petaría en un consumer sobre el floor.
  */
@@ -157,7 +157,7 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
     for (const name of SAFE_GLOBALS) {
       if (!isRuntimeGlobal(name)) absent.push(name);
     }
-    // En la celda Node 22.12 de la matriz CI, cualquier nombre listado por
+    // En la celda Node 22.22 de la matriz CI, cualquier nombre listado por
     // `globals` pero ausente en el engine mínimo aparece aquí → forzamos
     // reclasificación antes de tagear.
     expect(absent).toEqual([]);
@@ -250,7 +250,7 @@ describe("SAFE_GLOBALS whitelist vs Node runtime (#150, fail-closed)", () => {
   });
 
   it("F. los GLOBALS_OVERCLAIMS están restados de SAFE_GLOBALS", () => {
-    // Invariante directo (no solo el indirecto de Test A en la celda 22.12):
+    // Invariante directo (no solo el indirecto de Test A en la celda 22.22):
     // los nombres que el floor no provee no deben estar en la whitelist.
     const leaked = GLOBALS_OVERCLAIMS.filter((name) => SAFE_GLOBALS.has(name));
     expect(leaked).toEqual([]);

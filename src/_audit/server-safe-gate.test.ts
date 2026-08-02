@@ -562,6 +562,35 @@ export function C(k: string){ ${b} return null; }`,
     expect(detects(`const m = import.meta["foo"]("./x.ts"); void m;`)).toBe(false);
   });
 
+  it("desenvuelve el CALLEE erased: `(import.meta.glob)(…)` y `(… as any)(…)` fail-cierran; alias y coma-op siguen fuera del mandato (gate 1.0.0, PR-1)", () => {
+    const detects = (b: string) =>
+      checkSourceFile(
+        `/** @server-safe */
+export function C(){ ${b} return null; }`,
+        "gc.fixture.tsx",
+      ).some((v) => v.rule === "unresolved-import");
+
+    // La KEY del bracket ya se desenvolvía; el CALLEE no. `(import.meta.glob)(…)`
+    // es un ParenthesizedExpression y `(… as any)(…)` un AsExpression, así que
+    // ninguno llegaba a la rama de PropertyAccess y pasaban sin flaggear.
+    //
+    // Se creían out-of-mandate por una premisa de `server-safe-limitations.md`
+    // («el macro no se expande → crash universal»). MEDIDO contra vite 8: es
+    // falsa para estas dos, AMBAS EXPANDEN. Funcionan en producción cargando N
+    // módulos sin auditar ⇒ fail-open real.
+    expect(detects(`const m = (import.meta.glob)("./x.ts"); void m;`)).toBe(true);
+    expect(detects(`const m = (import.meta.glob as any)("./x.ts"); void m;`)).toBe(true);
+    expect(detects(`const m = ((import.meta.glob))("./x.ts"); void m;`)).toBe(true);
+    expect(detects(`const m = (import.meta["glob"] as any)("./x.ts"); void m;`)).toBe(true);
+
+    // FUERA del mandato, y esto también está medido contra vite 8: NO expanden,
+    // así que `import.meta.glob` llega como `undefined` y crashea en CUALQUIER
+    // runtime. Nadie puede shippearlo, luego no hay divergencia que cazar.
+    // Flaggearlos sería penalizar ofuscación, no divergencia.
+    expect(detects(`const g = import.meta.glob; const m = g("./x.ts"); void m;`)).toBe(false);
+    expect(detects(`const m = (0, import.meta.glob)("./x.ts"); void m;`)).toBe(false);
+  });
+
   it("clasificación EAGER de `import.meta.glob` es fail-closed ante erased en las opciones (objeto/clave/valor `as const`, spread → eager bajo guard); solo `{eager:false}` CRUDO prueba lazy — simetría con el fix de la key (Auditor-B)", () => {
     // Bajo guard client-only (`typeof window`): un LAZY se suprime, un EAGER flaggea (Vite lo hoistea a
     // module-top → corre server-side). Así la mis-clasificación eager→lazy sería un fail-open visible.

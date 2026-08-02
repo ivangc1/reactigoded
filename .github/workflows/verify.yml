@@ -16,10 +16,10 @@ jobs:
     # Linux y solo cazados manualmente por Codex en su sandbox real.
     # Esta matriz es la red de seguridad que los habría cazado
     # automáticamente.
-    #   - ubuntu-latest + Node 22.12.0: baseline (engine mínimo del
+    #   - ubuntu-latest + Node 22.22.2: baseline (engine mínimo del
     #     package.json, lo que se publicaba pre-#151).
     #   - ubuntu-latest + Node 24: forward compat con Node current.
-    #   - windows-latest + Node 22.12.0 / 24: paridad de plataforma del
+    #   - windows-latest + Node 22.22.2 / 24: paridad de plataforma del
     #     paquete publicado. Caza POSIX-only commands, path separator
     #     leaks, line-ending sensitivity, shell-specific scripts.
     # `fail-fast: false` para que un fallo en Windows-Node24 no aborte
@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: ["22.12.0", "24"]
+        node: ["22.22.2", "24"]
     # Sin override de shell: todos los steps invocan `npm run ...` o
     # `npx ...`, que son cross-platform. El único step inline que
     # requería bash (`grep -cF '[reactigoded]'`) se migró a
@@ -54,6 +54,18 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: CI cubre la cadena de verify (anti-drift, A-CI-02)
+        # Este fichero reimplementa a mano la cadena de `npm run verify` para
+        # que el log muestre qué gate falló y para poder documentar cada step.
+        # El precio es que las dos listas pueden divergir en silencio, y ya han
+        # divergido dos veces (`test:state-css-exclusion` pre-beta.25,
+        # `test:public-api` en el gate 1.0.0). Este gate compara ambas: cerrar
+        # el caso concreto no cierra la clase.
+        #
+        # Va pronto a propósito: es barato y falla antes de gastar 20 minutos
+        # de matriz para descubrir que un gate no estaba corriendo.
+        run: npm run test:ci-covers-verify
 
       - name: Typecheck
         run: npm run typecheck
@@ -95,6 +107,13 @@ jobs:
       - name: Build (lib + dts + styles)
         run: npm run build
 
+      - name: dist .d.ts compilan como programa (B34-1)
+        # Compila los `.d.ts` del tarball con `skipLibCheck:false` y `types:[]`
+        # en Bundler Y NodeNext. Las fixtures de consumer solo ven lo que se
+        # importa desde una entry: `dist/components/Slot/index.d.ts` shippeó
+        # con 3×TS2305 porque ningún consumer puede alcanzar ese barrel.
+        run: npm run test:dist-dts
+
       - name: state.css exclusion gate (H-07/D9)
         # Verifica que dist/index.js no arrastra utilities pseudo-class
         # del state.css (713 KB gzip standalone). Si un componente del
@@ -103,6 +122,41 @@ jobs:
         # beta.25 el script existía en verify:unit pero NO en CI; el
         # cruce de gate reviews (Codex + Claude) lo cazó.
         run: npm run test:state-css-exclusion
+
+      - name: Public API freeze gate (§5.13)
+        # A-CI-02: este gate estaba encadenado en `verify:unit` pero NO aquí,
+        # así que una mutación de `src/_audit/public-api-names.json` pasaba los
+        # checks requeridos y solo habría muerto en `prepublishOnly` — es decir,
+        # con el tag protegido ya creado e irreversible.
+        #
+        # Es la SEGUNDA vez que este repo sufre esta misma clase de drift (la
+        # primera, con `test:state-css-exclusion`, está documentada en el step
+        # de arriba). Por eso, además del step, hay un gate que compara la
+        # cadena de `verify` con los steps de este fichero: cerrar el caso
+        # concreto sin cerrar el espacio es lo que permitió la reincidencia.
+        run: npm run test:public-api
+
+      - name: Gate inverso — emitido ⊆ freeze (F3)
+        # La otra dirección del freeze. El step de arriba caza el nombre
+        # congelado que DESAPARECE de dist (rename accidental); este caza el
+        # nombre que el DS EMITE y que nadie congeló. Es el hueco por el que
+        # pasaron las 4 clases de C-1, que llevaban años emitidas fuera del
+        # contrato y las encontró una auditoría en vez de CI.
+        #
+        # Deriva los nombres del AST de src con el checker de TS, no del CSS:
+        # el espacio CSS no es decidible (~1.800 clases de la capa utility sin
+        # predicado que las separe), el de emisión sí.
+        run: npm run test:emitted-classes
+
+      - name: Inventario nominal de exports (F2)
+        # Congela los NOMBRES de export por entry, separando valores de tipos.
+        # Las fixtures de consumer no sirven de ancla: congelan lo que usan, no
+        # la superficie. Medido — quitar `export type { NavbarLogoProps }` deja
+        # las dos fixtures en verde mientras un consumer real rompe con TS2724.
+        run: npm run test:public-api-exports
+
+      - name: README declara la version publicada (A-DOC-01)
+        run: npm run test:readme-version
 
       - name: Publint gate (D1-P3)
         # Valida package.json exports + types resolution. Aceptamos
@@ -191,7 +245,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22.12.0
+          node-version: 22.22.2
           cache: npm
 
       - name: Install dependencies
@@ -204,3 +258,41 @@ jobs:
 
       - name: Storybook tests (vitest browser + axe-core)
         run: npm run test:storybook
+
+  next-consumer:
+    name: Consumer Next App Router (RSC boundary)
+    # Ubuntu-only y FUERA de la matriz de 4 celdas a propósito: lo que se mide
+    # aquí es la resolución de condiciones de export por el bundler de Next,
+    # que no depende del SO ni de la versión de Node. Meterlo en la matriz
+    # multiplicaría por 4 el coste (~5 min por celda) sin añadir señal.
+    #
+    # Cierra A-RSC-01, que ninguna fixture de tipos puede cazar: `tsc` resuelve
+    # por `dist/index.d.ts` (97 exports) mientras el grafo RSC resuelve por la
+    # condición `react-server` → `dist/server-safe.js` (44). Los 53 que faltan
+    # no dan error de tipos, dan error de build.
+    #
+    # ⚠️ Este job NO bloquea nada hasta que su contexto se añada a
+    # `required_status_checks` del ruleset 16867823 — un job nuevo no es
+    # requerido por existir. El nombre a añadir es el de `name:` de arriba.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (lib + dts + styles)
+        # Imprescindible: el gate hace `npm pack`, y `npm pack` NO construye.
+        # Sin esto empaquetaría el `dist/` que hubiera (o ninguno) y mediría
+        # otro artefacto.
+        run: npm run build
+
+      - name: Consumer Next App Router (server + client + control negativo)
+        run: npm run test:next-consumer

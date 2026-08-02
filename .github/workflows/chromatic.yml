@@ -18,6 +18,14 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          # `fetch-depth: 0` NO es opcional: con él, el commit real del PR queda
+          # en el historial local y Chromatic puede resolverlo cuando se lo
+          # pasamos por `CHROMATIC_SHA` (ver el paso siguiente).
+          #
+          # El checkout se deja en el merge ref, que es lo correcto: lo que se
+          # fotografía debe ser el resultado de mezclar con la base, no la rama
+          # aislada. El commit que se REPORTA se corrige por entorno, no
+          # cambiando lo que se construye.
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -31,10 +39,139 @@ jobs:
       - name: Run Chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-        # H-02 (rc1): visual review is gated. Removed --exit-zero-on-changes
-        # (so a snapshot drift now FAILS the job) and --auto-accept-changes=main
-        # (every change to main has to be approved by a human reviewer in
-        # the Chromatic UI). --exit-once-uploaded stays so the job does not
-        # block waiting for review — the gating is the green/red on the PR
-        # and the manual approval in chromatic.com.
+          # Lo que la propia CLI pide cuando avisa «Please use our official
+          # GitHub Action or forward the pull_request event info to us».
+          #
+          # MECANISMO, leído en `node_modules/chromatic/dist` (18.1.0) y no
+          # supuesto: en su rama nativa de Actions para `pull_request` hace
+          # `commit = GITHUB_SHA`, `mergeCommit = GITHUB_SHA`,
+          # `branch = GITHUB_HEAD_REF`. Y en un evento `pull_request`,
+          # `GITHUB_SHA` ES el merge commit efímero `refs/pull/N/merge` — un
+          # commit sintético que no está en la rama y que se recicla. De ahí que
+          # cada build quedara atribuido a un commit distinto y desechable.
+          #
+          # La única puerta para corregirlo es el override, cuya condición es
+          # literalmente `M = CHROMATIC_SHA && CHROMATIC_BRANCH`: exige LAS DOS.
+          # Por eso el flag `--branch-name` por sí solo no hizo nada (medido:
+          # build 629 siguió cayendo en el efímero `1c15a10`), y por eso tampoco
+          # servía tocar el checkout — Chromatic no mira el HEAD de git, lee el
+          # entorno.
+          CHROMATIC_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHROMATIC_BRANCH: ${{ github.head_ref || github.ref_name }}
+          CHROMATIC_SLUG: ${{ github.repository }}
+          # Se registra como `mergeCommit`, que es exactamente lo que la rama
+          # nativa hace con `GITHUB_SHA`. Vacío fuera de un PR.
+          CHROMATIC_PULL_REQUEST_SHA: ${{ github.event_name == 'pull_request' && github.sha || '' }}
+        # ⚠️ ESTE JOB NO BLOQUEA UN DRIFT VISUAL, Y EL COMENTARIO ANTERIOR DECÍA
+        # QUE SÍ (A-CI-01, gate 1.0.0).
+        #
+        # Decía: «Removed --exit-zero-on-changes (so a snapshot drift now FAILS
+        # the job) … --exit-once-uploaded stays so the job does not block
+        # waiting for review — the gating is the green/red on the PR». Las dos
+        # mitades no se sostienen a la vez. La semántica medida de la CLI
+        # (18.0.1) es literal: «--exit-once-uploaded [branch]  Exit with 0 once
+        # the built version has been published to Chromatic». Es decir, sale 0
+        # ANTES de que existan resultados de comparación: acredita el UPLOAD, no
+        # la revisión. Quitar `--exit-zero-on-changes` no cambia nada mientras
+        # este flag esté, porque el proceso ya ha salido cuando llegaría el
+        # veredicto.
+        #
+        # Y el «green/red on the PR» no existe hoy: la GitHub App de Chromatic
+        # NO publica ningún status en este repo — medido, `total_count=0` en los
+        # commits HEAD de los 3 PRs más recientes, y los 6 contextos requeridos
+        # del ruleset son todos de github-actions. O sea: hoy un drift visual se
+        # mergea con todo verde.
+        #
+        # ESTADO. `UI Tests` corre de verdad desde el build 621 (2026-07-28,
+        # «Tested 239 stories … captured 560 snapshots») y su contexto está en
+        # `required_status_checks` del ruleset 16867823.
+        #
+        # El gate FUNCIONA: `UI Tests` sale verde y requerido en el PR, aunque
+        # el status cuelgue del merge ref (ver el checkout). Lo que estaba roto
+        # era la atribución de commits, no el gateo — y la primera lectura que
+        # hice de esos mismos datos fue que no gateaba, que era falso.
+        #
+        # Aun así, dos afirmaciones de este fichero SÍ resultaron no medidas: el
+        # pin a `integration_id 47100` que el ruleset nunca tuvo, y el
+        # `--exit-once-uploaded` que decía bloquear drift cuando solo acredita el
+        # upload. De ahí la regla de la casa aquí: cada afirmación lleva al lado
+        # el commit y el número contra los que se comprobó, y «no medido» se
+        # escribe como no medido.
+        #
+        # Historia, porque A-CI-01 lo describia mas suave de lo que era: el
+        # informe decia «el check acredita el upload, no la revision». Lo medido
+        # el 28-jul fue peor — la revision visual NO SE EJECUTABA EN ABSOLUTO
+        # desde el 19-jul: cuota agotada, y el log remataba con «No UI tests or
+        # UI review enabled». No es que el gate midiera mal, es que no media, y
+        # por tanto tampoco habia nada que aprobar en la UI.
+        #
+        # ⚠️ EL MODO DE FALLO A VIGILAR. `UI Tests` es ahora un check REQUERIDO:
+        # si la cuota se agota vuelve a quedarse en `pending` → TODOS los PRs
+        # dejan de poder mergearse hasta el siguiente ciclo.
+        #
+        # ⚠️ `UI Tests` ES EL ÚNICO CONTEXTO REQUERIDO SIN PINEAR, Y HOY NO SE
+        # PUEDE PINEAR. Los otros siete van a github-actions (15368).
+        #
+        # Este comentario llegó a decir que iba pineado a `integration_id:
+        # 47100` (app `chromatic-com` de `chromaui`). Era falso: el ruleset lo
+        # tenía sin pinear. Se intentó, y con el pin puesto el PR quedaba
+        # BLOCKED con todo verde, porque de esa app no llega ningún status.
+        #
+        # La razón que se dio entonces —«el `creator` del status viene `null`,
+        # así que el id se consulta por slug»— venía de mirar el endpoint
+        # equivocado. `/commits/{sha}/status` (combinado) NO incluye ese campo;
+        # `/commits/{sha}/statuses` (lista) sí, y dice:
+        #     context=UI Tests  creator=ivangc1  creator_type=User
+        # O sea que Chromatic firma como USUARIO vía OAuth, no como GitHub App.
+        # `integration_id` solo admite Apps ⇒ ningún id puede casar. No es un id
+        # mal elegido, es imposible mientras la integración sea OAuth.
+        #
+        # CONDICIÓN DE DESBLOQUEO: conectar el proyecto a la GitHub App de
+        # Chromatic (Manage → Integrations → GitHub). Cuando los statuses los
+        # firme la App, esto se cierra añadiendo `integration_id: 47100` al
+        # contexto —el id se obtiene con `gh api /apps/chromatic-com --jq .id`—
+        # y verificando que sigue llegando el status.
+        #
+        # RIESGO REAL MIENTRAS TANTO, dimensionado y no minimizado: sin pinear,
+        # cualquier fuente con `statuses: write` puede publicar un `UI Tests`
+        # verde. Aquí eso es el propio dueño y los workflows de este repo (los
+        # PRs de fork reciben token de solo lectura). Y `bypass_actors` ya da
+        # bypass `always` al rol de admin, así que frente a ese actor el pin no
+        # añadía garantía ninguna. Requerido-sin-pinear es más débil de lo que
+        # parece, pero es estrictamente mejor que no requerirlo.
+        #
+        # ARITMÉTICA DEL PLAN GRATUITO (por qué se agota, medido):
+        #   239 stories → un build completo son 560 snapshots (× modos/viewports;
+        #   MEDIDO en el build 621, no estimado: mi primera cuenta dijo 239 y se
+        #   quedaba corta a la mitad). El plan incluye 5.000/mes ⇒ caben ~9
+        #   builds completos, no ~20. Y este workflow dispara en
+        #   DOS eventos: cada push a una rama de PR es un build, y el merge a
+        #   `main` es otro. Un PR con 3 pushes ≈ 4 builds ≈ 1.000 snapshots, o
+        #   sea ~2 PRs al mes. `--only-changed` (TurboSnap) recorta, pero no en
+        #   el primer build de una rama ni cuando el diff toca ficheros que
+        #   afectan a muchas stories.
+        #
+        # ⚠️ NO resolver esto con un filtro `paths:` en este workflow. `Run
+        # Chromatic` es un contexto REQUERIDO del ruleset, y un job que no se
+        # dispara deja el check en "Expected — Waiting" indefinidamente: los PRs
+        # que no toquen `src/` quedarían sin poder mergearse. Misma trampa que
+        # añadir `UI Tests` estando en pending.
+        #
+        # Palancas reales: quitar el trigger de `push: main` (≈ mitad de gasto,
+        # a costa de la línea base con la que se comparan los PRs), agrupar
+        # commits para pushear menos veces, o pagar plan.
+        #
+        # POR QUÉ NO SE QUITA `--exit-once-uploaded` PARA QUE ESTE JOB —que SÍ
+        # está pineado— acredite la comparación en vez del upload. Sería la vía
+        # de tener el gate visual bajo un check pineado hoy mismo, sin depender
+        # de cómo firme Chromatic. Se descarta por la aritmética de arriba: sin
+        # el flag, la CLI espera al veredicto y sale ≠0 si hay cambios sin
+        # revisar; un job de Actions ya terminado NO se repinta al aprobar en
+        # Chromatic, así que cada cambio visual exigiría re-lanzar el job. Si
+        # ese re-lanzamiento genera un build nuevo son ~560 snapshots más sobre
+        # un presupuesto de ~9 builds/mes. NO ESTÁ MEDIDO si Chromatic reutiliza
+        # el build del mismo commit; se deja escrito como incógnita en vez de
+        # asumirlo, porque el riesgo cae del lado caro y comprobarlo cuesta
+        # justamente la cuota que está en juego. El status de la App, en cambio,
+        # se actualiza EN SITIO al aprobar.
         run: npx chromatic --exit-once-uploaded --only-changed

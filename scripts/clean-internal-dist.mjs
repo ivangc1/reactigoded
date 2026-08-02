@@ -10,6 +10,7 @@
  * Este script es post-build y elimina:
  *   - dist/test-utils/         (helpers de test, no API pública)
  *   - dist/stories/            (matrix de stories, no API)
+ *   - dist/components/Slot/    (barrel interno; su `.d.ts` shippeaba roto — B34-1)
  *   - dist/utils/env.*         (helper interno isDev())
  *   - dist/utils/mergeDescribedBy.*  (helper interno a11y)
  *   - dist/utils/useIsoLayoutEffect.* (helper interno SSR-safe)
@@ -77,6 +78,20 @@ function rmFilesByPrefix(rel, prefixes) {
 // Directorios completos no API.
 rmDir("test-utils");
 rmDir("stories");
+// B34-1 (gate 1.0.0): `components/Slot/` shippeaba un barrel ROTO. Su
+// doc-block a nivel de fichero termina en `@internal`, y TS adhiere esa
+// etiqueta SOLO al primer statement — así que `stripInternal` vació los tres
+// hermanos a `export {};` mientras `index.d.ts` seguía re-exportando de ellos:
+// 3×TS2305 en el tarball publicado. Nadie lo veía porque el barrel no es
+// alcanzable desde ninguna entry (medido: 0 referencias entrantes en dist,
+// ausente de index.d.ts/server-safe.d.ts y del `exports` map).
+//
+// Se borra el directorio ENTERO en vez de etiquetar `@internal` statement a
+// statement porque es lo que dice la intención declarada del propio fichero
+// (`src/components/Slot/index.ts:4`: "NO exportado al root"): si no es API, no
+// tiene por qué viajar. Etiquetar habría dejado cuatro `.d.ts` vacíos de peso
+// muerto en el tarball.
+rmDir("components/Slot");
 
 // Files internos en dist/utils/ — sólo cn.* es público.
 //

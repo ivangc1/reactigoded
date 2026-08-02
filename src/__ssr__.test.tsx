@@ -21,7 +21,7 @@
  * Si un componente nuevo se añade al DS, añadirlo aquí garantiza
  * SSR-safety en CI antes del merge.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { act } from "react";
@@ -524,12 +524,54 @@ describe("SSR — renderToString por componente del DS", () => {
  *     (portales, "use client" granular, FUI). El consumer NO los
  *     server-renderiza; meterlos en hydrateRoot tests probaría algo
  *     que no es invariante del DS.
- *   - **ThemeToggle / Switch indeterminate**: usan
- *     `useSyncExternalStore` con server snapshot fijo. Su SSR es
- *     trivial (renderToString ya lo cubre) y el ciclo de hidratación
- *     pasaría sin información — añadir es ruido.
+ *   - **Switch indeterminate**: su estado indeterminado se aplica en
+ *     effect sobre el nodo, no en el HTML del servidor; el ciclo de
+ *     hidratación no añade señal sobre lo que ya cubre `renderToString`.
+ *
+ * **ThemeToggle SÍ está incluido, y antes NO lo estaba (SSR-01).** La
+ * exclusión anterior decía: «usan `useSyncExternalStore` con server
+ * snapshot fijo … el ciclo de hidratación pasaría sin información —
+ * añadir es ruido». Las dos premisas eran falsas y esa exclusión es la
+ * razón de que el defecto shippeara:
+ *   (a) ThemeToggle NO leía el tema por `useSyncExternalStore`: lo leía
+ *       directo del DOM dentro de `derive()`, o sea DURANTE el render de
+ *       hidratación. Solo el `localStorage` pasaba por el store.
+ *   (b) El ciclo daba un mismatch recuperable con el script anti-flash
+ *       del propio README: información, no ruido.
+ * Los tests CSR de `ThemeToggle.test.tsx` (bloque B-08) no podían
+ * cazarlo por construcción: con `render()` React llama `getSnapshot`, no
+ * `getServerSnapshot`, así que el defecto era invisible ahí.
+ *
+ * Estos 3 casos llevan `beforeHydrate` (fijan storage y `<html
+ * data-theme>` ENTRE el server render y la hidratación) y `afterSettle`
+ * en vez de la aserción genérica de DOM intacto, porque la
+ * resincronización post-mount muta el DOM legítimamente.
  */
-const HYDRATE_CASES: { name: string; jsx: () => ReactElement }[] = [
+type HydrateCase = {
+  name: string;
+  jsx: () => ReactElement;
+  /** Corre entre `renderToString` y `hydrateRoot`: simula lo que el navegador
+   *  ya tiene puesto (script anti-flash, storage de una visita anterior). */
+  beforeHydrate?: () => void;
+  /** `false` cuando la resincronización post-hidratación muta el DOM a
+   *  propósito. Nunca se pone `false` "porque falla": solo cuando la mutación
+   *  ES el comportamiento correcto y `afterSettle` la comprueba. */
+  expectDomStable?: boolean;
+  /** Aserciones específicas tras asentarse la hidratación. */
+  afterSettle?: (container: HTMLElement) => void;
+};
+
+/** Deja el entorno como una pestaña recién abierta, sin restos del caso previo. */
+function resetThemeEnv(): void {
+  document.documentElement.removeAttribute("data-theme");
+  try {
+    window.localStorage.removeItem("theme");
+  } catch {
+    /* sin storage — nada que limpiar. */
+  }
+}
+
+const HYDRATE_CASES: HydrateCase[] = [
   { name: "Button", jsx: () => <Button>Aceptar</Button> },
   {
     name: "Card (compound)",
@@ -563,6 +605,62 @@ const HYDRATE_CASES: { name: string; jsx: () => ReactElement }[] = [
       </Tabs>
     ),
   },
+  // ── SSR-01: los 3 escenarios de hidratación de ThemeToggle ──────────
+  // El invariante compartido es el mismo en los tres: `aria-checked` del
+  // switch debe coincidir con `<html data-theme>` una vez asentado. Es el
+  // par que se desincronizaba en silencio en producción, con el agravante
+  // de que un `role="switch"` cuyo estado no describe la realidad es un
+  // fallo WCAG 4.1.2 (Name, Role, Value), no solo un detalle visual.
+  {
+    name: "ThemeToggle (anti-flash resolvió light, sin storage)",
+    jsx: () => <ThemeToggle />,
+    beforeHydrate: () => {
+      resetThemeEnv();
+      document.documentElement.setAttribute("data-theme", "light");
+    },
+    // La resincronización post-mount cambia aria-checked y el label: mutación
+    // legítima, comprobada abajo.
+    expectDomStable: false,
+    afterSettle: (container) => {
+      const input = container.querySelector("input");
+      expect(document.documentElement).toHaveAttribute("data-theme", "light");
+      expect(input).toHaveAttribute("aria-checked", "false");
+    },
+  },
+  {
+    name: "ThemeToggle (storage light + anti-flash light)",
+    jsx: () => <ThemeToggle />,
+    beforeHydrate: () => {
+      resetThemeEnv();
+      window.localStorage.setItem("theme", "light");
+      document.documentElement.setAttribute("data-theme", "light");
+    },
+    expectDomStable: false,
+    afterSettle: (container) => {
+      const input = container.querySelector("input");
+      // ESTE es el assert que caza el fix naive. Mover la lectura a
+      // `useSyncExternalStore` sin re-resolver en el effect elimina el
+      // mismatch (`recoverableErrors` vacío, o sea la métrica del informe
+      // pasa) y a la vez escribe el default sobre la preferencia guardada
+      // del usuario: entra con "light" y sale con "dark" persistido.
+      expect(window.localStorage.getItem("theme")).toBe("light");
+      expect(document.documentElement).toHaveAttribute("data-theme", "light");
+      expect(input).toHaveAttribute("aria-checked", "false");
+    },
+  },
+  {
+    name: "ThemeToggle (sin script anti-flash ni storage)",
+    jsx: () => <ThemeToggle />,
+    beforeHydrate: resetThemeEnv,
+    expectDomStable: false,
+    afterSettle: (container) => {
+      const input = container.querySelector("input");
+      // Sin señal externa manda el default dark-first del DS, y el servidor
+      // ya había renderizado eso: aquí el DOM no debería cambiar de valor.
+      expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+      expect(input).toHaveAttribute("aria-checked", "true");
+    },
+  },
 ];
 
 describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
@@ -585,16 +683,31 @@ describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
   for (const c of HYDRATE_CASES) {
     it(`${c.name}: hidrata sin mismatch ni DOM mutation`, async () => {
       // 1. Server render → HTML estático.
-      // eslint-disable-next-line testing-library/render-result-naming-convention -- `serverHtml` viene de renderToString, no del `render` de testing-library; la regla no aplica.
-      const serverHtml = renderToString(c.jsx());
+      //    Con `document` STUBEADO A undefined: si el componente lee el DOM
+      //    durante el render (que es justo el defecto SSR-01), el pase
+      //    "servidor" leería el mismo DOM que luego prepara `beforeHydrate` y
+      //    el test se autocumpliría — mediría un mismatch que él mismo acaba
+      //    de evitar. El repo ya conocía el truco (72c4e13).
+      vi.stubGlobal("document", undefined);
+      let serverHtml: string;
+      try {
+        serverHtml = renderToString(c.jsx());
+      } finally {
+        vi.unstubAllGlobals();
+      }
 
-      // 2. Montar el HTML en un container DOM real (happy-dom). Esto
+      // 2. Estado que el navegador ya tiene ANTES de hidratar: script
+      //    anti-flash, storage de una visita anterior. Va aquí y no antes
+      //    porque el servidor, por definición, no lo ve.
+      c.beforeHydrate?.();
+
+      // 3. Montar el HTML en un container DOM real (happy-dom). Esto
       //    simula lo que el browser recibe del server antes de bootstrap.
       const container = document.createElement("div");
       container.innerHTML = serverHtml;
       document.body.appendChild(container);
 
-      // 3. Snapshot pre-hydrate para detectar mutaciones post-hidratación.
+      // 4. Snapshot pre-hydrate para detectar mutaciones post-hidratación.
       const htmlBeforeHydrate = container.innerHTML;
 
       // 4. Hidratar dentro de `act()`. `hydrateRoot` inicia hidratación
@@ -608,21 +721,42 @@ describe("SSR — hydrateRoot ciclo server→cliente (H-08)", () => {
       //    React kicks in cuando el callback retorna void, lo que rompe
       //    `await`. Retornar el `Root` desde el callback fuerza el
       //    overload `act<T>(() => T): Promise<T>` que sí es awaitable.
+      //    El asentamiento va DENTRO del mismo `act`, no en uno posterior:
+      //    un componente que se resincroniza con una fuente externa (el
+      //    `MutationObserver` de `<html data-theme>` en ThemeToggle) recibe su
+      //    notificación milisegundos después del commit, y happy-dom la
+      //    entrega por su propia cola. Con dos `act` separados esa
+      //    notificación cae en el hueco entre el cierre del primero y la
+      //    apertura del segundo — React avisa de "update not wrapped in act" y
+      //    la política de stderr del repo (#28) lo convierte en fallo. Medido:
+      //    con `act` separados falla; con uno solo, no.
       const recoverableErrors: unknown[] = [];
-      const root: Root = await act(() =>
-        hydrateRoot(container, c.jsx(), {
+      const root: Root = await act(async () => {
+        const r = hydrateRoot(container, c.jsx(), {
           onRecoverableError: (err) => {
             recoverableErrors.push(err);
           },
-        }),
-      );
+        });
+        // Varios puntos de control en vez de un `await` largo: hay que ceder el
+        // turno REPETIDAMENTE para que la cola de happy-dom avance.
+        for (let i = 0; i < 5; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        return r;
+      });
 
       // 5. Assertions tras hydration settled:
-      //    - No errores recoverables (no mismatch).
-      //    - DOM intacto post-hidratación (React reuse del HTML server,
-      //      no re-mount).
+      //    - No errores recoverables (no mismatch). Invariante de TODOS los
+      //      casos, sin excepción.
+      //    - DOM intacto post-hidratación (React reuse del HTML server, no
+      //      re-mount) SALVO donde la resincronización con una fuente externa
+      //      es el comportamiento correcto; esos casos lo comprueban en
+      //      `afterSettle`, que es más específico, no más laxo.
       expect(recoverableErrors).toEqual([]);
-      expect(container.innerHTML).toBe(htmlBeforeHydrate);
+      if (c.expectDomStable !== false) {
+        expect(container.innerHTML).toBe(htmlBeforeHydrate);
+      }
+      c.afterSettle?.(container);
 
       // 6. Cleanup: unmount + remove container del documento. Sin esto,
       //    el React state queda colgado entre tests y los counters de

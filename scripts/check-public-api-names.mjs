@@ -57,8 +57,27 @@ const cssClasses = new Set([...css.matchAll(/\.(ig-[a-z0-9-]+)/g)].map((m) => m[
 // Solo DECLARACIONES (`--ig-x:`), NO referencias `var(--ig-x)`: si un token
 // congelado se borra pero otro token aún lo referencia, su nombre sigue
 // apareciendo en el CSS — el gate debe cazar el borrado igual (codex P1).
+//
+// Se barren TODOS los CSS shippeados, no solo `igoded-tokens.css` (E31-F4).
+// Leer un único fichero dejaba 6 tokens invisibles al gate —los declara otro
+// CSS— y por tanto imposibles de congelar: `--ig-gradient-{from,via,to}` y
+// `--ig-snap-strictness` en `igoded-components.css`, `--ig-ring-offset-{width,
+// color}` en `igoded-state-css.css`. Un sembrador que solo mira un fichero
+// hereda su recorte, que es la misma causa raíz que C-1 (la semilla del freeze
+// heredó las omisiones de la prosa de CSSAPI.mdx).
+function allCssFiles(dir) {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...allCssFiles(p));
+    else if (e.name.endsWith(".css")) out.push(p);
+  }
+  return out;
+}
 const tokens = new Set(
-  [...rd("dist/styles/igoded-tokens.css").matchAll(/(--ig-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
+  allCssFiles(resolve(root, "dist/styles"))
+    .flatMap((p) => [...readFileSync(p, "utf8").matchAll(/(--ig-[a-z0-9-]+)\s*:/g)])
+    .map((m) => m[1]),
 );
 // Escanear TODOS los chunks JS de dist (recursivo), no solo los 2 facades: el
 // build multi-entry emite código compartido a chunks (p.ej. Toast-XXX.js), y un
@@ -93,6 +112,26 @@ for (const d of hooks.dynamic ?? []) {
     missing.push(`hook  ${d.prefix}* (prefijo no emitido en JS; cubre ${String((d.members ?? []).length)} miembros)`);
   }
 }
+// componentCustomProperties: custom properties que el JS ESCRIBE (inline style) y
+// el CSS LEE con var(). No caben en `tokensTier2` porque el predicado de esa
+// categoría lee DECLARACIONES de igoded-tokens.css, y estas no se declaran en
+// ningún CSS — por eso `--ig-progress-percent` quedó fuera del freeze pese a
+// estar documentada como patrón de consumo público (CSSAPI.mdx) y a que un ADR
+// registra que allowlists CSP pueden depender de sus valores.
+//
+// Se comprueban las DOS mitades porque el contrato son las dos: si el JS deja de
+// emitirla, el consumer que la lee se queda sin valor; si el CSS deja de leerla,
+// el nombre ya no gobierna nada. Cualquiera de las dos ausencias es el breaking.
+const cssAll = [
+  "dist/styles/igoded-tokens.css",
+  "dist/styles/igoded-components.css",
+  "dist/styles/igoded-base.css",
+  "dist/styles/igoded-design.css",
+].filter(has).map(rd).join("\n");
+for (const p of json.componentCustomProperties ?? []) {
+  if (!bundlesText.includes(p)) missing.push(`custom-prop  ${p} (no emitida por JS)`);
+  else if (!cssAll.includes(`var(${p}`)) missing.push(`custom-prop  ${p} (emitida, pero ya no la lee ningún CSS)`);
+}
 
 if (missing.length > 0) {
   console.error(
@@ -114,6 +153,7 @@ const hookCount = (hooks.literal?.length ?? 0) + (hooks.dynamic ?? []).reduce((n
 console.log(
   `✓ public-api-names: ${String(json.classes.length)} clases + ${String(hookCount)} hooks + ` +
     `${String(json.tokensTier2.length)} tokens + ` +
-    `${String(json.dataAttributes.length)} data-attrs — todos presentes en dist.`,
+    `${String(json.dataAttributes.length)} data-attrs + ` +
+    `${String((json.componentCustomProperties ?? []).length)} custom-props — todos presentes en dist.`,
 );
 process.exit(0);

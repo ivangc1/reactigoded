@@ -26,7 +26,12 @@ export function allowIncidentalConsoleError(pattern: RegExp): void {
     // Cubre error Y warn: React emite act() por console.error, pero los
     // dev-warnings de hooks (p.ej. useControllableState) van por console.warn.
     for (const method of ["error", "warn"] as const) {
-      const guard = console[method] as (...args: unknown[]) => void;
+      // `.bind(console)` y no una referencia suelta: extraer un método de su
+      // objeto lo deja sin receptor, y hay runtimes donde `console.error` usa
+      // `this` internamente. Aquí además el guard se re-invoca desde dentro de
+      // un mock, así que perder el receptor sería un fallo silencioso en el
+      // camino que precisamente sirve para no perder mensajes.
+      const guard = (console[method] as (...args: unknown[]) => void).bind(console);
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
         if (!pattern.test(args.map((a) => String(a)).join(" "))) guard(...args);
       });

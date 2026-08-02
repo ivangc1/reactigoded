@@ -209,7 +209,16 @@ for (const f of files) {
         members.push(...node.members);
       } else if (ts.isTypeAliasDeclaration(node)) {
         const collect = (typeNode) => {
-          if (ts.isTypeLiteralNode(typeNode)) {
+          // Los paréntesis primero: un union de intersecciones se escribe
+          // `| (A & { x } & B)` y TS mete un ParenthesizedTypeNode entre el
+          // union y la intersección. Sin atravesarlo, la rama entera es
+          // invisible al clasificador — así se le escaparon las 3 props de
+          // `Chip` (A-TYPES-02), que es la forma AST de cualquier union
+          // discriminado con intersecciones. No es una frontera EOPT nueva:
+          // es un falso negativo de este walker.
+          if (ts.isParenthesizedTypeNode(typeNode)) {
+            collect(typeNode.type);
+          } else if (ts.isTypeLiteralNode(typeNode)) {
             members.push(...typeNode.members);
           } else if (
             ts.isIntersectionTypeNode(typeNode) ||

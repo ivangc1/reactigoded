@@ -15,11 +15,40 @@ NO defectos del `dist`):
 - Entrypoints JS (`reactigoded`, `/server-safe`, `/cn`): `node16 (from
   ESM)` 🟢 + `bundler` 🟢 → los consumers modernos resuelven bien.
 - `node16 (from CJS)`: ⚠️ ESM dynamic-import-only — inherente a
-  `"type":"module"` (un `require` CJS debe pasar a `import()` dinámico).
+  `"type":"module"`. **El veredicto de attw es sobre los TIPOS y es correcto**;
+  el paréntesis que había aquí («un `require` CJS debe pasar a `import()`
+  dinámico») era falso en runtime y se ha quitado: ver la corrección de abajo.
 - `node10`: 💀 — resolución legacy sin soporte de `exports`; irrelevante
-  (engine floor `>=22.12`).
-- Entrypoints `styles/*.css`: 💀 — **falso positivo** de attw (no entiende
-  exports CSS sin tipos; los bundlers los resuelven sin problema).
+  (engine floor `>=22.22`).
+- Entrypoints `styles/*.css`: 💀 — los bundlers los resuelven sin problema, pero
+  **no es un falso positivo de attw**. Ver la corrección justo debajo.
+
+> **Corrección de registro (gate 1.0.0, `PR-4`).** El paréntesis de la fila `node16 (from CJS)`
+> decía que un `require` desde CJS «debe pasar a `import()` dinámico». En runtime es falso, y
+> encima el propio CHANGELOG dice lo contrario en su entrada de D1-P4. Medido sobre el `dist`:
+> `require("reactigoded")` devuelve los **97 exports** tanto en **22.12** (el floor anterior)
+> como en 24 — Node soporta `require()` síncrono de ESM desde 22.12, con un warning de feature
+> experimental. Lo que attw dice sigue siendo cierto **para los tipos**: en la resolución
+> `node16 from CJS` los `.d.ts` no se ven como CJS. Son dos cosas distintas y la línea las
+> mezclaba en una.
+
+> **Corrección de registro (gate 1.0.0, `A-CSS-01`).** Esta línea decía «falso positivo de attw
+> (no entiende exports CSS sin tipos)». Lo primero es cierto, lo segundo no: el hueco es real y
+> `tsc` lo ve **sin attw de por medio**. Medido sobre el tarball instalado — un consumer con
+> `noUncheckedSideEffectImports: true` recibe **9 × TS2882**, uno por subpath CSS, y **exit 0**
+> sin el flag. Es decir: los 9 subpaths no tienen declaración de tipos, y ese flag es
+> exactamente el que la exige.
+>
+> **Workaround del consumer**, una línea en cualquier `.d.ts` de su proyecto:
+> ```ts
+> declare module "reactigoded/styles/*.css";
+> ```
+>
+> **Por qué no se tipa desde el paquete (todavía)**: exigiría convertir los 9 targets del
+> `exports` map de string a objeto con condición `types`, y generar y shippear ~37 `.d.ts`
+> vacíos (los 28 fragmentos de `state/` incluidos). Es superficie de `exports` —lo que el freeze
+> de 1.0 protege— tocada para un flag opt-in con workaround de una línea. Queda como decisión
+> abierta para 1.1.0, ya medida: no es que no se sepa hacer, es que el momento es malo.
 
 **Follow-up (no bloquea rc.1)**: promover attw a gate CI con
 `--ignore-rules cjs-resolves-to-esm no-resolution` (cubre la matriz de

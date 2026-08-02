@@ -1,3 +1,11 @@
+/* eslint-disable jest-dom/prefer-to-have-value -- `aria-valuenow` es un ATRIBUTO
+   ARIA, no el value de un control de formulario. `toHaveValue()` lee la
+   propiedad `value` del elemento, que en un `<div role="progressbar">` no
+   existe: el autofix de esta regla convirtió estas 5 aserciones y rompió 10
+   tests (medido). La regla se equivoca al tratar `aria-value*` como value de
+   formulario; `toHaveAttribute` es aquí la aserción correcta, no una menos
+   idiomática. No se desactiva en todo el repo — solo en este fichero, que es
+   el único con progressbar. */
 import { describe, it, expect } from "vitest";
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";

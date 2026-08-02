@@ -44,11 +44,22 @@ mandate.
   `if (import.meta.hot)` or `?.` passes, but Vite prunes `import.meta.hot` to `undefined` in *every*
   production build (Node, Edge, browser alike) → an unguarded call crashes in all production, not just Edge.
   Guard it or use `?.`.
-- **Assembled / wrapped `import.meta.glob` callee.** `(import.meta.glob)(...)`, `(import.meta.glob as any)(...)`,
-  etc. pass. Vite recognizes the glob macro by a raw regex; any wrapper defeats recognition → the macro is
-  not expanded → `import.meta.glob` is `undefined`/throws at runtime → a universal crash on the first import
-  (browser, Node-SSR, Edge alike), visible in `vite dev`/`build`. No production runtime where it works. Call
-  `import.meta.glob(...)` directly (unwrapped).
+- **Assembled `import.meta.glob` callee — only the forms Vite does NOT expand.**
+  `const g = import.meta.glob; g(...)` and `(0, import.meta.glob)(...)` pass. Measured against vite 8:
+  neither is expanded, so `import.meta.glob` arrives as `undefined` and throws on the first import in
+  **every** runtime (browser, Node-SSR, Edge alike). No production runtime where it works ⇒ nothing to
+  diverge, nothing for this gate to catch. Call `import.meta.glob(...)` directly.
+
+  > **Corrección (gate 1.0.0, `PR-1`).** Esta entrada listaba como ejemplos `(import.meta.glob)(...)` y
+  > `(import.meta.glob as any)(...)`, con el razonamiento «cualquier wrapper derrota el reconocimiento del
+  > macro → crash universal → out-of-mandate». La premisa es **falsa justo para esos dos**: medido contra
+  > vite 8, **ambos EXPANDEN**. Es decir, funcionan en producción y cargan N módulos que el gate nunca
+  > auditó — un fail-open real, no un residual. El gate los caza desde este release (desenvuelve el callee
+  > igual que ya desenvolvía la key del bracket).
+  >
+  > La lección de método está registrada en el proyecto: clasificar algo como out-of-mandate exige **medir**
+  > la premisa contra el oráculo (aquí, Vite), no derivarla del diseño. El discriminador es «¿hay un runtime
+  > de producción donde esto funciona?» — para paren/cast la respuesta era sí.
 - **Reflective descriptor read of a Node-only member.**
   `Object.getOwnPropertyDescriptor(performance, "eventLoopUtilization").value()` passes, but `performance`'s
   members live on the prototype (not own props) → the descriptor is `undefined` → `.value()` throws a
@@ -114,8 +125,15 @@ subsystem the gate renounces. Never hides anything executable.
 ## 5. Deferred — solvable, tracked for a later release
 
 - **Guarded `process.env` (rc.2).** Denied (it `ReferenceError`s on the strict Edge baseline). The guarded
-  form `if (typeof process !== "undefined") process.env.X` is safe but currently flagged. *Workaround: read
-  env via `import.meta.env`, or annotate the guarded read.*
+  form `if (typeof process !== "undefined") process.env.X` is safe but currently flagged. *Workaround:
+  annotate the guarded read.*
+
+  > **Corrección (gate 1.0.0, `PR-2`).** El workaround decía además «read env via `import.meta.env`». Eso
+  > no es lectura de entorno **para un consumer de esta librería**: Vite en lib-mode **hornea**
+  > `import.meta.env` en tiempo de build, con los valores del build del DS, no los del consumer. Medido
+  > sobre el artefacto: `import.meta.env` aparece **0 veces** en `dist/index.js`, frente a 21 guards
+  > `import.meta.env.DEV` en el source. O sea que dentro del DS sirve para podar código en build, y para
+  > leer el entorno del consumer no sirve en absoluto. Se quita del workaround.
 - **Systematic Edge-global derivation (#190).** `SAFE_GLOBALS` is derived from Node ∪ ES builtins minus the
   Vercel-Edge-missing set, with `SharedArrayBuffer` additionally removed (Cloudflare disables it — Spectre).
   A fully systematic `{workerd ∩ Deno ∩ Vercel-Edge}` intersection (and the `Atomics` / high-resolution-timer

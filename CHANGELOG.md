@@ -7,7 +7,328 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-_Sin cambios desde `1.0.0-rc.1`._
+## [1.0.0-rc.2] — 2026-07-28 · **cierre del gate 1.0.0 estable**
+
+Cierra los **28 hallazgos** de la auditoría cruzada A+B sobre `1.0.0-rc.1` (0 BLOCKER, 4 HIGH,
+11 MEDIUM, 13 LOW), cuyo veredicto consolidado era **NO-GO reabrible**. Nada de esto cambia la
+API pública ni el contenido del paquete: es la **cadena de evidencia** del release, los gates que
+la protegen, y las premisas escritas que no se sostenían al medirlas.
+
+Este release es además la **canary del camino OIDC**. El publish de `rc.1` nunca llegó a ocurrir
+por push de tag —el run murió con `E404` y se salvó con un `workflow_dispatch` que acabó firmando
+la provenance del commit equivocado—, así que `rc.2` es la primera vez que se ejercita el camino
+real con el guard puesto. Si `verify-provenance` sale verde aquí, `v1.0.0` puede taggearse
+sabiendo exactamente qué va a pasar.
+
+### Corregido — HIGH
+
+- **La provenance firmaba el commit equivocado** (`A-REL-01`). En `rc.1` la attestation SLSA
+  quedó firmando `refs/heads/main` + el commit de main, mientras el tarball, el `gitHead` y
+  el tag eran `318e159`. Causa: npm deriva la provenance de las variables del **evento** de
+  Actions, no del `actions/checkout` — y aquel publish salió por `workflow_dispatch` desde
+  main con checkout del tag. El tarball era correcto; la evidencia apuntaba a otro árbol, que
+  es peor que no tenerla porque parece correcta.
+  - `release.yml` gana un **guard de evento pre-publish**: solo un `push` de tag cuyo
+    `GITHUB_REF`/`GITHUB_SHA` coincidan con el tag puede publicar. Es pre-publish porque una
+    versión de npm es inmutable: después solo se puede negar el registro, no arreglar la firma.
+  - `workflow_dispatch` **ya no publica**. Queda reducido a re-verificar la evidencia de algo
+    ya publicado y regenerar su registro. Si el workflow del tag está roto y el publish nunca
+    ocurrió, la salida es un tag nuevo — cuesta un número de versión, y ese es el precio de
+    que la evidencia sea cierta.
+- **El guard de provenance no comprobaba lo que decía comprobar.** Vivía embebido en el
+  workflow, seleccionaba la attestation **por índice** (`attestations[0]`, que es siempre el
+  predicado `npm-publish`, no el SLSA), y decodificaba el sobre DSSE **sin verificar la
+  firma** — o sea solo probaba «el registro me devolvió este JSON». Además solo existía en la
+  rama de re-run, así que nunca llegó a ejecutarse sobre una publicación real.
+  Sustituido por `scripts/verify-provenance.mjs`, que selecciona por `predicateType`
+  (0 y >1 son ambos fallo), verifica la firma SLSA contra Fulcio y la del registro contra las
+  claves publicadas de npm, y compara digest, `gitHead`, ref, commit y evento. Corre en el
+  release y es post-hoc: se puede lanzar contra cualquier versión ya publicada.
+
+- **`ThemeToggle` rompía la hidratación siguiendo el patrón anti-flash del propio README**
+  (`SSR-01`). Leía `<html data-theme>` **durante** el render de hidratación, así que con un
+  script anti-flash que resolviera un tema distinto de `defaultTheme` producía o un mismatch
+  recuperable (React descarta el árbol del servidor y lo regenera) o —en producción— un
+  desync silencioso: el control decía "Dark" con la página ya en claro, no se autocorregía, y
+  el primer click cambiaba el tema **sin mover `aria-checked`**. Un `role="switch"` cuyo
+  estado programático no cambia al activarlo es además un fallo WCAG 4.1.2.
+  Ahora el DOM y el `localStorage` entran por `useSyncExternalStore` con snapshot de servidor
+  estable, y el effect **re-resuelve contra las fuentes vivas** en vez de escribir el valor
+  del render de hidratación. Esa segunda mitad es la que evita convertir el fix en una
+  regresión peor: sin ella se elimina el mismatch pero se sobrescribe el `data-theme` del
+  script anti-flash **y la preferencia guardada del usuario** — medido, un visitante con tema
+  claro entraba y salía con `"dark"` persistido.
+  El claim del README que prometía lo contrario queda corregido, y `ThemeToggle` entra en los
+  casos de hidratación de `__ssr__.test.tsx`, de los que estaba excluido con una premisa
+  escrita que era falsa. Los 3 casos nuevos fallan tanto con el bug original como con el fix
+  naive: es la diferencia entre un test que acompaña al fix y uno que lo defiende.
+- **`ThemeToggle` sigue ahora a los escritores externos de `<html data-theme>`.** Antes solo
+  leía el atributo en render, así que si otro código lo cambiaba —`useTheme()`, el script
+  anti-flash, la propia app— el switch se quedaba anunciando el tema anterior. Es la misma
+  clase de defecto que el anterior, un `role="switch"` cuyo estado no describe la realidad,
+  alcanzable sin SSR. El observador **filtra las escrituras del propio componente**: si no,
+  se despertaría a sí mismo en cada montaje para renderizar exactamente lo mismo. Y el effect
+  ya no reescribe el atributo cuando su valor es el correcto, porque `setAttribute` encola una
+  mutación aunque el valor no cambie y eso despertaría también a los observadores del consumer.
+  *Límite conocido, medido y anotado en `POST_RC1_BACKLOG.md`*: con `storageKey` activo el
+  orden de resolución hace que el storage gane al atributo, así que un `ThemeToggle` con
+  persistencia sigue sin converger con `useTheme`. Cambiar ese orden es un breaking que exige
+  decidir antes qué significa "preferencia del usuario"; no se hace en un fix de hidratación.
+
+### Migración desde `1.0.0-beta.26` — lee esto antes, hay DOS beta.26
+
+El identificador `1.0.0-beta.26` apunta a **dos árboles distintos e incompatibles**, así que una
+sola guía de migración describiría mal a la mitad de la gente. Medido:
+
+| De dónde lo instalaste | Árbol real | ¿Cruza los renames de rc.1? |
+|---|---|---|
+| `npm install reactigoded@1.0.0-beta.26` | `95c374e` | **No.** Ese tarball ya venía con los nombres nuevos |
+| tag git `v1.0.0-beta.26` | `d3f2328` | **Sí.** Ese árbol es anterior a los renames |
+
+Los dos commits distan **24 commits**. El publish de npm salió de un árbol de `main` posterior al
+tag, a mano y antes del workflow de release — por eso `gitHead` en el registro dice `95c374e` y no
+el commit del tag.
+
+**Si vienes de npm**: no tienes que hacer nada por los renames; ya los tenías.
+
+**Si vienes del tag git**, cruzas los renames de rc.1 y hay una trampa: los imports y las props
+rompen ruidosamente (TypeScript te lo dice), pero **las clases CSS desaparecen en silencio** — tu
+hoja de estilos sigue siendo válida, simplemente deja de aplicar. Son estas 9:
+
+```
+ig-input-error          → ig-input-invalid
+ig-input-success        → ig-input-valid
+ig-navbar-brand         → ig-navbar-logo
+ig-tooltip-color-brand      → ig-tooltip-brand
+ig-tooltip-color-danger     → ig-tooltip-danger
+ig-tooltip-color-info       → ig-tooltip-info
+ig-tooltip-color-secondary  → ig-tooltip-secondary
+ig-tooltip-color-success    → ig-tooltip-success
+ig-tooltip-color-warning    → ig-tooltip-warning
+```
+
+Grep de migración, pegable tal cual:
+
+```bash
+rg "ig-input-(error|success)|ig-navbar-brand|ig-tooltip-color-"
+rg "state=\"(error|success)\""
+```
+### Corrección de registro
+
+- La entrada **`[1.0.0-beta.26]`** lleva fecha **2026-05-29**, que es la del tag. El publish real a
+  npm fue el **2026-07-18**, siete semanas después y desde otro árbol (`95c374e`, no el commit del
+  tag). La entrada describe lo que se tageó, no lo que se publicó.
+- La misma entrada atribuye a `rc.1` los renames BREAKING. En npm **ya habían shippeado dentro de
+  beta.26**: el tarball publicado sale de `95c374e`, que es post-rename. Para quien instaló de npm,
+  el salto `beta.26 → rc.1` es de **0 cambios** — los dos publishes tienen el `dist/` byte a byte.
+- La descripción de la capa utility la sitúa en `state.css`, y sus tres clases de ejemplo
+  (`ig-flex`, `ig-gap-*`, `ig-bg-*`) están en `igoded-components.css` (`E31-F5`). La capa utility
+  se reparte entre los dos ficheros; decir «la capa utility de state.css» describe mal dónde vive.
+- El header de `server-safe.d.ts` decía que cada componente del subset «garantiza» las 4
+  propiedades, y citaba un script que **no viaja en el tarball** (`E33-F1`). Un consumer no puede
+  ejecutar la comprobación que se le ofrece como aval. Reescrito: dice qué verifica el gate del
+  repo, y que su alcance son sus fronteras declaradas, no una garantía absoluta.
+- El workaround de `process.env` en `server-safe-limitations.md` ofrecía «leer el entorno vía
+  `import.meta.env`» (`PR-2`). Para un consumer eso no lee nada: Vite lo **hornea** en build con los
+  valores del build del DS. Medido — `import.meta.env` aparece **0 veces** en `dist/index.js`,
+  frente a 21 guards en el source.
+
+- La entrada de `beta.25` afirma que Chromatic quedó con **revisión visual humana obligatoria**
+  al quitarle `--auto-accept-changes=main` y `--exit-zero-on-changes` (`[H-02]`). Era falso, y lo
+  medido fue peor que lo que el propio `A-CI-01` describía.
+  - El informe decía «el check acredita el upload, no la revisión». Cierto, pero incompleto:
+    **la revisión visual no se estaba ejecutando en absoluto** desde el 2026-07-19. El log del
+    build lo decía literal — «Snapshot quota reached» y «No UI tests or UI review enabled»—, así
+    que no había snapshots que comparar ni, por tanto, nada que aprobar en la UI.
+  - **Cerrado el 2026-07-28**: instalada la GitHub App de Chromatic, restablecida la cuota y
+    `UI Tests` añadido a `required_status_checks`. El build 621 pasó con 239 stories y 560
+    snapshots. Un drift visual ya no se mergea en verde.
+  - Queda un modo de fallo que conviene tener a la vista: `UI Tests` es un check **requerido**,
+    así que si la cuota se agota vuelve a `pending` y **bloquea todos los PRs** hasta el
+    siguiente ciclo. Un build completo son **560** snapshots sobre 5.000/mes — unos 9 al mes, no
+    los ~20 que estimé antes de medirlo.
+  - El contexto va **pineado** a la GitHub App de Chromatic (`integration_id: 47100`), igual que
+    los otros seis van pineados a github-actions. Sin pinear, cualquier fuente con permiso de
+    statuses podría publicar un `UI Tests` verde y satisfacer el check.
+
+### Cambiado
+
+- **Bump de 27 devDependencies** — 23 minor/patch y 4 majors: `sigstore` 4→5, `size-limit` y
+  `@size-limit/file` 12→13, `@testing-library/jest-dom` 6→7. Ninguna toca runtime ni peers, así
+  que el consumer no ve nada de esto.
+  - **`typescript` se queda en `6.0.3` a propósito.** TS 7 nativo **no expone la Compiler API de
+    JS**, y de ella dependen cinco gates de este repo (`check-server-safe-markers`,
+    `check-emitted-classes`, `check-public-api-exports`, `check-dist-dts`, `eopt-classify`) además
+    de `typescript-eslint`. **Condición de desbloqueo**: que 7.1 publique esa API y
+    `typescript-eslint` la soporte (upstream #10940). Está anotado en `_comment_typecheck_native`
+    del `package.json`, que es donde vive el rationale completo.
+  - Fallout real: **0 regresiones funcionales**. Lo único que salió fueron 12 violaciones de
+    reglas nuevas de los linters actualizados, todas atendidas en código salvo una (ver abajo).
+- **Se retiran `patch-package`, la carpeta `patches/` y el hook `prepare`.** El patch existía
+  porque `eslint-plugin-jest-dom@5.5.0` usaba `context.getSourceCode()`, retirado en ESLint 9+.
+  La 5.10.1 ya no lo usa —verificado: 0 ocurrencias en `dist/rules/`— y `patch-package` de hecho
+  rechazaba aplicar el patch por desajuste de versión. Se cumplió la condición de salida que el
+  propio `eslint.config.js` tenía escrita.
+  - **Esto disuelve `SYM-1` de raíz**: sin `prepare` en el manifest publicado no hay hook que se
+    ejecute al instalar desde un directorio o un symlink, así que `npm link` y
+    `npm install file:<dir>` no tienen nada que romper. El guard que se había añadido para ello
+    deja de hacer falta.
+- **Ref callbacks explícitos en `Menu` y `Tooltip`.** Los setters de Floating UI se pasaban
+  sueltos (`refs.setReference`), y FUI los **tipa** como métodos aunque los **implementa** como
+  funciones estables sin `this`. Ahora van envueltos en `useCallback` sobre `[refs]` —identidad
+  igual de estable, `refs` lo es— y `MenuContext` declara `(node: HTMLElement | null) => void` en
+  vez de arrastrar el tipo interno de la librería. Además `allowIncidentalConsoleError` hace
+  `.bind(console)`: ahí el receptor perdido **no** era falso positivo, y el guard se re-invoca
+  desde dentro de un mock, así que habría sido un fallo silencioso justo en el camino que existe
+  para no perder mensajes.
+- **El engine floor sube a `>=22.22.2`** (`C-5`, decisión de floor). Sale del principio ya
+  ratificado en este mismo CHANGELOG —«floor alineado al peor caso del ecosistema»— re-derivado con
+  el tooling de hoy: con 22.12, `pnpm` ≥11 rechaza el install y `npm ci --engine-strict` falla con
+  10 `EBADENGINE` de la familia ESLint 10; y con el bump de devDeps de este release, `sigstore@5`
+  pide `^22.22.2`.
+  - **Por qué 22.22.2 y no 22.13**: es una decisión explícita del mantenedor, no la aplicación
+    mecánica del principio. Hoy el paquete no tiene consumers reales —`latest` sigue apuntando a
+    `beta.26`— y las máquinas del único consumer van por encima de esa versión. Pre-1.0 subirlo es
+    gratis; después de 1.0.0 costaría un MAJOR. Y relajarlo más adelante **no** es breaking, así
+    que la decisión no es irreversible en la dirección peligrosa.
+  - Matiz medido que conviene no perder: ESLint 10.7 **funciona** en 22.12 pese a declararse fuera
+    de rango, así que la celda CI del floor anterior pasaba **por suerte, no por contrato**.
+  - La matriz de CI y los contextos requeridos del ruleset pasan a `22.22.2`. Los dos: un job
+    renombrado sin actualizar el ruleset deja checks requeridos que no aparecen nunca y bloquea
+    todos los PRs.
+
+- El **registro durable** del release pasa del cuerpo de la GitHub Release a un asset
+  `release-record.json`. El cuerpo es a la vez notas para humanos y registro de máquina, así
+  que se pisan en las dos direcciones: en `rc.1` una edición manual borró la tabla que el
+  workflow había escrito. El asset se verifica además contra npm y contra la attestation.
+
+- **El freeze de API pública pasa a `336 clases + 13 hooks + 41 tokens Tier-2 + 8 data-attrs +
+  1 custom property de componente`** (desde `332 + 13 + 37 + 6 + —`). Todo lo que entra ya
+  shippeaba: se congela lo que estaba emitido y sin ancla, no se añade superficie nueva.
+  - Las **4 clases** que la semilla del freeze perdió: `ig-caption-bottom`, `ig-table-auto`,
+    `ig-skeleton-container`, `ig-table-scroll-region`. La semilla fue `prosa de CSSAPI.mdx ∩
+    dist`, y la doc documenta solo la mitad de cada par (`ig-caption-top` sí, `-bottom` no;
+    `ig-table-fixed` sí, `-auto` no), así que el freeze heredó la omisión de la doc. Tres
+    métodos independientes —derivación del tarball, render real desde exports públicos y
+    derivación AST sobre el ensamblaje JS— dan exactamente estas 4 y ninguna más.
+  - Los **4 tokens de theming** `--ig-space-unit` y `--ig-font-{base,heading,mono}`, que la doc
+    ya enseñaba a sobrescribir sin que nada los protegiera. `--ig-space-unit` gobierna 32
+    tokens derivados: su rename no daría ningún error, solo degradaría el spacing entero de la
+    app del consumer.
+  - Los **2 data-attrs** de portal `data-toast-container` y `data-tooltip-content`, que estaban
+    excluidos por silencio en vez de por declaración.
+
+- **`dist/components/Slot/` deja de viajar en el tarball.** Su barrel shippeaba con 3×TS2305:
+  el doc-block del fichero termina en `@internal` y TS adhiere esa etiqueta solo al primer
+  statement, así que `stripInternal` vació los tres hermanos a `export {}` mientras el barrel
+  seguía re-exportando de ellos. No era alcanzable desde ninguna entry (0 referencias
+  entrantes, ausente del `exports` map), y el propio fichero declaraba no ser API — así que se
+  saca entero en vez de etiquetar statement a statement.
+
+### Añadido
+
+- **Categoría de freeze `componentCustomProperties`** — custom properties que el JS escribe
+  como estilo inline y el CSS lee con `var()`. `--ig-progress-percent` no cabía en
+  `tokensTier2` porque el predicado de esa categoría lee *declaraciones* de
+  `igoded-tokens.css` y esta no se declara en ningún CSS: meterla ahí habría hecho **fallar**
+  el gate. El predicado nuevo comprueba las dos mitades del contrato (la emite el JS ∧ la lee
+  el CSS), porque cualquiera de las dos ausencias rompe al consumer. Medido: es la única
+  custom property que el bundle emite desde JS, así que la categoría está completa por
+  medición y no por enumeración.
+- `sigstore` como **devDependency** (no viaja en el paquete), para verificar la firma de la
+  attestation SLSA. Se fija en la línea `4.x` a propósito: `5.x` exige Node `^22.22.2`, por
+  encima del floor del repo. Y `yaml`, que ya se usaba de forma transitiva, pasa a estar
+  declarada: un gate que depende de una transitiva se rompe el día que su padre la suelte.
+- **Gate `test:dist-dts`** — compila los `.d.ts` del tarball como programa, en Bundler y
+  NodeNext, con `skipLibCheck:false` y `types:[]`. Las fixtures de consumer solo cubren lo
+  alcanzable desde una entry pública; este gate cubre lo que *viaja*. Es el `[MUST]` que
+  `CLAUDEGATE6-RC1-GATE.md:282` daba por cumplido sin haberlo ejecutado.
+- **La taxonomía de tokens ahora particiona, y el sembrador del freeze deja de ser ciego**
+  (`E31-F4`). Tres defectos medidos, los tres cerrados:
+  - `DesignTokens.mdx` decía que los tres tiers *organizan* los tokens del DS. Cubren **116**
+    de **553**: son el vocabulario del color, no del sistema entero. Ahora la doc lo dice, y
+    enumera las 437 restantes en una tabla que **suma exacto** — partición, no muestra.
+  - El patrón Tier-3 documentado era `--ig-{cardinal}-glow`, que matchea **0** tokens: el
+    real tiene el segmento invertido, `--ig-glow-{cardinal}` (33 tokens con `-sm`/`-lg`).
+  - El checker del freeze derivaba los tokens existentes leyendo **solo** `igoded-tokens.css`,
+    así que 6 declarados en otros CSS eran invisibles y por tanto imposibles de congelar
+    (`--ig-gradient-{from,via,to}`, `--ig-snap-strictness`, `--ig-ring-offset-{width,color}`).
+    Un sembrador que mira un solo fichero hereda su recorte — la misma causa raíz que C-1,
+    donde la semilla heredó las omisiones de la prosa de `CSSAPI.mdx`.
+- **`Chip` rompía con `exactOptionalPropertyTypes`** (`A-TYPES-02`). Sus props condicionales
+  daban 2×TS2375, y una de ellas es `selectable={undefined}` — el idioma que el propio DS
+  bendice y blinda con fixtures para `href` en `MenuItem`, `SidebarItem` y `NavbarLogo`. Chip
+  rompía una convención de contrato del DS, no solo un tipo.
+  - **No es una tercera frontera EOPT**: el CHANGELOG sigue listando **dos**. Era un falso
+    negativo del clasificador, que no atravesaba `ParenthesizedTypeNode` — la forma AST de
+    cualquier union discriminado con intersecciones, o sea de `ChipProps` entero. Medido: con
+    el fix, las props sin ensanchar pasan de 11 a 14; sin el fix, 11. Las 3 que faltaban.
+  - La matriz EOPT del gate anterior salió 14/14 verde porque `Chip' **no estaba en el
+    fixture**. Cobertura de fixture, no ausencia de defecto. Ahora está.
+- **`scripts.prepare` deja de romper `npm link` y `npm install file:<dir>`** (`SYM-1`). El hook
+  viaja en el manifest publicado y npm lo ejecuta al instalar desde un directorio o symlink, así
+  que el consumer moría porque `patch-package` no está en su `node_modules` — y
+  `--ignore-scripts` no lo evita en el npm del engine floor. Ahora el hook se autoguarda: solo
+  invoca `patch-package` si existe `patches/`. Medido en un consumer real: antes falla, ahora
+  pasa. No se mueve a `prepack` porque ya se intentó (`3cc9249`) y hubo que revertirlo
+  (`7d62faf`): `prepack` no corre en `npm ci`, que es donde el repo necesita el patch.
+- El gate `test:dist-dts` añade la resolución **Node16**, que no cubría ningún gate (`T5`). Hoy
+  da lo mismo que NodeNext —el paquete es ESM puro— pero eso pasa a ser un resultado medido en
+  cada build en vez de una premisa.
+- **Gate `test:public-api-exports`** — inventario nominal de los **346** nombres de export
+  (valores y tipos, por entry: `.`, `./server-safe`, `./cn`). Los nombres de export son lo
+  PRIMERO que rompe a un consumer y no tenían ancla: 75 de los 97 valores la tenían solo de
+  forma **incidental** —alguna fixture los importa— y los otros 22 valores más 133 de los 142
+  tipos no tenían ninguna. 155 nombres.
+  - Probado por mutación, no inferido: retirando `export type { NavbarLogoProps }` las dos
+    fixtures de consumer siguen pasando con **exit 0** mientras un consumer real rompe con
+    TS2724. Una fixture congela lo que usa, no la superficie.
+  - La separación **valor/tipo** no es cosmética: convertir un valor en type-only lo borra del
+    runtime aunque el nombre siga en el `.d.ts`. Detectarlo exige mirar la marca type-only del
+    re-export ANTES de resolver el alias —`getAliasedSymbol` la atraviesa y devuelve los flags
+    del símbolo original—. La primera versión del gate no lo hacía y daba la mutación por
+    buena; lo cazó su propio control.
+  - Un export que desaparece o cambia de clase es **fallo** (exige MAJOR); uno nuevo es un
+    **aviso**, porque añadir superficie es una minor legítima y convertirlo en error obligaría
+    a tocar el freeze en cada feature.
+- **Gate `test:emitted-classes`** — el freeze, en la dirección que faltaba. `test:public-api`
+  comprueba `freeze ⊆ dist`: caza el nombre congelado que desaparece. Este comprueba
+  **`emitido ⊆ freeze ∪ exclusiones con razón escrita`**: caza el nombre que el DS empieza a
+  emitir y que nadie congela — el hueco por el que pasaron las 4 clases de C-1, que llevaban
+  años emitidas fuera del contrato y las encontró una auditoría en vez de CI.
+  - Deriva los nombres del **AST de `src`** con el checker de TypeScript, no del CSS. El
+    espacio CSS **no es decidible**, y está medido: ~2.600 clases `ig-*` en `dist/styles`
+    frente a 336 congeladas, la exclusión de la capa utility que documenta `CSSAPI.mdx` es una
+    lista abierta que deja ~1.800 sin cubrir, y no hay discriminador estructural (0 `@layer`;
+    1.696 de esas ~1.800 conviven con las congeladas en el mismo fichero). El espacio de
+    **emisión** sí lo es: ~350 nombres, cada uno con su `file:line`.
+  - Las clases ensambladas (`` `ig-table-${layout}` ``) se expanden por el tipo de la
+    expresión. Si el tipo no es una unión finita de literales, el gate **falla** en vez de
+    saltarse el sitio: no se puede congelar lo que no se puede enumerar. Es cierre
+    por-espacio, no por-casos.
+  - Verificado con tres controles: quitando las 4 clases de C-1 del freeze las caza
+    exactamente a esas cuatro; una clase nueva emitida la caza; y un ensamblaje ensanchado a
+    `string` falla como no-derivable en vez de colarse.
+- **Gate `test:next-consumer`** — consumer Next.js App Router real (job propio en CI, no en
+  `verify:unit`: instala Next y corre cuatro builds). Cierra `A-RSC-01`, que ninguna fixture de
+  tipos podía cazar: `tsc` resuelve por `dist/index.d.ts` (97 exports) mientras el grafo RSC
+  resuelve por la condición `react-server` → `dist/server-safe.js` (44). Los 53 que faltan no
+  dan error de tipos, dan error de build — verde en el editor, rojo en el CI del consumer.
+  `fixtures/rsc/` era ciega a esto **por construcción**: fuerza `customConditions:
+  ["react-server"]` y `paths` al subset, o sea exactamente la mitad opuesta del fallo.
+  El gate mide cuatro celdas en Webpack **y** Turbopack, y la que lo convierte en gate es el
+  **control negativo**: un Server Component importando un export client-only debe FALLAR. Sin
+  él, el job quedaría verde aunque la frontera server-safe dejara de discriminar. Verificado
+  por mutación: exportando `Accordion` desde `server-safe` el gate se pone rojo en las cuatro.
+  Y comprueba que el error **nombra el export** — un control negativo que falla por otra causa
+  daría un verde falso, que es la trampa que este tipo de test suele tener.
+- **Gate `test:ci-covers-verify`** — compara la cadena de `npm run verify` con los steps de
+  `verify.yml` y falla si alguno no corre en CI. `test:public-api` llevaba fuera de los checks
+  requeridos (`A-CI-02`): una mutación del JSON de freeze pasaba CI y solo habría muerto en
+  `prepublishOnly`, con el tag protegido ya creado. Es la **segunda** vez que este repo sufre
+  ese drift; la primera se cerró por-caso, y por eso volvió. Ahora se cierra el espacio: lo
+  que no se cubre exige una exención con razón escrita, y un `run:` que el gate no sepa
+  parsear es fallo, no pase.
 
 ## [1.0.0-rc.1] — 2026-07-19 · **API pública congelada**
 
@@ -26,6 +347,12 @@ ahora porque el paquete tenía **0 consumidores en npm**; después de 1.0 costar
 - Clases `.ig-tooltip-color-*` → `.ig-tooltip-*` (el infijo `-color-` era dialecto local; la doc ya prometía la forma sin él).
 - Clase `.ig-navbar-brand` → `.ig-navbar-logo` y componente `NavbarBrand` → **`NavbarLogo`** (`brand` colisionaba con el eje de rol de color; el slot es el logo).
 - Clases `.ig-input-error`/`.ig-input-success` → `.ig-input-invalid`/`.ig-input-valid` y valores del prop `state` (`"invalid"`/`"valid"`), alineados con `aria-invalid`.
+  > **Modo de fallo si no migras y no usas TypeScript** (medido en el gate 1.0.0, `E32-F2`):
+  > el valor viejo **no cae a un error visible, cae a silencio**. Sin clase de estado, sin
+  > `aria-invalid` y sin warning en ningún canal — build, SSR y consola incluidos: el
+  > `<input>` queda idéntico a no pasar `state`. Aplica a `Input`, `Textarea` y
+  > `NativeSelect`. Greps de migración:
+  > `rg 'state="(error|success)"'` y `rg 'ig-input-(error|success)'`.
 
 Además, 4 correcciones de documentación de clases que **se documentaban pero no shippean**:
 `ig-btn-md`, `ig-timeline-dot-default`, `ig-step-interactive`, `ig-text-on-cinis`.

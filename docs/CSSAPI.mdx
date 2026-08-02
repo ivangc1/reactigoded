@@ -492,6 +492,7 @@ Usa el contrato del `Input` para estados:
 |---|---|
 | Wrapper | `.ig-skeleton` |
 | Shapes | `.ig-skeleton-text` · `.ig-skeleton-avatar` · `.ig-skeleton-avatar-lg` · `.ig-skeleton-card` · `.ig-skeleton-image` · `.ig-skeleton-button` · `.ig-skeleton-title` |
+| Grupo | `.ig-skeleton-container` (envoltorio con `aria-busy`/`aria-live` que agrupa varios skeletons como una sola región de carga) |
 
 ```html
 <div class="ig-skeleton ig-skeleton-title"></div>
@@ -596,8 +597,9 @@ Usa el contrato del `Input` para estados:
 | Categoría | Clases |
 |---|---|
 | Wrapper | `.ig-table` (sobre `<table>`) |
-| Modifiers | `.ig-table-bordered` · `.ig-table-striped` · `.ig-table-hover` · `.ig-table-compact` · `.ig-table-fixed` |
-| Caption | `.ig-caption-top` (caption arriba en lugar de abajo) |
+| Modifiers | `.ig-table-bordered` · `.ig-table-striped` · `.ig-table-hover` · `.ig-table-compact` · `.ig-table-fixed` · `.ig-table-auto` (ancho de columna automático; es el valor por defecto de `layout`) |
+| Caption | `.ig-caption-top` (caption arriba) · `.ig-caption-bottom` (caption abajo; es el valor por defecto de `captionSide`) |
+| Scroll | `.ig-table-scroll-region` (contenedor con overflow que el componente añade cuando la tabla desborda) |
 
 ```html
 <table class="ig-table ig-table-bordered ig-table-striped ig-table-hover">
