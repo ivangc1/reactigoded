@@ -18,6 +18,30 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          # EL COMMIT REAL DEL PR, NO EL MERGE COMMIT EFÍMERO. En un evento
+          # `pull_request`, `actions/checkout` deja HEAD en `refs/pull/N/merge`:
+          # un commit sintético que GitHub fabrica para el CI y que no existe en
+          # la rama. Chromatic saca el commit del HEAD de git —la CLI 18.1.0 no
+          # tiene flag para pasárselo, solo `--branch-name` y
+          # `--repository-slug`— así que publicaba el status sobre ESE commit.
+          #
+          # OJO CON LA CONCLUSIÓN FÁCIL, que ya me comí una vez: esto NO rompe el
+          # gate. Medido en #146 @ `22be60d`: 0 statuses en el HEAD y el
+          # `UI Tests success` (build 628) colgando de `2713c44` — y aun así
+          # GitHub da el contexto requerido por satisfecho y deja mergear. O sea
+          # que la evaluación del check SÍ mira los statuses del merge ref.
+          #
+          # Lo que rompe de verdad es TurboSnap, y está en el log de la CLI:
+          # «couldn't find the commit (3e67333) for the most recent build (#627)
+          # … copiamos del build (#625) que sí tenía commit (4017185)». Cada
+          # build de PR se atribuye a un efímero que además se recicla, así que
+          # la cadena de líneas base se parte SIEMPRE y el diff se calcula contra
+          # un build de hace días: «Found 23 changed files» cuando el push tocó
+          # cuatro. Sobre un presupuesto de ~9 builds/mes eso es el agujero.
+          #
+          # Y el efecto secundario: la evidencia queda en un commit que
+          # desaparece. Auditar el HEAD a posteriori no encuentra nada.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -31,6 +55,7 @@ jobs:
       - name: Run Chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         # ⚠️ ESTE JOB NO BLOQUEA UN DRIFT VISUAL, Y EL COMENTARIO ANTERIOR DECÍA
         # QUE SÍ (A-CI-01, gate 1.0.0).
         #
@@ -51,11 +76,21 @@ jobs:
         # del ruleset son todos de github-actions. O sea: hoy un drift visual se
         # mergea con todo verde.
         #
-        # ESTADO: CERRADO (build 621, 2026-07-28). La GitHub App de Chromatic
-        # esta instalada, `UI Tests` corre de verdad («Tested 239 stories …
-        # captured 560 snapshots») y su contexto esta en
-        # `required_status_checks` del ruleset 16867823. Un drift visual ya no
-        # se mergea en verde.
+        # ESTADO. `UI Tests` corre de verdad desde el build 621 (2026-07-28,
+        # «Tested 239 stories … captured 560 snapshots») y su contexto está en
+        # `required_status_checks` del ruleset 16867823.
+        #
+        # El gate FUNCIONA: `UI Tests` sale verde y requerido en el PR, aunque
+        # el status cuelgue del merge ref (ver el checkout). Lo que estaba roto
+        # era la atribución de commits, no el gateo — y la primera lectura que
+        # hice de esos mismos datos fue que no gateaba, que era falso.
+        #
+        # Aun así, dos afirmaciones de este fichero SÍ resultaron no medidas: el
+        # pin a `integration_id 47100` que el ruleset nunca tuvo, y el
+        # `--exit-once-uploaded` que decía bloquear drift cuando solo acredita el
+        # upload. De ahí la regla de la casa aquí: cada afirmación lleva al lado
+        # el commit y el número contra los que se comprobó, y «no medido» se
+        # escribe como no medido.
         #
         # Historia, porque A-CI-01 lo describia mas suave de lo que era: el
         # informe decia «el check acredita el upload, no la revision». Lo medido
@@ -133,4 +168,10 @@ jobs:
         # asumirlo, porque el riesgo cae del lado caro y comprobarlo cuesta
         # justamente la cuota que está en juego. El status de la App, en cambio,
         # se actualiza EN SITIO al aprobar.
-        run: npx chromatic --exit-once-uploaded --only-changed
+        #
+        # `--branch-name` por la otra mitad del mismo problema: con el checkout
+        # en detached HEAD no hay rama local, y la CLI avisaba «Branch
+        # 'fix/gate-100-bloque-R' does not exist … Pull request status updates
+        # likely won't work properly». Se le pasa la rama del PR (o la rama real
+        # en el push a main).
+        run: npx chromatic --exit-once-uploaded --only-changed --branch-name "$BRANCH"
