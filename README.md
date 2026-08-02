@@ -20,9 +20,9 @@ sobre un CSS modular utility-first state-driven (`tokens` / `base` /
 
 ## Instalación
 
-<!-- readme-version: 1.0.0-rc.1 -->
+<!-- readme-version: 1.0.0-rc.2 -->
 
-> **Release candidate `1.0.0-rc.1`** — la API pública está **congelada**
+> **Release candidate `1.0.0-rc.2`** — la API pública está **congelada**
 > (§5.13, protegida por gate): cambiarla exige un bump MAJOR.
 
 ```bash

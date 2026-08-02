@@ -7,9 +7,18 @@ versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-Cierre del gate `1.0.0` estable (auditoría cruzada A+B sobre `rc.1`: 28 hallazgos, 4 HIGH).
-Nada de esto cambia la API pública ni el contenido del paquete: es la **cadena de evidencia**
-del release.
+## [1.0.0-rc.2] — 2026-07-28 · **cierre del gate 1.0.0 estable**
+
+Cierra los **28 hallazgos** de la auditoría cruzada A+B sobre `1.0.0-rc.1` (0 BLOCKER, 4 HIGH,
+11 MEDIUM, 13 LOW), cuyo veredicto consolidado era **NO-GO reabrible**. Nada de esto cambia la
+API pública ni el contenido del paquete: es la **cadena de evidencia** del release, los gates que
+la protegen, y las premisas escritas que no se sostenían al medirlas.
+
+Este release es además la **canary del camino OIDC**. El publish de `rc.1` nunca llegó a ocurrir
+por push de tag —el run murió con `E404` y se salvó con un `workflow_dispatch` que acabó firmando
+la provenance del commit equivocado—, así que `rc.2` es la primera vez que se ejercita el camino
+real con el guard puesto. Si `verify-provenance` sale verde aquí, `v1.0.0` puede taggearse
+sabiendo exactamente qué va a pasar.
 
 ### Corregido — HIGH
 
