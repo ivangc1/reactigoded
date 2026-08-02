@@ -138,6 +138,9 @@ rg "state=\"(error|success)\""
     así que si la cuota se agota vuelve a `pending` y **bloquea todos los PRs** hasta el
     siguiente ciclo. Un build completo son **560** snapshots sobre 5.000/mes — unos 9 al mes, no
     los ~20 que estimé antes de medirlo.
+  - El contexto va **pineado** a la GitHub App de Chromatic (`integration_id: 47100`), igual que
+    los otros seis van pineados a github-actions. Sin pinear, cualquier fuente con permiso de
+    statuses podría publicar un `UI Tests` verde y satisfacer el check.
 
 ### Cambiado
 

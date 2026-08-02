@@ -68,6 +68,16 @@ jobs:
         # si la cuota se agota vuelve a quedarse en `pending` → TODOS los PRs
         # dejan de poder mergearse hasta el siguiente ciclo.
         #
+        # El contexto va PINEADO a la GitHub App de Chromatic (`integration_id:
+        # 47100`, app slug `chromatic-com` de `chromaui`), igual que los otros
+        # seis van pineados a github-actions (15368). Sin pinear, cualquier
+        # fuente con permiso de statuses podría publicar un `UI Tests` verde y
+        # satisfacer el check. El id NO se puede derivar del status —su
+        # `creator` viene `null` y el `avatar_url` lleva un id de OAuth app, que
+        # es otro espacio de nombres (comprobado: `/app/581325` devuelve una app
+        # sin relación)—; se obtiene consultando la app por su slug:
+        #     gh api /apps/chromatic-com --jq .id
+        #
         # ARITMÉTICA DEL PLAN GRATUITO (por qué se agota, medido):
         #   239 stories → un build completo son 560 snapshots (× modos/viewports;
         #   MEDIDO en el build 621, no estimado: mi primera cuenta dijo 239 y se
