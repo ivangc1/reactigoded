@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
   type Ref,
+  type RefObject,
 } from "react";
 import { Switch, type SwitchProps } from "@/components/Switch";
 import { useControllableState } from "@/hooks/useControllableState";
@@ -70,8 +71,7 @@ function readDomTheme(attribute: string | null): Theme | null {
  */
 function useDomTheme(
   attribute: string | null,
-  /** Último valor que ESTE componente escribió en el atributo. Ver abajo. */
-  selfWritten: { current: Theme | null },
+  selfWritten: RefObject<Theme | null>,
 ): Theme | null {
   // `subscribe` observa de verdad, con MutationObserver, igual que `useTheme`.
   // No es adorno: sin suscripción el control MIENTE. Medido — si otro
@@ -81,32 +81,34 @@ function useDomTheme(
   // `role="switch"` cuyo estado programático no describe la realidad (WCAG
   // 4.1.2), solo que alcanzable sin SSR.
   //
-  // El coste de tenerlo es que las notificaciones llegan asíncronas: los tests
-  // que montan ThemeToggle tienen que dejar asentar el ciclo dentro de `act()`.
-  // Eso es correcto: el componente ES asíncrono frente a una fuente externa, y
-  // un test que no lo espera está midiendo un estado intermedio.
+  // El observer notifica SIEMPRE, incluidas las escrituras del propio effect,
+  // y esa auto-notificación NO es cosmética: en el montaje que aplica el
+  // default provoca un commit extra que React entrega en un microtask, o sea
+  // FUERA del `act` de quien renderiza. Medido con `Profiler`: los commits son
+  // `["mount","update"]`, el segundo con output idéntico. En este repo la
+  // política de stderr lo convierte en 11 tests rojos; en el consumer sería el
+  // clásico "not wrapped in act" imposible de silenciar desde fuera.
+  //
+  // De ahí la marca. Codex encontró dos formas de romperla y AMBAS caen con el
+  // mismo predicado: (a) no se consumía, así que un tercero que volviera al
+  // último valor escrito quedaba ignorado para siempre; (b) `MutationObserver`
+  // ENTREGA POR LOTES, así que si un hermano escribe en la misma tarea el
+  // callback solo se ejecuta una vez y una marca por-registro se queda rancia.
+  //
+  // El arreglo no mira los registros del lote, mira el DOM VIVO: se ignora la
+  // notificación solo si el atributo ACABA valiendo lo que este componente ya
+  // refleja. Es por-espacio y no por-casos — sea cual sea la secuencia dentro
+  // del lote, si el resultado neto es el valor que ya mostramos no hay nada que
+  // propagar, y si es cualquier otro se propaga. La marca se consume siempre,
+  // de un solo uso, así que no puede quedar rancia.
   const subscribe = useCallback(
     (cb: () => void) => {
       if (!attribute || typeof document === "undefined") return () => {};
       const observer = new MutationObserver(() => {
-        // Ignora la propia escritura del effect. El componente ESCRIBE este
-        // atributo y a la vez lo observa: sin este filtro se despierta a sí
-        // mismo en cada montaje, gasta un render cuyo output es idéntico y
-        // —en tests— entrega la notificación fuera de `act()`. Lo que
-        // interesa observar son los escritores AJENOS (`useTheme`, el script
-        // anti-flash del consumer, código de la app).
-        //
-        // La marca se CONSUME al usarla: es un vale de un solo uso para LA
-        // notificación que genera nuestra escritura, no un valor a ignorar
-        // para siempre. Dejarla puesta abría este agujero (codex P2): tras
-        // escribir "dark", un tercero pone "light" —se propaga bien— y luego
-        // vuelve a "dark"; esa segunda sí es ajena, pero coincidía con la
-        // marca vieja y se descartaba, dejando `aria-checked` y el label
-        // desincronizados de `<html>` de forma estable.
-        if (readDomTheme(attribute) === selfWritten.current) {
-          selfWritten.current = null;
-          return;
-        }
+        const actual = readDomTheme(attribute);
+        const propia = selfWritten.current;
+        selfWritten.current = null;
+        if (propia !== null && actual === propia) return;
         cb();
       });
       observer.observe(document.documentElement, {
@@ -181,8 +183,8 @@ export function ThemeToggle({
   ...rest
 }: ThemeToggleProps) {
   const stored = useStoredTheme(storageKey);
-  // Registro de lo que este componente escribe, para que su observer no
-  // confunda su propia escritura con la de un tercero.
+  // Último valor que ESTE componente escribió en el atributo y cuya
+  // notificación aún no se ha consumido. Ver `useDomTheme`.
   const selfWritten = useRef<Theme | null>(null);
   const domTheme = useDomTheme(attribute, selfWritten);
   const [override, setOverride] = useState<Theme | null>(null);

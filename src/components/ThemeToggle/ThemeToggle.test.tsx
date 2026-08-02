@@ -334,15 +334,20 @@ describe("ThemeToggle — sigue a escritores externos de data-theme", () => {
   });
 
   it("sigue sincronizado si un tercero vuelve al último valor que el componente escribió", async () => {
-    // El agujero que cerró codex P2. La marca anti-auto-despertar es un vale de
-    // UN SOLO USO; si se quedara puesta, esta secuencia la reutilizaría para
-    // descartar una notificación ajena:
+    // Invariante, no mecanismo: pase lo que pase por dentro, el control tiene
+    // que acabar describiendo lo que dice `<html>`.
     //
-    //   1. montaje sin atributo → el componente escribe "dark"  (marca = dark)
-    //   2. un tercero pone "light"                              → se propaga OK
-    //   3. el tercero vuelve a "dark"                           → coincide con
-    //      la marca vieja y se descartaba, dejando el switch en "light" con
-    //      `<html data-theme="dark">` de forma ESTABLE, no transitoria.
+    //   1. montaje sin atributo → el componente escribe "dark"
+    //   2. un tercero pone "light"                            → se propaga
+    //   3. el tercero VUELVE a "dark"                         → debe propagarse
+    //
+    // El (3) es el que importa y viene del review de Codex: la marca que
+    // ignora la escritura propia del componente no se consumía, así que ese
+    // paso quedaba descartado por coincidir con ella — dejando el switch en
+    // "light" con `<html data-theme="dark">` de forma ESTABLE, no transitoria.
+    //
+    // Está escrito como invariante y no como mecanismo: pase lo que pase por
+    // dentro, el control tiene que acabar describiendo lo que dice `<html>`.
     render(<ThemeToggle storageKey={null} />);
     const sw = screen.getByRole("switch");
     await act(async () => {
@@ -366,5 +371,30 @@ describe("ThemeToggle — sigue a escritores externos de data-theme", () => {
     });
     expect(sw).toBeChecked();
     expect(screen.getByText("Dark")).toBeInTheDocument();
+  });
+
+  it("sigue sincronizado si un tercero escribe en el MISMO lote que la escritura propia", async () => {
+    // Segunda variante del review de Codex, y la que no cierra consumir la
+    // marca: `MutationObserver` entrega POR LOTES. Si un effect hermano escribe
+    // en la misma tarea que la escritura de montaje, el callback se ejecuta UNA
+    // sola vez para las dos mutaciones. Una marca comparada contra el registro
+    // del lote se quedaría rancia y el cambio ajeno se perdería.
+    //
+    // Aquí ambas escrituras ocurren dentro del mismo `act`, sin ceder el hilo
+    // entre ellas, que es lo que fuerza el lote único.
+    render(<ThemeToggle storageKey={null} />);
+    const sw = screen.getByRole("switch");
+
+    await act(async () => {
+      // El effect de montaje escribe "dark"; sin esperar a que se entregue esa
+      // notificación, un tercero deja el atributo en "light".
+      document.documentElement.setAttribute("data-theme", "light");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Gana el DOM vivo, no la marca: el control describe "light".
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(sw).not.toBeChecked();
+    expect(screen.getByText("Light")).toBeInTheDocument();
   });
 });

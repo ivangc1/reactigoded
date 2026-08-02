@@ -62,9 +62,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          # En modo manual se opera sobre EL CÓDIGO DEL TAG, no el de la rama
-          # desde la que se lanza. (En modo push ya es el tag por definición.)
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/v{0}', inputs.version) || github.ref }}
+          # SIEMPRE el ref del evento, también en modo manual.
+          #
+          # Antes el modo manual hacía checkout del ÁRBOL DEL TAG, y eso rompía
+          # el propio modo reconcile (codex P2): reconciliar un tag anterior a
+          # este cambio sustituye el workspace por un árbol donde no existen ni
+          # `scripts/verify-provenance.mjs`, ni el script `test:readme-version`,
+          # ni la devDep `sigstore` — así que el job moría antes de poder
+          # verificar nada. La vía de recuperación no puede depender de que el
+          # artefacto que va a auditar traiga consigo las herramientas que la
+          # auditan.
+          #
+          # Reconcile NO necesita el árbol del tag: sus comprobaciones van
+          # contra el REGISTRO (npm + attestation), y lo poco que necesita del
+          # tag —su commit y su `package.json`— se lee con `git rev-list` y
+          # `git show <tag>:package.json`, sin cambiar de árbol.
+          #
+          # En modo push, `github.ref` YA es el tag, así que la rama de publish
+          # sigue empaquetando exactamente el árbol tageado.
+          ref: ${{ github.ref }}
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Setup Node
@@ -115,15 +132,23 @@ jobs:
         env:
           IN_VERSION: ${{ inputs.version }}
         run: |
-          PKG="$(node -p "require('./package.json').version")"
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="v$IN_VERSION"
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "::error::El tag $TAG no existe en el repo."
+              exit 1
+            fi
+            # El manifest del TAG se lee del objeto git, sin cambiar de árbol:
+            # el workspace es el de la revisión del workflow, que es donde viven
+            # las herramientas que este modo necesita (codex P2).
+            PKG="$(git show "refs/tags/$TAG:package.json" | node -p "JSON.parse(require('node:fs').readFileSync(0,'utf8')).version")"
             if [ "$IN_VERSION" != "$PKG" ]; then
               echo "::error::La versión indicada ($IN_VERSION) no coincide con el package.json del tag ($PKG)."
               exit 1
             fi
-            TAG="v$PKG"
             MODE="reconcile"
           else
+            PKG="$(node -p "require('./package.json').version")"
             TAG="$GITHUB_REF_NAME"
             if [ "${TAG#v}" != "$PKG" ]; then
               echo "::error::El tag ($TAG) no coincide con package.json ($PKG). Corrige el tag o el bump."
@@ -291,12 +316,18 @@ jobs:
           # —que prueba paquete, commit y workflow— no dice nada del dist-tag,
           # que además es un puntero MUTABLE.
           DIST_TAGS="$(npm view reactigoded dist-tags --json)"
-          printf '%s\n%s' "$META" "$DIST_TAGS" | node -e '
-            let s = "";
-            process.stdin.on("data", (d) => (s += d)).on("end", () => {
-              const [metaRaw, tagsRaw] = s.split("\n");
-              const m = JSON.parse(metaRaw);
-              const tags = JSON.parse(tagsRaw || "{}");
+          # Los dos documentos van a FICHEROS, no concatenados por stdin:
+          # `npm view --json` imprime JSON pretty-printed (326 líneas para este
+          # paquete), así que framing por saltos de línea es imposible — trocear
+          # por "\n" deja el primer fragmento en "{" y el JSON.parse revienta en
+          # CADA release. Medido: así estaba y así fallaba (codex P1).
+          printf '%s' "$META" > /tmp/npm-meta.json
+          printf '%s' "$DIST_TAGS" > /tmp/npm-dist-tags.json
+          node -e '
+            {
+              const fs = require("node:fs");
+              const m = JSON.parse(fs.readFileSync("/tmp/npm-meta.json", "utf8"));
+              const tags = JSON.parse(fs.readFileSync("/tmp/npm-dist-tags.json", "utf8"));
               const version = process.env.VERSION;
               const applied = process.env.APPLIED_TAG;
               // Todos los que apuntan a esta versión, no solo el derivado.
@@ -331,8 +362,8 @@ jobs:
                   : null,
                 attestationUrl: m?.dist?.attestations?.url ?? null,
               };
-              require("node:fs").writeFileSync("release-record.json", JSON.stringify(rec, null, 2));
-            });
+              fs.writeFileSync("release-record.json", JSON.stringify(rec, null, 2));
+            }
           '
           cat release-record.json
           PRERELEASE=""
